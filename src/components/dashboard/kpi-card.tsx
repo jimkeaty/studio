@@ -1,12 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { LucideIcon } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 interface KpiCardProps {
   title: string;
-  icon: LucideIcon;
   actual: number;
   target: number;
   performance: number; // 0-100+
@@ -14,7 +12,7 @@ interface KpiCardProps {
   isGracePeriod: boolean;
 }
 
-export function KpiCard({ title, icon: Icon, actual, target, performance, grade, isGracePeriod }: KpiCardProps) {
+export function KpiCard({ title, actual, target, performance, grade, isGracePeriod }: KpiCardProps) {
   
   const getGradeColor = (grade: string) => {
     switch (grade) {
@@ -36,12 +34,11 @@ export function KpiCard({ title, icon: Icon, actual, target, performance, grade,
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline justify-between">
             <div className="text-2xl font-bold">{actual.toLocaleString()}</div>
-            <Badge className={cn('text-primary-foreground', getGradeColor(finalGrade))}>
+            <Badge className={cn('text-primary-foreground text-xl px-3 py-1', getGradeColor(finalGrade))}>
                 {finalGrade}
             </Badge>
         </div>

@@ -2,7 +2,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, Phone, Users, FileText, CalendarCheck, CalendarPlus, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity } from 'lucide-react';
+import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 
@@ -129,12 +129,12 @@ export default function AgentDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard title="Calls" icon={Phone} {...dashboardData.kpis.calls} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Engagements" icon={Users} {...dashboardData.kpis.engagements} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Appts Set" icon={CalendarPlus} {...dashboardData.kpis.appointmentsSet} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Appts Held" icon={CalendarCheck} {...dashboardData.kpis.appointmentsHeld} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Contracts" icon={FileText} {...dashboardData.kpis.contractsWritten} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Closings" icon={DollarSign} {...dashboardData.kpis.closings} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Calls" {...dashboardData.kpis.calls} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Engagements" {...dashboardData.kpis.engagements} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Appts Set" {...dashboardData.kpis.appointmentsSet} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Appts Held" {...dashboardData.kpis.appointmentsHeld} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Contracts" {...dashboardData.kpis.contractsWritten} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Closings" {...dashboardData.kpis.closings} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
       </div>
 
       <Card>
