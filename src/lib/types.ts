@@ -114,3 +114,46 @@ export interface AgentDashboardData {
     engagementValue: number;
   };
 }
+
+export type LeaderboardMetricKey =
+  | 'calls'
+  | 'engagements'
+  | 'apptsSet'
+  | 'apptsHeld'
+  | 'contracts'
+  | 'closings';
+
+export const leaderboardMetrics: { key: LeaderboardMetricKey; label: string }[] = [
+  { key: 'calls', label: 'Calls' },
+  { key: 'engagements', label: 'Engagements' },
+  { key: 'apptsSet', label: 'Appointments Set' },
+  { key: 'apptsHeld', label: 'Appointments Held' },
+  { key: 'contracts', label: 'Contracts Written' },
+  { key: 'closings', label: 'Closings' },
+];
+
+export interface LeaderboardConfig {
+  periodType: 'monthly' | 'quarterly';
+  periodId: string; // e.g., '2026-02' or '2026-Q1'
+  title: string;
+  subtitle: string;
+  primaryMetricKey: LeaderboardMetricKey;
+  secondaryMetricKey?: LeaderboardMetricKey;
+  showTopN: number;
+  visualMode: 'raceTrack' | 'podium' | 'progressBars';
+}
+
+export interface LeaderboardAgentMetrics {
+  agentId: string;
+  displayName: string; // "First L."
+  teamType: 'CGL' | 'SGL';
+  avatarUrl?: string;
+  metrics: Record<LeaderboardMetricKey, number>;
+}
+
+export interface LeaderboardRollup {
+  periodId: string;
+  startDate: string;
+  endDate: string;
+  agents: LeaderboardAgentMetrics[];
+}

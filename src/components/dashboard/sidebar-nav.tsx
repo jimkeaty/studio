@@ -71,6 +71,29 @@ export function SidebarNav() {
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+        <SidebarSeparator className="my-2" />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <Link href="/dashboard/admin/leaderboard">
+              <SidebarMenuButton
+                isActive={pathname.startsWith('/dashboard/admin')}
+                tooltip="Leaderboard Config"
+                className="justify-start"
+              >
+                <Settings className="h-4 w-4" />
+                <span>Leaderboard Config</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <Link href="/leaderboard" target="_blank">
+              <SidebarMenuButton tooltip="Leaderboard TV Mode" className="justify-start">
+                <BarChart3 className="h-4 w-4" />
+                <span>TV Mode</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-2">
         <Card className="bg-accent/50 dark:bg-accent/20 border-0">
