@@ -37,8 +37,8 @@ export function KpiCard({ title, actual, target, performance, grade, isGracePeri
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-bold">{actual.toLocaleString()}</div>
-            <Badge className={cn('text-primary-foreground text-xl px-3 py-1', getGradeColor(finalGrade))}>
+            <div className="text-xl font-bold">{actual.toLocaleString()}</div>
+            <Badge className={cn('text-primary-foreground text-6xl px-4', getGradeColor(finalGrade))}>
                 {finalGrade}
             </Badge>
         </div>
