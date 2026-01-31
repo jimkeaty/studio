@@ -9,6 +9,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLe
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AgentDashboardData, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { Scoreboard } from '@/components/dashboard/broker/scoreboard';
+
 
 // Mock data for broker dashboard
 const agents: (User & { data: AgentDashboardData })[] = [
@@ -132,6 +134,8 @@ export default function BrokerDashboardPage() {
                 <h1 className="text-3xl font-bold tracking-tight">Broker Command</h1>
                 <p className="text-muted-foreground">Aggregated view of your brokerage&apos;s performance.</p>
             </div>
+            
+            <Scoreboard />
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                  <Card>
@@ -316,7 +320,7 @@ export default function BrokerDashboardPage() {
                             <BarChart data={funnelData} layout="vertical" margin={{ left: 10, right: 20 }}>
                                 <XAxis type="number" hide />
                                 <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={80} />
-                                <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                                <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
                                 <Bar dataKey="value" radius={5} layout="vertical">
                                      {funnelData.map((entry, index) => (
                                         <div key={`cell-${index}`} style={{ backgroundColor: entry.fill }} />
