@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { DollarSign, Users, TrendingUp, Target } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { ChartContainer, ChartTooltip, ChartLegend, ChartLegendContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AgentDashboardData, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
