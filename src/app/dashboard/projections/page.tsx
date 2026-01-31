@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { DollarSign, Target, TrendingUp, RefreshCw, Save, CheckCircle, Phone, Users, CalendarCheck, FileText, Filter, CalendarPlus } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
   new Intl.NumberFormat('en-US', {
