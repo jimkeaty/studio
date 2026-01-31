@@ -19,6 +19,10 @@ const dashboardData: AgentDashboardData = {
   incomePerformance: 27,
   isIncomeGracePeriod: false,
   expectedYTDIncomeGoal: 16733,
+  pipelineAdjustedIncome: {
+    grade: 'A',
+    performance: 99,
+  },
   kpis: {
     calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' },
     engagements: { actual: 420, target: 500, performance: 84, grade: 'C' },
@@ -119,44 +123,52 @@ export default function AgentDashboardPage() {
                 <CardTitle>Agent Income</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
-                {/* Grade Section */}
-                <div className="flex flex-col items-center justify-center text-center p-4">
-                    <p className="text-muted-foreground text-sm font-medium">OVERALL INCOME GRADE</p>
-                    <p className={cn("text-8xl font-bold", dashboardData.incomeGrade === 'F' || dashboardData.incomeGrade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.incomeGrade}</p>
-                    {dashboardData.isIncomeGracePeriod 
-                        ? <Badge variant="secondary">Grace Period</Badge>
-                        : <p className="text-muted-foreground">{dashboardData.incomePerformance}% of Goal Pace</p>
-                    }
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Grades Section */}
+                    <div className="space-y-4">
+                        <div className="text-center md:text-left">
+                            <p className="text-sm font-medium text-muted-foreground">Grade (Closed Only)</p>
+                            <div className="flex items-baseline justify-center md:justify-start gap-2">
+                                <p className={cn("text-5xl font-bold", dashboardData.incomeGrade === 'F' || dashboardData.incomeGrade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.incomeGrade}</p>
+                                <span className="text-lg text-muted-foreground">{dashboardData.incomePerformance}% of Goal</span>
+                            </div>
+                            {dashboardData.isIncomeGracePeriod && <Badge variant="secondary">Grace Period</Badge>}
+                        </div>
+                        <Separator />
+                        <div className="text-center md:text-left">
+                            <div className="flex items-center justify-center md:justify-start gap-2">
+                                <p className="text-sm font-medium text-muted-foreground">Grade (If Pipeline Closes)</p>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Info className="h-4 w-4 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Pending income is not guaranteed. This is a what-if view only.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                             <div className="flex items-baseline justify-center md:justify-start gap-2">
+                                <p className={cn("text-5xl font-bold", dashboardData.pipelineAdjustedIncome.grade === 'F' || dashboardData.pipelineAdjustedIncome.grade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.pipelineAdjustedIncome.grade}</p>
+                                <span className="text-lg text-muted-foreground">{dashboardData.pipelineAdjustedIncome.performance}% of Goal</span>
+                            </div>
+                        </div>
+                    </div>
 
-                <Separator orientation="vertical" className="hidden sm:block h-auto" />
-                
-                {/* Numbers Section */}
-                <div className="w-full sm:w-auto flex-1 space-y-4 text-center sm:text-left">
-                    <div>
-                    <p className="text-sm font-medium text-muted-foreground">YTD Net Earned (Closed)</p>
-                    <p className="text-4xl font-bold">{formatCurrency(dashboardData.netEarned)}</p>
-                    <p className="text-sm text-muted-foreground">YTD Goal: {formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                    {/* Numbers Section */}
+                    <div className="flex flex-col justify-center space-y-6">
+                        <div>
+                            <p className="text-sm font-medium text-muted-foreground">YTD Net Earned (Closed)</p>
+                            <p className="text-4xl font-bold">{formatCurrency(dashboardData.netEarned)}</p>
+                            <p className="text-sm text-muted-foreground">YTD Goal: {formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                        </div>
+                        <Separator/>
+                        <div>
+                            <p className="text-sm font-medium text-muted-foreground">Est. Income Pipeline</p>
+                            <p className="text-2xl font-bold">{formatCurrency(dashboardData.netPending)}</p>
+                        </div>
                     </div>
-                    <Separator/>
-                    <div>
-                    <div className="flex items-center justify-center sm:justify-start gap-2">
-                        <p className="text-sm font-medium text-muted-foreground">Est. Income Pipeline</p>
-                        <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Info className="h-4 w-4 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                            <p>Pending income is not guaranteed and does not affect your Income Grade.</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        </TooltipProvider>
-                    </div>
-                    <p className="text-2xl font-bold">{formatCurrency(dashboardData.netPending)}</p>
-                    </div>
-                </div>
                 </div>
                 {dashboardData.isIncomeGracePeriod && <p className="text-xs text-muted-foreground text-center mt-4">Income typically lags activity by ~60 days.</p>}
             </CardContent>
