@@ -12,13 +12,14 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Building, Edit, LayoutGrid, Settings, Target, Users } from 'lucide-react';
+import { BarChart3, Building, Edit, LayoutGrid, Settings, Target, Users, TrendingUp } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 
 const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: Edit },
+  { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
 ];
 
 const brokerMenuItems = [{ href: '/dashboard/broker', label: 'Broker Command', icon: Users }];
