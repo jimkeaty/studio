@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis } from '@/components/ui/chart';
 import { AgentDashboardData, User } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 
 // Mock data for broker dashboard
