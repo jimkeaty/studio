@@ -84,6 +84,9 @@ export interface AgentDashboardData {
   netPending: number;
 
   monthlyIncome: { month: string; closed: number; pending: number }[];
+  totalClosedIncomeForYear: number;
+  totalPendingIncomeForYear: number;
+  totalIncomeWithPipelineForYear: number;
 
   // The forecast section would be powered by the GenAI flow.
   // The Cloud Function would call the AI model and store the result here.

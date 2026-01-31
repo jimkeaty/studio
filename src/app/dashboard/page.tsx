@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
 import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users, Info } from 'lucide-react';
@@ -14,6 +14,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 
 // Mock data for the agent dashboard. In a real app, this would be fetched from Firestore.
+const monthlyIncomeData = [
+    { month: 'Jan', closed: 2000, pending: 1000 },
+    { month: 'Feb', closed: 2562, pending: 500 },
+    { month: 'Mar', closed: 0, pending: 2000 },
+    { month: 'Apr', closed: 0, pending: 0 },
+    { month: 'May', closed: 0, pending: 3000 },
+    { month: 'Jun', closed: 0, pending: 5000 },
+    { month: 'Jul', closed: 0, pending: 500 },
+    { month: 'Aug', closed: 0, pending: 0 },
+    { month: 'Sep', closed: 0, pending: 0 },
+    { month: 'Oct', closed: 0, pending: 0 },
+    { month: 'Nov', closed: 0, pending: 0 },
+    { month: 'Dec', closed: 0, pending: 0 },
+];
+const totalClosedIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.closed, 0);
+const totalPendingIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.pending, 0);
+
 const dashboardData: AgentDashboardData = {
   userId: 'agent-1',
   leadIndicatorGrade: 'B',
@@ -37,20 +54,10 @@ const dashboardData: AgentDashboardData = {
   },
   netEarned: 4562,
   netPending: 12000,
-  monthlyIncome: [
-    { month: 'Jan', closed: 2000, pending: 1000 },
-    { month: 'Feb', closed: 2562, pending: 500 },
-    { month: 'Mar', closed: 0, pending: 2000 },
-    { month: 'Apr', closed: 0, pending: 0 },
-    { month: 'May', closed: 0, pending: 3000 },
-    { month: 'Jun', closed: 0, pending: 5000 },
-    { month: 'Jul', closed: 0, pending: 500 },
-    { month: 'Aug', closed: 0, pending: 0 },
-    { month: 'Sep', closed: 0, pending: 0 },
-    { month: 'Oct', closed: 0, pending: 0 },
-    { month: 'Nov', closed: 0, pending: 0 },
-    { month: 'Dec', closed: 0, pending: 0 },
-  ],
+  monthlyIncome: monthlyIncomeData,
+  totalClosedIncomeForYear,
+  totalPendingIncomeForYear,
+  totalIncomeWithPipelineForYear: totalClosedIncomeForYear + totalPendingIncomeForYear,
   forecast: {
     projectedClosings: 11,
     paceBasedNetIncome: 33000,
@@ -267,6 +274,22 @@ export default function AgentDashboardPage() {
                 </BarChart>
             </ChartContainer>
         </CardContent>
+        <CardFooter className="border-t p-4">
+            <div className="grid w-full grid-cols-3 items-center gap-4">
+                <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Total Closed</p>
+                    <p className="text-lg font-bold">{formatCurrency(dashboardData.totalClosedIncomeForYear)}</p>
+                </div>
+                <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Total Pending</p>
+                    <p className="text-lg font-bold">{formatCurrency(dashboardData.totalPendingIncomeForYear)}</p>
+                </div>
+                <div className="space-y-1 text-right">
+                    <p className="text-sm font-semibold text-primary">Total Income (Incl. Pipeline)</p>
+                    <p className="text-2xl font-bold text-primary">{formatCurrency(dashboardData.totalIncomeWithPipelineForYear)}</p>
+                </div>
+            </div>
+        </CardFooter>
       </Card>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
