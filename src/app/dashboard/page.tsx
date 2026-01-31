@@ -31,18 +31,23 @@ const monthlyIncomeData = [
 const totalClosedIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.closed, 0);
 const totalPendingIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.pending, 0);
 
+const netEarnedYTD = 4562;
+const netPendingYTD = 12000;
+const expectedYTDGoal = 16733;
+const ytdTotalPotential = netEarnedYTD + netPendingYTD;
+
 const dashboardData: AgentDashboardData = {
   userId: 'agent-1',
   leadIndicatorGrade: 'B',
   leadIndicatorPerformance: 99,
   isLeadIndicatorGracePeriod: false,
   incomeGrade: 'F',
-  incomePerformance: 27,
+  incomePerformance: (netEarnedYTD / expectedYTDGoal) * 100,
   isIncomeGracePeriod: false,
-  expectedYTDIncomeGoal: 16733,
+  expectedYTDIncomeGoal: expectedYTDGoal,
   pipelineAdjustedIncome: {
     grade: 'A',
-    performance: 99,
+    performance: (ytdTotalPotential / expectedYTDGoal) * 100,
   },
   kpis: {
     calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' },
@@ -52,8 +57,9 @@ const dashboardData: AgentDashboardData = {
     contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' },
     closings: { actual: 9, target: 8, performance: 112, grade: 'A' },
   },
-  netEarned: 4562,
-  netPending: 12000,
+  netEarned: netEarnedYTD,
+  netPending: netPendingYTD,
+  ytdTotalPotential: ytdTotalPotential,
   monthlyIncome: monthlyIncomeData,
   totalClosedIncomeForYear,
   totalPendingIncomeForYear,
@@ -143,7 +149,7 @@ export default function AgentDashboardPage() {
                             <p className="text-sm font-medium text-muted-foreground">Grade (Closed Only)</p>
                             <div className="flex items-baseline justify-center md:justify-start gap-2">
                                 <p className={cn("text-5xl font-bold", dashboardData.incomeGrade === 'F' || dashboardData.incomeGrade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.incomeGrade}</p>
-                                <span className="text-lg text-muted-foreground">{dashboardData.incomePerformance}% of Goal</span>
+                                <span className="text-lg text-muted-foreground">{dashboardData.incomePerformance.toFixed(0)}% of Goal</span>
                             </div>
                             {dashboardData.isIncomeGracePeriod && <Badge variant="secondary">Grace Period</Badge>}
                         </div>
@@ -164,22 +170,31 @@ export default function AgentDashboardPage() {
                             </div>
                              <div className="flex items-baseline justify-center md:justify-start gap-2">
                                 <p className={cn("text-5xl font-bold", dashboardData.pipelineAdjustedIncome.grade === 'F' || dashboardData.pipelineAdjustedIncome.grade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.pipelineAdjustedIncome.grade}</p>
-                                <span className="text-lg text-muted-foreground">{dashboardData.pipelineAdjustedIncome.performance}% of Goal</span>
+                                <span className="text-lg text-muted-foreground">{dashboardData.pipelineAdjustedIncome.performance.toFixed(0)}% of Goal</span>
                             </div>
+                             <p className="text-xs text-muted-foreground mt-1">
+                                Based on Total Potential YTD: {formatCurrency(dashboardData.ytdTotalPotential)}
+                            </p>
                         </div>
                     </div>
 
                     {/* Numbers Section */}
-                    <div className="flex flex-col justify-center space-y-6">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                         <div>
-                            <p className="text-sm font-medium text-muted-foreground">YTD Net Earned (Closed)</p>
-                            <p className="text-4xl font-bold">{formatCurrency(dashboardData.netEarned)}</p>
-                            <p className="text-sm text-muted-foreground">YTD Goal: {formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                            <p className="text-sm font-medium text-muted-foreground">YTD Net Earned</p>
+                            <p className="text-2xl font-bold">{formatCurrency(dashboardData.netEarned)}</p>
                         </div>
-                        <Separator/>
                         <div>
-                            <p className="text-sm font-medium text-muted-foreground">Est. Income Pipeline</p>
+                            <p className="text-sm font-medium text-muted-foreground">YTD Goal</p>
+                            <p className="text-2xl font-bold">{formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-muted-foreground">Est. Pipeline</p>
                             <p className="text-2xl font-bold">{formatCurrency(dashboardData.netPending)}</p>
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-primary">Total Potential YTD</p>
+                            <p className="text-2xl font-bold text-primary">{formatCurrency(dashboardData.ytdTotalPotential)}</p>
                         </div>
                     </div>
                 </div>
