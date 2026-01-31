@@ -1,10 +1,13 @@
-import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users } from 'lucide-react';
+import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users, Info } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
+
 
 // Mock data for the agent dashboard. In a real app, this would be fetched from Firestore.
 const dashboardData: AgentDashboardData = {
@@ -12,9 +15,10 @@ const dashboardData: AgentDashboardData = {
   leadIndicatorGrade: 'B',
   leadIndicatorPerformance: 99,
   isLeadIndicatorGracePeriod: false,
-  incomeGrade: 'A',
-  incomePerformance: 102,
-  isIncomeGracePeriod: true, // Example of grace period
+  incomeGrade: 'F',
+  incomePerformance: 27,
+  isIncomeGracePeriod: false,
+  expectedYTDIncomeGoal: 16733,
   kpis: {
     calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' },
     engagements: { actual: 420, target: 500, performance: 84, grade: 'C' },
@@ -23,16 +27,16 @@ const dashboardData: AgentDashboardData = {
     contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' },
     closings: { actual: 9, target: 8, performance: 112, grade: 'A' },
   },
-  netEarned: 27000,
+  netEarned: 4562,
   netPending: 12000,
   monthlyIncome: [
     { month: 'Jan', closed: 2000, pending: 1000 },
-    { month: 'Feb', closed: 3000, pending: 500 },
-    { month: 'Mar', closed: 2500, pending: 2000 },
-    { month: 'Apr', closed: 4500, pending: 0 },
-    { month: 'May', closed: 4000, pending: 3000 },
+    { month: 'Feb', closed: 2562, pending: 500 },
+    { month: 'Mar', closed: 0, pending: 2000 },
+    { month: 'Apr', closed: 0, pending: 0 },
+    { month: 'May', closed: 0, pending: 3000 },
     { month: 'Jun', closed: 0, pending: 5000 },
-    { month: 'Jul', closed: 0, pending: 5500 },
+    { month: 'Jul', closed: 0, pending: 500 },
     { month: 'Aug', closed: 0, pending: 0 },
     { month: 'Sep', closed: 0, pending: 0 },
     { month: 'Oct', closed: 0, pending: 0 },
@@ -111,20 +115,51 @@ export default function AgentDashboardPage() {
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">
-           <CardHeader>
-            <CardTitle>Overall Income Grade</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="flex justify-between items-baseline">
-                <p className="text-4xl font-bold">{dashboardData.incomeGrade}</p>
-                <p className="text-muted-foreground">{dashboardData.incomePerformance}% of Goal Pace</p>
-            </div>
-            <Progress value={dashboardData.incomePerformance} aria-label={`${dashboardData.incomePerformance}% of goal pace`} />
-             {dashboardData.isIncomeGracePeriod 
-                ? <p className="text-sm text-muted-foreground pt-2">Grace Period — Income typically lags activity by ~60 days</p>
-                : <p className="text-sm text-muted-foreground pt-2">Measures if you are on pace to hit your annual net income goal.</p>
-            }
-          </CardContent>
+            <CardHeader>
+                <CardTitle>Agent Income</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
+                {/* Grade Section */}
+                <div className="flex flex-col items-center justify-center text-center p-4">
+                    <p className="text-muted-foreground text-sm font-medium">OVERALL INCOME GRADE</p>
+                    <p className={cn("text-8xl font-bold", dashboardData.incomeGrade === 'F' || dashboardData.incomeGrade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.incomeGrade}</p>
+                    {dashboardData.isIncomeGracePeriod 
+                        ? <Badge variant="secondary">Grace Period</Badge>
+                        : <p className="text-muted-foreground">{dashboardData.incomePerformance}% of Goal Pace</p>
+                    }
+                </div>
+
+                <Separator orientation="vertical" className="hidden sm:block h-auto" />
+                
+                {/* Numbers Section */}
+                <div className="w-full sm:w-auto flex-1 space-y-4 text-center sm:text-left">
+                    <div>
+                    <p className="text-sm font-medium text-muted-foreground">YTD Net Earned (Closed)</p>
+                    <p className="text-4xl font-bold">{formatCurrency(dashboardData.netEarned)}</p>
+                    <p className="text-sm text-muted-foreground">YTD Goal: {formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                    </div>
+                    <Separator/>
+                    <div>
+                    <div className="flex items-center justify-center sm:justify-start gap-2">
+                        <p className="text-sm font-medium text-muted-foreground">Est. Income Pipeline</p>
+                        <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Info className="h-4 w-4 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                            <p>Pending income is not guaranteed and does not affect your Income Grade.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    <p className="text-2xl font-bold">{formatCurrency(dashboardData.netPending)}</p>
+                    </div>
+                </div>
+                </div>
+                {dashboardData.isIncomeGracePeriod && <p className="text-xs text-muted-foreground text-center mt-4">Income typically lags activity by ~60 days.</p>}
+            </CardContent>
         </Card>
       </div>
 

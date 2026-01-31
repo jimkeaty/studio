@@ -65,6 +65,7 @@ export interface AgentDashboardData {
   incomeGrade: 'A' | 'B' | 'C' | 'D' | 'F';
   incomePerformance: number; // 0-100+
   isIncomeGracePeriod: boolean;
+  expectedYTDIncomeGoal: number;
 
   kpis: {
     calls: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
