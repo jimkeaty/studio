@@ -270,8 +270,8 @@ export default function ProjectionsPage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Funnel Stage</TableHead>
-                                <TableHead className="text-right">Actual</TableHead>
-                                <TableHead className="text-right">Plan</TableHead>
+                                <TableHead className="text-right">Actual (YTD)</TableHead>
+                                <TableHead className="text-right">Plan Assumption</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
