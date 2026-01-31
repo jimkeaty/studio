@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { DollarSign, Target, TrendingUp, RefreshCw, Save, CheckCircle, Phone, Users, CalendarCheck, FileText, Filter, CalendarPlus } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
   new Intl.NumberFormat('en-US', {
@@ -112,12 +113,14 @@ const PaceVsPlanCard = ({ title, actual, projected }: { title: string, actual: n
 )
 
 export default function ProjectionsPage() {
-    const [sandboxGoal, setSandboxGoal] = useState<number>(initialProjectionData.annualIncomeGoal);
-    const [displayGoal, setDisplayGoal] = useState<number>(initialProjectionData.annualIncomeGoal);
+    const { toast } = useToast();
+    const [projectionData, setProjectionData] = useState(initialProjectionData);
+    const [sandboxGoal, setSandboxGoal] = useState<number>(projectionData.annualIncomeGoal);
+    const [displayGoal, setDisplayGoal] = useState<number>(projectionData.annualIncomeGoal);
 
     // Section C: "At Your Current Pace..."
     const paceProjection = useMemo(() => {
-        const { ytdActuals, workdaysElapsed, totalWorkdaysInYear, planConversions, avgNetPerClosing } = initialProjectionData;
+        const { ytdActuals, workdaysElapsed, totalWorkdaysInYear, planConversions, avgNetPerClosing } = projectionData;
 
         if (workdaysElapsed === 0) return null;
 
@@ -138,11 +141,11 @@ export default function ProjectionsPage() {
             closings: projectedClosings,
             income: projectedIncome
         }
-    }, []);
+    }, [projectionData]);
 
     // Section E: Actual vs. Plan Conversions
     const actualConversions = useMemo(() => {
-        const { ytdActuals, planConversions } = initialProjectionData;
+        const { ytdActuals, planConversions } = projectionData;
         const safeDivide = (num: number, den: number) => den > 0 ? (num / den) : null;
         
         return [
@@ -152,11 +155,11 @@ export default function ProjectionsPage() {
             { name: "Appts Held → Contracts", actual: safeDivide(ytdActuals.contractsWritten, ytdActuals.appointmentsHeld), plan: 1 / planConversions.apptHeldPerContract },
             { name: "Contracts → Closings", actual: safeDivide(ytdActuals.closings, ytdActuals.contractsWritten), plan: 1 / planConversions.contractsPerClosing },
         ] as ConversionMetric[];
-    }, []);
+    }, [projectionData]);
 
     // Section D: Catch-Up Calculations
     const calculateCatchUpMetrics = useCallback((goal: number): CatchUpMetrics => {
-        const { ytdActuals, avgNetPerClosing, workdaysElapsed, totalWorkdaysInYear, monthsElapsed, planConversions } = initialProjectionData;
+        const { ytdActuals, avgNetPerClosing, workdaysElapsed, totalWorkdaysInYear, monthsElapsed, planConversions } = projectionData;
 
         const workdaysRemaining = totalWorkdaysInYear - workdaysElapsed;
         const monthsRemaining = 12 - monthsElapsed;
@@ -200,20 +203,30 @@ export default function ProjectionsPage() {
                 calls: createMetric(remainingNeeded.calls),
             }
         };
-    }, []);
+    }, [projectionData]);
 
     const catchUpMetrics = useMemo(() => calculateCatchUpMetrics(displayGoal), [displayGoal, calculateCatchUpMetrics]);
 
     const handleApply = () => setDisplayGoal(sandboxGoal);
     const handleReset = () => {
-        setSandboxGoal(initialProjectionData.annualIncomeGoal);
-        setDisplayGoal(initialProjectionData.annualIncomeGoal);
+        setSandboxGoal(projectionData.annualIncomeGoal);
+        setDisplayGoal(projectionData.annualIncomeGoal);
     };
 
     const handleSave = () => {
-        // TODO: Implement server action to save the new goal to the agent's business plan.
-        console.log("Saving new goal:", sandboxGoal);
-        alert("Goal saved! (This is a placeholder)");
+        // Simulate saving to the backend
+        const newProjectionData = {
+            ...projectionData,
+            annualIncomeGoal: sandboxGoal,
+        };
+        setProjectionData(newProjectionData);
+        setDisplayGoal(sandboxGoal);
+        
+        toast({
+            title: "New Goal Saved!",
+            description: `Your annual income goal has been updated to ${formatCurrency(sandboxGoal)}.`,
+            action: <CheckCircle className="h-5 w-5 text-green-500" />,
+        });
     };
 
     return (
@@ -228,13 +241,13 @@ export default function ProjectionsPage() {
                     <CardTitle className="flex items-center gap-2"><Target /> Your Business Plan (Annual Targets)</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 items-center">
-                    <MetricDisplay label="Annual Income Goal" value={initialProjectionData.annualIncomeGoal} isCurrency />
-                    <MetricDisplay label="Calls" value={initialProjectionData.planAnnualTargets.calls} />
-                    <MetricDisplay label="Engagements" value={initialProjectionData.planAnnualTargets.engagements} />
-                    <MetricDisplay label="Appts Set" value={initialProjectionData.planAnnualTargets.appointmentsSet} />
-                    <MetricDisplay label="Appts Held" value={initialProjectionData.planAnnualTargets.appointmentsHeld} />
-                    <MetricDisplay label="Contracts" value={initialProjectionData.planAnnualTargets.contractsWritten} />
-                    <MetricDisplay label="Closings" value={initialProjectionData.planAnnualTargets.closings} />
+                    <MetricDisplay label="Annual Income Goal" value={projectionData.annualIncomeGoal} isCurrency />
+                    <MetricDisplay label="Calls" value={projectionData.planAnnualTargets.calls} />
+                    <MetricDisplay label="Engagements" value={projectionData.planAnnualTargets.engagements} />
+                    <MetricDisplay label="Appts Set" value={projectionData.planAnnualTargets.appointmentsSet} />
+                    <MetricDisplay label="Appts Held" value={projectionData.planAnnualTargets.appointmentsHeld} />
+                    <MetricDisplay label="Contracts" value={projectionData.planAnnualTargets.contractsWritten} />
+                    <MetricDisplay label="Closings" value={projectionData.planAnnualTargets.closings} />
                 </CardContent>
             </Card>
 
@@ -248,15 +261,15 @@ export default function ProjectionsPage() {
                        <p className="text-sm text-muted-foreground">Projected Income</p>
                        <p className="text-4xl font-bold text-green-600">{formatCurrency(paceProjection?.income ?? 0)}</p>
                        <Separator className="my-2" />
-                       <p className="text-sm text-muted-foreground">Actual YTD: {formatCurrency(initialProjectionData.ytdActuals.netEarned)}</p>
+                       <p className="text-sm text-muted-foreground">Actual YTD: {formatCurrency(projectionData.ytdActuals.netEarned)}</p>
                     </Card>
                     <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                        <PaceVsPlanCard title="Calls" actual={initialProjectionData.ytdActuals.calls} projected={paceProjection?.calls ?? 0} />
-                        <PaceVsPlanCard title="Engagements" actual={initialProjectionData.ytdActuals.engagements} projected={paceProjection?.engagements ?? 0} />
-                        <PaceVsPlanCard title="Appts Set" actual={initialProjectionData.ytdActuals.appointmentsSet} projected={paceProjection?.appointmentsSet ?? 0} />
-                        <PaceVsPlanCard title="Appts Held" actual={initialProjectionData.ytdActuals.appointmentsHeld} projected={paceProjection?.appointmentsHeld ?? 0} />
-                        <PaceVsPlanCard title="Contracts" actual={initialProjectionData.ytdActuals.contractsWritten} projected={paceProjection?.contractsWritten ?? 0} />
-                        <PaceVsPlanCard title="Closings" actual={initialProjectionData.ytdActuals.closings} projected={paceProjection?.closings ?? 0} />
+                        <PaceVsPlanCard title="Calls" actual={projectionData.ytdActuals.calls} projected={paceProjection?.calls ?? 0} />
+                        <PaceVsPlanCard title="Engagements" actual={projectionData.ytdActuals.engagements} projected={paceProjection?.engagements ?? 0} />
+                        <PaceVsPlanCard title="Appts Set" actual={projectionData.ytdActuals.appointmentsSet} projected={paceProjection?.appointmentsSet ?? 0} />
+                        <PaceVsPlanCard title="Appts Held" actual={projectionData.ytdActuals.appointmentsHeld} projected={paceProjection?.appointmentsHeld ?? 0} />
+                        <PaceVsPlanCard title="Contracts" actual={projectionData.ytdActuals.contractsWritten} projected={paceProjection?.contractsWritten ?? 0} />
+                        <PaceVsPlanCard title="Closings" actual={projectionData.ytdActuals.closings} projected={paceProjection?.closings ?? 0} />
                     </div>
                 </CardContent>
             </Card>
@@ -285,7 +298,7 @@ export default function ProjectionsPage() {
                     <Card className="bg-muted/50 lg:w-64 flex-shrink-0">
                         <CardHeader className="pb-2">
                             <Label htmlFor="current-goal">Original Plan Goal</Label>
-                            <p id="current-goal" className="text-xl font-bold">{formatCurrency(initialProjectionData.annualIncomeGoal)}</p>
+                            <p id="current-goal" className="text-xl font-bold">{formatCurrency(projectionData.annualIncomeGoal)}</p>
                         </CardHeader>
                         <CardContent className="space-y-3 pb-3">
                             <Separator />
