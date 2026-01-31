@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -7,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 // Mock data for the agent dashboard. In a real app, this would be fetched from Firestore.
@@ -100,6 +104,8 @@ const StatTile = ({ icon: Icon, label, value }: { icon: React.ElementType, label
 
 
 export default function AgentDashboardPage() {
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -215,15 +221,40 @@ export default function AgentDashboardPage() {
 
        <Card>
         <CardHeader>
-            <CardTitle>Agent Income by Month</CardTitle>
-            <p className="text-sm text-muted-foreground">
-                Showing closed (solid) and pending (lighter) income.
-            </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <CardTitle>Agent Income by Month</CardTitle>
+                    <CardDescription className="flex items-center gap-1.5 pt-1">
+                        Showing closed and pending income for {selectedYear}.
+                         <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Info className="h-4 w-4 cursor-help text-muted-foreground" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Pending income is not guaranteed and does not affect your Income Grade.</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </CardDescription>
+                </div>
+                 <Select value={selectedYear} onValueChange={setSelectedYear}>
+                    <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                         {[...Array(5)].map((_, i) => {
+                            const year = new Date().getFullYear() - i;
+                            return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                        })}
+                    </SelectContent>
+                </Select>
+            </div>
         </CardHeader>
         <CardContent>
             <ChartContainer config={{
                 closed: { label: 'Closed', color: 'hsl(var(--primary))' },
-                pending: { label: 'Pending', color: 'hsl(var(--chart-2))' },
+                pending: { label: 'Pending (Not Guaranteed)', color: 'hsl(var(--chart-2))' },
             }} className="h-[300px] w-full">
                 <BarChart data={dashboardData.monthlyIncome} layout="vertical" margin={{ left: 10, right: 20 }}>
                     <CartesianGrid horizontal={false} />
