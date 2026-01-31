@@ -51,17 +51,27 @@ export interface Transaction {
 // periodically or on-demand.
 export interface AgentDashboardData {
   userId: string;
-  grade: 'A' | 'B' | 'C' | 'D' | 'F';
-  progress: number; // 0-100
+  
+  leadIndicatorGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  leadIndicatorPerformance: number; // 0-100+
+  isLeadIndicatorGracePeriod: boolean;
+
+  incomeGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  incomePerformance: number; // 0-100+
+  isIncomeGracePeriod: boolean;
+
   kpis: {
-    calls: { actual: number; target: number };
-    engagements: { actual: number; target: number };
-    appointmentsHeld: { actual: number; target: number };
-    contractsWritten: { actual: number; target: number };
-    closings: { actual: number; target: number };
+    calls: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
+    engagements: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
+    appointmentsHeld: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
+    contractsWritten: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
+    closings: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
   };
   netEarned: number;
   netPending: number;
+
+  monthlyIncome: { month: string; closed: number; pending: number }[];
+
   // The forecast section would be powered by the GenAI flow.
   // The Cloud Function would call the AI model and store the result here.
   forecast: {

@@ -2,38 +2,47 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, Phone, Users, FileText, CalendarCheck, BarChart } from 'lucide-react';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, LineChart, Line, XAxis, YAxis, CartesianGrid } from '@/components/ui/chart';
+import { DollarSign, Phone, Users, FileText, CalendarCheck, BarChart as BarChartIcon } from 'lucide-react';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 
 // Mock data for the agent dashboard. In a real app, this would be fetched from Firestore.
 const dashboardData: AgentDashboardData = {
   userId: 'agent-1',
-  grade: 'A',
-  progress: 85, // Pace vs. Plan percentage
+  leadIndicatorGrade: 'B',
+  leadIndicatorPerformance: 99,
+  isLeadIndicatorGracePeriod: false,
+  incomeGrade: 'A',
+  incomePerformance: 102,
+  isIncomeGracePeriod: true, // Example of grace period
   kpis: {
-    calls: { actual: 1250, target: 1500 },
-    engagements: { actual: 420, target: 500 },
-    appointmentsHeld: { actual: 45, target: 50 },
-    contractsWritten: { actual: 15, target: 12 },
-    closings: { actual: 9, target: 8 },
+    calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' },
+    engagements: { actual: 420, target: 500, performance: 84, grade: 'C' },
+    appointmentsHeld: { actual: 45, target: 50, performance: 90, grade: 'B' },
+    contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' },
+    closings: { actual: 9, target: 8, performance: 112, grade: 'A' },
   },
   netEarned: 27000,
   netPending: 12000,
+  monthlyIncome: [
+    { month: 'Jan', closed: 2000, pending: 1000 },
+    { month: 'Feb', closed: 3000, pending: 500 },
+    { month: 'Mar', closed: 2500, pending: 2000 },
+    { month: 'Apr', closed: 4500, pending: 0 },
+    { month: 'May', closed: 4000, pending: 3000 },
+    { month: 'Jun', closed: 0, pending: 5000 },
+    { month: 'Jul', closed: 0, pending: 5500 },
+    { month: 'Aug', closed: 0, pending: 0 },
+    { month: 'Sep', closed: 0, pending: 0 },
+    { month: 'Oct', closed: 0, pending: 0 },
+    { month: 'Nov', closed: 0, pending: 0 },
+    { month: 'Dec', closed: 0, pending: 0 },
+  ],
   forecast: {
     projectedClosings: 11,
     paceBasedNetIncome: 33000,
   },
 };
 
-const forecastChartData = [
-  { month: 'Jan', income: 2000 },
-  { month: 'Feb', income: 3000 },
-  { month: 'Mar', income: 2500 },
-  { month: 'Apr', income: 4500 },
-  { month: 'May', income: 4000 },
-  { month: 'Jun', income: 5000, projected: true },
-  { month: 'Jul', income: 5500, projected: true },
-];
 
 export default function AgentDashboardPage() {
   return (
@@ -46,38 +55,64 @@ export default function AgentDashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1 flex flex-col items-center justify-center text-center shadow-lg">
           <CardHeader>
-            <CardTitle className="text-muted-foreground font-medium">Your Grade</CardTitle>
+            <CardTitle className="text-muted-foreground font-medium">Lead Indicator Grade</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-9xl font-bold text-primary">{dashboardData.grade}</p>
-            <p className="text-muted-foreground mt-2">On pace to exceed your goals</p>
+            <p className="text-9xl font-bold text-primary">{dashboardData.leadIndicatorGrade}</p>
+            <p className="text-muted-foreground mt-2">On pace with your lead generation activities</p>
+             {dashboardData.isLeadIndicatorGracePeriod && <p className="text-xs text-muted-foreground mt-1">Grace Period — establishing baseline</p>}
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">
            <CardHeader>
-            <CardTitle>Pace to Quarterly Plan</CardTitle>
+            <CardTitle>Overall Income Grade</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="flex justify-between items-baseline">
-                <p className="text-4xl font-bold">{dashboardData.progress}%</p>
-                <p className="text-muted-foreground">Target: 100%</p>
+                <p className="text-4xl font-bold">{dashboardData.incomeGrade}</p>
+                <p className="text-muted-foreground">{dashboardData.incomePerformance}% of Goal Pace</p>
             </div>
-            <Progress value={dashboardData.progress} aria-label={`${dashboardData.progress}% complete`} />
-            <p className="text-sm text-muted-foreground pt-2">
-                {/* Grading logic would exist in a Cloud Function */}
-                Week 1 is a grace period. Grading starts in Week 2 based on your pace vs. your business plan targets. Keep up the great work!
-            </p>
+            <Progress value={dashboardData.incomePerformance} aria-label={`${dashboardData.incomePerformance}% of goal pace`} />
+             {dashboardData.isIncomeGracePeriod 
+                ? <p className="text-sm text-muted-foreground pt-2">Grace Period — Income typically lags activity by ~60 days</p>
+                : <p className="text-sm text-muted-foreground pt-2">Measures if you are on pace to hit your annual net income goal.</p>
+            }
           </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        <KpiCard title="Calls" icon={Phone} actual={dashboardData.kpis.calls.actual} target={dashboardData.kpis.calls.target} />
-        <KpiCard title="Engagements" icon={Users} actual={dashboardData.kpis.engagements.actual} target={dashboardData.kpis.engagements.target} />
-        <KpiCard title="Appts Held" icon={CalendarCheck} actual={dashboardData.kpis.appointmentsHeld.actual} target={dashboardData.kpis.appointmentsHeld.target} />
-        <KpiCard title="Contracts" icon={FileText} actual={dashboardData.kpis.contractsWritten.actual} target={dashboardData.kpis.contractsWritten.target} />
-        <KpiCard title="Closings" icon={DollarSign} actual={dashboardData.kpis.closings.actual} target={dashboardData.kpis.closings.target} />
+        <KpiCard title="Calls" icon={Phone} {...dashboardData.kpis.calls} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Engagements" icon={Users} {...dashboardData.kpis.engagements} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Appts Held" icon={CalendarCheck} {...dashboardData.kpis.appointmentsHeld} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Contracts" icon={FileText} {...dashboardData.kpis.contractsWritten} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Closings" icon={DollarSign} {...dashboardData.kpis.closings} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
       </div>
+
+       <Card>
+        <CardHeader>
+            <CardTitle>Agent Income by Month</CardTitle>
+            <p className="text-sm text-muted-foreground">
+                Showing closed (solid) and pending (lighter) income.
+            </p>
+        </CardHeader>
+        <CardContent>
+            <ChartContainer config={{
+                closed: { label: 'Closed', color: 'hsl(var(--primary))' },
+                pending: { label: 'Pending', color: 'hsl(var(--chart-2))' },
+            }} className="h-[300px] w-full">
+                <BarChart data={dashboardData.monthlyIncome} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <CartesianGrid horizontal={false} />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="month" type="category" tickLine={false} axisLine={false} />
+                    <ChartTooltip cursor={true} content={<ChartTooltipContent />} />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar dataKey="closed" type="monotone" stackId="a" fill="var(--color-closed)" radius={[4, 0, 0, 4]} />
+                    <Bar dataKey="pending" type="monotone" stackId="a" fill="var(--color-pending)" radius={[0, 4, 4, 0]} />
+                </BarChart>
+            </ChartContainer>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card>
@@ -107,7 +142,7 @@ export default function AgentDashboardPage() {
          <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pace-Based Estimated Net</CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
+            <BarChartIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -117,29 +152,6 @@ export default function AgentDashboardPage() {
           </CardContent>
         </Card>
       </div>
-      
-      <Card>
-        <CardHeader>
-            <CardTitle>Income Forecast</CardTitle>
-            <p className="text-sm text-muted-foreground">
-                {/* This forecast is based on a calculation, but could be enhanced by a GenAI model */}
-                Projected income based on your appointment-to-closing conversion rate.
-            </p>
-        </CardHeader>
-        <CardContent>
-            <ChartContainer config={{}} className="h-[250px] w-full">
-                <LineChart data={forecastChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line dataKey="income" type="monotone" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    <Line dataKey="projected" type="monotone" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                </LineChart>
-            </ChartContainer>
-        </CardContent>
-      </Card>
-
     </div>
   );
 }
