@@ -12,7 +12,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Building, Edit, LayoutGrid, Settings, Target, Users, TrendingUp } from 'lucide-react';
+import { BarChart3, Building, Edit, LayoutGrid, Settings, Target, Users, TrendingUp, Newspaper } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 
 const agentMenuItems = [
@@ -23,6 +23,16 @@ const agentMenuItems = [
 ];
 
 const brokerMenuItems = [{ href: '/dashboard/broker', label: 'Broker Command', icon: Users }];
+
+const adminMenuItems = [
+    { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
+    { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
+];
+
+const tvModeItems = [
+    { href: '/leaderboard', label: 'Leaderboard TV Mode', icon: BarChart3 },
+    { href: '/new-activity', label: 'New Activity TV Mode', icon: Newspaper },
+];
 
 export function SidebarNav() {
   const pathname = usePathname();
@@ -73,26 +83,38 @@ export function SidebarNav() {
         </SidebarMenu>
         <SidebarSeparator className="my-2" />
         <SidebarMenu>
-          <SidebarMenuItem>
-            <Link href="/dashboard/admin/leaderboard">
-              <SidebarMenuButton
-                isActive={pathname.startsWith('/dashboard/admin')}
-                tooltip="Leaderboard Config"
-                className="justify-start"
-              >
-                <Settings className="h-4 w-4" />
-                <span>Leaderboard Config</span>
-              </SidebarMenuButton>
-            </Link>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <Link href="/leaderboard" target="_blank">
-              <SidebarMenuButton tooltip="Leaderboard TV Mode" className="justify-start">
-                <BarChart3 className="h-4 w-4" />
-                <span>TV Mode</span>
-              </SidebarMenuButton>
-            </Link>
-          </SidebarMenuItem>
+            <p className="px-2 text-xs font-semibold text-muted-foreground/80">Admin</p>
+          {adminMenuItems.map((item) => (
+            <SidebarMenuItem key={item.href}>
+                <Link href={item.href}>
+                <SidebarMenuButton
+                    isActive={pathname.startsWith(item.href)}
+                    tooltip={item.label}
+                    className="justify-start"
+                >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                </SidebarMenuButton>
+                </Link>
+            </SidebarMenuItem>
+            ))}
+        </SidebarMenu>
+         <SidebarSeparator className="my-2" />
+        <SidebarMenu>
+             <p className="px-2 text-xs font-semibold text-muted-foreground/80">TV Modes</p>
+          {tvModeItems.map((item) => (
+            <SidebarMenuItem key={item.href}>
+                <Link href={item.href} target="_blank">
+                <SidebarMenuButton
+                    tooltip={item.label}
+                    className="justify-start"
+                >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                </SidebarMenuButton>
+                </Link>
+            </SidebarMenuItem>
+            ))}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-2">

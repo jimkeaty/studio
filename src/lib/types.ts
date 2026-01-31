@@ -66,6 +66,7 @@ export interface AgentDashboardData {
   incomePerformance: number; // 0-100+
   isIncomeGracePeriod: boolean;
   expectedYTDIncomeGoal: number;
+  ytdTotalPotential: number;
 
   pipelineAdjustedIncome: {
     grade: 'A' | 'B' | 'C' | 'D' | 'F';
@@ -82,7 +83,6 @@ export interface AgentDashboardData {
   };
   netEarned: number;
   netPending: number;
-  ytdTotalPotential: number;
 
   monthlyIncome: { month: string; closed: number; pending: number }[];
   totalClosedIncomeForYear: number;
@@ -141,6 +141,7 @@ export interface LeaderboardConfig {
   secondaryMetricKey?: LeaderboardMetricKey;
   showTopN: number;
   visualMode: 'raceTrack' | 'podium' | 'progressBars';
+  sortBy: 'primaryThenSecondary';
 }
 
 export interface LeaderboardAgentMetrics {
@@ -156,4 +157,27 @@ export interface LeaderboardRollup {
   startDate: string;
   endDate: string;
   agents: LeaderboardAgentMetrics[];
+}
+
+export interface NewActivityConfig {
+  lookbackDays: 30 | 60 | 90;
+  showTopN: number;
+  sortOrder: 'newestFirst';
+  title: string;
+  showAddress: boolean;
+}
+
+export interface NewActivityItem {
+  id: string;
+  date: string; // 'YYYY-MM-DD'
+  agentDisplayName: string;
+  addressShort: string;
+  price: number;
+}
+
+export interface NewActivityRollup {
+  lookbackDays: number;
+  generatedAt: string; // ISO string
+  newListings: NewActivityItem[];
+  newContracts: NewActivityItem[];
 }
