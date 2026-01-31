@@ -14,7 +14,7 @@ export default function LoginPage() {
         </div>
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Welcome to BrokerView</CardTitle>
+            <CardTitle className="text-2xl font-bold">Welcome to Smart Broker USA</CardTitle>
             <CardDescription>Enter your credentials to access your dashboard.</CardDescription>
           </CardHeader>
           <CardContent>

@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'BrokerView',
+  title: 'Smart Broker USA',
   description: 'Performance and accountability dashboard for real estate agents and brokers.',
 };
 

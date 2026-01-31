@@ -32,7 +32,7 @@ export function SidebarNav() {
         <div className="flex h-16 items-center gap-3 px-4">
           <Building className="h-8 w-8 text-primary" />
           <div className="flex flex-col">
-            <span className="text-lg font-semibold tracking-tight">BrokerView</span>
+            <span className="text-lg font-semibold tracking-tight">Smart Broker USA</span>
           </div>
         </div>
       </SidebarHeader>

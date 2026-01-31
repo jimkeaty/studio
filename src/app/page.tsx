@@ -13,7 +13,7 @@ export default function Home() {
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <div className="text-center">
-        <p className="text-lg font-semibold text-primary">Redirecting to BrokerView...</p>
+        <p className="text-lg font-semibold text-primary">Redirecting to Smart Broker USA...</p>
       </div>
     </div>
   );
