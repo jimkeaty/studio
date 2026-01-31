@@ -1,9 +1,10 @@
 import { Progress } from '@/components/ui/progress';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, Phone, Users, FileText, CalendarCheck, BarChart as BarChartIcon } from 'lucide-react';
+import { DollarSign, Phone, Users, FileText, CalendarCheck, CalendarPlus, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
+import { cn } from '@/lib/utils';
 
 // Mock data for the agent dashboard. In a real app, this would be fetched from Firestore.
 const dashboardData: AgentDashboardData = {
@@ -17,6 +18,7 @@ const dashboardData: AgentDashboardData = {
   kpis: {
     calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' },
     engagements: { actual: 420, target: 500, performance: 84, grade: 'C' },
+    appointmentsSet: { actual: 50, target: 55, performance: 91, grade: 'B' },
     appointmentsHeld: { actual: 45, target: 50, performance: 90, grade: 'B' },
     contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' },
     closings: { actual: 9, target: 8, performance: 112, grade: 'A' },
@@ -41,7 +43,52 @@ const dashboardData: AgentDashboardData = {
     projectedClosings: 11,
     paceBasedNetIncome: 33000,
   },
+  conversions: {
+    callToEngagement: { actual: (420 / 1250) * 100, plan: 25 },
+    engagementToAppointmentSet: { actual: (50 / 420) * 100, plan: 10 },
+    appointmentSetToHeld: { actual: (45 / 50) * 100, plan: 90 },
+    appointmentHeldToContract: { actual: (15 / 45) * 100, plan: 20 },
+    contractToClosing: { actual: (9 / 15) * 100, plan: 80 },
+  },
+  stats: {
+    ytdVolume: 2700000,
+    avgSalesPrice: 300000,
+    buyerClosings: 5,
+    sellerClosings: 4,
+    avgCommission: 3000,
+    engagementValue: 64.28,
+  },
 };
+
+const formatCurrency = (amount: number, minimumFractionDigits = 0) => 
+  new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD', 
+    minimumFractionDigits 
+  }).format(amount);
+
+const ConversionStat = ({ name, actual, plan }: { name: string; actual: number | null; plan: number }) => (
+  <div className="rounded-lg border p-4">
+    <p className="text-sm font-medium text-muted-foreground">{name}</p>
+    <div className="mt-2 flex items-center justify-center gap-2">
+      <p className="text-2xl font-bold">
+        {actual != null ? `${actual.toFixed(1)}%` : '—'}
+      </p>
+      {actual != null && actual >= plan && <TrendingUp className="h-5 w-5 text-green-500" />}
+    </div>
+    <p className="text-xs text-muted-foreground">Plan: {plan.toFixed(1)}%</p>
+  </div>
+);
+
+const StatTile = ({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value: string | number }) => (
+  <div className="flex items-center gap-4 rounded-lg border p-4">
+    <Icon className="h-8 w-8 text-muted-foreground" />
+    <div>
+      <p className="text-sm font-medium">{label}</p>
+      <p className="text-2xl font-bold">{value}</p>
+    </div>
+  </div>
+);
 
 
 export default function AgentDashboardPage() {
@@ -81,13 +128,43 @@ export default function AgentDashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard title="Calls" icon={Phone} {...dashboardData.kpis.calls} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
         <KpiCard title="Engagements" icon={Users} {...dashboardData.kpis.engagements} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Appts Set" icon={CalendarPlus} {...dashboardData.kpis.appointmentsSet} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
         <KpiCard title="Appts Held" icon={CalendarCheck} {...dashboardData.kpis.appointmentsHeld} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
         <KpiCard title="Contracts" icon={FileText} {...dashboardData.kpis.contractsWritten} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
         <KpiCard title="Closings" icon={DollarSign} {...dashboardData.kpis.closings} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Activity /> Funnel Conversions (Actual vs. Plan)</CardTitle>
+          <CardDescription>Your year-to-date conversion rates compared to your business plan.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
+          <ConversionStat name="Calls to Engagements" {...dashboardData.conversions.callToEngagement} />
+          <ConversionStat name="Engagements to Appts" {...dashboardData.conversions.engagementToAppointmentSet} />
+          <ConversionStat name="Appts Set to Held" {...dashboardData.conversions.appointmentSetToHeld} />
+          <ConversionStat name="Appts to Contracts" {...dashboardData.conversions.appointmentHeldToContract} />
+          <ConversionStat name="Contracts to Closings" {...dashboardData.conversions.contractToClosing} />
+        </CardContent>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+            <CardTitle>Agent Stats (Not Graded)</CardTitle>
+            <CardDescription>Key production and income statistics for the year.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <StatTile icon={DollarSign} label="YTD Volume" value={`$${(dashboardData.stats.ytdVolume / 1000000).toFixed(1)}M`} />
+            <StatTile icon={Home} label="Avg. Sales Price" value={formatCurrency(dashboardData.stats.avgSalesPrice)} />
+            <StatTile icon={Handshake} label="Avg. Net Commission" value={formatCurrency(dashboardData.stats.avgCommission)} />
+            <StatTile icon={Users} label="Buyer Closings" value={dashboardData.stats.buyerClosings} />
+            <StatTile icon={Users} label="Seller Closings" value={dashboardData.stats.sellerClosings} />
+            <StatTile icon={DollarSign} label="Avg $ Per Engagement" value={formatCurrency(dashboardData.stats.engagementValue)} />
+        </CardContent>
+      </Card>
 
        <Card>
         <CardHeader>
@@ -122,7 +199,7 @@ export default function AgentDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(dashboardData.netEarned)}
+              {formatCurrency(dashboardData.netEarned)}
             </div>
             <p className="text-xs text-muted-foreground">Total commission earned this year.</p>
           </CardContent>
@@ -134,7 +211,7 @@ export default function AgentDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(dashboardData.netPending)}
+              {formatCurrency(dashboardData.netPending)}
             </div>
             <p className="text-xs text-muted-foreground">Commission from pending transactions.</p>
           </CardContent>
@@ -146,7 +223,7 @@ export default function AgentDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ~ {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(dashboardData.forecast.paceBasedNetIncome)}
+              ~ {formatCurrency(dashboardData.forecast.paceBasedNetIncome)}
             </div>
             <p className="text-xs text-muted-foreground">Estimated income based on current pace.</p>
           </CardContent>

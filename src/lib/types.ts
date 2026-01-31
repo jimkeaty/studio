@@ -47,6 +47,12 @@ export interface Transaction {
   closingDate: string; // ISO string
 }
 
+
+interface ConversionMetric {
+  actual: number | null; // percentage, null if not calculable
+  plan: number; // percentage
+}
+
 // Pre-computed data for agent dashboard, updated by a Cloud Function
 // periodically or on-demand.
 export interface AgentDashboardData {
@@ -63,6 +69,7 @@ export interface AgentDashboardData {
   kpis: {
     calls: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
     engagements: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
+    appointmentsSet: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
     appointmentsHeld: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
     contractsWritten: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
     closings: { actual: number; target: number; performance: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' };
@@ -77,5 +84,22 @@ export interface AgentDashboardData {
   forecast: {
     projectedClosings: number;
     paceBasedNetIncome: number;
+  };
+  
+  conversions: {
+    callToEngagement: ConversionMetric;
+    engagementToAppointmentSet: ConversionMetric;
+    appointmentSetToHeld: ConversionMetric;
+    appointmentHeldToContract: ConversionMetric;
+    contractToClosing: ConversionMetric;
+  };
+
+  stats: {
+    ytdVolume: number;
+    avgSalesPrice: number;
+    buyerClosings: number;
+    sellerClosings: number;
+    avgCommission: number;
+    engagementValue: number;
   };
 }
