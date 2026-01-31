@@ -109,6 +109,7 @@ export interface AgentDashboardData {
     avgSalesPrice: number;
     buyerClosings: number;
     sellerClosings: number;
+    renterClosings: number;
     avgCommission: number;
     engagementValue: number;
   };

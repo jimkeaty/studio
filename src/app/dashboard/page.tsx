@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users, Info } from 'lucide-react';
+import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users, Info, KeyRound } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
@@ -55,7 +55,7 @@ const dashboardData: AgentDashboardData = {
     appointmentsSet: { actual: 50, target: 55, performance: 91, grade: 'B' },
     appointmentsHeld: { actual: 45, target: 50, performance: 90, grade: 'B' },
     contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' },
-    closings: { actual: 9, target: 8, performance: 112, grade: 'A' },
+    closings: { actual: 10, target: 8, performance: 125, grade: 'A' },
   },
   netEarned: netEarnedYTD,
   netPending: netPendingYTD,
@@ -78,8 +78,9 @@ const dashboardData: AgentDashboardData = {
   stats: {
     ytdVolume: 2700000,
     avgSalesPrice: 300000,
-    buyerClosings: 5,
+    buyerClosings: 6,
     sellerClosings: 4,
+    renterClosings: 3,
     avgCommission: 3000,
     engagementValue: 64.28,
   },
@@ -198,6 +199,17 @@ export default function AgentDashboardPage() {
                         </div>
                     </div>
                 </div>
+
+                <Separator className="my-4" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Closings (YTD)</p>
+                  <p className="text-sm">
+                    Buyer: <span className="font-semibold text-foreground">{dashboardData.stats.buyerClosings}</span> | 
+                    Seller: <span className="font-semibold text-foreground">{dashboardData.stats.sellerClosings}</span> | 
+                    Renter: <span className="font-semibold text-foreground">{dashboardData.stats.renterClosings}</span>
+                  </p>
+                </div>
+                
                 {dashboardData.isIncomeGracePeriod && <p className="text-xs text-muted-foreground text-center mt-4">Income typically lags activity by ~60 days.</p>}
             </CardContent>
         </Card>
