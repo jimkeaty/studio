@@ -2,7 +2,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity } from 'lucide-react';
+import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 
