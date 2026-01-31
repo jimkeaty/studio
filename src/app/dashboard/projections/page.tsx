@@ -72,31 +72,44 @@ type CatchUpMetrics = {
 type CatchUpMetricValues = { remaining: number; perDay: number; perWeek: number; perMonth: number; }
 type ConversionMetric = { name: string; actual: number | null; plan: number; };
 
-const ProjectionRowMetric = ({ label, value, valueClass }: { label: string; value: string | number; valueClass?: string }) => (
-    <div className="text-center">
-        <p className={cn("text-3xl font-bold", valueClass)}>{value}</p>
-        <p className="text-xs text-muted-foreground uppercase">{label}</p>
+const MetricDisplay = ({ label, value, isCurrency = false, isCompact = false }: { label: string, value: number, isCurrency?: boolean, isCompact?: boolean }) => (
+    <div>
+        <p className={cn("text-muted-foreground", isCompact ? "text-xs" : "text-sm")}>{label}</p>
+        <p className={cn("font-bold", isCompact ? "text-lg" : "text-2xl")}>{isCurrency ? formatCurrency(value) : formatNumber(value)}</p>
     </div>
 );
 
-const CatchUpMetricDisplay = ({ title, data }: { title: string, data: CatchUpMetricValues }) => {
-  const needsImprovement = data.remaining > 0;
-  return (
-    <div className="text-center">
-      <p className={cn("text-3xl font-bold", needsImprovement ? "text-destructive" : "text-green-600")}>
-        {formatNumber(data.remaining)}
-      </p>
-      <p className="text-xs text-muted-foreground uppercase">{title}</p>
-      {needsImprovement && (
-        <div className="mt-2 text-xs text-muted-foreground border-t pt-1 grid">
-            <span>{formatNumber(data.perMonth, 1)}/mo</span>
-            <span>{formatNumber(data.perWeek, 1)}/wk</span>
-            <span>{formatNumber(data.perDay, 1)}/day</span>
+const CatchUpMetric = ({ title, data }: { title: string, data: CatchUpMetricValues }) => (
+    <Card className="flex flex-col items-center justify-center p-4 text-center">
+        <p className="text-xs text-muted-foreground uppercase">{title}</p>
+        <p className="text-4xl font-bold text-destructive">{formatNumber(data.remaining)}</p>
+        <p className="text-sm font-medium">Needed</p>
+        <Separator className="my-2" />
+        <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+            <span className="font-semibold">{formatNumber(data.perMonth, 1)}</span>
+            <span className="font-semibold">{formatNumber(data.perWeek, 1)}</span>
+            <span className="font-semibold">{formatNumber(data.perDay, 1)}</span>
+            <span className="text-muted-foreground">/mo</span>
+            <span className="text-muted-foreground">/wk</span>
+            <span className="text-muted-foreground">/day</span>
         </div>
-      )}
-    </div>
-  )
-}
+    </Card>
+);
+
+const PaceVsPlanCard = ({ title, actual, projected }: { title: string, actual: number, projected: number }) => (
+    <Card className="text-center">
+        <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center">
+            <p className="text-3xl font-bold">{formatNumber(projected)}</p>
+            <p className="text-xs text-muted-foreground">Projected</p>
+            <Separator className="w-1/2 my-2" />
+            <p className="text-lg font-semibold">{formatNumber(actual)}</p>
+            <p className="text-xs text-muted-foreground">Actual YTD</p>
+        </CardContent>
+    </Card>
+)
 
 export default function ProjectionsPage() {
     const [sandboxGoal, setSandboxGoal] = useState<number>(initialProjectionData.annualIncomeGoal);
@@ -210,92 +223,66 @@ export default function ProjectionsPage() {
                 <p className="text-muted-foreground">Analyze your pace, plan, and catch-up scenarios.</p>
             </div>
             
-            {/* Business Plan Row */}
-            <div className="space-y-2">
-                <CardHeader className="p-0 mb-2">
-                    <CardTitle className="text-center text-lg">Your Business Plan</CardTitle>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Target /> Your Business Plan (Annual Targets)</CardTitle>
                 </CardHeader>
-                <div className="relative flex items-center">
-                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-primary -translate-y-1/2 z-0"></div>
-                    <div className="bg-primary text-primary-foreground p-4 rounded-lg text-center w-48 z-10">
-                        <p className="text-xl font-bold">{formatCurrency(initialProjectionData.annualIncomeGoal)}</p>
-                        <p className="text-xs">Annual Goal</p>
-                    </div>
-                    <div className="flex-1 bg-background z-10 px-4">
-                        <div className="grid grid-cols-6 gap-2">
-                            <ProjectionRowMetric label="Calls" value={formatNumber(initialProjectionData.planAnnualTargets.calls)} />
-                            <ProjectionRowMetric label="Engagements" value={formatNumber(initialProjectionData.planAnnualTargets.engagements)} />
-                            <ProjectionRowMetric label="Appts Set" value={formatNumber(initialProjectionData.planAnnualTargets.appointmentsSet)} />
-                            <ProjectionRowMetric label="Appts Held" value={formatNumber(initialProjectionData.planAnnualTargets.appointmentsHeld)} />
-                            <ProjectionRowMetric label="Contracts" value={formatNumber(initialProjectionData.planAnnualTargets.contractsWritten)} />
-                            <ProjectionRowMetric label="Closings" value={formatNumber(initialProjectionData.planAnnualTargets.closings)} />
-                        </div>
-                    </div>
-                    <div className="bg-primary text-primary-foreground p-4 rounded-lg text-center w-48 z-10">
-                        <p className="text-xl font-bold">Business Plan</p>
-                    </div>
-                </div>
-            </div>
+                <CardContent className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 items-center">
+                    <MetricDisplay label="Annual Income Goal" value={initialProjectionData.annualIncomeGoal} isCurrency />
+                    <MetricDisplay label="Calls" value={initialProjectionData.planAnnualTargets.calls} />
+                    <MetricDisplay label="Engagements" value={initialProjectionData.planAnnualTargets.engagements} />
+                    <MetricDisplay label="Appts Set" value={initialProjectionData.planAnnualTargets.appointmentsSet} />
+                    <MetricDisplay label="Appts Held" value={initialProjectionData.planAnnualTargets.appointmentsHeld} />
+                    <MetricDisplay label="Contracts" value={initialProjectionData.planAnnualTargets.contractsWritten} />
+                    <MetricDisplay label="Closings" value={initialProjectionData.planAnnualTargets.closings} />
+                </CardContent>
+            </Card>
 
-            {/* Projected Pace Row */}
-            <div className="space-y-2">
-                <CardHeader className="p-0 mb-2">
-                    <CardTitle className="text-center text-lg">At Your Current Pace, You Will Achieve</CardTitle>
+            <Card>
+                 <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><TrendingUp /> At Your Current Pace, You Will Achieve</CardTitle>
+                    <CardDescription>Projections are based on your YTD calls pace and business plan conversion assumptions.</CardDescription>
                 </CardHeader>
-                <div className="relative flex items-center">
-                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-green-600 -translate-y-1/2 z-0"></div>
-                    <div className="bg-green-600 text-white p-4 rounded-lg text-center w-48 z-10">
-                        <p className="text-xl font-bold">{formatCurrency(initialProjectionData.ytdActuals.netEarned)}</p>
-                        <p className="text-xs">Actual Income</p>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <Card className="flex flex-col items-center justify-center p-6 bg-muted/30">
+                       <p className="text-sm text-muted-foreground">Projected Income</p>
+                       <p className="text-4xl font-bold text-green-600">{formatCurrency(paceProjection?.income ?? 0)}</p>
+                       <Separator className="my-2" />
+                       <p className="text-sm text-muted-foreground">Actual YTD: {formatCurrency(initialProjectionData.ytdActuals.netEarned)}</p>
+                    </Card>
+                    <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <PaceVsPlanCard title="Calls" actual={initialProjectionData.ytdActuals.calls} projected={paceProjection?.calls ?? 0} />
+                        <PaceVsPlanCard title="Engagements" actual={initialProjectionData.ytdActuals.engagements} projected={paceProjection?.engagements ?? 0} />
+                        <PaceVsPlanCard title="Appts Set" actual={initialProjectionData.ytdActuals.appointmentsSet} projected={paceProjection?.appointmentsSet ?? 0} />
+                        <PaceVsPlanCard title="Appts Held" actual={initialProjectionData.ytdActuals.appointmentsHeld} projected={paceProjection?.appointmentsHeld ?? 0} />
+                        <PaceVsPlanCard title="Contracts" actual={initialProjectionData.ytdActuals.contractsWritten} projected={paceProjection?.contractsWritten ?? 0} />
+                        <PaceVsPlanCard title="Closings" actual={initialProjectionData.ytdActuals.closings} projected={paceProjection?.closings ?? 0} />
                     </div>
-                    <div className="flex-1 bg-background z-10 px-4">
-                        <div className="grid grid-cols-6 gap-2">
-                            <ProjectionRowMetric label="Calls" value={formatNumber(paceProjection?.calls)} />
-                            <ProjectionRowMetric label="Engagements" value={formatNumber(paceProjection?.engagements)} />
-                            <ProjectionRowMetric label="Appts Set" value={formatNumber(paceProjection?.appointmentsSet)} />
-                            <ProjectionRowMetric label="Appts Held" value={formatNumber(paceProjection?.appointmentsHeld)} />
-                            <ProjectionRowMetric label="Contracts" value={formatNumber(paceProjection?.contractsWritten)} />
-                            <ProjectionRowMetric label="Closings" value={formatNumber(paceProjection?.closings)} />
-                        </div>
-                    </div>
-                    <div className="bg-green-600 text-white p-4 rounded-lg text-center w-48 z-10">
-                        <p className="text-xl font-bold">{formatCurrency(paceProjection?.income ?? 0)}</p>
-                        <p className="text-xs">Projected Income</p>
-                    </div>
-                </div>
-            </div>
+                </CardContent>
+            </Card>
 
-            {/* Catch Up Row */}
-            <div className="space-y-2">
-                <CardHeader className="p-0 mb-2">
-                    <CardTitle className="text-center text-lg">To Meet Your Goal ({formatCurrency(displayGoal)}), You Will Need</CardTitle>
-                    <CardDescription className="text-center text-sm">This is what it takes from today forward — not what you ‘should have done.’</CardDescription>
+            <Card>
+                 <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><RefreshCw /> To Meet Your Goal, You Will Need</CardTitle>
+                    <CardDescription>
+                        This is what it takes from today forward — not what you ‘should have done.’ Calculations are based on your business plan conversions to hit {formatCurrency(displayGoal)}.
+                    </CardDescription>
                 </CardHeader>
-                <div className="flex items-start gap-4">
-                    <div className="flex-1">
-                        <div className="relative flex items-center">
-                            <div className="absolute top-1/2 left-0 w-full h-0.5 bg-destructive -translate-y-1/2 z-0"></div>
-                            <div className="bg-destructive text-destructive-foreground p-4 rounded-lg text-center w-48 z-10">
-                                <p className="text-xl font-bold">{formatCurrency(catchUpMetrics.incomeLeftToGo)}</p>
-                                <p className="text-xs">Income Left To Go</p>
-                            </div>
-                            <div className="flex-1 bg-background z-10 px-4">
-                                <div className="grid grid-cols-6 gap-2">
-                                    <CatchUpMetricDisplay title="Calls" data={catchUpMetrics.metrics.calls} />
-                                    <CatchUpMetricDisplay title="Engagements" data={catchUpMetrics.metrics.engagements} />
-                                    <CatchUpMetricDisplay title="Appts Set" data={catchUpMetrics.metrics.appointmentsSet} />
-                                    <CatchUpMetricDisplay title="Appts Held" data={catchUpMetrics.metrics.appointmentsHeld} />
-                                    <CatchUpMetricDisplay title="Contracts" data={catchUpMetrics.metrics.contractsWritten} />
-                                    <CatchUpMetricDisplay title="Closings" data={catchUpMetrics.metrics.closings} />
-                                </div>
-                            </div>
-                            <div className="bg-destructive text-destructive-foreground p-4 rounded-lg text-center w-48 z-10">
-                                <p className="text-xl font-bold">{formatCurrency(displayGoal)}</p>
-                                <p className="text-xs">Agent Income Goal</p>
-                            </div>
-                        </div>
+                <CardContent className="flex flex-col lg:flex-row gap-6">
+                     <Card className="flex flex-col items-center justify-center p-6 bg-muted/30 flex-shrink-0">
+                       <p className="text-sm text-muted-foreground">Income Left To Go</p>
+                       <p className="text-4xl font-bold text-destructive">{formatCurrency(catchUpMetrics.incomeLeftToGo)}</p>
+                       <Separator className="my-2" />
+                       <p className="text-sm text-muted-foreground">Closings Needed: {formatNumber(catchUpMetrics.remainingClosingsNeeded)}</p>
+                    </Card>
+                    <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <CatchUpMetric title="Calls" data={catchUpMetrics.metrics.calls} />
+                        <CatchUpMetric title="Engagements" data={catchUpMetrics.metrics.engagements} />
+                        <CatchUpMetric title="Appts Set" data={catchUpMetrics.metrics.appointmentsSet} />
+                        <CatchUpMetric title="Appts Held" data={catchUpMetrics.metrics.appointmentsHeld} />
+                        <CatchUpMetric title="Contracts" data={catchUpMetrics.metrics.contractsWritten} />
                     </div>
-                    <Card className="bg-muted/50 w-64 flex-shrink-0">
+                    <Card className="bg-muted/50 lg:w-64 flex-shrink-0">
                         <CardHeader className="pb-2">
                             <Label htmlFor="current-goal">Original Plan Goal</Label>
                             <p id="current-goal" className="text-xl font-bold">{formatCurrency(initialProjectionData.annualIncomeGoal)}</p>
@@ -328,8 +315,8 @@ export default function ProjectionsPage() {
                             </Button>
                         </CardFooter>
                     </Card>
-                </div>
-            </div>
+                </CardContent>
+            </Card>
 
             <Card>
                 <CardHeader>
