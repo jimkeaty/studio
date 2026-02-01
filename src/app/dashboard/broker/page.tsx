@@ -25,10 +25,10 @@ const agents: (User & { data: AgentDashboardData })[] = [
             incomePerformance: 99,
             isIncomeGracePeriod: false,
             expectedYTDIncomeGoal: 30000,
+            ytdTotalPotential: 39000,
             pipelineAdjustedIncome: { grade: 'A', performance: 110 },
             kpis: { calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' }, engagements: { actual: 420, target: 500, performance: 84, grade: 'C' }, appointmentsSet: { actual: 50, target: 55, performance: 91, grade: 'B' }, appointmentsHeld: { actual: 45, target: 50, performance: 90, grade: 'B' }, contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' }, closings: { actual: 9, target: 8, performance: 113, grade: 'A' } },
             netEarned: 27000, netPending: 12000,
-            ytdTotalPotential: 39000,
             monthlyIncome: [],
             totalClosedIncomeForYear: 27000,
             totalPendingIncomeForYear: 12000,
@@ -49,10 +49,10 @@ const agents: (User & { data: AgentDashboardData })[] = [
             incomePerformance: 60,
             isIncomeGracePeriod: false,
             expectedYTDIncomeGoal: 15000,
+            ytdTotalPotential: 15000,
             pipelineAdjustedIncome: { grade: 'B', performance: 100 },
             kpis: { calls: { actual: 800, target: 1400, performance: 57, grade: 'F' }, engagements: { actual: 250, target: 450, performance: 56, grade: 'F' }, appointmentsSet: { actual: 28, target: 45, performance: 62, grade: 'D' }, appointmentsHeld: { actual: 25, target: 40, performance: 63, grade: 'D' }, contractsWritten: { actual: 5, target: 8, performance: 63, grade: 'D' }, closings: { actual: 3, target: 6, performance: 50, grade: 'F' } },
             netEarned: 9000, netPending: 6000,
-            ytdTotalPotential: 15000,
             monthlyIncome: [],
             totalClosedIncomeForYear: 9000,
             totalPendingIncomeForYear: 6000,
@@ -73,10 +73,10 @@ const agents: (User & { data: AgentDashboardData })[] = [
             incomePerformance: 88,
             isIncomeGracePeriod: false,
             expectedYTDIncomeGoal: 24000,
+            ytdTotalPotential: 30000,
             pipelineAdjustedIncome: { grade: 'A', performance: 125 },
             kpis: { calls: { actual: 1100, target: 1300, performance: 85, grade: 'B' }, engagements: { actual: 380, target: 400, performance: 95, grade: 'A' }, appointmentsSet: { actual: 42, target: 40, performance: 105, grade: 'A' }, appointmentsHeld: { actual: 40, target: 45, performance: 89, grade: 'B' }, contractsWritten: { actual: 10, target: 10, performance: 100, grade: 'A' }, closings: { actual: 7, target: 8, performance: 88, grade: 'B' } },
             netEarned: 21000, netPending: 9000,
-            ytdTotalPotential: 30000,
             monthlyIncome: [],
             totalClosedIncomeForYear: 21000,
             totalPendingIncomeForYear: 9000,
@@ -100,30 +100,26 @@ const funnelData = [
   { name: 'Closings', value: totalClosings, fill: 'var(--color-primary)' },
 ];
 
-const monthlyGciMarginData = {
+const monthlyBrokerGciData = {
   year: 2024,
   months: [
-    { month: 'Jan', totalGCI: 50000, agentGCI: 40000, brokerGCI: 10000, brokerMarginPct: 0.20 },
-    { month: 'Feb', totalGCI: 65000, agentGCI: 52000, brokerGCI: 13000, brokerMarginPct: 0.20 },
-    { month: 'Mar', totalGCI: 45000, agentGCI: 36000, brokerGCI: 9000, brokerMarginPct: 0.20 },
-    { month: 'Apr', totalGCI: 80000, agentGCI: 64000, brokerGCI: 16000, brokerMarginPct: 0.20 },
-    { month: 'May', totalGCI: 72000, agentGCI: 57600, brokerGCI: 14400, brokerMarginPct: 0.20 },
-    { month: 'Jun', totalGCI: 95000, agentGCI: 76000, brokerGCI: 19000, brokerMarginPct: 0.20 },
-    { month: 'Jul', totalGCI: 0, agentGCI: 0, brokerGCI: 0, brokerMarginPct: null },
-    { month: 'Aug', totalGCI: 0, agentGCI: 0, brokerGCI: 0, brokerMarginPct: null },
-    { month: 'Sep', totalGCI: 0, agentGCI: 0, brokerGCI: 0, brokerMarginPct: null },
-    { month: 'Oct', totalGCI: 0, agentGCI: 0, brokerGCI: 0, brokerMarginPct: null },
-    { month: 'Nov', totalGCI: 0, agentGCI: 0, brokerGCI: 0, brokerMarginPct: null },
-    { month: 'Dec', totalGCI: 0, agentGCI: 0, brokerGCI: 0, brokerMarginPct: null },
+    { month: 'Jan', closedBrokerGci: 10000, pendingBrokerGci: 5000, brokerGciGoal: 12000 },
+    { month: 'Feb', closedBrokerGci: 13000, pendingBrokerGci: 2000, brokerGciGoal: 12000 },
+    { month: 'Mar', closedBrokerGci: 9000,  pendingBrokerGci: 8000, brokerGciGoal: 12000 },
+    { month: 'Apr', closedBrokerGci: 16000, pendingBrokerGci: 4000, brokerGciGoal: 15000 },
+    { month: 'May', closedBrokerGci: 14400, pendingBrokerGci: 6000, brokerGciGoal: 15000 },
+    { month: 'Jun', closedBrokerGci: 19000, pendingBrokerGci: 10000, brokerGciGoal: 18000 },
+    { month: 'Jul', closedBrokerGci: 0, pendingBrokerGci: 8000, brokerGciGoal: 18000 },
+    { month: 'Aug', closedBrokerGci: 0, pendingBrokerGci: 5000, brokerGciGoal: 18000 },
+    { month: 'Sep', closedBrokerGci: 0, pendingBrokerGci: 0, brokerGciGoal: 18000 },
+    { month: 'Oct', closedBrokerGci: 0, pendingBrokerGci: 0, brokerGciGoal: 18000 },
+    { month: 'Nov', closedBrokerGci: 0, pendingBrokerGci: 0, brokerGciGoal: 18000 },
+    { month: 'Dec', closedBrokerGci: 0, pendingBrokerGci: 0, brokerGciGoal: 18000 },
   ],
 };
 
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
-const formatPercent = (value: number | null) => {
-    if (value === null || value === undefined) return '—';
-    return new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 0 }).format(value);
-};
 
 export default function BrokerDashboardPage() {
     const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
@@ -184,9 +180,9 @@ export default function BrokerDashboardPage() {
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <div>
-                            <CardTitle>Monthly GCI &amp; Broker Margin %</CardTitle>
+                            <CardTitle>Monthly Broker Net Income (Closed + Pending vs. Goal)</CardTitle>
                             <CardDescription>
-                                Closed GCI breakdown with broker margin percentage for {selectedYear}.
+                                Broker net income breakdown for {selectedYear}.
                             </CardDescription>
                         </div>
                         <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -205,13 +201,13 @@ export default function BrokerDashboardPage() {
                 <CardContent>
                     <ChartContainer
                         config={{
-                            agentGCI: { label: 'Agent GCI', color: 'hsl(var(--chart-1))' },
-                            brokerGCI: { label: 'Broker GCI', color: 'hsl(var(--chart-2))' },
-                            brokerMarginPct: { label: 'Broker Margin %', color: 'hsl(var(--primary))' },
+                            closedBrokerGci: { label: 'Net (Closed)', color: 'hsl(var(--primary))' },
+                            pendingBrokerGci: { label: 'Net (Pending)', color: 'hsl(var(--chart-2))' },
+                            brokerGciGoal: { label: 'Net Goal', color: 'hsl(var(--muted-foreground))' },
                         }}
                         className="h-[350px] w-full"
                     >
-                        <BarChart data={monthlyGciMarginData.months} margin={{ right: 20 }}>
+                        <BarChart data={monthlyBrokerGciData.months} margin={{ right: 5 }}>
                             <CartesianGrid vertical={false} />
                             <XAxis
                                 dataKey="month"
@@ -220,19 +216,14 @@ export default function BrokerDashboardPage() {
                                 tickMargin={8}
                             />
                             <YAxis
-                                yAxisId="left"
                                 tickFormatter={(value) => `$${Number(value) / 1000}k`}
-                            />
-                            <YAxis
-                                yAxisId="right"
-                                orientation="right"
-                                tickFormatter={(value) => `${Math.round(Number(value) * 100)}%`}
                             />
                             <ChartTooltip
                                 cursor={true}
                                 content={({ active, payload, label }) => {
                                     if (active && payload?.length) {
                                         const data = payload[0].payload;
+                                        const totalPotential = data.closedBrokerGci + data.pendingBrokerGci;
                                         return (
                                             <div className="rounded-lg border bg-background p-2 shadow-sm">
                                                 <div className="grid grid-cols-2 gap-2">
@@ -241,36 +232,36 @@ export default function BrokerDashboardPage() {
                                                             {label}
                                                         </span>
                                                         <span className="font-bold text-foreground">
-                                                            {formatCurrency(data.totalGCI)}
+                                                            {formatCurrency(totalPotential)}
                                                         </span>
                                                     </div>
                                                 </div>
                                                 <div className="mt-2 grid gap-1.5 text-xs">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="flex h-2 w-2 shrink-0 rounded-full bg-[var(--color-agentGCI)]" />
+                                                        <span className="flex h-2 w-2 shrink-0 rounded-full bg-[var(--color-closedBrokerGci)]" />
                                                         <div className="flex-1">
-                                                            <span>Agent GCI</span>
+                                                            <span>Net (Closed)</span>
                                                         </div>
                                                         <span className="font-mono font-medium tabular-nums text-foreground">
-                                                            {formatCurrency(data.agentGCI)}
+                                                            {formatCurrency(data.closedBrokerGci)}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <span className="flex h-2 w-2 shrink-0 rounded-full bg-[var(--color-brokerGCI)]" />
+                                                        <span className="flex h-2 w-2 shrink-0 rounded-full bg-[var(--color-pendingBrokerGci)]" />
                                                         <div className="flex-1">
-                                                            <span>Broker GCI</span>
+                                                            <span>Net (Pending)</span>
                                                         </div>
                                                         <span className="font-mono font-medium tabular-nums text-foreground">
-                                                            {formatCurrency(data.brokerGCI)}
+                                                            {formatCurrency(data.pendingBrokerGci)}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <div className="h-3 w-[2px] shrink-0 rounded-full bg-[var(--color-brokerMarginPct)]" />
+                                                        <div className="h-3 w-[2px] shrink-0 rounded-full bg-[var(--color-brokerGciGoal)]" />
                                                         <div className="flex-1">
-                                                            <span>Broker Margin %</span>
+                                                            <span>Net Goal</span>
                                                         </div>
                                                         <span className="font-mono font-medium tabular-nums text-foreground">
-                                                            {formatPercent(data.brokerMarginPct)}
+                                                            {formatCurrency(data.brokerGciGoal)}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -282,27 +273,24 @@ export default function BrokerDashboardPage() {
                             />
                             <ChartLegend content={<ChartLegendContent />} />
                             <Bar
-                                dataKey="agentGCI"
+                                dataKey="closedBrokerGci"
                                 stackId="gci"
-                                fill="var(--color-agentGCI)"
-                                yAxisId="left"
+                                fill="var(--color-closedBrokerGci)"
                                 radius={[0, 0, 0, 0]}
                             />
                             <Bar
-                                dataKey="brokerGCI"
+                                dataKey="pendingBrokerGci"
                                 stackId="gci"
-                                fill="var(--color-brokerGCI)"
-                                yAxisId="left"
+                                fill="var(--color-pendingBrokerGci)"
                                 radius={[4, 4, 0, 0]}
                             />
                             <Line
                                 type="monotone"
-                                dataKey="brokerMarginPct"
-                                stroke="var(--color-brokerMarginPct)"
-                                yAxisId="right"
-                                dot={false}
+                                dataKey="brokerGciGoal"
+                                stroke="var(--color-brokerGciGoal)"
                                 strokeWidth={2}
-                                connectNulls
+                                dot={false}
+                                strokeDasharray="3 4"
                             />
                         </BarChart>
                     </ChartContainer>
@@ -390,4 +378,5 @@ export default function BrokerDashboardPage() {
             </Card>
         </div>
     );
-}
+
+    
