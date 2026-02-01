@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
 import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users, Info, KeyRound } from 'lucide-react';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -15,18 +15,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 // Mock data for the agent dashboard. In a real app, this would be fetched from Firestore.
 const monthlyIncomeData = [
-    { month: 'Jan', closed: 2000, pending: 1000 },
-    { month: 'Feb', closed: 2562, pending: 500 },
-    { month: 'Mar', closed: 0, pending: 2000 },
-    { month: 'Apr', closed: 0, pending: 0 },
-    { month: 'May', closed: 0, pending: 3000 },
-    { month: 'Jun', closed: 0, pending: 5000 },
-    { month: 'Jul', closed: 0, pending: 500 },
-    { month: 'Aug', closed: 0, pending: 0 },
-    { month: 'Sep', closed: 0, pending: 0 },
-    { month: 'Oct', closed: 0, pending: 0 },
-    { month: 'Nov', closed: 0, pending: 0 },
-    { month: 'Dec', closed: 0, pending: 0 },
+    { month: 'Jan', closed: 2000, pending: 1000, goal: 8333 },
+    { month: 'Feb', closed: 2562, pending: 500, goal: 8333 },
+    { month: 'Mar', closed: 0, pending: 2000, goal: 8333 },
+    { month: 'Apr', closed: 0, pending: 0, goal: 8333 },
+    { month: 'May', closed: 0, pending: 3000, goal: 8333 },
+    { month: 'Jun', closed: 0, pending: 5000, goal: 8333 },
+    { month: 'Jul', closed: 0, pending: 500, goal: 8333 },
+    { month: 'Aug', closed: 0, pending: 0, goal: 8333 },
+    { month: 'Sep', closed: 0, pending: 0, goal: 8333 },
+    { month: 'Oct', closed: 0, pending: 0, goal: 8333 },
+    { month: 'Nov', closed: 0, pending: 0, goal: 8333 },
+    { month: 'Dec', closed: 0, pending: 0, goal: 8333 },
 ];
 const totalClosedIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.closed, 0);
 const totalPendingIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.pending, 0);
@@ -259,14 +259,14 @@ export default function AgentDashboardPage() {
                 <div>
                     <CardTitle>Agent Income by Month</CardTitle>
                     <CardDescription className="flex items-center gap-1.5 pt-1">
-                        Showing closed and pending income for {selectedYear}.
+                        Showing goal, closed, and pending income for {selectedYear}.
                          <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Info className="h-4 w-4 cursor-help text-muted-foreground" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p>Pending income is not guaranteed and does not affect your Income Grade.</p>
+                                    <p>Pending income is not guaranteed and does not affect your Income Grade. The goal is based on your business plan.</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -288,16 +288,29 @@ export default function AgentDashboardPage() {
         <CardContent>
             <ChartContainer config={{
                 closed: { label: 'Closed', color: 'hsl(var(--primary))' },
-                pending: { label: 'Pending (Not Guaranteed)', color: 'hsl(var(--chart-2))' },
+                pending: { label: 'Pending', color: 'hsl(var(--chart-2))' },
+                goal: { label: 'Monthly Goal', color: 'hsl(var(--muted-foreground))' },
             }} className="h-[300px] w-full">
-                <BarChart data={dashboardData.monthlyIncome} layout="vertical" margin={{ left: 10, right: 20 }}>
-                    <CartesianGrid horizontal={false} />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="month" type="category" tickLine={false} axisLine={false} />
-                    <ChartTooltip cursor={true} content={<ChartTooltipContent />} />
+                <BarChart data={dashboardData.monthlyIncome} margin={{ right: 5 }}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                        dataKey="month"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                    />
+                    <YAxis
+                        tickFormatter={(value) => `$${Number(value) / 1000}k`}
+                        domain={[0, 'dataMax + 2000']}
+                    />
+                    <ChartTooltip
+                        cursor={true}
+                        content={<ChartTooltipContent indicator="dot" />}
+                    />
                     <ChartLegend content={<ChartLegendContent />} />
-                    <Bar dataKey="closed" type="monotone" stackId="a" fill="var(--color-closed)" radius={[4, 0, 0, 4]} />
-                    <Bar dataKey="pending" type="monotone" stackId="a" fill="var(--color-pending)" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="closed" stackId="a" fill="var(--color-closed)" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="pending" stackId="a" fill="var(--color-pending)" radius={[4, 4, 0, 0]} />
+                    <Line type="monotone" dataKey="goal" stroke="var(--color-goal)" strokeWidth={2} strokeDasharray="3 3" dot={false} />
                 </BarChart>
             </ChartContainer>
         </CardContent>
