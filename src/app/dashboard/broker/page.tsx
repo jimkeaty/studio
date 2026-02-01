@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { DollarSign, Users, TrendingUp, Target } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AgentDashboardData, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -118,6 +118,12 @@ const monthlyBrokerGciData = {
   ],
 };
 
+const chartConfig = {
+    closedBrokerGci: { label: 'Net (Closed)', color: 'hsl(var(--primary))' },
+    pendingBrokerGci: { label: 'Net (Pending)', color: 'hsl(var(--chart-2))' },
+    brokerGciGoal: { label: 'Net Goal', color: 'hsl(var(--chart-3))' },
+} satisfies ChartConfig;
+
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 
@@ -200,11 +206,7 @@ export default function BrokerDashboardPage() {
                 </CardHeader>
                 <CardContent>
                     <ChartContainer
-                        config={{
-                            closedBrokerGci: { label: 'Net (Closed)', color: 'hsl(var(--primary))' },
-                            pendingBrokerGci: { label: 'Net (Pending)', color: 'hsl(var(--chart-2))' },
-                            brokerGciGoal: { label: 'Net Goal', color: 'hsl(var(--muted-foreground))' },
-                        }}
+                        config={chartConfig}
                         className="h-[350px] w-full"
                     >
                         <BarChart data={monthlyBrokerGciData.months} margin={{ right: 5 }}>
@@ -220,56 +222,7 @@ export default function BrokerDashboardPage() {
                             />
                             <ChartTooltip
                                 cursor={true}
-                                content={({ active, payload, label }) => {
-                                    if (active && payload?.length) {
-                                        const data = payload[0].payload;
-                                        const totalPotential = data.closedBrokerGci + data.pendingBrokerGci;
-                                        return (
-                                            <div className="rounded-lg border bg-background p-2 shadow-sm">
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[0.70rem] uppercase text-muted-foreground">
-                                                            {label}
-                                                        </span>
-                                                        <span className="font-bold text-foreground">
-                                                            {formatCurrency(totalPotential)}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="mt-2 grid gap-1.5 text-xs">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="flex h-2 w-2 shrink-0 rounded-full bg-[var(--color-closedBrokerGci)]" />
-                                                        <div className="flex-1">
-                                                            <span>Net (Closed)</span>
-                                                        </div>
-                                                        <span className="font-mono font-medium tabular-nums text-foreground">
-                                                            {formatCurrency(data.closedBrokerGci)}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="flex h-2 w-2 shrink-0 rounded-full bg-[var(--color-pendingBrokerGci)]" />
-                                                        <div className="flex-1">
-                                                            <span>Net (Pending)</span>
-                                                        </div>
-                                                        <span className="font-mono font-medium tabular-nums text-foreground">
-                                                            {formatCurrency(data.pendingBrokerGci)}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="h-3 w-[2px] shrink-0 rounded-full bg-[var(--color-brokerGciGoal)]" />
-                                                        <div className="flex-1">
-                                                            <span>Net Goal</span>
-                                                        </div>
-                                                        <span className="font-mono font-medium tabular-nums text-foreground">
-                                                            {formatCurrency(data.brokerGciGoal)}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                }}
+                                content={<ChartTooltipContent indicator="dot" />}
                             />
                             <ChartLegend content={<ChartLegendContent />} />
                             <Bar
@@ -380,3 +333,4 @@ export default function BrokerDashboardPage() {
     );
 
     
+
