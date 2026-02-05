@@ -71,12 +71,14 @@ export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
         setLoading(true);
         setIsUsingMockData(false);
+        setError(null);
 
         // In a real app, you'd get the user's ID from an auth context.
         // For now, we'll hardcode an agent ID to fetch the data for.
@@ -85,18 +87,23 @@ export default function AgentDashboardPage() {
         // This is the assumed path for the agent's yearly dashboard rollup document.
         const docRef = doc(db, 'dashboards', userId, 'agent', selectedYear);
         
+        console.log(`[INFO] Attempting to fetch agent dashboard from Firestore path: ${docRef.path}`);
+        
         try {
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 setDashboardData(docSnap.data() as AgentDashboardData);
             } else {
-                console.warn(`[DEVELOPER WARNING] No live data found at '${docRef.path}'. Falling back to mock data. Ensure your Cloud Functions are running and data exists at this path.`);
+                const errorMessage = `No live data found at '${docRef.path}'. Your Firestore database does not have a document at this specific path.`;
+                console.warn(`[WARNING] ${errorMessage} Falling back to mock data. Please ensure your Firestore data is structured correctly.`);
+                setError(errorMessage);
                 setDashboardData(mockAgentDashboardData);
                 setIsUsingMockData(true);
             }
-        } catch (e) {
-            console.error("Error fetching dashboard data:", e);
-            console.warn(`[DEVELOPER WARNING] Failed to fetch live data due to an error. Falling back to mock data. This could be a Firestore permissions issue or a configuration problem.`);
+        } catch (e: any) {
+            const errorMessage = `Failed to fetch live data due to an error. This is often a Firestore permissions issue or a data path mismatch.`;
+            console.error(`[ERROR] ${errorMessage} Path: '${docRef.path}'. Full error:`, e);
+            setError(`${errorMessage} Check the browser console for more details.`);
             setDashboardData(mockAgentDashboardData);
             setIsUsingMockData(true);
         } finally {
@@ -129,7 +136,7 @@ export default function AgentDashboardPage() {
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
             <AlertTitle>Displaying Mock Data</AlertTitle>
             <AlertDescription>
-                Could not load live data from Firestore. Please check your console for details and ensure your backend is configured correctly.
+                {error || 'Could not load live data from Firestore. Please check your console for details and ensure your backend is configured correctly.'}
             </AlertDescription>
         </Alert>
       )}
@@ -301,7 +308,7 @@ export default function AgentDashboardPage() {
             <ChartContainer config={{
                 closed: { label: 'Closed', color: 'hsl(var(--primary))' },
                 pending: { label: 'Pending', color: 'hsl(var(--chart-2))' },
-                goal: { label: 'Monthly Goal', color: 'hsl(var(--muted-foreground))' },
+                goal: { label: 'Monthly Goal', color: 'hsl(var(--chart-3))' },
             }} className="h-[300px] w-full">
                 <BarChart data={dashboardData.monthlyIncome} margin={{ right: 5 }}>
                     <CartesianGrid vertical={false} />
