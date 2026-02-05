@@ -84,7 +84,7 @@ export interface AgentDashboardData {
   netEarned: number;
   netPending: number;
 
-  monthlyIncome: { month: string; closed: number; pending: number }[];
+  monthlyIncome: { month: string; closed: number; pending: number; goal: number; }[];
   totalClosedIncomeForYear: number;
   totalPendingIncomeForYear: number;
   totalIncomeWithPipelineForYear: number;

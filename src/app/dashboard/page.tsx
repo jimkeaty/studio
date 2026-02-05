@@ -1,96 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, BarChart as BarChartIcon, TrendingUp, Home, Handshake, Activity, Users, Info, KeyRound } from 'lucide-react';
+import { DollarSign, Activity, Users, Info } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { TrendingUp, Home, Handshake } from 'lucide-react';
 
-
-// Mock data for the agent dashboard. In a real app, this would be fetched from Firestore.
-const monthlyIncomeData = [
-    { month: 'Jan', closed: 2000, pending: 1000, goal: 8333 },
-    { month: 'Feb', closed: 2562, pending: 500, goal: 8333 },
-    { month: 'Mar', closed: 0, pending: 2000, goal: 8333 },
-    { month: 'Apr', closed: 0, pending: 0, goal: 8333 },
-    { month: 'May', closed: 0, pending: 3000, goal: 8333 },
-    { month: 'Jun', closed: 0, pending: 5000, goal: 8333 },
-    { month: 'Jul', closed: 0, pending: 500, goal: 8333 },
-    { month: 'Aug', closed: 0, pending: 0, goal: 8333 },
-    { month: 'Sep', closed: 0, pending: 0, goal: 8333 },
-    { month: 'Oct', closed: 0, pending: 0, goal: 8333 },
-    { month: 'Nov', closed: 0, pending: 0, goal: 8333 },
-    { month: 'Dec', closed: 0, pending: 0, goal: 8333 },
-];
-const totalClosedIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.closed, 0);
-const totalPendingIncomeForYear = monthlyIncomeData.reduce((acc, month) => acc + month.pending, 0);
-
-const netEarnedYTD = 4562;
-const netPendingYTD = 12000;
-const expectedYTDGoal = 16733;
-const ytdTotalPotential = netEarnedYTD + netPendingYTD;
-
-const dashboardData: AgentDashboardData = {
-  userId: 'agent-1',
-  leadIndicatorGrade: 'B',
-  leadIndicatorPerformance: 99,
-  isLeadIndicatorGracePeriod: false,
-  incomeGrade: 'F',
-  incomePerformance: (netEarnedYTD / expectedYTDGoal) * 100,
-  isIncomeGracePeriod: false,
-  expectedYTDIncomeGoal: expectedYTDGoal,
-  pipelineAdjustedIncome: {
-    grade: 'A',
-    performance: (ytdTotalPotential / expectedYTDGoal) * 100,
-  },
-  kpis: {
-    calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' },
-    engagements: { actual: 420, target: 500, performance: 84, grade: 'C' },
-    appointmentsSet: { actual: 50, target: 55, performance: 91, grade: 'B' },
-    appointmentsHeld: { actual: 45, target: 50, performance: 90, grade: 'B' },
-    contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' },
-    closings: { actual: 10, target: 8, performance: 125, grade: 'A' },
-  },
-  netEarned: netEarnedYTD,
-  netPending: netPendingYTD,
-  ytdTotalPotential: ytdTotalPotential,
-  monthlyIncome: monthlyIncomeData,
-  totalClosedIncomeForYear,
-  totalPendingIncomeForYear,
-  totalIncomeWithPipelineForYear: totalClosedIncomeForYear + totalPendingIncomeForYear,
-  forecast: {
-    projectedClosings: 11,
-    paceBasedNetIncome: 33000,
-  },
-  conversions: {
-    callToEngagement: { actual: (420 / 1250) * 100, plan: 25 },
-    engagementToAppointmentSet: { actual: (50 / 420) * 100, plan: 10 },
-    appointmentSetToHeld: { actual: (45 / 50) * 100, plan: 90 },
-    appointmentHeldToContract: { actual: (15 / 45) * 100, plan: 20 },
-    contractToClosing: { actual: (9 / 15) * 100, plan: 80 },
-  },
-  stats: {
-    ytdVolume: 2700000,
-    avgSalesPrice: 300000,
-    buyerClosings: 6,
-    sellerClosings: 4,
-    renterClosings: 3,
-    avgCommission: 3000,
-    engagementValue: 64.28,
-  },
-};
-
-const formatCurrency = (amount: number, minimumFractionDigits = 0) => 
-  new Intl.NumberFormat('en-US', { 
-    style: 'currency', 
-    currency: 'USD', 
-    minimumFractionDigits 
+const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits,
   }).format(amount);
 
 const ConversionStat = ({ name, actual, plan }: { name: string; actual: number | null; plan: number }) => (
@@ -116,9 +47,74 @@ const StatTile = ({ icon: Icon, label, value }: { icon: React.ElementType, label
   </div>
 );
 
+const DashboardSkeleton = () => (
+    <div className="flex flex-col gap-8">
+        <div>
+            <Skeleton className="h-9 w-1/2" />
+            <Skeleton className="h-5 w-1/3 mt-2" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <Card className="lg:col-span-1"><CardContent className="p-6"><Skeleton className="h-48 w-full" /></CardContent></Card>
+            <Card className="lg:col-span-2"><CardContent className="p-6"><Skeleton className="h-48 w-full" /></CardContent></Card>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {[...Array(6)].map((_, i) => <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>)}
+        </div>
+        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card>
+        <Card><CardContent className="p-6"><Skeleton className="h-60 w-full" /></CardContent></Card>
+    </div>
+);
+
 
 export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+  const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+        setLoading(true);
+        setError(null);
+
+        // In a real app, you'd get the user's ID from an auth context.
+        // For now, we'll hardcode an agent ID to fetch the data for.
+        const userId = 'agent-1'; 
+        
+        // This is the assumed path for the agent's yearly dashboard rollup document.
+        const docRef = doc(db, 'dashboards', userId, 'agent', selectedYear);
+        
+        try {
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                setDashboardData(docSnap.data() as AgentDashboardData);
+            } else {
+                setError(`No dashboard data found for this user for the year ${selectedYear}. Please check if the backend has generated the data.`);
+                console.log("No such document at path:", docRef.path);
+            }
+        } catch (e) {
+            console.error("Error fetching dashboard data:", e);
+            setError('Failed to load dashboard data. There might be an issue with the database connection or permissions.');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    fetchData();
+  }, [selectedYear]);
+
+  if (loading) {
+    return <DashboardSkeleton />;
+  }
+
+  if (error || !dashboardData) {
+    return (
+        <Alert variant="destructive">
+            <AlertTitle>Error Loading Dashboard</AlertTitle>
+            <AlertDescription>{error || 'Could not load dashboard data.'}</AlertDescription>
+        </Alert>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -230,11 +226,11 @@ export default function AgentDashboardPage() {
           <CardDescription>Your year-to-date conversion rates compared to your business plan.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
-          <ConversionStat name="Calls to Engagements" {...dashboardData.conversions.callToEngagement} />
-          <ConversionStat name="Engagements to Appts" {...dashboardData.conversions.engagementToAppointmentSet} />
-          <ConversionStat name="Appts Set to Held" {...dashboardData.conversions.appointmentSetToHeld} />
-          <ConversionStat name="Appts to Contracts" {...dashboardData.conversions.appointmentHeldToContract} />
-          <ConversionStat name="Contracts to Closings" {...dashboardData.conversions.contractToClosing} />
+          <ConversionStat name="Calls → Engagements" actual={dashboardData.conversions.callToEngagement.actual} plan={dashboardData.conversions.callToEngagement.plan} />
+          <ConversionStat name="Engagements → Appts" actual={dashboardData.conversions.engagementToAppointmentSet.actual} plan={dashboardData.conversions.engagementToAppointmentSet.plan} />
+          <ConversionStat name="Appts Set → Held" actual={dashboardData.conversions.appointmentSetToHeld.actual} plan={dashboardData.conversions.appointmentSetToHeld.plan} />
+          <ConversionStat name="Appts → Contracts" actual={dashboardData.conversions.appointmentHeldToContract.actual} plan={dashboardData.conversions.appointmentHeldToContract.plan} />
+          <ConversionStat name="Contracts → Closings" actual={dashboardData.conversions.contractToClosing.actual} plan={dashboardData.conversions.contractToClosing.plan} />
         </CardContent>
       </Card>
       
@@ -331,45 +327,6 @@ export default function AgentDashboardPage() {
             </div>
         </CardFooter>
       </Card>
-
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Earned (Closed)</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(dashboardData.netEarned)}
-            </div>
-            <p className="text-xs text-muted-foreground">Total commission earned this year.</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Pending (Under Contract)</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(dashboardData.netPending)}
-            </div>
-            <p className="text-xs text-muted-foreground">Commission from pending transactions.</p>
-          </CardContent>
-        </Card>
-         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pace-Based Estimated Net</CardTitle>
-            <BarChartIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ~ {formatCurrency(dashboardData.forecast.paceBasedNetIncome)}
-            </div>
-            <p className="text-xs text-muted-foreground">Estimated income based on current pace.</p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
