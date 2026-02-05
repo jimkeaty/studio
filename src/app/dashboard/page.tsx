@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
-import { DollarSign, Activity, Users, Info } from 'lucide-react';
+import { DollarSign, Activity, Users, Info, TrendingUp, Home, Handshake, AlertTriangle } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
@@ -15,7 +15,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { TrendingUp, Home, Handshake } from 'lucide-react';
+import { mockAgentDashboardData } from '@/lib/mock-data';
+
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
   new Intl.NumberFormat('en-US', {
@@ -29,11 +30,11 @@ const ConversionStat = ({ name, actual, plan }: { name: string; actual: number |
     <p className="text-sm font-medium text-muted-foreground">{name}</p>
     <div className="mt-2 flex items-center justify-center gap-2">
       <p className="text-2xl font-bold">
-        {actual != null ? `${actual.toFixed(1)}%` : '—'}
+        {actual != null ? `${(actual * 100).toFixed(1)}%` : '—'}
       </p>
       {actual != null && actual >= plan && <TrendingUp className="h-5 w-5 text-green-500" />}
     </div>
-    <p className="text-xs text-muted-foreground">Plan: {plan.toFixed(1)}%</p>
+    <p className="text-xs text-muted-foreground">Plan: {(plan * 100).toFixed(1)}%</p>
   </div>
 );
 
@@ -70,12 +71,12 @@ export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
         setLoading(true);
-        setError(null);
+        setIsUsingMockData(false);
 
         // In a real app, you'd get the user's ID from an auth context.
         // For now, we'll hardcode an agent ID to fetch the data for.
@@ -89,12 +90,15 @@ export default function AgentDashboardPage() {
             if (docSnap.exists()) {
                 setDashboardData(docSnap.data() as AgentDashboardData);
             } else {
-                setError(`No dashboard data found for this user for the year ${selectedYear}. Please check if the backend has generated the data.`);
-                console.log("No such document at path:", docRef.path);
+                console.warn(`[DEVELOPER WARNING] No live data found at '${docRef.path}'. Falling back to mock data. Ensure your Cloud Functions are running and data exists at this path.`);
+                setDashboardData(mockAgentDashboardData);
+                setIsUsingMockData(true);
             }
         } catch (e) {
             console.error("Error fetching dashboard data:", e);
-            setError('Failed to load dashboard data. There might be an issue with the database connection or permissions.');
+            console.warn(`[DEVELOPER WARNING] Failed to fetch live data due to an error. Falling back to mock data. This could be a Firestore permissions issue or a configuration problem.`);
+            setDashboardData(mockAgentDashboardData);
+            setIsUsingMockData(true);
         } finally {
             setLoading(false);
         }
@@ -107,17 +111,29 @@ export default function AgentDashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  if (error || !dashboardData) {
+  if (!dashboardData) {
+    // This case should ideally not be hit if we always fall back to mock data,
+    // but it's good practice as a safeguard.
     return (
         <Alert variant="destructive">
             <AlertTitle>Error Loading Dashboard</AlertTitle>
-            <AlertDescription>{error || 'Could not load dashboard data.'}</AlertDescription>
+            <AlertDescription>Could not load dashboard data. Please try again later.</AlertDescription>
         </Alert>
     );
   }
 
   return (
     <div className="flex flex-col gap-8">
+      {isUsingMockData && (
+        <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-300">
+            <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
+            <AlertTitle>Displaying Mock Data</AlertTitle>
+            <AlertDescription>
+                Could not load live data from Firestore. Please check your console for details and ensure your backend is configured correctly.
+            </AlertDescription>
+        </Alert>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
         <p className="text-muted-foreground">Your performance at a glance.</p>

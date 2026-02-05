@@ -1,27 +1,24 @@
-# Settings to manage and configure a Firebase App Hosting backend
-# https://firebase.google.com/docs/app-hosting/configure
-
 runConfig:
   maxInstances: 1
 
-env:
-  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: "AIzaSyBkKkSa-8XrT_NQ7dMpCXQh5ub2IPdVwdg"
+  env:
+    - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+      value: "AIzaSyBkKkSa-8XrT_NQ7dMpCXQh5ub2IPdVwdg"
 
-  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: "smart-broker-usa.firebaseapp.com"
+    - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+      value: "smart-broker-usa.firebaseapp.com"
 
-  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: "smart-broker-usa"
+    - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+      value: "smart-broker-usa"
 
-  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    value: "smart-broker-usa.firebasestorage.app"
+    - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+      value: "smart-broker-usa.firebasestorage.app"
 
-  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    value: "349178824168"
+    - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+      value: "349178824168"
 
-  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: "1:349178824168:web:f2413b74cf31e717b8505d"
+    - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+      value: "1:349178824168:web:f2413b74cf31e717b8505d"
 
-  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
-    value: "G-7QCWP5Q1DE"
+    - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+      value: "G-7QCWP5Q1DE"
