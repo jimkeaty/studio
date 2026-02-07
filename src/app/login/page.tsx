@@ -36,7 +36,7 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error("Sign-in click error:", err);
       if (err.code === 'auth/api-key-not-valid') {
-        setErrorMsg("Invalid Firebase API Key. Please check the value of NEXT_PUBLIC_FIREBASE_API_KEY in your apphosting.yaml file.");
+        setErrorMsg("Invalid Firebase API Key. You must update `apphosting.yaml` with the correct key from your Firebase project console.");
       } else {
         setErrorMsg(String(err?.message || err));
       }
@@ -59,7 +59,7 @@ export default function LoginPage() {
       } catch (err: any) {
         if (mounted) {
            if (err.code === 'auth/api-key-not-valid') {
-             setErrorMsg("Invalid Firebase API Key. Please check the value of NEXT_PUBLIC_FIREBASE_API_KEY in your apphosting.yaml file.");
+             setErrorMsg("Invalid Firebase API Key. You must update `apphosting.yaml` with the correct key from your Firebase project console.");
              return;
            }
 
@@ -107,7 +107,7 @@ export default function LoginPage() {
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle>Authentication Error</AlertTitle>
                   <AlertDescription>
-                    {errorMsg} This is often caused by an incorrect value in the `apphosting.yaml` file. Please verify your Firebase project credentials and try again.
+                    {errorMsg}
                   </AlertDescription>
                 </Alert>
             ) : null}
