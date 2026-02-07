@@ -34,7 +34,11 @@ export default function LoginPage() {
       await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error("Sign-in click error:", err);
-      setErrorMsg(String(err?.message || err));
+      if (err.code === 'auth/api-key-not-valid') {
+        setErrorMsg("Invalid Firebase API Key. Please check the value of NEXT_PUBLIC_FIREBASE_API_KEY in your apphosting.yaml file.");
+      } else {
+        setErrorMsg(String(err?.message || err));
+      }
       setBusy(false);
     }
   };
@@ -49,16 +53,16 @@ export default function LoginPage() {
         // If user just came back from Google sign-in
         if (result?.user) {
           console.log("Google login success:", result.user.email);
-
-          // TEMP: skip provisioning for now
-          // Next step (after auth works) is to call the provisionUser Cloud Function URL directly.
-
           router.replace("/dashboard");
         }
       } catch (err: any) {
         if (mounted) {
-          const msg = String(err?.message || "");
+           if (err.code === 'auth/api-key-not-valid') {
+             setErrorMsg("Invalid Firebase API Key. Please check the value of NEXT_PUBLIC_FIREBASE_API_KEY in your apphosting.yaml file.");
+             return;
+           }
 
+          const msg = String(err?.message || "");
           // Ignore common "no redirect" / "no auth event" cases
           if (
             msg &&
