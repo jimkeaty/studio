@@ -31,11 +31,6 @@ export default function LoginPage() {
       setBusy(true);
 
       const provider = new GoogleAuthProvider();
-
-      // ✅ PROVE what config is being used at runtime
-      console.log("RUNTIME FIREBASE KEY:", auth.app.options.apiKey);
-      console.log("RUNTIME AUTH DOMAIN:", auth.app.options.authDomain);
-
       await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error("Sign-in click error:", err);
