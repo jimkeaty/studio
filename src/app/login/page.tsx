@@ -11,7 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Building } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, Building } from "lucide-react";
 
 import {
   GoogleAuthProvider,
@@ -100,14 +101,19 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
+            {errorMsg ? (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Authentication Error</AlertTitle>
+                  <AlertDescription>
+                    {errorMsg} This is often caused by an incorrect value in the `apphosting.yaml` file. Please verify your Firebase project credentials and try again.
+                  </AlertDescription>
+                </Alert>
+            ) : null}
             <Button className="w-full" onClick={handleGoogleSignIn} disabled={busy}>
               {busy ? "Signing in..." : "Sign in with Google"}
             </Button>
-
-            {errorMsg ? (
-              <p className="text-sm text-red-600 break-words">{errorMsg}</p>
-            ) : null}
           </CardContent>
         </Card>
       </div>
