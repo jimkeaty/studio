@@ -70,7 +70,7 @@ const DashboardSkeleton = () => (
 
 
 export default function AgentDashboardPage() {
-  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+  const [selectedYear, setSelectedYear] = useState('2026');
   const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,8 +81,6 @@ export default function AgentDashboardPage() {
         setLoading(true);
         setIsUsingMockData(false);
         setError(null);
-
-        console.log('Fetching data for year:', selectedYear);
 
         // In a real app, you'd get the user's ID from an auth context.
         // For now, we'll hardcode an agent ID to fetch the data for.
@@ -307,7 +305,7 @@ export default function AgentDashboardPage() {
                     </SelectTrigger>
                     <SelectContent>
                          {[...Array(5)].map((_, i) => {
-                            const year = new Date().getFullYear() - i;
+                            const year = new Date().getFullYear() + 2 - i;
                             return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
                         })}
                     </SelectContent>
