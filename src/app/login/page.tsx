@@ -35,7 +35,14 @@ export default function LoginPage() {
       await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error("Sign-in click error:", err);
-      setErrorMsg(String(err?.message || "An unexpected error occurred."));
+       if (err.code === 'auth/unauthorized-domain') {
+        // Get the part of the hostname after any port-forwarding prefix like '9000-'
+        const currentHost = window.location.hostname;
+        const displayHost = currentHost.includes('-') ? currentHost.substring(currentHost.indexOf('-') + 1) : currentHost;
+        setErrorMsg(`This app's domain (${displayHost}) is not authorized. Go to Firebase Console > Authentication > Settings > Authorized domains and add it.`);
+      } else {
+        setErrorMsg(String(err?.message || "An unexpected error occurred."));
+      }
       setBusy(false);
     }
   };
