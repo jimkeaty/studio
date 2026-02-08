@@ -23,7 +23,7 @@ import { auth } from '@/lib/firebase';
 export default function LoginPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<React.ReactNode | null>(null);
 
   const handleGoogleSignIn = async () => {
     setErrorMsg(null);
@@ -37,23 +37,36 @@ export default function LoginPage() {
       router.replace('/dashboard');
     } catch (err: any) {
       console.error('Sign-in click error:', err);
+
       if (err.code === 'auth/unauthorized-domain') {
         const currentHost = window.location.hostname;
+        const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
         setErrorMsg(
-          `Authentication failed. The domain you are on (${currentHost}) is not authorized for this Firebase project. Please go to the Firebase Console, navigate to Authentication > Settings > Authorized domains, and add this exact domain. It can take a few minutes for changes to apply.`
+          <div className="space-y-2 text-left">
+            <p>
+              Your app's domain is not authorized. This is a standard Firebase security step.
+            </p>
+            <ol className="list-decimal list-inside space-y-1 text-xs">
+              <li>Go to the <a href="https://console.firebase.google.com/" className="underline" target="_blank" rel="noopener noreferrer">Firebase Console</a>.</li>
+              <li>Select project: <strong className="font-mono">{projectId}</strong>.</li>
+              <li>Navigate to: <strong>Authentication</strong> &gt; <strong>Settings</strong> &gt; <strong>Authorized domains</strong>.</li>
+              <li>Click <strong>Add domain</strong> and enter this exact value:</li>
+            </ol>
+            <pre className="mt-1 w-full overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs text-muted-foreground">
+              {currentHost}
+            </pre>
+            <p className="text-xs text-muted-foreground pt-2">It may take a few minutes for the change to take effect after adding the domain.</p>
+          </div>
         );
       } else if (err.code === 'auth/popup-blocked') {
         setErrorMsg('Pop-up was blocked by the browser. Please allow pop-ups for this site and try again.');
-      }
-      else {
-        setErrorMsg(
-          String(err?.message || 'An unexpected error occurred during sign-in.')
-        );
+      } else {
+        setErrorMsg(String(err?.message || 'An unexpected error occurred.'));
       }
       setBusy(false);
     }
   };
-
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
