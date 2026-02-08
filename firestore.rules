@@ -4,16 +4,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // By default, deny all reads and writes.
-    // More specific rules below will grant access where needed.
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Allow any authenticated user to read from the dashboards collection.
-    // This allows the dashboard to fetch data for any agent.
+    // Allow any authenticated user to read from an agent's yearly dashboard document.
     // For a production app with sensitive data, you would restrict this further,
     // for example: allow read: if request.auth.uid == userId;
-    match /dashboards/{userId}/{path=**} {
+    match /dashboards/{userId}/agent/{year} {
       allow read: if request.auth != null;
     }
   }
