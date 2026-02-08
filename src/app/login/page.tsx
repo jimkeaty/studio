@@ -44,9 +44,8 @@ export default function LoginPage() {
     const provider = new GoogleAuthProvider();
 
     try {
-      const result = await signInWithPopup(auth, provider);
-      // onAuthStateChanged will handle the redirect
-      console.log('Popup login success:', result.user.email);
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged will handle the redirect if successful
     } catch (err: any) {
       console.error('Popup sign-in error:', err);
       if (err.code === 'auth/unauthorized-domain') {
