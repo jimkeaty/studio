@@ -5,7 +5,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Agents can only read their own dashboard data.
     match /dashboards/{userId}/agent/{year} {
-      allow read: if request.auth.uid == userId;
+      // TEMPORARY RULE for diagnostics: Allow read if any user is authenticated.
+      // This helps determine if the auth state is being sent at all.
+      allow read: if request.auth != null;
       // Deny writes to prevent accidental modification from client.
       allow write: if false;
     }
