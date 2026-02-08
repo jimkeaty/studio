@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -16,8 +16,7 @@ import { AlertTriangle, Building, Loader2 } from 'lucide-react';
 
 import {
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -25,38 +24,6 @@ export default function LoginPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isCheckingRedirect, setIsCheckingRedirect] = useState(true);
-
-  useEffect(() => {
-    const checkRedirect = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result && result.user) {
-          // User signed in successfully.
-          console.log('Google redirect login success:', result.user.email);
-          router.replace('/dashboard');
-        } else {
-          // No user found in redirect result, so it's a fresh visit.
-          setIsCheckingRedirect(false);
-        }
-      } catch (err: any) {
-        // Handle errors that happen *after* the user is redirected back from Google.
-        console.error('Redirect result error:', err);
-        if (err.code === 'auth/unauthorized-domain') {
-          const currentHost = window.location.hostname;
-          setErrorMsg(
-            `Authentication failed. The domain you are on (${currentHost}) is not authorized for this Firebase project. Please go to the Firebase Console, navigate to Authentication > Settings > Authorized domains, and add this exact domain. It can take a few minutes for changes to apply.`
-          );
-        } else {
-          setErrorMsg(
-            String(err?.message || 'An unexpected error occurred during sign-in.')
-          );
-        }
-        setIsCheckingRedirect(false);
-      }
-    };
-    checkRedirect();
-  }, [router]);
 
   const handleGoogleSignIn = async () => {
     setErrorMsg(null);
@@ -64,35 +31,29 @@ export default function LoginPage() {
     const provider = new GoogleAuthProvider();
 
     try {
-      // This will attempt to redirect the user to Google's sign-in page.
-      // Errors here are often client-side pre-checks, like an invalid domain.
-      await signInWithRedirect(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      // User signed in successfully.
+      console.log('Google popup login success:', result.user.email);
+      router.replace('/dashboard');
     } catch (err: any) {
       console.error('Sign-in click error:', err);
       if (err.code === 'auth/unauthorized-domain') {
         const currentHost = window.location.hostname;
         setErrorMsg(
-          `This app's domain (${currentHost}) is not authorized. Please add this exact domain to your Firebase project's "Authorized domains" list in the Authentication > Settings section of the Firebase Console. Note: It may take a few minutes for the changes to apply.`
+          `Authentication failed. The domain you are on (${currentHost}) is not authorized for this Firebase project. Please go to the Firebase Console, navigate to Authentication > Settings > Authorized domains, and add this exact domain. It can take a few minutes for changes to apply.`
         );
-      } else {
-        setErrorMsg(String(err?.message || 'An unexpected error occurred.'));
+      } else if (err.code === 'auth/popup-blocked') {
+        setErrorMsg('Pop-up was blocked by the browser. Please allow pop-ups for this site and try again.');
       }
-      setBusy(false); // Stop the busy indicator on error
+      else {
+        setErrorMsg(
+          String(err?.message || 'An unexpected error occurred during sign-in.')
+        );
+      }
+      setBusy(false);
     }
   };
 
-  if (isCheckingRedirect) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-muted-foreground">
-            Checking authentication status...
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -124,7 +85,14 @@ export default function LoginPage() {
               onClick={handleGoogleSignIn}
               disabled={busy}
             >
-              {busy ? 'Redirecting...' : 'Sign in with Google'}
+              {busy ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Please wait
+                </>
+              ) : (
+                'Sign in with Google'
+              )}
             </Button>
           </CardContent>
         </Card>
