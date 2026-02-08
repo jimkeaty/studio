@@ -16,6 +16,8 @@ import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
@@ -75,7 +77,7 @@ export default function AgentDashboardPage() {
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-    async function fetchData() {
+    function fetchData() {
         setLoading(true);
         setIsUsingMockData(false);
         setError(null);
@@ -87,28 +89,34 @@ export default function AgentDashboardPage() {
         // This is the assumed path for the agent's yearly dashboard rollup document.
         const docRef = doc(db, 'dashboards', userId, 'agent', selectedYear);
         
-        console.log(`[INFO] Attempting to fetch agent dashboard from Firestore path: ${docRef.path}`);
-        
-        try {
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                setDashboardData(docSnap.data() as AgentDashboardData);
-            } else {
-                const errorMessage = `No live data found at '${docRef.path}'. Your Firestore database does not have a document at this specific path.`;
-                console.warn(`[WARNING] ${errorMessage} Falling back to mock data. Please ensure your Firestore data is structured correctly.`);
+        getDoc(docRef)
+            .then((docSnap) => {
+                if (docSnap.exists()) {
+                    setDashboardData(docSnap.data() as AgentDashboardData);
+                } else {
+                    const errorMessage = `No live data found for ${selectedYear}. Your Firestore database does not have a document at this specific path. Falling back to mock data.`;
+                    setError(errorMessage);
+                    setDashboardData(mockAgentDashboardData);
+                    setIsUsingMockData(true);
+                }
+            })
+            .catch((serverError: any) => {
+                // Create a contextual permission error to be surfaced by the listener.
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'get',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                
+                // Fall back to mock data for the UI to prevent a crash.
+                const errorMessage = `Failed to fetch live data for ${selectedYear}. This is likely a Firestore permissions issue.`;
                 setError(errorMessage);
                 setDashboardData(mockAgentDashboardData);
                 setIsUsingMockData(true);
-            }
-        } catch (e: any) {
-            const errorMessage = `Failed to fetch live data due to an error. This is often a Firestore permissions issue or a data path mismatch.`;
-            console.error(`[ERROR] ${errorMessage} Path: '${docRef.path}'. Full error:`, e);
-            setError(`${errorMessage} Check the browser console for more details.`);
-            setDashboardData(mockAgentDashboardData);
-            setIsUsingMockData(true);
-        } finally {
-            setLoading(false);
-        }
+            })
+            .finally(() => {
+                setLoading(false);
+            });
     }
 
     fetchData();
