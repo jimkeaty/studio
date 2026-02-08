@@ -29,7 +29,7 @@ export function useDoc<T = DocumentData>(ref: DocumentReference<T> | null) {
         );
 
         return () => unsubscribe();
-    }, [ref]);
+    }, [ref?.path]);
 
     return { data, loading, error };
 }
