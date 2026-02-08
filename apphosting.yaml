@@ -3,7 +3,7 @@ runConfig:
 
   env:
     - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-      value: "AIzaSyBkKkSa-8XrT_NQ7dMpCXQh5ub2IPdVwdg"
+      value: "AIzaSyCbkEpvYeoQJ0O-pjszaNb1Nj5T0wf_T3s"
 
     - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
       value: "smart-broker-usa.firebaseapp.com"
@@ -18,7 +18,7 @@ runConfig:
       value: "349178824168"
 
     - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-      value: "1:349178824168:web:f2413b74cf31e717b8505d"
+      value: "1:349178824168:web:96a4ebb72e96deb3b8505d"
 
     - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
-      value: "G-7QCWP5Q1DE"
+      value: "G-X4687TJXZV"
