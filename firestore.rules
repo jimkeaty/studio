@@ -9,9 +9,12 @@ service cloud.firestore {
       allow write: if false; // Writes are handled by backend functions
     }
     
-    // Allow writes for authenticated users to other collections (like dailyLog)
-    // This is a broad rule and should be refined in a production app.
-    match /users/{userId}/{path=**} {
+    // Allow users to write their own daily logs and business plans
+    match /users/{userId}/dailyLogs/{logId} {
+      allow write: if request.auth.uid == userId;
+    }
+
+    match /users/{userId}/plans/{planId} {
       allow write: if request.auth.uid == userId;
     }
   }
