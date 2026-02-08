@@ -17,8 +17,6 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
     console.error("Firebase configuration is missing or incomplete. Please check your environment variables in apphosting.yaml.");
 }
 
-console.log(`[DEBUG] Using Firebase API Key: ${firebaseConfig.apiKey}`);
-
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
