@@ -322,18 +322,22 @@ export default function AgentDashboardPage() {
             </ChartContainer>
         </CardContent>
         <CardFooter className="border-t p-4">
-            <div className="grid w-full grid-cols-3 items-center gap-4">
+            <div className="grid w-full grid-cols-4 items-center gap-2 text-center">
                 <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Total Closed</p>
+                    <p className="text-sm text-muted-foreground">YTD Goal</p>
+                    <p className="text-lg font-bold">{formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                </div>
+                <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">YTD Closed</p>
                     <p className="text-lg font-bold">{formatCurrency(dashboardData.totalClosedIncomeForYear)}</p>
                 </div>
                 <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Total Pending</p>
+                    <p className="text-sm text-muted-foreground">YTD Pending</p>
                     <p className="text-lg font-bold">{formatCurrency(dashboardData.totalPendingIncomeForYear)}</p>
                 </div>
-                <div className="space-y-1 text-right">
-                    <p className="text-sm font-semibold text-primary">Total Income (Incl. Pipeline)</p>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(dashboardData.totalIncomeWithPipelineForYear)}</p>
+                <div className="space-y-1">
+                    <p className="text-sm font-semibold text-primary">Potential</p>
+                    <p className="text-lg font-bold text-primary">{formatCurrency(dashboardData.totalIncomeWithPipelineForYear)}</p>
                 </div>
             </div>
         </CardFooter>

@@ -132,7 +132,7 @@ export default function DailyTrackerPage() {
                 totalClosedIncomeForYear: 0,
                 totalPendingIncomeForYear: 0,
                 totalIncomeWithPipelineForYear: 0,
-                monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({...m, closed: 0, pending: 0, goal: 0})),
+                monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({...m, closed: 0, pending: 0})),
             };
         }
         
