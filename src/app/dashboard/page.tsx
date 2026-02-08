@@ -82,6 +82,8 @@ export default function AgentDashboardPage() {
         setIsUsingMockData(false);
         setError(null);
 
+        console.log('Fetching data for year:', selectedYear);
+
         // In a real app, you'd get the user's ID from an auth context.
         // For now, we'll hardcode an agent ID to fetch the data for.
         const userId = 'agent-1'; 

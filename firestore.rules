@@ -3,16 +3,12 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // By default, deny all reads and writes.
+    // WARNING: This is an insecure rule for debugging purposes ONLY.
+    // It makes your entire database publicly readable.
+    // This should be reverted to a secure state as soon as possible.
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // WARNING: This is an insecure rule for debugging purposes only.
-    // It allows any client to read agent dashboard data.
-    // This should be changed back to: allow read: if request.auth != null;
-    match /dashboards/{userId}/agent/{year} {
       allow read: if true;
+      allow write: if request.auth != null; // Keep writes protected
     }
   }
 }
