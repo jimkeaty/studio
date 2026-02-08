@@ -16,9 +16,6 @@ import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { errorEmitter } from '@/firebase/error-emitter';
-
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
   new Intl.NumberFormat('en-US', {
@@ -80,19 +77,12 @@ export default function AgentDashboardPage() {
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-    if (!user && !userLoading) {
-        // Not logged in, and auth state is resolved. Stop loading.
-        setDataLoading(false);
-        return;
-    }
-
     if (user) {
-        const fetchData = async () => {
-            setDataLoading(true);
-            const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+        setDataLoading(true);
+        const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
 
-            try {
-                const docSnap = await getDoc(docRef);
+        getDoc(docRef)
+            .then((docSnap) => {
                 if (docSnap.exists()) {
                     setDashboardData(docSnap.data() as AgentDashboardData);
                     setIsUsingMockData(false);
@@ -103,23 +93,19 @@ export default function AgentDashboardPage() {
                     setIsUsingMockData(true);
                     setDataError(null);
                 }
-            } catch (err: any) {
-                // This will catch any errors, including permission errors if the rules are misconfigured.
-                console.error('Firestore Read Error:', err);
-                const permissionError = new FirestorePermissionError({
-                    path: docRef.path,
-                    operation: 'get',
-                });
-                errorEmitter.emit('permission-error', permissionError);
+            })
+            .catch((err) => {
+                console.error("Firestore Read Error:", err);
                 setDataError(err);
                 setDashboardData(mockAgentDashboardData);
                 setIsUsingMockData(true);
-            } finally {
+            })
+            .finally(() => {
                 setDataLoading(false);
-            }
-        };
-
-        fetchData();
+            });
+    } else if (!userLoading) {
+        // Not logged in, and auth state is resolved. Stop loading.
+        setDataLoading(false);
     }
   }, [user, userLoading, db, selectedYear]);
 
@@ -149,12 +135,12 @@ export default function AgentDashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      {isUsingMockData && (
+      {(isUsingMockData || dataError) && (
         <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-300">
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
-            <AlertTitle>Displaying Mock Data</AlertTitle>
+            <AlertTitle>{dataError ? 'Error Loading Live Data' : 'Displaying Mock Data'}</AlertTitle>
             <AlertDescription>
-                {dataError ? `Failed to load live data: ${dataError.message}` : `No live data found for your user for ${selectedYear}. This is expected for new users.`}
+                {dataError ? `${dataError.message}` : `No live data found for your user for ${selectedYear}. This is expected for new users.`}
             </AlertDescription>
         </Alert>
       )}
