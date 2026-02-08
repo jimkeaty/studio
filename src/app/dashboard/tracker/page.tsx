@@ -13,6 +13,10 @@ import { cn } from '@/lib/utils';
 import { CalendarIcon, Check, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { useUser, useFirestore } from '@/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const trackerFormSchema = z.object({
   date: z.date({
@@ -29,6 +33,8 @@ type TrackerFormValues = z.infer<typeof trackerFormSchema>;
 
 export default function DailyTrackerPage() {
   const { toast } = useToast();
+  const { user } = useUser();
+  const db = useFirestore();
   
   const form = useForm<TrackerFormValues>({
     resolver: zodResolver(trackerFormSchema),
@@ -43,16 +49,42 @@ export default function DailyTrackerPage() {
   });
 
   function onSubmit(data: TrackerFormValues) {
-    // In a real app, this would be a server action that creates/updates a 'dailyLog' document in Firestore.
-    console.log('// TODO: Call server action to save daily log:', {
-        ...data,
-        date: format(data.date, 'yyyy-MM-dd')
-    });
-    toast({
-      title: "Log Saved!",
-      description: `Your activity for ${format(data.date, 'PPP')} has been saved.`,
-      action: <Check className="h-5 w-5 text-green-500" />,
-    });
+    if (!user || !db) {
+        toast({
+            variant: "destructive",
+            title: "Not Signed In",
+            description: "You must be signed in to log your daily activity.",
+        });
+        return;
+    }
+
+    const dateStr = format(data.date, 'yyyy-MM-dd');
+    const logDocRef = doc(db, 'users', user.uid, 'dailyLogs', dateStr);
+
+    const { date, ...logData } = data;
+    const dataToSave = {
+        ...logData,
+        userId: user.uid,
+        date: dateStr,
+        updatedAt: new Date().toISOString(),
+    };
+
+    setDoc(logDocRef, dataToSave, { merge: true })
+        .then(() => {
+            toast({
+              title: "Log Saved!",
+              description: `Your activity for ${format(data.date, 'PPP')} has been saved.`,
+              action: <Check className="h-5 w-5 text-green-500" />,
+            });
+        })
+        .catch((err) => {
+             const permissionError = new FirestorePermissionError({
+                path: logDocRef.path,
+                operation: 'update', // or 'create'
+                requestResourceData: dataToSave,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
   }
   
   const sevenDaysAgo = new Date();

@@ -7,6 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { BusinessPlan } from '@/lib/types';
 import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target } from 'lucide-react';
+import { useUser, useFirestore } from '@/firebase';
+import { useToast } from '@/hooks/use-toast';
+import { doc, setDoc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const conversionRates = {
   appointmentToContract: 0.2, // 20% of appointments held become contracts
@@ -44,11 +49,50 @@ export default function BusinessPlanPage() {
   const [incomeGoal, setIncomeGoal] = useState(100000);
   const [plan, setPlan] = useState<BusinessPlan['calculatedTargets']>(calculatePlan(100000));
   
-  const handleCalculate = () => {
-    // In a real app, this would be a server action that creates/updates the 'plan' document in Firestore.
-    // A Cloud Function would then perform the calculation.
-    console.log('// TODO: Call server action to save plan for year 2024 with goal:', incomeGoal);
-    setPlan(calculatePlan(incomeGoal));
+  const { user } = useUser();
+  const db = useFirestore();
+  const { toast } = useToast();
+
+  const handleCalculateAndSave = () => {
+    if (!user || !db) {
+        toast({
+            variant: 'destructive',
+            title: 'Not Signed In',
+            description: 'You must be signed in to save a business plan.',
+        });
+        return;
+    }
+    
+    const newPlanData = calculatePlan(incomeGoal);
+    setPlan(newPlanData);
+    
+    const year = new Date().getFullYear();
+    // The document ID will be the year, ensuring one plan per user per year.
+    const planDocRef = doc(db, 'users', user.uid, 'plans', String(year));
+
+    const planToSave = {
+        userId: user.uid,
+        year: year,
+        annualIncomeGoal: incomeGoal,
+        calculatedTargets: newPlanData,
+        updatedAt: new Date().toISOString(),
+    };
+
+    setDoc(planDocRef, planToSave, { merge: true })
+        .then(() => {
+            toast({
+                title: 'Plan Saved!',
+                description: `Your business plan for ${year} has been updated.`,
+            });
+        })
+        .catch((err) => {
+            const permissionError = new FirestorePermissionError({
+                path: planDocRef.path,
+                operation: 'update', // or 'create'
+                requestResourceData: planToSave,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
   };
   
   return (
@@ -81,8 +125,8 @@ export default function BusinessPlanPage() {
                   />
               </div>
             </div>
-            <Button onClick={handleCalculate} className="w-full sm:w-auto">
-              <ArrowRight className="mr-2 h-4 w-4" /> Calculate Your Plan
+            <Button onClick={handleCalculateAndSave} className="w-full sm:w-auto">
+              <ArrowRight className="mr-2 h-4 w-4" /> Calculate & Save Plan
             </Button>
           </div>
         </CardContent>
