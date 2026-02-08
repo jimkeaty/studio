@@ -17,26 +17,21 @@ import { AlertTriangle, Building, Loader2 } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged,
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useAuth, useUser } from '@/firebase';
 
 export default function LoginPage() {
   const router = useRouter();
+  const auth = useAuth();
+  const { user, loading: userLoading } = useUser();
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<React.ReactNode | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        router.replace('/dashboard');
-      } else {
-        setIsLoading(false);
-      }
-    });
-    return () => unsubscribe();
-  }, [router]);
+    if (!userLoading && user) {
+      router.replace('/dashboard');
+    }
+  }, [user, userLoading, router]);
 
   const handleGoogleSignIn = async () => {
     setErrorMsg(null);
@@ -45,7 +40,7 @@ export default function LoginPage() {
 
     try {
       await signInWithPopup(auth, provider);
-      // onAuthStateChanged will handle the redirect if successful
+      // onAuthStateChanged in useUser will handle the redirect if successful
     } catch (err: any) {
       console.error('Popup sign-in error:', err);
       if (err.code === 'auth/unauthorized-domain') {
@@ -76,7 +71,7 @@ export default function LoginPage() {
     }
   };
   
-  if (isLoading) {
+  if (userLoading || user) {
     return (
        <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="flex flex-col items-center gap-4">

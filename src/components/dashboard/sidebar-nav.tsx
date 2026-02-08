@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
@@ -38,7 +39,7 @@ export function SidebarNav() {
   const pathname = usePathname();
 
   return (
-    <>
+    <Sidebar className="hidden border-r lg:block">
       <SidebarHeader className="border-b">
         <div className="flex h-16 items-center gap-3 px-4">
           <Building className="h-8 w-8 text-primary" />
@@ -128,6 +129,6 @@ export function SidebarNav() {
           </div>
         </Card>
       </SidebarFooter>
-    </>
+    </Sidebar>
   );
 }

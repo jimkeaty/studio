@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -11,14 +11,11 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { doc } from 'firebase/firestore';
+import { useUser, useFirestore, useDoc } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
@@ -72,79 +69,39 @@ const DashboardSkeleton = () => (
 
 export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState('2026');
-  const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isUsingMockData, setIsUsingMockData] = useState(false);
+  const { user, loading: userLoading } = useUser();
+  const db = useFirestore();
 
-  useEffect(() => {
-    // We must wait for the auth state to be confirmed before fetching data
-    // to ensure the security rules have the user's UID.
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // User is signed in, proceed to fetch data.
-        setLoading(true);
-        setIsUsingMockData(false);
-        setError(null);
+  const docRef = useMemo(() => {
+    if (!user) return null;
+    return doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+  }, [user, db, selectedYear]);
 
-        // Use the authenticated user's UID to fetch their specific data.
-        const userId = user.uid;
-        const docRef = doc(db, 'dashboards', userId, 'agent', selectedYear);
-
-        getDoc(docRef)
-            .then((docSnap) => {
-                if (docSnap.exists()) {
-                    setDashboardData(docSnap.data() as AgentDashboardData);
-                } else {
-                    const errorMessage = `No live data found for your user account for year ${selectedYear}. Falling back to mock data. This is expected if you haven't generated any data yet.`;
-                    setError(errorMessage);
-                    setDashboardData(mockAgentDashboardData);
-                    setIsUsingMockData(true);
-                }
-            })
-            .catch((serverError: any) => {
-                // This will catch any errors, including permission errors if the rules are misconfigured.
-                const permissionError = new FirestorePermissionError({
-                    path: docRef.path,
-                    operation: 'get',
-                });
-                errorEmitter.emit('permission-error', permissionError);
-                
-                const errorMessage = `Failed to fetch live data due to a permissions issue.`;
-                setError(errorMessage);
-                setDashboardData(mockAgentDashboardData);
-                setIsUsingMockData(true);
-            })
-            .finally(() => {
-                setLoading(false);
-            });
-      } else {
-        // User is not signed in.
-        setLoading(false);
-        setError("You are not authenticated. Please log in to see your dashboard.");
-        setDashboardData(null);
-        setIsUsingMockData(false);
-      }
-    });
-
-    // Cleanup the listener when the component unmounts.
-    return () => unsubscribe();
-  }, [selectedYear]);
+  const { data: liveData, loading: dataLoading, error: dataError } = useDoc<AgentDashboardData>(docRef);
+  
+  const isUsingMockData = (dataError || (!dataLoading && !liveData)) ?? false;
+  const dashboardData = isUsingMockData ? mockAgentDashboardData : liveData;
+  const loading = userLoading || (dataLoading && !dashboardData);
 
   if (loading) {
     return <DashboardSkeleton />;
   }
-
-  if (!dashboardData) {
+  
+  if (!user && !loading) {
     return (
-        <Alert variant="destructive">
+         <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Error Loading Dashboard</AlertTitle>
+            <AlertTitle>Not Authenticated</AlertTitle>
             <AlertDescription>
-                {error || "Could not load dashboard data. Please try again later."}
+                Please log in to view your dashboard.
             </AlertDescription>
         </Alert>
     );
+  }
+
+  if (!dashboardData) {
+    // This case should be covered by loading or mock data fallback, but as a safeguard:
+    return <DashboardSkeleton />;
   }
 
   return (
@@ -154,7 +111,7 @@ export default function AgentDashboardPage() {
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
             <AlertTitle>Displaying Mock Data</AlertTitle>
             <AlertDescription>
-                {error || 'Could not load live data from Firestore. Please check your console for details and ensure your backend is configured correctly.'}
+                {dataError ? `Failed to load live data. Check console for details.` : `No live data found for ${selectedYear}. This is expected if you haven't generated any data yet.`}
             </AlertDescription>
         </Alert>
       )}
