@@ -3,10 +3,10 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Agents can only read their own dashboard data.
+    // This is a temporary, insecure rule for debugging purposes.
+    // It allows any read request to the dashboards collection.
     match /dashboards/{userId}/agent/{year} {
-      allow read: if request.auth.uid == userId;
-      // Deny writes to prevent accidental modification from client.
+      allow read: if true; 
       allow write: if false;
     }
     

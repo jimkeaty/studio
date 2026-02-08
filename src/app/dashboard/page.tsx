@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -17,8 +17,7 @@ import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { errorEmitter } from '@/firebase/error-emitter';
+import { useToast } from '@/hooks/use-toast';
 
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
@@ -74,6 +73,7 @@ export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState('2026');
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
+  const { toast } = useToast();
 
   const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
@@ -108,24 +108,23 @@ export default function AgentDashboardPage() {
           setDataError(null);
         }
       } catch (err: any) {
-        // This will catch any errors, including permission errors if the rules are misconfigured.
-        const permissionError = new FirestorePermissionError({
-            path: docRef.path,
-            operation: 'get',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-
+        // This is a simplified catch block for final diagnosis.
         console.error('Firestore Read Error:', err);
         setDataError(err);
         setDashboardData(mockAgentDashboardData);
         setIsUsingMockData(true);
+        toast({
+            variant: "destructive",
+            title: "Error Loading Data",
+            description: "Could not load dashboard data. Displaying mock data instead.",
+        });
       } finally {
         setDataLoading(false);
       }
     };
 
     fetchData();
-  }, [user, db, selectedYear, userLoading]);
+  }, [user, db, selectedYear, userLoading, toast]);
 
 
   const loading = userLoading || dataLoading;
