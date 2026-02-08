@@ -118,9 +118,9 @@ export default function AgentDashboardPage() {
       {isUsingMockData && (
         <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-300">
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
-            <AlertTitle>{dataError ? 'Error Loading Live Data' : 'Displaying Mock Data'}</AlertTitle>
+            <AlertTitle>{dataError ? 'Error Loading Live Data' : 'Displaying Sample Data'}</AlertTitle>
             <AlertDescription>
-                {dataError ? `${dataError.message}` : `Could not find live data for your user for ${selectedYear}. This is expected for new users.`}
+                {dataError ? `We encountered an issue fetching your live data: ${dataError.message}. This can sometimes happen due to network or configuration issues. We're showing you sample data in the meantime.` : `Could not find live data for your user for ${selectedYear}. This is expected for new users. We're showing you sample data in the meantime.`}
             </AlertDescription>
         </Alert>
       )}
