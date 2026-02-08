@@ -1,8 +1,6 @@
 'use client';
 import { type Query, onSnapshot, type DocumentData, type QuerySnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { FirestorePermissionError } from '../errors';
-import { errorEmitter } from '../error-emitter';
 
 export function useCollection<T = DocumentData>(query: Query<T> | null) {
     const [snapshot, setSnapshot] = useState<QuerySnapshot<T> | null>(null);
@@ -13,6 +11,7 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
         if (!query) {
             setSnapshot(null);
             setLoading(false);
+            setError(null);
             return;
         }
 
@@ -24,14 +23,8 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
                 setError(null);
             },
             (err) => {
-                // It's hard to reliably get the path from a query object without internal properties.
-                // We'll signal it as a list operation on an unknown path.
-                const permissionError = new FirestorePermissionError({
-                    path: `Collection query (path unknown)`,
-                    operation: 'list',
-                });
-                errorEmitter.emit('permission-error', permissionError);
-                setError(permissionError);
+                console.error(`[useCollection] Error fetching collection:`, err);
+                setError(err);
                 setSnapshot(null);
                 setLoading(false);
             }
