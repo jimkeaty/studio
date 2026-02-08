@@ -67,7 +67,7 @@ const DashboardSkeleton = () => (
 
 
 export default function AgentDashboardPage() {
-  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear() + 2)); // Default to 2026
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
@@ -140,8 +140,9 @@ export default function AgentDashboardPage() {
                 <SelectValue placeholder="Select year" />
             </SelectTrigger>
             <SelectContent>
+                {/* Show current year and 4 previous years */}
                 {[...Array(5)].map((_, i) => {
-                const year = new Date().getFullYear() + 2 - i;
+                const year = new Date().getFullYear() - i;
                 return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
                 })}
             </SelectContent>
