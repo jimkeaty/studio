@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -11,8 +11,8 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc } from 'firebase/firestore';
-import { useUser, useFirestore, useDoc } from '@/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
@@ -71,27 +71,46 @@ export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
-  const docRef = useMemo(() => {
-    if (user && db) {
-      return doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+  const [liveDashboardData, setLiveDashboardData] = useState<AgentDashboardData | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!user || !db) {
+      if (!userLoading) {
+        setDataLoading(false);
+      }
+      return;
     }
-    return null;
-  }, [user, db, selectedYear]);
 
-  const { data: liveDashboardData, loading: dataLoading, error: dataError } = useDoc(docRef);
+    setDataLoading(true);
+    const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
 
-  const isUsingMockData = !liveDashboardData && !dataLoading;
+    const unsubscribe = onSnapshot(docRef,
+      (snapshot) => {
+        setLiveDashboardData(snapshot.exists() ? snapshot.data() as AgentDashboardData : null);
+        setDataLoading(false);
+        setDataError(null);
+      },
+      (err) => {
+        console.error(`[AgentDashboard] Error fetching document at ${docRef.path}:`, err);
+        setDataError(err);
+        setLiveDashboardData(null);
+        setDataLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, db, selectedYear, userLoading]);
+
   const loading = userLoading || dataLoading;
 
   if (loading) {
     return <DashboardSkeleton />;
   }
 
-  const dashboardData = isUsingMockData ? mockAgentDashboardData : liveDashboardData;
-
-  if (!dashboardData) {
-    return <DashboardSkeleton />;
-  }
+  const dashboardData = liveDashboardData || mockAgentDashboardData;
+  const isUsingMockData = !liveDashboardData;
 
   return (
     <div className="flex flex-col gap-8">
