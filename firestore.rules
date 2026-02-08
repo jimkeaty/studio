@@ -3,9 +3,9 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow any authenticated user to read from the dashboards collection for now.
+    // Agents can only read their own dashboard data.
     match /dashboards/{userId}/agent/{year} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && request.auth.uid == userId;
       // Deny writes to prevent accidental modification from client.
       allow write: if false;
     }

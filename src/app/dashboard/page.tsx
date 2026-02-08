@@ -12,7 +12,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
@@ -77,39 +78,39 @@ export default function AgentDashboardPage() {
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-    function fetchData() {
+    // We must wait for the auth state to be confirmed before fetching data
+    // to ensure the security rules have the user's UID.
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, proceed to fetch data.
         setLoading(true);
         setIsUsingMockData(false);
         setError(null);
 
-        // In a real app, you'd get the user's ID from an auth context.
-        // For now, we'll hardcode an agent ID to fetch the data for.
-        const userId = 'agent-1'; 
-        
-        // This is the assumed path for the agent's yearly dashboard rollup document.
+        // Use the authenticated user's UID to fetch their specific data.
+        const userId = user.uid;
         const docRef = doc(db, 'dashboards', userId, 'agent', selectedYear);
-        
+
         getDoc(docRef)
             .then((docSnap) => {
                 if (docSnap.exists()) {
                     setDashboardData(docSnap.data() as AgentDashboardData);
                 } else {
-                    const errorMessage = `No live data found for ${selectedYear}. Your Firestore database does not have a document at this specific path. Falling back to mock data.`;
+                    const errorMessage = `No live data found for your user account for year ${selectedYear}. Falling back to mock data. This is expected if you haven't generated any data yet.`;
                     setError(errorMessage);
                     setDashboardData(mockAgentDashboardData);
                     setIsUsingMockData(true);
                 }
             })
             .catch((serverError: any) => {
-                // Create a contextual permission error to be surfaced by the listener.
+                // This will catch any errors, including permission errors if the rules are misconfigured.
                 const permissionError = new FirestorePermissionError({
                     path: docRef.path,
                     operation: 'get',
                 });
                 errorEmitter.emit('permission-error', permissionError);
                 
-                // Fall back to mock data for the UI to prevent a crash.
-                const errorMessage = `Failed to fetch live data for ${selectedYear}. This is likely a Firestore permissions issue.`;
+                const errorMessage = `Failed to fetch live data due to a permissions issue.`;
                 setError(errorMessage);
                 setDashboardData(mockAgentDashboardData);
                 setIsUsingMockData(true);
@@ -117,9 +118,17 @@ export default function AgentDashboardPage() {
             .finally(() => {
                 setLoading(false);
             });
-    }
+      } else {
+        // User is not signed in.
+        setLoading(false);
+        setError("You are not authenticated. Please log in to see your dashboard.");
+        setDashboardData(null);
+        setIsUsingMockData(false);
+      }
+    });
 
-    fetchData();
+    // Cleanup the listener when the component unmounts.
+    return () => unsubscribe();
   }, [selectedYear]);
 
   if (loading) {
@@ -127,12 +136,13 @@ export default function AgentDashboardPage() {
   }
 
   if (!dashboardData) {
-    // This case should ideally not be hit if we always fall back to mock data,
-    // but it's good practice as a safeguard.
     return (
         <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Error Loading Dashboard</AlertTitle>
-            <AlertDescription>Could not load dashboard data. Please try again later.</AlertDescription>
+            <AlertDescription>
+                {error || "Could not load dashboard data. Please try again later."}
+            </AlertDescription>
         </Alert>
     );
   }
