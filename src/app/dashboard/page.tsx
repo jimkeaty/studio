@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -81,50 +80,48 @@ export default function AgentDashboardPage() {
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-    // We shouldn't be fetching data until the user is authenticated.
-    if (userLoading || !user) {
-      // If we are done loading and there's no user, we can stop the loading indicator.
-      if (!userLoading) {
+    if (!user && !userLoading) {
+        // Not logged in, and auth state is resolved. Stop loading.
         setDataLoading(false);
-      }
-      return;
+        return;
     }
 
-    const fetchData = async () => {
-      setDataLoading(true);
-      const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+    if (user) {
+        const fetchData = async () => {
+            setDataLoading(true);
+            const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
 
-      try {
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setDashboardData(docSnap.data() as AgentDashboardData);
-          setIsUsingMockData(false);
-          setDataError(null);
-        } else {
-          // Document does not exist, fall back to mock data
-          console.warn(`No dashboard document found at ${docRef.path}. Falling back to mock data.`);
-          setDashboardData(mockAgentDashboardData);
-          setIsUsingMockData(true);
-          setDataError(null);
-        }
-      } catch (err: any) {
-        // This is a simplified catch block for final diagnosis.
-        console.error('Firestore Read Error:', err);
-        setDataError(err);
-        setDashboardData(mockAgentDashboardData);
-        setIsUsingMockData(true);
-        toast({
-            variant: "destructive",
-            title: "Error Loading Data",
-            description: "Could not load dashboard data. Displaying mock data instead.",
-        });
-      } finally {
-        setDataLoading(false);
-      }
-    };
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setDashboardData(docSnap.data() as AgentDashboardData);
+                    setIsUsingMockData(false);
+                    setDataError(null);
+                } else {
+                    console.warn(`No dashboard document found at ${docRef.path}. Falling back to mock data.`);
+                    setDashboardData(mockAgentDashboardData);
+                    setIsUsingMockData(true);
+                    setDataError(null);
+                }
+            } catch (err: any) {
+                // This will catch any errors, including permission errors if the rules are misconfigured.
+                console.error('Firestore Read Error:', err);
+                setDataError(err);
+                setDashboardData(mockAgentDashboardData);
+                setIsUsingMockData(true);
+                toast({
+                    variant: "destructive",
+                    title: "Error Loading Data",
+                    description: "Could not load dashboard data. Displaying mock data instead.",
+                });
+            } finally {
+                setDataLoading(false);
+            }
+        };
 
-    fetchData();
-  }, [user, db, selectedYear, userLoading, toast]);
+        fetchData();
+    }
+  }, [user, userLoading, db, selectedYear, toast]);
 
 
   const loading = userLoading || dataLoading;
