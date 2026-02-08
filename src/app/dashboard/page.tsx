@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -11,11 +12,13 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc } from 'firebase/firestore';
-import { useUser, useFirestore, useDoc } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { errorEmitter } from '@/firebase/error-emitter';
 
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
@@ -72,17 +75,61 @@ export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
-  const docRef = useMemo(() => {
-    if (!user) return null;
-    return doc(db, 'dashboards', user.uid, 'agent', selectedYear);
-  }, [user, db, selectedYear]);
+  const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<Error | null>(null);
+  const [isUsingMockData, setIsUsingMockData] = useState(false);
 
-  const { data: liveData, loading: dataLoading, error: dataError } = useDoc<AgentDashboardData>(docRef);
+  useEffect(() => {
+    // We shouldn't be fetching data until the user is authenticated.
+    if (userLoading || !user) {
+      // If we are done loading and there's no user, we can stop the loading indicator.
+      if (!userLoading) {
+        setDataLoading(false);
+      }
+      return;
+    }
+
+    const fetchData = async () => {
+      setDataLoading(true);
+      const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+
+      try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setDashboardData(docSnap.data() as AgentDashboardData);
+          setIsUsingMockData(false);
+          setDataError(null);
+        } else {
+          // Document does not exist, fall back to mock data
+          console.warn(`No dashboard document found at ${docRef.path}. Falling back to mock data.`);
+          setDashboardData(mockAgentDashboardData);
+          setIsUsingMockData(true);
+          setDataError(null);
+        }
+      } catch (err: any) {
+        // This will catch any errors, including permission errors if the rules are misconfigured.
+        const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+
+        console.error('Firestore Read Error:', err);
+        setDataError(err);
+        setDashboardData(mockAgentDashboardData);
+        setIsUsingMockData(true);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user, db, selectedYear, userLoading]);
+
+
+  const loading = userLoading || dataLoading;
   
-  const isUsingMockData = (dataError || (!dataLoading && !liveData)) ?? false;
-  const dashboardData = isUsingMockData ? mockAgentDashboardData : liveData;
-  const loading = userLoading || (dataLoading && !dashboardData);
-
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -100,7 +147,7 @@ export default function AgentDashboardPage() {
   }
 
   if (!dashboardData) {
-    // This case should be covered by loading or mock data fallback, but as a safeguard:
+    // This can happen briefly between loading states.
     return <DashboardSkeleton />;
   }
 
@@ -111,7 +158,7 @@ export default function AgentDashboardPage() {
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
             <AlertTitle>Displaying Mock Data</AlertTitle>
             <AlertDescription>
-                {dataError ? `Failed to load live data. Check console for details.` : `No live data found for ${selectedYear}. This is expected if you haven't generated any data yet.`}
+                {dataError ? `Failed to load live data: ${dataError.message}` : `No live data found for your user for ${selectedYear}. This is expected for new users.`}
             </AlertDescription>
         </Alert>
       )}
