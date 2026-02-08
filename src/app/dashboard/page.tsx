@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
-import type { AgentDashboardData } from '@/lib/types';
+import type { AgentDashboardData, BusinessPlan } from '@/lib/types';
 import { DollarSign, Activity, Users, Info, TrendingUp, Home, Handshake, AlertTriangle } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
@@ -100,50 +100,86 @@ export default function AgentDashboardPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<Error | null>(null);
 
-  const docRef = useMemo(() => {
+  const [businessPlan, setBusinessPlan] = useState<BusinessPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+
+  const dashboardDocRef = useMemo(() => {
     if (!user?.uid || !db) return null;
     return doc(db, 'dashboards', user.uid, 'agent', selectedYear) as DocumentReference<AgentDashboardData>;
   }, [user?.uid, db, selectedYear]);
 
+  const planDocRef = useMemo(() => {
+    if (!user?.uid || !db) return null;
+    return doc(db, 'users', user.uid, 'plans', selectedYear) as DocumentReference<BusinessPlan>;
+  }, [user?.uid, db, selectedYear]);
+
 
   useEffect(() => {
-    if (!docRef) {
-        // This handles the case where user or db are not ready yet.
-        // We set loading to false if we are not in an initial user loading state.
-        if (!userLoading) {
-            setDataLoading(false);
-        }
+    if (!dashboardDocRef) {
+        if (!userLoading) setDataLoading(false);
         return;
     }
-
     setDataLoading(true);
-    const unsubscribe = onSnapshot(docRef,
+    const unsubscribe = onSnapshot(dashboardDocRef,
       (snapshot) => {
         setLiveDashboardData(snapshot.exists() ? snapshot.data() : null);
         setDataLoading(false);
         setDataError(null);
       },
       (err) => {
-        console.error(`[AgentDashboard] Error fetching document at ${docRef.path}:`, err);
+        console.error(`[AgentDashboard] Error fetching dashboard document at ${dashboardDocRef.path}:`, err);
         setDataError(err);
         setLiveDashboardData(null);
         setDataLoading(false);
       }
     );
-
     return () => unsubscribe();
-  }, [docRef, userLoading]);
+  }, [dashboardDocRef, userLoading]);
 
-  const loading = userLoading || dataLoading;
+  useEffect(() => {
+    if (!planDocRef) {
+        if (!userLoading) setPlanLoading(false);
+        return;
+    }
+    setPlanLoading(true);
+    const unsubscribe = onSnapshot(planDocRef,
+      (snapshot) => {
+        setBusinessPlan(snapshot.exists() ? snapshot.data() : null);
+        setPlanLoading(false);
+      },
+      (err) => {
+        console.error(`[AgentDashboard] Error fetching business plan at ${planDocRef.path}:`, err);
+        setBusinessPlan(null);
+        setPlanLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, [planDocRef, userLoading]);
+
+  const loading = userLoading || dataLoading || planLoading;
+
+  const dashboardData = useMemo(() => {
+    const baseData = liveDashboardData || mockAgentDashboardData;
+    const monthlyGoal = businessPlan?.calculatedTargets?.monthlyNetIncome || mockAgentDashboardData.monthlyIncome[0].goal;
+
+    const ensuredMonthlyIncome = baseData.monthlyIncome.map(monthData => ({
+        ...monthData,
+        goal: monthlyGoal,
+    }));
+
+    return {
+        ...baseData,
+        monthlyIncome: ensuredMonthlyIncome,
+    };
+  }, [liveDashboardData, businessPlan]);
 
   if (loading) {
     return <DashboardSkeleton />;
   }
 
-  const dashboardData = liveDashboardData || mockAgentDashboardData;
   const isUsingMockData = !liveDashboardData;
 
-    // Process monthly income data to apply business logic
+  // Process monthly income data to apply business logic for pending/closed amounts
   const processedMonthlyIncome = processMonthlyIncomeData(dashboardData.monthlyIncome, selectedYear);
   const processedDashboardData = {
     ...dashboardData,
@@ -173,7 +209,7 @@ export default function AgentDashboardPage() {
                 <SelectValue placeholder="Select year" />
             </SelectTrigger>
             <SelectContent>
-                {/* Show current year and 4 previous years */}
+                {/* Show current year + 2 future and 2 previous years */}
                 {[...Array(5)].map((_, i) => {
                 const year = new Date().getFullYear() + 2 - i;
                 return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
