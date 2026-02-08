@@ -14,9 +14,11 @@ import { CalendarIcon, Check, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { mockAgentDashboardData } from '@/lib/mock-data';
+import type { AgentDashboardData } from '@/lib/types';
 
 const trackerFormSchema = z.object({
   date: z.date({
@@ -48,7 +50,7 @@ export default function DailyTrackerPage() {
     },
   });
 
-  function onSubmit(data: TrackerFormValues) {
+  async function onSubmit(data: TrackerFormValues) {
     if (!user || !db) {
         toast({
             variant: "destructive",
@@ -69,22 +71,91 @@ export default function DailyTrackerPage() {
         updatedAt: new Date().toISOString(),
     };
 
-    setDoc(logDocRef, dataToSave, { merge: true })
-        .then(() => {
-            toast({
-              title: "Log Saved!",
-              description: `Your activity for ${format(data.date, 'PPP')} has been saved.`,
-              action: <Check className="h-5 w-5 text-green-500" />,
-            });
-        })
-        .catch((err) => {
-             const permissionError = new FirestorePermissionError({
-                path: logDocRef.path,
-                operation: 'update', // or 'create'
-                requestResourceData: dataToSave,
-            });
-            errorEmitter.emit('permission-error', permissionError);
+    // Save the daily log first
+    try {
+      await setDoc(logDocRef, dataToSave, { merge: true });
+    } catch (err) {
+      const permissionError = new FirestorePermissionError({
+          path: logDocRef.path,
+          operation: 'update',
+          requestResourceData: dataToSave,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+      toast({
+        variant: "destructive",
+        title: "Log Save Failed",
+        description: "Could not save your daily log due to a permission error."
+      });
+      return; // Stop if the primary save fails
+    }
+    
+    // This part simulates a backend function for immediate feedback during testing.
+    // It creates/updates the main dashboard document when a log is saved.
+    try {
+        const yearStr = format(data.date, 'yyyy');
+        const dashboardDocRef = doc(db, 'dashboards', user.uid, 'agent', yearStr);
+        const dashboardSnap = await getDoc(dashboardDocRef);
+        let dashboardData: AgentDashboardData;
+
+        if (dashboardSnap.exists()) {
+            // If dashboard data already exists, update it by adding the new values
+            const existingData = dashboardSnap.data() as AgentDashboardData;
+            dashboardData = {
+                ...existingData,
+                kpis: {
+                    ...existingData.kpis,
+                    calls: { ...existingData.kpis.calls, actual: (existingData.kpis.calls.actual || 0) + data.calls },
+                    engagements: { ...existingData.kpis.engagements, actual: (existingData.kpis.engagements.actual || 0) + data.engagements },
+                    appointmentsSet: { ...existingData.kpis.appointmentsSet, actual: (existingData.kpis.appointmentsSet.actual || 0) + data.appointmentsSet },
+                    appointmentsHeld: { ...existingData.kpis.appointmentsHeld, actual: (existingData.kpis.appointmentsHeld.actual || 0) + data.appointmentsHeld },
+                    contractsWritten: { ...existingData.kpis.contractsWritten, actual: (existingData.kpis.contractsWritten.actual || 0) + data.contractsWritten },
+                }
+            };
+        } else {
+            // If no dashboard exists for this year, create a new one using the mock data as a template.
+            dashboardData = {
+                ...mockAgentDashboardData,
+                userId: user.uid,
+                kpis: {
+                    ...mockAgentDashboardData.kpis,
+                    calls: { ...mockAgentDashboardData.kpis.calls, actual: data.calls },
+                    engagements: { ...mockAgentDashboardData.kpis.engagements, actual: data.engagements },
+                    appointmentsSet: { ...mockAgentDashboardData.kpis.appointmentsSet, actual: data.appointmentsSet },
+                    appointmentsHeld: { ...mockAgentDashboardData.kpis.appointmentsHeld, actual: data.appointmentsHeld },
+                    contractsWritten: { ...mockAgentDashboardData.kpis.contractsWritten, actual: data.contractsWritten },
+                    closings: { ...mockAgentDashboardData.kpis.closings, actual: 0 } // Start with 0 closings
+                },
+                // Reset key figures for a fresh dashboard
+                netEarned: 0,
+                netPending: 0,
+                ytdTotalPotential: 0,
+                totalClosedIncomeForYear: 0,
+                totalPendingIncomeForYear: 0,
+                totalIncomeWithPipelineForYear: 0,
+                monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({...m, closed: 0, pending: 0, goal: 0})),
+            };
+        }
+        
+        await setDoc(dashboardDocRef, dashboardData, { merge: true });
+        
+        toast({
+            title: "Log Saved & Dashboard Updated!",
+            description: `Your dashboard for ${yearStr} now reflects this activity. Go check it out!`,
+            action: <Check className="h-5 w-5 text-green-500" />,
         });
+    } catch (err) {
+        console.error("Error updating dashboard document for testing:", err);
+        const permissionError = new FirestorePermissionError({
+            path: `dashboards/${user.uid}/agent/${format(data.date, 'yyyy')}`,
+            operation: 'update',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        toast({
+          variant: "destructive",
+          title: "Dashboard Update Failed",
+          description: "Your log was saved, but the dashboard could not be updated for testing due to a permission error."
+        });
+    }
   }
   
   const sevenDaysAgo = new Date();
