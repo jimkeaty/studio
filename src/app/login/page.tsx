@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Building, Loader2, AlertTriangle, KeyRound } from 'lucide-react';
+import { Building, Loader2, AlertTriangle, KeyRound, CheckCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -51,6 +51,12 @@ export default function LoginPage() {
     setSuccessMsg(null);
     setIsSigningIn(true);
 
+    if (!auth) {
+        setErrorMsg("Authentication service is not available. Please try again later.");
+        setIsSigningIn(false);
+        return;
+    }
+    
     try {
       await signInWithEmailAndPassword(auth, email, password);
       // onAuthStateChanged in useUser will handle the redirect

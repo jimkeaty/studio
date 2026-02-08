@@ -34,6 +34,12 @@ export default function SignupPage() {
 
     setIsSigningUp(true);
 
+    if (!auth) {
+        setErrorMsg("Authentication service is not available. Please try again later.");
+        setIsSigningUp(false);
+        return;
+    }
+
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, {
