@@ -65,6 +65,25 @@ const DashboardSkeleton = () => (
     </div>
 );
 
+const processMonthlyIncomeData = (monthlyIncome: AgentDashboardData['monthlyIncome'], selectedYear: string) => {
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    const displayYear = parseInt(selectedYear, 10);
+
+    return monthlyIncome.map((monthData, index) => {
+        const newMonthData = { ...monthData };
+        // If the year is in the past, all pendings are zero.
+        if (displayYear < currentYear) {
+            newMonthData.pending = 0;
+        }
+        // If it's the current year, pendings for past months are also zero.
+        if (displayYear === currentYear && index < currentMonth) {
+            newMonthData.pending = 0;
+        }
+        return newMonthData;
+    });
+};
+
 
 export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
@@ -118,6 +137,14 @@ export default function AgentDashboardPage() {
   const dashboardData = liveDashboardData || mockAgentDashboardData;
   const isUsingMockData = !liveDashboardData;
 
+    // Process monthly income data to apply business logic
+  const processedMonthlyIncome = processMonthlyIncomeData(dashboardData.monthlyIncome, selectedYear);
+  const processedDashboardData = {
+    ...dashboardData,
+    monthlyIncome: processedMonthlyIncome,
+  };
+
+
   return (
     <div className="flex flex-col gap-8">
       {isUsingMockData && (
@@ -155,9 +182,9 @@ export default function AgentDashboardPage() {
             <CardTitle className="text-muted-foreground font-medium">Lead Indicator Grade</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-9xl font-bold text-primary">{dashboardData.leadIndicatorGrade}</p>
+            <p className="text-9xl font-bold text-primary">{processedDashboardData.leadIndicatorGrade}</p>
             <p className="text-muted-foreground mt-2">On pace with your lead generation activities</p>
-             {dashboardData.isLeadIndicatorGracePeriod && <p className="text-xs text-muted-foreground mt-1">Grace Period — establishing baseline</p>}
+             {processedDashboardData.isLeadIndicatorGracePeriod && <p className="text-xs text-muted-foreground mt-1">Grace Period — establishing baseline</p>}
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">
@@ -171,10 +198,10 @@ export default function AgentDashboardPage() {
                         <div className="text-center md:text-left">
                             <p className="text-sm font-medium text-muted-foreground">Grade (Closed Only)</p>
                             <div className="flex items-baseline justify-center md:justify-start gap-2">
-                                <p className={cn("text-5xl font-bold", dashboardData.incomeGrade === 'F' || dashboardData.incomeGrade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.incomeGrade}</p>
-                                <span className="text-lg text-muted-foreground">{dashboardData.incomePerformance.toFixed(0)}% of Goal</span>
+                                <p className={cn("text-5xl font-bold", processedDashboardData.incomeGrade === 'F' || processedDashboardData.incomeGrade === 'D' ? 'text-destructive' : 'text-primary')}>{processedDashboardData.incomeGrade}</p>
+                                <span className="text-lg text-muted-foreground">{processedDashboardData.incomePerformance.toFixed(0)}% of Goal</span>
                             </div>
-                            {dashboardData.isIncomeGracePeriod && <Badge variant="secondary">Grace Period</Badge>}
+                            {processedDashboardData.isIncomeGracePeriod && <Badge variant="secondary">Grace Period</Badge>}
                         </div>
                         <Separator />
                         <div className="text-center md:text-left">
@@ -192,11 +219,11 @@ export default function AgentDashboardPage() {
                                 </TooltipProvider>
                             </div>
                              <div className="flex items-baseline justify-center md:justify-start gap-2">
-                                <p className={cn("text-5xl font-bold", dashboardData.pipelineAdjustedIncome.grade === 'F' || dashboardData.pipelineAdjustedIncome.grade === 'D' ? 'text-destructive' : 'text-primary')}>{dashboardData.pipelineAdjustedIncome.grade}</p>
-                                <span className="text-lg text-muted-foreground">{dashboardData.pipelineAdjustedIncome.performance.toFixed(0)}% of Goal</span>
+                                <p className={cn("text-5xl font-bold", processedDashboardData.pipelineAdjustedIncome.grade === 'F' || processedDashboardData.pipelineAdjustedIncome.grade === 'D' ? 'text-destructive' : 'text-primary')}>{processedDashboardData.pipelineAdjustedIncome.grade}</p>
+                                <span className="text-lg text-muted-foreground">{processedDashboardData.pipelineAdjustedIncome.performance.toFixed(0)}% of Goal</span>
                             </div>
                              <p className="text-xs text-muted-foreground mt-1">
-                                Based on Total Potential YTD: {formatCurrency(dashboardData.ytdTotalPotential)}
+                                Based on Total Potential YTD: {formatCurrency(processedDashboardData.ytdTotalPotential)}
                             </p>
                         </div>
                     </div>
@@ -205,19 +232,19 @@ export default function AgentDashboardPage() {
                     <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">YTD Net Earned</p>
-                            <p className="text-2xl font-bold">{formatCurrency(dashboardData.netEarned)}</p>
+                            <p className="text-2xl font-bold">{formatCurrency(processedDashboardData.netEarned)}</p>
                         </div>
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">YTD Goal</p>
-                            <p className="text-2xl font-bold">{formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                            <p className="text-2xl font-bold">{formatCurrency(processedDashboardData.expectedYTDIncomeGoal)}</p>
                         </div>
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">Est. Pipeline</p>
-                            <p className="text-2xl font-bold">{formatCurrency(dashboardData.netPending)}</p>
+                            <p className="text-2xl font-bold">{formatCurrency(processedDashboardData.netPending)}</p>
                         </div>
                         <div>
                             <p className="text-sm font-medium text-primary">Total Potential YTD</p>
-                            <p className="text-2xl font-bold text-primary">{formatCurrency(dashboardData.ytdTotalPotential)}</p>
+                            <p className="text-2xl font-bold text-primary">{formatCurrency(processedDashboardData.ytdTotalPotential)}</p>
                         </div>
                     </div>
                 </div>
@@ -226,24 +253,24 @@ export default function AgentDashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Closings (YTD)</p>
                   <p className="text-sm">
-                    Buyer: <span className="font-semibold text-foreground">{dashboardData.stats.buyerClosings}</span> | 
-                    Seller: <span className="font-semibold text-foreground">{dashboardData.stats.sellerClosings}</span> | 
-                    Renter: <span className="font-semibold text-foreground">{dashboardData.stats.renterClosings}</span>
+                    Buyer: <span className="font-semibold text-foreground">{processedDashboardData.stats.buyerClosings}</span> | 
+                    Seller: <span className="font-semibold text-foreground">{processedDashboardData.stats.sellerClosings}</span> | 
+                    Renter: <span className="font-semibold text-foreground">{processedDashboardData.stats.renterClosings}</span>
                   </p>
                 </div>
                 
-                {dashboardData.isIncomeGracePeriod && <p className="text-xs text-muted-foreground text-center mt-4">Income typically lags activity by ~60 days.</p>}
+                {processedDashboardData.isIncomeGracePeriod && <p className="text-xs text-muted-foreground text-center mt-4">Income typically lags activity by ~60 days.</p>}
             </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard title="Calls" {...dashboardData.kpis.calls} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Engagements" {...dashboardData.kpis.engagements} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Appts Set" {...dashboardData.kpis.appointmentsSet} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Appts Held" {...dashboardData.kpis.appointmentsHeld} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Contracts" {...dashboardData.kpis.contractsWritten} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
-        <KpiCard title="Closings" {...dashboardData.kpis.closings} isGracePeriod={dashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Calls" {...processedDashboardData.kpis.calls} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Engagements" {...processedDashboardData.kpis.engagements} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Appts Set" {...processedDashboardData.kpis.appointmentsSet} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Appts Held" {...processedDashboardData.kpis.appointmentsHeld} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Contracts" {...processedDashboardData.kpis.contractsWritten} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
+        <KpiCard title="Closings" {...processedDashboardData.kpis.closings} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
       </div>
 
       <Card>
@@ -252,11 +279,11 @@ export default function AgentDashboardPage() {
           <CardDescription>Your year-to-date conversion rates compared to your business plan.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
-          <ConversionStat name="Calls → Engagements" actual={dashboardData.conversions.callToEngagement.actual} plan={dashboardData.conversions.callToEngagement.plan} />
-          <ConversionStat name="Engagements → Appts" actual={dashboardData.conversions.engagementToAppointmentSet.actual} plan={dashboardData.conversions.engagementToAppointmentSet.plan} />
-          <ConversionStat name="Appts Set → Held" actual={dashboardData.conversions.appointmentSetToHeld.actual} plan={dashboardData.conversions.appointmentSetToHeld.plan} />
-          <ConversionStat name="Appts → Contracts" actual={dashboardData.conversions.appointmentHeldToContract.actual} plan={dashboardData.conversions.appointmentHeldToContract.plan} />
-          <ConversionStat name="Contracts → Closings" actual={dashboardData.conversions.contractToClosing.actual} plan={dashboardData.conversions.contractToClosing.plan} />
+          <ConversionStat name="Calls → Engagements" actual={processedDashboardData.conversions.callToEngagement.actual} plan={processedDashboardData.conversions.callToEngagement.plan} />
+          <ConversionStat name="Engagements → Appts" actual={processedDashboardData.conversions.engagementToAppointmentSet.actual} plan={processedDashboardData.conversions.engagementToAppointmentSet.plan} />
+          <ConversionStat name="Appts Set → Held" actual={processedDashboardData.conversions.appointmentSetToHeld.actual} plan={processedDashboardData.conversions.appointmentSetToHeld.plan} />
+          <ConversionStat name="Appts → Contracts" actual={processedDashboardData.conversions.appointmentHeldToContract.actual} plan={processedDashboardData.conversions.appointmentHeldToContract.plan} />
+          <ConversionStat name="Contracts → Closings" actual={processedDashboardData.conversions.contractToClosing.actual} plan={processedDashboardData.conversions.contractToClosing.plan} />
         </CardContent>
       </Card>
       
@@ -266,12 +293,12 @@ export default function AgentDashboardPage() {
             <CardDescription>Key production and income statistics for the year.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <StatTile icon={DollarSign} label="YTD Volume" value={`$${(dashboardData.stats.ytdVolume / 1000000).toFixed(1)}M`} />
-            <StatTile icon={Home} label="Avg. Sales Price" value={formatCurrency(dashboardData.stats.avgSalesPrice)} />
-            <StatTile icon={Handshake} label="Avg. Net Commission" value={formatCurrency(dashboardData.stats.avgCommission)} />
-            <StatTile icon={Users} label="Buyer Closings" value={dashboardData.stats.buyerClosings} />
-            <StatTile icon={Users} label="Seller Closings" value={dashboardData.stats.sellerClosings} />
-            <StatTile icon={DollarSign} label="Avg $ Per Engagement" value={formatCurrency(dashboardData.stats.engagementValue)} />
+            <StatTile icon={DollarSign} label="YTD Volume" value={`$${(processedDashboardData.stats.ytdVolume / 1000000).toFixed(1)}M`} />
+            <StatTile icon={Home} label="Avg. Sales Price" value={formatCurrency(processedDashboardData.stats.avgSalesPrice)} />
+            <StatTile icon={Handshake} label="Avg. Net Commission" value={formatCurrency(processedDashboardData.stats.avgCommission)} />
+            <StatTile icon={Users} label="Buyer Closings" value={processedDashboardData.stats.buyerClosings} />
+            <StatTile icon={Users} label="Seller Closings" value={processedDashboardData.stats.sellerClosings} />
+            <StatTile icon={DollarSign} label="Avg $ Per Engagement" value={formatCurrency(processedDashboardData.stats.engagementValue)} />
         </CardContent>
       </Card>
 
@@ -298,7 +325,7 @@ export default function AgentDashboardPage() {
                 pending: { label: 'Pending', color: 'hsl(var(--chart-2))' },
                 goal: { label: 'Monthly Goal', color: 'hsl(var(--chart-3))' },
             }} className="h-[300px] w-full">
-                <BarChart data={dashboardData.monthlyIncome} margin={{ right: 5 }}>
+                <BarChart data={processedDashboardData.monthlyIncome} margin={{ right: 5 }}>
                     <CartesianGrid vertical={false} />
                     <XAxis
                         dataKey="month"
@@ -325,19 +352,19 @@ export default function AgentDashboardPage() {
             <div className="grid w-full grid-cols-4 items-center gap-2 text-center">
                 <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">YTD Goal</p>
-                    <p className="text-lg font-bold">{formatCurrency(dashboardData.expectedYTDIncomeGoal)}</p>
+                    <p className="text-lg font-bold">{formatCurrency(processedDashboardData.expectedYTDIncomeGoal)}</p>
                 </div>
                 <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">YTD Closed</p>
-                    <p className="text-lg font-bold">{formatCurrency(dashboardData.totalClosedIncomeForYear)}</p>
+                    <p className="text-lg font-bold">{formatCurrency(processedDashboardData.totalClosedIncomeForYear)}</p>
                 </div>
                 <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">YTD Pending</p>
-                    <p className="text-lg font-bold">{formatCurrency(dashboardData.totalPendingIncomeForYear)}</p>
+                    <p className="text-lg font-bold">{formatCurrency(processedDashboardData.totalPendingIncomeForYear)}</p>
                 </div>
                 <div className="space-y-1">
                     <p className="text-sm font-semibold text-primary">Potential</p>
-                    <p className="text-lg font-bold text-primary">{formatCurrency(dashboardData.totalIncomeWithPipelineForYear)}</p>
+                    <p className="text-lg font-bold text-primary">{formatCurrency(processedDashboardData.totalIncomeWithPipelineForYear)}</p>
                 </div>
             </div>
         </CardFooter>

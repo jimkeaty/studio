@@ -18,7 +18,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { mockAgentDashboardData } from '@/lib/mock-data';
-import type { AgentDashboardData } from '@/lib/types';
+import type { AgentDashboardData, BusinessPlan } from '@/lib/types';
 
 const trackerFormSchema = z.object({
   date: z.date({
@@ -112,7 +112,22 @@ export default function DailyTrackerPage() {
                 }
             };
         } else {
-            // If no dashboard exists for this year, create a new one using the mock data as a template.
+            // If no dashboard exists for this year, create a new one.
+
+            // 1. Fetch the business plan for the year to get the goal.
+            const planDocRef = doc(db, 'users', user.uid, 'plans', yearStr);
+            const planSnap = await getDoc(planDocRef);
+            
+            // Use goal from plan, or a default from mock if no plan exists.
+            let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal; 
+            if (planSnap.exists()) {
+                const planData = planSnap.data() as BusinessPlan;
+                if (planData.calculatedTargets?.monthlyNetIncome) {
+                    monthlyGoal = planData.calculatedTargets.monthlyNetIncome;
+                }
+            }
+
+            // 2. Create the new dashboard data object
             dashboardData = {
                 ...mockAgentDashboardData,
                 userId: user.uid,
@@ -132,7 +147,13 @@ export default function DailyTrackerPage() {
                 totalClosedIncomeForYear: 0,
                 totalPendingIncomeForYear: 0,
                 totalIncomeWithPipelineForYear: 0,
-                monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({...m, closed: 0, pending: 0})),
+                // Use the retrieved goal for all months
+                monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({
+                    ...m,
+                    closed: 0, 
+                    pending: 0, 
+                    goal: monthlyGoal 
+                })),
             };
         }
         
