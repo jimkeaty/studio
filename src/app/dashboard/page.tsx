@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser, useFirestore, useAuth } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
@@ -68,7 +68,8 @@ const DashboardSkeleton = () => (
 
 export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState('2026');
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
+  const auth = useAuth();
   const db = useFirestore();
 
   const [liveDashboardData, setLiveDashboardData] = useState<AgentDashboardData | null>(null);
@@ -78,31 +79,28 @@ export default function AgentDashboardPage() {
 
   useEffect(() => {
     if (userLoading) {
-      // Still waiting for the user's authentication state to be resolved.
       setDataLoading(true);
       return;
     }
 
-    if (!user || !db) {
-      // User is not logged in, or the database isn't ready. Fallback to mock data.
+    const currentUser = auth.currentUser;
+
+    if (!currentUser || !db) {
       setDataLoading(false);
       setIsUsingMockData(true);
       return;
     }
 
-    // At this point, user is authenticated. We can safely fetch their data.
     setDataLoading(true);
-    const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+    const docRef = doc(db, 'dashboards', currentUser.uid, 'agent', selectedYear);
 
     const unsubscribe = onSnapshot(docRef,
       (docSnap) => {
         if (docSnap.exists()) {
-          // We found live data, let's use it.
           setLiveDashboardData(docSnap.data());
           setIsUsingMockData(false);
           setDataError(null);
         } else {
-          // No live data for this user/year, so we'll use the sample data.
           setLiveDashboardData(null);
           setIsUsingMockData(true);
           setDataError(null);
@@ -110,7 +108,6 @@ export default function AgentDashboardPage() {
         setDataLoading(false);
       },
       (err) => {
-        // An error occurred, likely a permission issue. Log it and use sample data.
         console.error("Firestore onSnapshot error:", err);
         setLiveDashboardData(null);
         setDataError(err);
@@ -119,9 +116,8 @@ export default function AgentDashboardPage() {
       }
     );
 
-    // Cleanup the listener when the component unmounts or dependencies change.
     return () => unsubscribe();
-  }, [user, userLoading, db, selectedYear]);
+  }, [userLoading, db, selectedYear, auth]);
 
   const loading = userLoading || dataLoading;
 
@@ -132,7 +128,6 @@ export default function AgentDashboardPage() {
   const dashboardData = isUsingMockData ? mockAgentDashboardData : liveDashboardData;
 
   if (!dashboardData) {
-    // This case should ideally not be hit if logic is correct, but it's a safe fallback.
     return <DashboardSkeleton />;
   }
 
