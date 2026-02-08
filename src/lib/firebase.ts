@@ -12,11 +12,10 @@ const firebaseConfig = {
   measurementId: "G-X4687TJXZV",
 };
 
-// Check for missing configuration
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    throw new Error("Firebase configuration is missing or incomplete. This should not happen with hardcoded values.");
-}
+// Initialize Firebase
+// This pattern prevents re-initialization in a Next.js environment.
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const db = getFirestore(app);
+const auth = getAuth(app);
 
-export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const db = getFirestore(app);
-export const auth = getAuth(app);
+export { app, db, auth };
