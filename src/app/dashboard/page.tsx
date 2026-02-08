@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -11,8 +11,8 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc } from 'firebase/firestore';
-import { useUser, useFirestore, useDoc } from '@/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
@@ -71,45 +71,68 @@ export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
-  const docRef = useMemo(() => {
-    if (!user || !db) return null;
-    return doc(db, 'dashboards', user.uid, 'agent', selectedYear);
-  }, [user, db, selectedYear]);
-
-  const { data: liveDashboardData, loading: dataLoading, error: dataError } = useDoc<AgentDashboardData>(docRef);
-  
+  const [liveDashboardData, setLiveDashboardData] = useState<AgentDashboardData | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<Error | null>(null);
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-      if (!dataLoading) {
-          if (liveDashboardData) {
-              setIsUsingMockData(false);
-          } else {
-              setIsUsingMockData(true);
-          }
+    if (userLoading) {
+      // Still waiting for the user's authentication state to be resolved.
+      setDataLoading(true);
+      return;
+    }
+
+    if (!user || !db) {
+      // User is not logged in, or the database isn't ready. Fallback to mock data.
+      setDataLoading(false);
+      setIsUsingMockData(true);
+      return;
+    }
+
+    // At this point, user is authenticated. We can safely fetch their data.
+    setDataLoading(true);
+    const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+
+    const unsubscribe = onSnapshot(docRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          // We found live data, let's use it.
+          setLiveDashboardData(docSnap.data());
+          setIsUsingMockData(false);
+          setDataError(null);
+        } else {
+          // No live data for this user/year, so we'll use the sample data.
+          setLiveDashboardData(null);
+          setIsUsingMockData(true);
+          setDataError(null);
+        }
+        setDataLoading(false);
+      },
+      (err) => {
+        // An error occurred, likely a permission issue. Log it and use sample data.
+        console.error("Firestore onSnapshot error:", err);
+        setLiveDashboardData(null);
+        setDataError(err);
+        setIsUsingMockData(true);
+        setDataLoading(false);
       }
-  }, [liveDashboardData, dataLoading]);
-  
-  const dashboardData = isUsingMockData ? mockAgentDashboardData : liveDashboardData;
-  const loading = userLoading || (dataLoading && !isUsingMockData);
+    );
+
+    // Cleanup the listener when the component unmounts or dependencies change.
+    return () => unsubscribe();
+  }, [user, userLoading, db, selectedYear]);
+
+  const loading = userLoading || dataLoading;
 
   if (loading) {
     return <DashboardSkeleton />;
   }
-  
-  if (!user && !loading) {
-    return (
-         <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Not Authenticated</AlertTitle>
-            <AlertDescription>
-                Please log in to view your dashboard.
-            </AlertDescription>
-        </Alert>
-    );
-  }
+
+  const dashboardData = isUsingMockData ? mockAgentDashboardData : liveDashboardData;
 
   if (!dashboardData) {
+    // This case should ideally not be hit if logic is correct, but it's a safe fallback.
     return <DashboardSkeleton />;
   }
 
