@@ -3,18 +3,18 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyCbkEpvYeoQJ0O-pjszaNb1Nj5T0wf_T3s",
+  authDomain: "smart-broker-usa.firebaseapp.com",
+  projectId: "smart-broker-usa",
+  storageBucket: "smart-broker-usa.firebasestorage.app",
+  messagingSenderId: "349178824168",
+  appId: "1:349178824168:web:96a4ebb72e96deb3b8505d",
+  measurementId: "G-X4687TJXZV",
 };
 
 // Check for missing configuration
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    throw new Error("Firebase configuration is missing or incomplete in your .env.local file. Please ensure all NEXT_PUBLIC_FIREBASE_* variables are set.");
+    throw new Error("Firebase configuration is missing or incomplete. This should not happen with hardcoded values.");
 }
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
