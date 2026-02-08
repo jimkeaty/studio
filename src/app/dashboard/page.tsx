@@ -74,14 +74,11 @@ const processMonthlyIncomeData = (monthlyIncome: AgentDashboardData['monthlyInco
         const newMonthData = { ...monthData };
 
         if (displayYear > currentYear) {
-            // For future years, there's no activity yet.
             newMonthData.closed = 0;
             newMonthData.pending = 0;
         } else if (displayYear < currentYear) {
-            // For past years, all pendings are finalized (either closed or cancelled).
             newMonthData.pending = 0;
         } else { // Current year
-            // For past months in the current year, pendings are also finalized.
             if (index < currentMonth) {
                 newMonthData.pending = 0;
             }
@@ -102,6 +99,8 @@ export default function AgentDashboardPage() {
 
   const [businessPlan, setBusinessPlan] = useState<BusinessPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(true);
+  
+  const [displayData, setDisplayData] = useState<AgentDashboardData | null>(null);
 
   const dashboardDocRef = useMemo(() => {
     if (!user?.uid || !db) return null;
@@ -155,23 +154,57 @@ export default function AgentDashboardPage() {
     );
     return () => unsubscribe();
   }, [planDocRef, userLoading]);
+  
+  useEffect(() => {
+    if (dataLoading || planLoading) {
+      setDisplayData(null);
+      return;
+    }
 
-  const loading = userLoading || dataLoading || planLoading;
-
-  const dashboardData = useMemo(() => {
-    const baseData = liveDashboardData || mockAgentDashboardData;
     const monthlyGoal = businessPlan?.calculatedTargets?.monthlyNetIncome || mockAgentDashboardData.monthlyIncome[0].goal;
 
+    let baseData: AgentDashboardData;
+
+    if (liveDashboardData) {
+      baseData = liveDashboardData;
+    } else {
+      baseData = JSON.parse(JSON.stringify(mockAgentDashboardData)); // Deep copy to create a blank slate
+      
+      Object.keys(baseData.kpis).forEach(key => {
+        const kpi = key as keyof typeof baseData.kpis;
+        baseData.kpis[kpi].actual = 0;
+        baseData.kpis[kpi].performance = 0;
+        baseData.kpis[kpi].grade = 'F';
+      });
+      
+      baseData.netEarned = 0;
+      baseData.netPending = 0;
+      baseData.ytdTotalPotential = 0;
+      baseData.expectedYTDIncomeGoal = 0;
+      baseData.totalClosedIncomeForYear = 0;
+      baseData.totalPendingIncomeForYear = 0;
+      baseData.totalIncomeWithPipelineForYear = 0;
+      
+      baseData.monthlyIncome = baseData.monthlyIncome.map(m => ({ ...m, closed: 0, pending: 0 }));
+      
+      baseData.incomeGrade = 'F';
+      baseData.leadIndicatorGrade = 'F';
+      baseData.pipelineAdjustedIncome = { grade: 'F', performance: 0 };
+    }
+    
     const ensuredMonthlyIncome = baseData.monthlyIncome.map(monthData => ({
         ...monthData,
         goal: monthlyGoal,
     }));
 
-    return {
+    setDisplayData({
         ...baseData,
         monthlyIncome: ensuredMonthlyIncome,
-    };
-  }, [liveDashboardData, businessPlan]);
+    });
+
+  }, [liveDashboardData, businessPlan, dataLoading, planLoading]);
+
+  const loading = userLoading || !displayData;
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -179,10 +212,9 @@ export default function AgentDashboardPage() {
 
   const isUsingMockData = !liveDashboardData;
 
-  // Process monthly income data to apply business logic for pending/closed amounts
-  const processedMonthlyIncome = processMonthlyIncomeData(dashboardData.monthlyIncome, selectedYear);
+  const processedMonthlyIncome = processMonthlyIncomeData(displayData.monthlyIncome, selectedYear);
   const processedDashboardData = {
-    ...dashboardData,
+    ...displayData,
     monthlyIncome: processedMonthlyIncome,
   };
 
@@ -209,7 +241,6 @@ export default function AgentDashboardPage() {
                 <SelectValue placeholder="Select year" />
             </SelectTrigger>
             <SelectContent>
-                {/* Show current year + 2 future and 2 previous years */}
                 {[...Array(5)].map((_, i) => {
                 const year = new Date().getFullYear() + 2 - i;
                 return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
@@ -235,7 +266,6 @@ export default function AgentDashboardPage() {
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Grades Section */}
                     <div className="space-y-4">
                         <div className="text-center md:text-left">
                             <p className="text-sm font-medium text-muted-foreground">Grade (Closed Only)</p>
@@ -270,7 +300,6 @@ export default function AgentDashboardPage() {
                         </div>
                     </div>
 
-                    {/* Numbers Section */}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">YTD Net Earned</p>
