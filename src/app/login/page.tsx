@@ -23,7 +23,7 @@ import { auth } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true); // Start as busy to handle redirect check
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
@@ -35,11 +35,7 @@ export default function LoginPage() {
       await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error("Sign-in click error:", err);
-      if (err.code === 'auth/api-key-not-valid') {
-        setErrorMsg("Invalid Firebase API Key. You must update `apphosting.yaml` with the correct key from your Firebase project console.");
-      } else {
-        setErrorMsg(String(err?.message || err));
-      }
+      setErrorMsg(String(err?.message || "An unexpected error occurred."));
       setBusy(false);
     }
   };
@@ -47,37 +43,30 @@ export default function LoginPage() {
   useEffect(() => {
     let mounted = true;
 
-    (async () => {
-      try {
-        const result = await getRedirectResult(auth);
-
-        // If user just came back from Google sign-in
-        if (result?.user) {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user && mounted) {
           console.log("Google login success:", result.user.email);
           router.replace("/dashboard");
+        } else if (mounted) {
+          setBusy(false); // No redirect result, so we are ready for user interaction
         }
-      } catch (err: any) {
+      })
+      .catch((err: any) => {
         if (mounted) {
-           if (err.code === 'auth/api-key-not-valid') {
-             setErrorMsg("Invalid Firebase API Key. You must update `apphosting.yaml` with the correct key from your Firebase project console.");
-             return;
-           }
-
           const msg = String(err?.message || "");
-          // Ignore common "no redirect" / "no auth event" cases
+          // Ignore common "no redirect" / "no auth event" cases on initial load
           if (
             msg &&
             !msg.toLowerCase().includes("no redirect") &&
             !msg.toLowerCase().includes("auth/no-auth-event")
           ) {
-            console.error("Redirect error:", err);
+            console.error("Redirect result error:", err);
             setErrorMsg(msg);
           }
+          setBusy(false);
         }
-      } finally {
-        if (mounted) setBusy(false);
-      }
-    })();
+      });
 
     return () => {
       mounted = false;
