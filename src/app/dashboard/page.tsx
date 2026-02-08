@@ -11,8 +11,8 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { useUser, useFirestore, useAuth } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
@@ -68,8 +68,7 @@ const DashboardSkeleton = () => (
 
 export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState('2026');
-  const { loading: userLoading } = useUser();
-  const auth = useAuth();
+  const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
   const [liveDashboardData, setLiveDashboardData] = useState<AgentDashboardData | null>(null);
@@ -78,46 +77,48 @@ export default function AgentDashboardPage() {
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-    if (userLoading) {
+    const fetchData = async () => {
+      if (!user) {
+        // Not logged in, so use mock data.
+        setIsUsingMockData(true);
+        setDataLoading(false);
+        return;
+      }
+
+      // User is authenticated, proceed to fetch data.
       setDataLoading(true);
-      return;
-    }
-
-    const currentUser = auth.currentUser;
-
-    if (!currentUser || !db) {
-      setDataLoading(false);
-      setIsUsingMockData(true);
-      return;
-    }
-
-    setDataLoading(true);
-    const docRef = doc(db, 'dashboards', currentUser.uid, 'agent', selectedYear);
-
-    const unsubscribe = onSnapshot(docRef,
-      (docSnap) => {
+      const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+      
+      try {
+        const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setLiveDashboardData(docSnap.data());
           setIsUsingMockData(false);
           setDataError(null);
         } else {
+          // Document doesn't exist for this user/year, so we'll use mock data.
           setLiveDashboardData(null);
           setIsUsingMockData(true);
           setDataError(null);
         }
-        setDataLoading(false);
-      },
-      (err) => {
-        console.error("Firestore onSnapshot error:", err);
+      } catch (err: any) {
+        console.error("Firestore Read Error:", err);
         setLiveDashboardData(null);
-        setDataError(err);
         setIsUsingMockData(true);
+        setDataError(err);
+      } finally {
         setDataLoading(false);
       }
-    );
+    };
 
-    return () => unsubscribe();
-  }, [userLoading, db, selectedYear, auth]);
+    if (userLoading) {
+      // Still checking auth state
+      setDataLoading(true);
+    } else {
+      // Auth state is resolved
+      fetchData();
+    }
+  }, [user, userLoading, db, selectedYear]);
 
   const loading = userLoading || dataLoading;
 
