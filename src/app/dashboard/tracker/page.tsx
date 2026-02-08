@@ -94,11 +94,24 @@ export default function DailyTrackerPage() {
     try {
         const yearStr = format(data.date, 'yyyy');
         const dashboardDocRef = doc(db, 'dashboards', user.uid, 'agent', yearStr);
+        
+        // 1. Fetch the business plan for the year to get the goal, regardless of whether the dashboard exists.
+        const planDocRef = doc(db, 'users', user.uid, 'plans', yearStr);
+        const planSnap = await getDoc(planDocRef);
+        let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal; // Default goal
+        if (planSnap.exists()) {
+            const planData = planSnap.data() as BusinessPlan;
+            if (planData.calculatedTargets?.monthlyNetIncome) {
+                monthlyGoal = planData.calculatedTargets.monthlyNetIncome;
+            }
+        }
+
+        // 2. Now handle the dashboard data
         const dashboardSnap = await getDoc(dashboardDocRef);
         let dashboardData: AgentDashboardData;
 
         if (dashboardSnap.exists()) {
-            // If dashboard data already exists, update it by adding the new values
+            // If dashboard data already exists, update it
             const existingData = dashboardSnap.data() as AgentDashboardData;
             dashboardData = {
                 ...existingData,
@@ -109,25 +122,17 @@ export default function DailyTrackerPage() {
                     appointmentsSet: { ...existingData.kpis.appointmentsSet, actual: (existingData.kpis.appointmentsSet.actual || 0) + data.appointmentsSet },
                     appointmentsHeld: { ...existingData.kpis.appointmentsHeld, actual: (existingData.kpis.appointmentsHeld.actual || 0) + data.appointmentsHeld },
                     contractsWritten: { ...existingData.kpis.contractsWritten, actual: (existingData.kpis.contractsWritten.actual || 0) + data.contractsWritten },
-                }
+                },
+                // Re-map the monthly income to ensure the goal is set correctly
+                monthlyIncome: (existingData.monthlyIncome || mockAgentDashboardData.monthlyIncome).map(m => ({
+                    month: m.month,
+                    closed: m.closed || 0,
+                    pending: m.pending || 0,
+                    goal: monthlyGoal, // Always set/update the goal from the plan
+                })),
             };
         } else {
             // If no dashboard exists for this year, create a new one.
-
-            // 1. Fetch the business plan for the year to get the goal.
-            const planDocRef = doc(db, 'users', user.uid, 'plans', yearStr);
-            const planSnap = await getDoc(planDocRef);
-            
-            // Use goal from plan, or a default from mock if no plan exists.
-            let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal; 
-            if (planSnap.exists()) {
-                const planData = planSnap.data() as BusinessPlan;
-                if (planData.calculatedTargets?.monthlyNetIncome) {
-                    monthlyGoal = planData.calculatedTargets.monthlyNetIncome;
-                }
-            }
-
-            // 2. Create the new dashboard data object
             dashboardData = {
                 ...mockAgentDashboardData,
                 userId: user.uid,

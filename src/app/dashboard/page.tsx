@@ -72,13 +72,19 @@ const processMonthlyIncomeData = (monthlyIncome: AgentDashboardData['monthlyInco
 
     return monthlyIncome.map((monthData, index) => {
         const newMonthData = { ...monthData };
-        // If the year is in the past, all pendings are zero.
-        if (displayYear < currentYear) {
+
+        if (displayYear > currentYear) {
+            // For future years, there's no activity yet.
+            newMonthData.closed = 0;
             newMonthData.pending = 0;
-        }
-        // If it's the current year, pendings for past months are also zero.
-        if (displayYear === currentYear && index < currentMonth) {
+        } else if (displayYear < currentYear) {
+            // For past years, all pendings are finalized (either closed or cancelled).
             newMonthData.pending = 0;
+        } else { // Current year
+            // For past months in the current year, pendings are also finalized.
+            if (index < currentMonth) {
+                newMonthData.pending = 0;
+            }
         }
         return newMonthData;
     });
@@ -169,7 +175,7 @@ export default function AgentDashboardPage() {
             <SelectContent>
                 {/* Show current year and 4 previous years */}
                 {[...Array(5)].map((_, i) => {
-                const year = new Date().getFullYear() - i;
+                const year = new Date().getFullYear() + 2 - i;
                 return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
                 })}
             </SelectContent>
