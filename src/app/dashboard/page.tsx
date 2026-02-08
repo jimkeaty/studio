@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, DocumentReference } from 'firebase/firestore';
 import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -67,7 +67,7 @@ const DashboardSkeleton = () => (
 
 
 export default function AgentDashboardPage() {
-  const [selectedYear, setSelectedYear] = useState('2026');
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear() + 2)); // Default to 2026
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
@@ -75,20 +75,26 @@ export default function AgentDashboardPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<Error | null>(null);
 
+  const docRef = useMemo(() => {
+    if (!user?.uid || !db) return null;
+    return doc(db, 'dashboards', user.uid, 'agent', selectedYear) as DocumentReference<AgentDashboardData>;
+  }, [user?.uid, db, selectedYear]);
+
+
   useEffect(() => {
-    if (!user || !db) {
-      if (!userLoading) {
-        setDataLoading(false);
-      }
-      return;
+    if (!docRef) {
+        // This handles the case where user or db are not ready yet.
+        // We set loading to false if we are not in an initial user loading state.
+        if (!userLoading) {
+            setDataLoading(false);
+        }
+        return;
     }
 
     setDataLoading(true);
-    const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
-
     const unsubscribe = onSnapshot(docRef,
       (snapshot) => {
-        setLiveDashboardData(snapshot.exists() ? snapshot.data() as AgentDashboardData : null);
+        setLiveDashboardData(snapshot.exists() ? snapshot.data() : null);
         setDataLoading(false);
         setDataError(null);
       },
@@ -101,7 +107,7 @@ export default function AgentDashboardPage() {
     );
 
     return () => unsubscribe();
-  }, [user, db, selectedYear, userLoading]);
+  }, [docRef, userLoading]);
 
   const loading = userLoading || dataLoading;
 
@@ -119,14 +125,27 @@ export default function AgentDashboardPage() {
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
             <AlertTitle>{dataError ? 'Error Loading Live Data' : 'Displaying Sample Data'}</AlertTitle>
             <AlertDescription>
-                {dataError ? `We encountered an issue fetching your live data: ${dataError.message}. This can sometimes happen due to network or configuration issues. We're showing you sample data in the meantime.` : `Could not find live data for your user for ${selectedYear}. This is expected for new users. We're showing you sample data in the meantime.`}
+                {dataError ? `We encountered an issue fetching your live data: ${dataError.message}. This can happen due to network or permission issues.` : `Could not find live data for your user for the year ${selectedYear}. This is expected for new users or for years without imported historical data. We're showing you sample data in the meantime.`}
             </AlertDescription>
         </Alert>
       )}
 
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
-        <p className="text-muted-foreground">Your performance at a glance.</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
+          <p className="text-muted-foreground">Your performance at a glance for {selectedYear}.</p>
+        </div>
+        <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select year" />
+            </SelectTrigger>
+            <SelectContent>
+                {[...Array(5)].map((_, i) => {
+                const year = new Date().getFullYear() + 2 - i;
+                return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                })}
+            </SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -257,35 +276,20 @@ export default function AgentDashboardPage() {
 
        <Card>
         <CardHeader>
-            <div className="flex items-center justify-between">
-                <div>
-                    <CardTitle>Agent Income by Month</CardTitle>
-                    <CardDescription className="flex items-center gap-1.5 pt-1">
-                        Showing goal, closed, and pending income for {selectedYear}.
-                         <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Info className="h-4 w-4 cursor-help text-muted-foreground" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Pending income is not guaranteed and does not affect your Income Grade. The goal is based on your business plan.</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </CardDescription>
-                </div>
-                 <Select value={selectedYear} onValueChange={setSelectedYear}>
-                    <SelectTrigger className="w-[120px]">
-                        <SelectValue placeholder="Select year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                         {[...Array(5)].map((_, i) => {
-                            const year = new Date().getFullYear() + 2 - i;
-                            return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                        })}
-                    </SelectContent>
-                </Select>
-            </div>
+          <CardTitle>Agent Income by Month</CardTitle>
+          <CardDescription className="flex items-center gap-1.5 pt-1">
+              Showing goal, closed, and pending income for {selectedYear}.
+                <TooltipProvider>
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Info className="h-4 w-4 cursor-help text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                          <p>Pending income is not guaranteed and does not affect your Income Grade. The goal is based on your business plan.</p>
+                      </TooltipContent>
+                  </Tooltip>
+              </TooltipProvider>
+          </CardDescription>
         </CardHeader>
         <CardContent>
             <ChartContainer config={{
