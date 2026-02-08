@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -16,69 +16,36 @@ import { AlertTriangle, Building } from "lucide-react";
 
 import {
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [busy, setBusy] = useState(true); // Start as busy to handle redirect check
+  const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
-    try {
-      setErrorMsg(null);
-      setBusy(true);
+    setErrorMsg(null);
+    setBusy(true);
+    const provider = new GoogleAuthProvider();
 
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+    try {
+      const result = await signInWithPopup(auth, provider);
+      console.log("Google login success:", result.user.email);
+      router.replace("/dashboard");
     } catch (err: any) {
       console.error("Sign-in click error:", err);
-       if (err.code === 'auth/unauthorized-domain') {
+      if (err.code === 'auth/unauthorized-domain') {
         // Get the part of the hostname after any port-forwarding prefix like '9000-'
         const currentHost = window.location.hostname;
-        const displayHost = currentHost.includes('-') ? currentHost.substring(currentHost.indexOf('-') + 1) : currentHost;
-        setErrorMsg(`This app's domain (${displayHost}) is not authorized. Go to Firebase Console > Authentication > Settings > Authorized domains and add it.`);
+        setErrorMsg(`This app's domain (${currentHost}) is not authorized. Go to Firebase Console > Authentication > Settings > Authorized domains and add it.`);
       } else {
         setErrorMsg(String(err?.message || "An unexpected error occurred."));
       }
       setBusy(false);
     }
   };
-
-  useEffect(() => {
-    let mounted = true;
-
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user && mounted) {
-          console.log("Google login success:", result.user.email);
-          router.replace("/dashboard");
-        } else if (mounted) {
-          setBusy(false); // No redirect result, so we are ready for user interaction
-        }
-      })
-      .catch((err: any) => {
-        if (mounted) {
-          const msg = String(err?.message || "");
-          // Ignore common "no redirect" / "no auth event" cases on initial load
-          if (
-            msg &&
-            !msg.toLowerCase().includes("no redirect") &&
-            !msg.toLowerCase().includes("auth/no-auth-event")
-          ) {
-            console.error("Redirect result error:", err);
-            setErrorMsg(msg);
-          }
-          setBusy(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
