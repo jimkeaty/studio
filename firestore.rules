@@ -5,7 +5,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Allow an authenticated user to read their own dashboard document.
     match /dashboards/{userId}/agent/{year} {
-      allow read: if true;
+      allow read: if request.auth.uid == userId;
       allow write: if false; // Writes are handled by backend functions
     }
     

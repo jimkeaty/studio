@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { AgentDashboardData } from '@/lib/types';
@@ -11,8 +11,8 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc, getDoc } from 'firebase/firestore';
-import { useUser, useFirestore } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import { useUser, useFirestore, useDoc } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
@@ -71,47 +71,28 @@ export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
-  const [dashboardData, setDashboardData] = useState<AgentDashboardData | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [dataError, setDataError] = useState<Error | null>(null);
+  const docRef = useMemo(() => {
+    if (!user || !db) return null;
+    return doc(db, 'dashboards', user.uid, 'agent', selectedYear);
+  }, [user, db, selectedYear]);
+
+  const { data: liveDashboardData, loading: dataLoading, error: dataError } = useDoc<AgentDashboardData>(docRef);
+  
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-    if (user) {
-        setDataLoading(true);
-        const docRef = doc(db, 'dashboards', user.uid, 'agent', selectedYear);
-
-        getDoc(docRef)
-            .then((docSnap) => {
-                if (docSnap.exists()) {
-                    setDashboardData(docSnap.data() as AgentDashboardData);
-                    setIsUsingMockData(false);
-                    setDataError(null);
-                } else {
-                    console.warn(`No dashboard document found at ${docRef.path}. Falling back to mock data.`);
-                    setDashboardData(mockAgentDashboardData);
-                    setIsUsingMockData(true);
-                    setDataError(null);
-                }
-            })
-            .catch((err) => {
-                console.error("Firestore Read Error:", err);
-                setDataError(err);
-                setDashboardData(mockAgentDashboardData);
-                setIsUsingMockData(true);
-            })
-            .finally(() => {
-                setDataLoading(false);
-            });
-    } else if (!userLoading) {
-        // Not logged in, and auth state is resolved. Stop loading.
-        setDataLoading(false);
-    }
-  }, [user, userLoading, db, selectedYear]);
-
-
-  const loading = userLoading || dataLoading;
+      if (!dataLoading) {
+          if (liveDashboardData) {
+              setIsUsingMockData(false);
+          } else {
+              setIsUsingMockData(true);
+          }
+      }
+  }, [liveDashboardData, dataLoading]);
   
+  const dashboardData = isUsingMockData ? mockAgentDashboardData : liveDashboardData;
+  const loading = userLoading || (dataLoading && !isUsingMockData);
+
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -129,18 +110,17 @@ export default function AgentDashboardPage() {
   }
 
   if (!dashboardData) {
-    // This can happen briefly between loading states.
     return <DashboardSkeleton />;
   }
 
   return (
     <div className="flex flex-col gap-8">
-      {(isUsingMockData || dataError) && (
+      {isUsingMockData && (
         <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-300">
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
             <AlertTitle>{dataError ? 'Error Loading Live Data' : 'Displaying Mock Data'}</AlertTitle>
             <AlertDescription>
-                {dataError ? `${dataError.message}` : `No live data found for your user for ${selectedYear}. This is expected for new users.`}
+                {dataError ? `${dataError.message}` : `Could not find live data for your user for ${selectedYear}. This is expected for new users.`}
             </AlertDescription>
         </Alert>
       )}
