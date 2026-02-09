@@ -1,1 +1,268 @@
+'use strict';
 
+/**
+ * Smart Broker USA — Import Agents & Transactions (DRY RUN by default)
+ * - Parses Excel (.xlsx)
+ * - Applies locked business rules
+ * - Produces agent → year rollups
+ * - NO Firestore writes (we’ll add later behind guardrails)
+ */
+
+const fs = require('fs');
+const path = require('path');
+const XLSX = require('xlsx');
+
+const CONFIG = {
+  // Put your Excel file in: /imports/data/
+  excelPath: process.env.EXCEL_PATH || path.join(__dirname, 'data', '2026 Version 9.xlsx'),
+  sheetName: process.env.SHEET_NAME || null,
+
+  // Governance
+  lockedYears: new Set([2022, 2023, 2024]),
+
+  // Rules
+  pendingMinYear: 2026,
+  listingsMinYear: 2025,
+};
+
+function die(msg) {
+  console.error(`\n❌ ${msg}\n`);
+  process.exit(1);
+}
+
+function isExcelSerialNumber(v) {
+  return typeof v === 'number' && isFinite(v) && v > 1000 && v < 60000;
+}
+
+function parseExcelDate(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (v instanceof Date && !isNaN(v.getTime())) return v;
+
+  if (isExcelSerialNumber(v)) {
+    const d = XLSX.SSF.parse_date_code(v);
+    if (!d) return null;
+    return new Date(Date.UTC(d.y, d.m - 1, d.d));
+  }
+
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function normalizeHeader(h) {
+  return String(h || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s/]/g, '');
+}
+
+function normalizeRowKeys(row) {
+  const out = {};
+  for (const [k, v] of Object.entries(row)) out[normalizeHeader(k)] = v;
+  return out;
+}
+
+function pick(row, ...keys) {
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k];
+  }
+  return null;
+}
+
+function yearOf(d) {
+  return d ? d.getFullYear() : null;
+}
+
+function normAgent(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ');
+}
+
+function ensureRollup(rollups, agent, year) {
+  if (!rollups[agent]) rollups[agent] = {};
+  if (!rollups[agent][year]) {
+    rollups[agent][year] = {
+      closed: 0,
+      pending: 0,
+      listings: { active: 0, canceled: 0, expired: 0 },
+      totals: { transactions: 0, listings: 0, all: 0 },
+    };
+  }
+  return rollups[agent][year];
+}
+
+function addEvent(rollups, agentRaw, year, kind) {
+  const agent = normAgent(agentRaw);
+  if (!agent || !year) return;
+
+  const r = ensureRollup(rollups, agent, year);
+
+  if (kind === 'closed') {
+    r.closed++;
+    r.totals.transactions++;
+    r.totals.all++;
+  } else if (kind === 'pending') {
+    r.pending++;
+    r.totals.transactions++;
+    r.totals.all++;
+  } else if (kind === 'listing_active') {
+    r.listings.active++;
+    r.totals.listings++;
+    r.totals.all++;
+  } else if (kind === 'listing_canceled') {
+    r.listings.canceled++;
+    r.totals.listings++;
+    r.totals.all++;
+  } else if (kind === 'listing_expired') {
+    r.listings.expired++;
+    r.totals.listings++;
+    r.totals.all++;
+  }
+}
+function classifyRow(nrow) {
+  const statusRaw = pick(nrow, 'status', 'transaction status', 'deal status', 'listing status');
+  const status = String(statusRaw || '').trim();
+  const s = status.toLowerCase();
+
+  const agent = pick(nrow, 'agent', 'agent name', 'selling agent', 'buyer agent', 'listing agent');
+
+  // Excel data truths (locked)
+  const closeDate = parseExcelDate(pick(nrow, 'close date', 'closed date'));
+  const projectedCloseDate = parseExcelDate(pick(nrow, 'projected close date', 'projected closing date'));
+  const listingDate = parseExcelDate(
+    pick(nrow, 'listing date / buyer rep date', 'listing date', 'buyer rep date')
+  );
+
+  // Closed
+  if (s === 'closed') {
+    if (!closeDate) return { kind: 'skip', reason: 'Closed missing Close Date' };
+    return { kind: 'closed', year: yearOf(closeDate), agent };
+  }
+
+  // Pending
+  if (s === 'pending') {
+    if (!projectedCloseDate) return { kind: 'skip', reason: 'Pending missing Projected Close Date' };
+    const y = yearOf(projectedCloseDate);
+    if (y < CONFIG.pendingMinYear) return { kind: 'skip', reason: `Pending projected year < ${CONFIG.pendingMinYear}` };
+    return { kind: 'pending', year: y, agent };
+  }
+
+  // Listings
+  if (s === 'active' || s === 'expired' || s === 'canceled' || s === 'cancelled') {
+    if (!listingDate) return { kind: 'skip', reason: 'Listing missing Listing Date / Buyer Rep Date' };
+    const y = yearOf(listingDate);
+    if (y < CONFIG.listingsMinYear) return { kind: 'skip', reason: `Listing year < ${CONFIG.listingsMinYear}` };
+
+    if (s === 'expired') return { kind: 'listing_expired', year: y, agent };
+    if (s === 'canceled' || s === 'cancelled') return { kind: 'listing_canceled', year: y, agent };
+    return { kind: 'listing_active', year: y, agent };
+  }
+
+  return { kind: 'skip', reason: `Unhandled status: ${status}` };
+}
+
+function computeTotals(rollups) {
+  const totals = {
+    closed: 0,
+    pending: 0,
+    listings: { active: 0, canceled: 0, expired: 0 },
+    totals: { transactions: 0, listings: 0, all: 0 },
+  };
+
+  for (const agent of Object.keys(rollups)) {
+    for (const year of Object.keys(rollups[agent])) {
+      const r = rollups[agent][year];
+      totals.closed += r.closed;
+      totals.pending += r.pending;
+      totals.listings.active += r.listings.active;
+      totals.listings.canceled += r.listings.canceled;
+      totals.listings.expired += r.listings.expired;
+      totals.totals.transactions += r.totals.transactions;
+      totals.totals.listings += r.totals.listings;
+      totals.totals.all += r.totals.all;
+    }
+  }
+
+  return totals;
+}
+
+(function main() {
+  console.log('\n=== Smart Broker USA Importer (DRY RUN) ===');
+  console.log(`Excel: ${CONFIG.excelPath}`);
+
+  if (!fs.existsSync(CONFIG.excelPath)) {
+    die(
+      `Excel file not found at: ${CONFIG.excelPath}\n` +
+      `Put it at /imports/data/ or set EXCEL_PATH env var.`
+    );
+  }
+
+  const wb = XLSX.readFile(CONFIG.excelPath, { cellDates: false });
+  const sheetName = CONFIG.sheetName || wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  if (!ws) die(`Sheet not found: ${sheetName}`);
+
+  const rawRows = XLSX.utils.sheet_to_json(ws, { defval: null });
+  console.log(`Sheet: ${sheetName}`);
+  console.log(`Rows: ${rawRows.length}`);
+
+  const rollups = {};
+  const counters = {
+    closed: 0,
+    pending: 0,
+    listing_active: 0,
+    listing_canceled: 0,
+    listing_expired: 0,
+    skipped: 0,
+    skippedReasons: {},
+  };
+
+  for (const row of rawRows) {
+    const nrow = normalizeRowKeys(row);
+    const c = classifyRow(nrow);
+
+    if (c.kind === 'skip') {
+      counters.skipped++;
+      counters.skippedReasons[c.reason] = (counters.skippedReasons[c.reason] || 0) + 1;
+      continue;
+    }
+
+    counters[c.kind]++;
+    addEvent(rollups, c.agent, c.year, c.kind);
+  }
+
+  console.log('\n=== COUNTS ===');
+  console.log(JSON.stringify(counters, null, 2));
+
+  const flat = [];
+  for (const agent of Object.keys(rollups)) {
+    for (const year of Object.keys(rollups[agent])) {
+      const r = rollups[agent][year];
+      flat.push({
+        agent,
+        year: Number(year),
+        all: r.totals.all,
+        closed: r.closed,
+        pending: r.pending,
+        listingActive: r.listings.active,
+        listingCanceled: r.listings.canceled,
+        listingExpired: r.listings.expired,
+      });
+    }
+  }
+  flat.sort((a, b) => b.all - a.all);
+
+  console.log('\n=== TOP 10 AGENT-YEAR ROLLUPS ===');
+  console.table(flat.slice(0, 10));
+
+  console.log('\n=== TOTALS ===');
+  console.log(JSON.stringify(computeTotals(rollups), null, 2));
+
+  console.log('\n✅ Done (dry run).');
+})();
