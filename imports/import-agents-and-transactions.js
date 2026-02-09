@@ -341,7 +341,29 @@ function buildWritePreview(rollups) {
 
   console.log('\n=== TOTALS ===');
   console.log(JSON.stringify(computeTotals(rollups), null, 2));
-
+// Debug: Unknown Agent audit (DRY RUN only)
+if (rollups['Unknown Agent']) {
+    const years = Object.keys(rollups['Unknown Agent']).sort();
+    const summary = years.map(y => ({
+      year: Number(y),
+      closed: rollups['Unknown Agent'][y].closed,
+      pending: rollups['Unknown Agent'][y].pending,
+      listingActive: rollups['Unknown Agent'][y].listings.active,
+      listingCanceled: rollups['Unknown Agent'][y].listings.canceled,
+      listingExpired: rollups['Unknown Agent'][y].listings.expired,
+      all: rollups['Unknown Agent'][y].totals.all,
+    }));
+  
+    const totalUnknown = summary.reduce((acc, r) => acc + r.all, 0);
+  
+    console.log('\n=== UNKNOWN AGENT AUDIT ===');
+    console.log(`Total Unknown Agent rows counted: ${totalUnknown}`);
+    console.table(summary);
+  } else {
+    console.log('\n=== UNKNOWN AGENT AUDIT ===');
+    console.log('No Unknown Agent rows counted.');
+  }
+  
   console.log('\n=== FIRESTORE WRITE PREVIEW (DRY RUN — NO WRITES) ===');
   const preview = buildWritePreview(rollups);
   console.log(JSON.stringify(preview, null, 2).slice(0, 4000));
