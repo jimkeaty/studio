@@ -1,16 +1,24 @@
 'use strict';
 
 /**
- * Smart Broker USA — Import Agents & Transactions (DRY RUN by default)
+ * Smart Broker USA — Import Agents & Transactions
  * - Parses Excel (.xlsx)
  * - Applies locked business rules
  * - Produces agent → year rollups
- * - Prints Firestore write preview (NO WRITES)
+ * - DRY RUN by default
+ * - Optional Firestore writes behind WRITE_TO_FIRESTORE=true
+ *
+ * Firestore shape (deterministic, rerunnable):
+ *   agents/{agentId} => { name, updatedAt }
+ *   agentYearRollups/{agentId}_{year} => { agentId, year, closed, pending, listings, totals, locked, updatedAt }
  */
 
 const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
+
+// Firestore is optional until you flip the switch:
+let admin = null;
 
 const CONFIG = {
   // Put your Excel file in: /imports/data/
@@ -24,13 +32,29 @@ const CONFIG = {
   pendingMinYear: 2026,   // Pending counted only if projected close year >= 2026
   listingsMinYear: 2025,  // Listings counted only if listing year >= 2025
 
-  // Editable years for write preview / eventual writes
+  // Editable years for write preview / writes
   editableMinYear: 2025,
+
+  // Safety switch
+  writeToFirestore: String(process.env.WRITE_TO_FIRESTORE || '').toLowerCase() === 'true',
+
+  // Firestore collections
+  collections: {
+    agents: process.env.COL_AGENTS || 'agents',
+    rollups: process.env.COL_ROLLUPS || 'agentYearRollups',
+  },
+
+  // Batch size for Firestore writes
+  batchSize: Number(process.env.BATCH_SIZE || 450),
 };
 
 function die(msg) {
   console.error(`\n❌ ${msg}\n`);
   process.exit(1);
+}
+
+function warn(msg) {
+  console.warn(`\n⚠️ ${msg}\n`);
 }
 
 function isExcelSerialNumber(v) {
@@ -89,16 +113,13 @@ function yearOf(d) {
 /**
  * Agent cleaning:
  * - trims + collapses spaces
- * - blocks obvious junk values (ONLY these four)
+ * - blocks only obvious junk headers
  */
 function normalizeAgentName(name) {
   const n = String(name || '').trim().replace(/\s+/g, ' ');
   if (!n) return '';
   const lower = n.toLowerCase();
-
-  // only block the obvious junk headers
   if (['agent', 'agents', 'n/a', 'na'].includes(lower)) return '';
-
   return n;
 }
 
@@ -114,7 +135,6 @@ function toTitleCase(s) {
 function slugifyAgentId(agentName) {
   const clean = normalizeAgentName(agentName);
   if (!clean) return '';
-
   return clean
     .toLowerCase()
     .replace(/['"]/g, '')
@@ -136,7 +156,6 @@ function ensureRollup(rollups, agent, year) {
 }
 
 function addEvent(rollups, agentRaw, year, kind) {
-  // Canonicalize agent for rollups; never drop a valid record due to agent formatting.
   const cleaned = normalizeAgentName(agentRaw);
   const agent = cleaned ? toTitleCase(cleaned) : 'Unknown Agent';
   if (!year) return;
@@ -241,7 +260,6 @@ function buildWritePreview(rollups) {
     const agentId = slugifyAgentId(agentName);
     if (!agentId) continue;
 
-    // Display name in title case (except Unknown Agent)
     const display = agentName === 'Unknown Agent' ? agentName : toTitleCase(agentName);
     agents[agentId] = { name: display };
 
@@ -270,104 +288,220 @@ function buildWritePreview(rollups) {
   return { agents, agentYearRollups };
 }
 
-(function main() {
-  console.log('\n=== Smart Broker USA Importer (DRY RUN) ===');
-  console.log(`Excel: ${CONFIG.excelPath}`);
+async function initFirestoreIfNeeded() {
+  if (!CONFIG.writeToFirestore) return null;
 
-  if (!fs.existsSync(CONFIG.excelPath)) {
+  // Lazy require so dry-run doesn't need Firebase
+  try {
+    admin = require('firebase-admin');
+  } catch (e) {
     die(
-      `Excel file not found at: ${CONFIG.excelPath}\n` +
-      `Put it at /imports/data/ or set EXCEL_PATH env var.`
+      `WRITE_TO_FIRESTORE=true but firebase-admin is not installed.\n` +
+      `Run: npm install firebase-admin`
     );
   }
 
-  const wb = XLSX.readFile(CONFIG.excelPath, { cellDates: false });
-  const sheetName = CONFIG.sheetName || wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  if (!ws) die(`Sheet not found: ${sheetName}`);
-
-  const rawRows = XLSX.utils.sheet_to_json(ws, { defval: null });
-  console.log(`Sheet: ${sheetName}`);
-  console.log(`Rows: ${rawRows.length}`);
-
-  const rollups = {};
-  const counters = {
-    closed: 0,
-    pending: 0,
-    listing_active: 0,
-    listing_canceled: 0,
-    listing_expired: 0,
-    skipped: 0,
-    skippedReasons: {},
-  };
-
-  for (const row of rawRows) {
-    const nrow = normalizeRowKeys(row);
-    const c = classifyRow(nrow);
-
-    if (c.kind === 'skip') {
-      counters.skipped++;
-      counters.skippedReasons[c.reason] = (counters.skippedReasons[c.reason] || 0) + 1;
-      continue;
-    }
-
-    counters[c.kind]++;
-    addEvent(rollups, c.agent, c.year, c.kind);
+  // Initialize once
+  if (!admin.apps.length) {
+    admin.initializeApp();
   }
 
-  console.log('\n=== COUNTS ===');
-  console.log(JSON.stringify(counters, null, 2));
+  return admin.firestore();
+}
 
-  const flat = [];
-  for (const agent of Object.keys(rollups)) {
-    for (const year of Object.keys(rollups[agent])) {
-      const r = rollups[agent][year];
-      flat.push({
-        agent,
-        year: Number(year),
-        all: r.totals.all,
+function validateWritePlan(preview) {
+  // Ensure no locked years slipped into the write set
+  for (const r of preview.agentYearRollups) {
+    if (CONFIG.lockedYears.has(r.year)) {
+      die(`Write plan includes LOCKED year ${r.year} for ${r.agentId}. Aborting.`);
+    }
+    if (r.year < CONFIG.editableMinYear) {
+      die(`Write plan includes year ${r.year} (< ${CONFIG.editableMinYear}) for ${r.agentId}. Aborting.`);
+    }
+  }
+}
+
+async function writeToFirestore(db, preview) {
+  validateWritePlan(preview);
+
+  const agentsEntries = Object.entries(preview.agents); // [agentId, {name}]
+  const rollups = preview.agentYearRollups;
+
+  console.log('\n=== FIRESTORE WRITE PLAN ===');
+  console.log(`WRITE_TO_FIRESTORE: ${CONFIG.writeToFirestore ? 'true' : 'false'}`);
+  console.log(`Agents to upsert: ${agentsEntries.length}`);
+  console.log(`Rollup docs to upsert (years >= ${CONFIG.editableMinYear}): ${rollups.length}`);
+  console.log(`Collections: agents="${CONFIG.collections.agents}", rollups="${CONFIG.collections.rollups}"`);
+
+  if (!CONFIG.writeToFirestore) {
+    console.log('DRY RUN — no Firestore writes.');
+    return;
+  }
+
+  const FieldValue = admin.firestore.FieldValue;
+
+  let batch = db.batch();
+  let ops = 0;
+  let committed = 0;
+
+  async function commitBatch() {
+    if (ops === 0) return;
+    await batch.commit();
+    committed += ops;
+    batch = db.batch();
+    ops = 0;
+  }
+
+  // Upsert agents
+  for (const [agentId, doc] of agentsEntries) {
+    const ref = db.collection(CONFIG.collections.agents).doc(agentId);
+    batch.set(
+      ref,
+      { name: doc.name, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    ops++;
+    if (ops >= CONFIG.batchSize) await commitBatch();
+  }
+
+  // Upsert rollups
+  for (const r of rollups) {
+    const docId = `${r.agentId}_${r.year}`;
+    const ref = db.collection(CONFIG.collections.rollups).doc(docId);
+    batch.set(
+      ref,
+      {
+        agentId: r.agentId,
+        year: r.year,
+        locked: false,
         closed: r.closed,
         pending: r.pending,
-        listingActive: r.listings.active,
-        listingCanceled: r.listings.canceled,
-        listingExpired: r.listings.expired,
-      });
+        listings: r.listings,
+        totals: r.totals,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    ops++;
+    if (ops >= CONFIG.batchSize) await commitBatch();
+  }
+
+  await commitBatch();
+  console.log(`\n✅ Firestore upsert complete. Ops committed: ${committed}`);
+}
+
+(function main() {
+  (async () => {
+    console.log('\n=== Smart Broker USA Importer ===');
+    console.log(`Excel: ${CONFIG.excelPath}`);
+    console.log(`WRITE_TO_FIRESTORE: ${CONFIG.writeToFirestore ? 'true' : 'false'}`);
+
+    if (!fs.existsSync(CONFIG.excelPath)) {
+      die(
+        `Excel file not found at: ${CONFIG.excelPath}\n` +
+        `Put it at /imports/data/ or set EXCEL_PATH env var.`
+      );
     }
-  }
-  flat.sort((a, b) => b.all - a.all);
 
-  console.log('\n=== TOP 10 AGENT-YEAR ROLLUPS ===');
-  console.table(flat.slice(0, 10));
+    const wb = XLSX.readFile(CONFIG.excelPath, { cellDates: false });
+    const sheetName = CONFIG.sheetName || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    if (!ws) die(`Sheet not found: ${sheetName}`);
 
-  console.log('\n=== TOTALS ===');
-  console.log(JSON.stringify(computeTotals(rollups), null, 2));
-// Debug: Unknown Agent audit (DRY RUN only)
-if (rollups['Unknown Agent']) {
-    const years = Object.keys(rollups['Unknown Agent']).sort();
-    const summary = years.map(y => ({
-      year: Number(y),
-      closed: rollups['Unknown Agent'][y].closed,
-      pending: rollups['Unknown Agent'][y].pending,
-      listingActive: rollups['Unknown Agent'][y].listings.active,
-      listingCanceled: rollups['Unknown Agent'][y].listings.canceled,
-      listingExpired: rollups['Unknown Agent'][y].listings.expired,
-      all: rollups['Unknown Agent'][y].totals.all,
-    }));
-  
-    const totalUnknown = summary.reduce((acc, r) => acc + r.all, 0);
-  
-    console.log('\n=== UNKNOWN AGENT AUDIT ===');
-    console.log(`Total Unknown Agent rows counted: ${totalUnknown}`);
-    console.table(summary);
-  } else {
-    console.log('\n=== UNKNOWN AGENT AUDIT ===');
-    console.log('No Unknown Agent rows counted.');
-  }
-  
-  console.log('\n=== FIRESTORE WRITE PREVIEW (DRY RUN — NO WRITES) ===');
-  const preview = buildWritePreview(rollups);
-  console.log(JSON.stringify(preview, null, 2).slice(0, 4000));
-  console.log('\n(Note: preview truncated for readability)');
+    const rawRows = XLSX.utils.sheet_to_json(ws, { defval: null });
+    console.log(`Sheet: ${sheetName}`);
+    console.log(`Rows: ${rawRows.length}`);
 
-  console.log('\n✅ Done (dry run).');
+    const rollups = {};
+    const counters = {
+      closed: 0,
+      pending: 0,
+      listing_active: 0,
+      listing_canceled: 0,
+      listing_expired: 0,
+      skipped: 0,
+      skippedReasons: {},
+    };
+
+    for (const row of rawRows) {
+      const nrow = normalizeRowKeys(row);
+      const c = classifyRow(nrow);
+
+      if (c.kind === 'skip') {
+        counters.skipped++;
+        counters.skippedReasons[c.reason] = (counters.skippedReasons[c.reason] || 0) + 1;
+        continue;
+      }
+
+      counters[c.kind]++;
+      addEvent(rollups, c.agent, c.year, c.kind);
+    }
+
+    console.log('\n=== COUNTS ===');
+    console.log(JSON.stringify(counters, null, 2));
+
+    const flat = [];
+    for (const agent of Object.keys(rollups)) {
+      for (const year of Object.keys(rollups[agent])) {
+        const r = rollups[agent][year];
+        flat.push({
+          agent,
+          year: Number(year),
+          all: r.totals.all,
+          closed: r.closed,
+          pending: r.pending,
+          listingActive: r.listings.active,
+          listingCanceled: r.listings.canceled,
+          listingExpired: r.listings.expired,
+        });
+      }
+    }
+    flat.sort((a, b) => b.all - a.all);
+
+    console.log('\n=== TOP 10 AGENT-YEAR ROLLUPS ===');
+    console.table(flat.slice(0, 10));
+
+    console.log('\n=== TOTALS ===');
+    console.log(JSON.stringify(computeTotals(rollups), null, 2));
+
+    // Debug: Unknown Agent audit
+    if (rollups['Unknown Agent']) {
+      const years = Object.keys(rollups['Unknown Agent']).sort();
+      const summary = years.map(y => ({
+        year: Number(y),
+        closed: rollups['Unknown Agent'][y].closed,
+        pending: rollups['Unknown Agent'][y].pending,
+        listingActive: rollups['Unknown Agent'][y].listings.active,
+        listingCanceled: rollups['Unknown Agent'][y].listings.canceled,
+        listingExpired: rollups['Unknown Agent'][y].listings.expired,
+        all: rollups['Unknown Agent'][y].totals.all,
+      }));
+      const totalUnknown = summary.reduce((acc, r) => acc + r.all, 0);
+      console.log('\n=== UNKNOWN AGENT AUDIT ===');
+      console.log(`Total Unknown Agent rows counted: ${totalUnknown}`);
+      console.table(summary);
+    } else {
+      console.log('\n=== UNKNOWN AGENT AUDIT ===');
+      console.log('No Unknown Agent rows counted.');
+    }
+
+    console.log('\n=== FIRESTORE WRITE PREVIEW (DRY RUN — NO WRITES) ===');
+    const preview = buildWritePreview(rollups);console.log(`Preview agents: ${Object.keys(preview.agents).length}`);
+    console.log(`Preview rollup docs (years >= ${CONFIG.editableMinYear}): ${preview.agentYearRollups.length}`);
+    
+    console.log(JSON.stringify(preview, null, 2).slice(0, 4000));
+    console.log('\n(Note: preview truncated for readability)');
+
+    // Firestore write (guarded)
+    const db = await initFirestoreIfNeeded();
+    if (CONFIG.writeToFirestore && !db) die('WRITE_TO_FIRESTORE=true but Firestore did not initialize.');
+    if (CONFIG.writeToFirestore) {
+      await writeToFirestore(db, preview);
+    }
+
+    console.log('\n✅ Done.');
+  })().catch(err => {
+    console.error('\n❌ Fatal error:', err);
+    process.exit(1);
+  });
 })();
