@@ -5,7 +5,7 @@
  * - Parses Excel (.xlsx)
  * - Applies locked business rules
  * - Produces agent → year rollups
- * - NO Firestore writes (we’ll add later behind guardrails)
+ * - Prints Firestore write preview (NO WRITES)
  */
 
 const fs = require('fs');
@@ -17,12 +17,15 @@ const CONFIG = {
   excelPath: process.env.EXCEL_PATH || path.join(__dirname, 'data', '2026 Version 9.xlsx'),
   sheetName: process.env.SHEET_NAME || null,
 
-  // Governance
+  // Governance (immutable years)
   lockedYears: new Set([2022, 2023, 2024]),
 
-  // Rules
-  pendingMinYear: 2026,
-  listingsMinYear: 2025,
+  // Counting rules
+  pendingMinYear: 2026,   // Pending counted only if projected close year >= 2026
+  listingsMinYear: 2025,  // Listings counted only if listing year >= 2025
+
+  // Editable years for write preview / eventual writes
+  editableMinYear: 2025,
 };
 
 function die(msg) {
@@ -38,12 +41,14 @@ function parseExcelDate(v) {
   if (v === null || v === undefined || v === '') return null;
   if (v instanceof Date && !isNaN(v.getTime())) return v;
 
+  // Excel serial date
   if (isExcelSerialNumber(v)) {
     const d = XLSX.SSF.parse_date_code(v);
     if (!d) return null;
     return new Date(Date.UTC(d.y, d.m - 1, d.d));
   }
 
+  // Strings
   if (typeof v === 'string') {
     const s = v.trim();
     if (!s) return null;
@@ -51,6 +56,7 @@ function parseExcelDate(v) {
     return isNaN(d.getTime()) ? null : d;
   }
 
+  // Fallback
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -80,8 +86,40 @@ function yearOf(d) {
   return d ? d.getFullYear() : null;
 }
 
-function normAgent(name) {
-  return String(name || '').trim().replace(/\s+/g, ' ');
+/**
+ * Agent cleaning:
+ * - trims + collapses spaces
+ * - blocks obvious junk values (ONLY these four)
+ */
+function normalizeAgentName(name) {
+  const n = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!n) return '';
+  const lower = n.toLowerCase();
+
+  // only block the obvious junk headers
+  if (['agent', 'agents', 'n/a', 'na'].includes(lower)) return '';
+
+  return n;
+}
+
+function toTitleCase(s) {
+  return String(s || '')
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+function slugifyAgentId(agentName) {
+  const clean = normalizeAgentName(agentName);
+  if (!clean) return '';
+
+  return clean
+    .toLowerCase()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 function ensureRollup(rollups, agent, year) {
@@ -98,8 +136,10 @@ function ensureRollup(rollups, agent, year) {
 }
 
 function addEvent(rollups, agentRaw, year, kind) {
-  const agent = normAgent(agentRaw);
-  if (!agent || !year) return;
+  // Canonicalize agent for rollups; never drop a valid record due to agent formatting.
+  const cleaned = normalizeAgentName(agentRaw);
+  const agent = cleaned ? toTitleCase(cleaned) : 'Unknown Agent';
+  if (!year) return;
 
   const r = ensureRollup(rollups, agent, year);
 
@@ -125,6 +165,7 @@ function addEvent(rollups, agentRaw, year, kind) {
     r.totals.all++;
   }
 }
+
 function classifyRow(nrow) {
   const statusRaw = pick(nrow, 'status', 'transaction status', 'deal status', 'listing status');
   const status = String(statusRaw || '').trim();
@@ -132,7 +173,7 @@ function classifyRow(nrow) {
 
   const agent = pick(nrow, 'agent', 'agent name', 'selling agent', 'buyer agent', 'listing agent');
 
-  // Excel data truths (locked)
+  // Excel truths (locked)
   const closeDate = parseExcelDate(pick(nrow, 'close date', 'closed date'));
   const projectedCloseDate = parseExcelDate(pick(nrow, 'projected close date', 'projected closing date'));
   const listingDate = parseExcelDate(
@@ -190,6 +231,43 @@ function computeTotals(rollups) {
   }
 
   return totals;
+}
+
+function buildWritePreview(rollups) {
+  const agents = {};
+  const agentYearRollups = [];
+
+  for (const agentName of Object.keys(rollups)) {
+    const agentId = slugifyAgentId(agentName);
+    if (!agentId) continue;
+
+    // Display name in title case (except Unknown Agent)
+    const display = agentName === 'Unknown Agent' ? agentName : toTitleCase(agentName);
+    agents[agentId] = { name: display };
+
+    for (const yearStr of Object.keys(rollups[agentName])) {
+      const year = Number(yearStr);
+
+      // Preview only for editable years
+      if (CONFIG.lockedYears.has(year)) continue;
+      if (year < CONFIG.editableMinYear) continue;
+
+      const r = rollups[agentName][yearStr];
+
+      agentYearRollups.push({
+        agentId,
+        year,
+        locked: false,
+        closed: r.closed,
+        pending: r.pending,
+        listings: r.listings,
+        totals: r.totals,
+      });
+    }
+  }
+
+  agentYearRollups.sort((a, b) => (a.agentId > b.agentId ? 1 : -1) || a.year - b.year);
+  return { agents, agentYearRollups };
 }
 
 (function main() {
@@ -263,6 +341,11 @@ function computeTotals(rollups) {
 
   console.log('\n=== TOTALS ===');
   console.log(JSON.stringify(computeTotals(rollups), null, 2));
+
+  console.log('\n=== FIRESTORE WRITE PREVIEW (DRY RUN — NO WRITES) ===');
+  const preview = buildWritePreview(rollups);
+  console.log(JSON.stringify(preview, null, 2).slice(0, 4000));
+  console.log('\n(Note: preview truncated for readability)');
 
   console.log('\n✅ Done (dry run).');
 })();
