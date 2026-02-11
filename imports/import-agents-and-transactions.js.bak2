@@ -227,57 +227,48 @@ function addEvent(rollups, agentRaw, year, kind) {
 }
 
 
-  function normalizeStatus(raw) {
-    let s = String(raw || "");
-    s = s.replace(/[`"'’]/g, "");
-    s = s.replace(/\u00a0/g, " ");
-    s = s.replace(/\s+/g, " ");
-    s = s.trim().toLowerCase();
+function normalizeStatus(raw) {
+  // Normalize spreadsheet status values into predictable tokens
+  let s = String(raw || "").trim();
+  if (!s) return "";
 
-    if (!s) return "";
+  // strip odd punctuation that shows up in spreadsheets
+  s = s.replace(/[`"'’]/g, "");
+  s = s.replace(/u00a0/g, " ");            // non-breaking space
+  s = s.replace(/s+/g, " ");               // collapse whitespace
+  s = s.trim().toLowerCase();
 
-    // strip spreadsheet prefix codes like x-, y-, z-
-    s = s.replace(/^[xyz]-/i, "");
+  // common “prefix codes” in your sheet: x-, y-, z-
+  if (/^[xyz]-/.test(s)) s = s.slice(2);
 
-    // common misspellings / variants
-    const MAP = {
-      "clsoed": "closed",
-      "pendng": "pending",
-      "cancelled": "canceled",
-      "temp off market": "temp off market",
-      "sale failed": "sale failed",
-      "pending": "pending",
-      "closed": "closed",
-      "active": "active",
-      "expired": "expired",
-      "canceled": "canceled"
-    };
+  // normalize british spelling
+  if (s === "cancelled") s = "canceled";
 
-    return MAP[s] || s;
-  }
+  // common typos / variants
+  const MAP = {
+    "clsoed": "closed",
+    "pendng": "pending",
+    "x-cancelled": "canceled",
+    "x-canceled": "canceled",
+    "z-expired": "expired",
+    "`pending": "pending"
+  };
+  if (MAP[s]) s = MAP[s];
+
+  return s;
+}
+
+function classifyRow(nrow) {
+  const statusRaw = pick(nrow, 'status', 'transaction status', 'deal status', 'listing status');
+    const status = String(statusRaw || "").trim(); // raw status for logging
+    const s = normalizeStatus(status); // normalized token for matching
 
 
-  function classifyRow(nrow) {
-    const statusRaw = pick(
-      nrow,
-      'status',
-      'transaction status',
-      'deal status',
-      'listing status'
-    );
-  
-    const status = String(statusRaw || "").trim();
-    const s = normalizeStatus(status);
-  
-    const agent = pick(
-      nrow,
-      'agent',
-      'agent name',
-      'selling agent',
-      'buyer agent',
-      'listing agent'
-    );
-  
+
+
+
+
+  const agent = pick(nrow, 'agent', 'agent name', 'selling agent', 'buyer agent', 'listing agent');
 
   // Excel truths (locked)
   const closeDate = parseExcelDate(pick(nrow, 'close date', 'closed date'));

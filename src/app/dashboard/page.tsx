@@ -1,5 +1,5 @@
 'use client';
-
+import TopAgents2025 from "./TopAgents2025";
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
@@ -248,7 +248,7 @@ export default function AgentDashboardPage() {
             </SelectContent>
         </Select>
       </div>
-
+      <TopAgents2025 year={Number(selectedYear)} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1 flex flex-col items-center justify-center text-center shadow-lg">
           <CardHeader>

@@ -226,58 +226,12 @@ function addEvent(rollups, agentRaw, year, kind) {
   }
 }
 
+function classifyRow(nrow) {
+  const statusRaw = pick(nrow, 'status', 'transaction status', 'deal status', 'listing status');
+  const status = String(statusRaw || '').trim();
+  const s = status.toLowerCase();
 
-  function normalizeStatus(raw) {
-    let s = String(raw || "");
-    s = s.replace(/[`"'’]/g, "");
-    s = s.replace(/\u00a0/g, " ");
-    s = s.replace(/\s+/g, " ");
-    s = s.trim().toLowerCase();
-
-    if (!s) return "";
-
-    // strip spreadsheet prefix codes like x-, y-, z-
-    s = s.replace(/^[xyz]-/i, "");
-
-    // common misspellings / variants
-    const MAP = {
-      "clsoed": "closed",
-      "pendng": "pending",
-      "cancelled": "canceled",
-      "temp off market": "temp off market",
-      "sale failed": "sale failed",
-      "pending": "pending",
-      "closed": "closed",
-      "active": "active",
-      "expired": "expired",
-      "canceled": "canceled"
-    };
-
-    return MAP[s] || s;
-  }
-
-
-  function classifyRow(nrow) {
-    const statusRaw = pick(
-      nrow,
-      'status',
-      'transaction status',
-      'deal status',
-      'listing status'
-    );
-  
-    const status = String(statusRaw || "").trim();
-    const s = normalizeStatus(status);
-  
-    const agent = pick(
-      nrow,
-      'agent',
-      'agent name',
-      'selling agent',
-      'buyer agent',
-      'listing agent'
-    );
-  
+  const agent = pick(nrow, 'agent', 'agent name', 'selling agent', 'buyer agent', 'listing agent');
 
   // Excel truths (locked)
   const closeDate = parseExcelDate(pick(nrow, 'close date', 'closed date'));
@@ -717,4 +671,3 @@ for (const [agentId, doc] of agentsEntries) {
     process.exit(1);
   });
 })();
-
