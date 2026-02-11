@@ -45,3 +45,4 @@ firebase-debug.log
 firestore-debug.log
 # Local import data (do not commit)
 imports/data/
+backups/
