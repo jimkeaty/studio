@@ -12,8 +12,9 @@ export interface User {
 export interface PlanAssumptions {
   conversionRates: {
     callToEngagement: number;
-    engagementToAppointment: number;
-    appointmentToContract: number;
+    engagementToAppointmentSet: number;
+    appointmentSetToHeld: number;
+    appointmentHeldToContract: number;
     contractToClosing: number;
   };
   avgCommission: number;

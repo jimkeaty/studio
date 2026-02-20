@@ -43,7 +43,7 @@ export const mockAgentDashboardData: AgentDashboardData = {
     conversions: {
         callToEngagement: { actual: 0.336, plan: 0.25 },
         engagementToAppointmentSet: { actual: 0.119, plan: 0.1 },
-        appointmentSetToHeld: { actual: 0.9, plan: 0.9 },
+        appointmentSetToHeld: { actual: 0.9, plan: 0.75 },
         appointmentHeldToContract: { actual: 0.333, plan: 0.2 },
         contractToClosing: { actual: 0.6, plan: 0.8 },
     },

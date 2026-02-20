@@ -18,7 +18,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { defaultAssumptions } from '@/lib/plan-assumptions';
 import type { BusinessPlan, PlanAssumptions, PlanTargets } from '@/lib/types';
-import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target, Percent, TrendingUp, Award } from 'lucide-react';
+import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target, Percent, TrendingUp, Award, CalendarCheck } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const planFormSchema = z.object({
@@ -27,8 +27,9 @@ const planFormSchema = z.object({
   workingDaysPerMonth: z.coerce.number().int().min(1, "Must be at least 1.").max(31, "Cannot exceed 31."),
   conversions: z.object({
       callToEngagement: z.coerce.number().min(0).max(100),
-      engagementToAppointment: z.coerce.number().min(0).max(100),
-      appointmentToContract: z.coerce.number().min(0).max(100),
+      engagementToAppointmentSet: z.coerce.number().min(0).max(100),
+      appointmentSetToHeld: z.coerce.number().min(0).max(100),
+      appointmentHeldToContract: z.coerce.number().min(0).max(100),
       contractToClosing: z.coerce.number().min(0).max(100),
   })
 });
@@ -53,8 +54,9 @@ const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): Busine
 
   const yearlyClosings = Math.ceil(incomeGoal / avgCommission);
   const yearlyContracts = Math.ceil(yearlyClosings / conversionRates.contractToClosing);
-  const yearlyAppointments = Math.ceil(yearlyContracts / conversionRates.appointmentToContract);
-  const yearlyEngagements = Math.ceil(yearlyAppointments / conversionRates.engagementToAppointment);
+  const yearlyAppointmentsHeld = Math.ceil(yearlyContracts / conversionRates.appointmentHeldToContract);
+  const yearlyAppointmentsSet = Math.ceil(yearlyAppointmentsHeld / conversionRates.appointmentSetToHeld);
+  const yearlyEngagements = Math.ceil(yearlyAppointmentsSet / conversionRates.engagementToAppointmentSet);
   const yearlyCalls = Math.ceil(yearlyEngagements / conversionRates.callToEngagement);
 
   const createTargets = (yearlyValue: number): PlanTargets => {
@@ -73,8 +75,8 @@ const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): Busine
     monthlyNetIncome: incomeGoal / 12,
     closings: createTargets(yearlyClosings),
     contractsWritten: createTargets(yearlyContracts),
-    appointmentsHeld: createTargets(yearlyAppointments),
-    appointmentsSet: createTargets(yearlyAppointments),
+    appointmentsHeld: createTargets(yearlyAppointmentsHeld),
+    appointmentsSet: createTargets(yearlyAppointmentsSet),
     engagements: createTargets(yearlyEngagements),
     calls: createTargets(yearlyCalls),
   };
@@ -120,8 +122,9 @@ export default function BusinessPlanPage() {
       workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
       conversions: {
         callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
-        engagementToAppointment: defaultAssumptions.conversionRates.engagementToAppointment * 100,
-        appointmentToContract: defaultAssumptions.conversionRates.appointmentToContract * 100,
+        engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
+        appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
+        appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
         contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
       }
     }
@@ -143,8 +146,9 @@ export default function BusinessPlanPage() {
                 workingDaysPerMonth: plan.assumptions.workingDaysPerMonth,
                 conversions: {
                     callToEngagement: plan.assumptions.conversionRates.callToEngagement * 100,
-                    engagementToAppointment: plan.assumptions.conversionRates.engagementToAppointment * 100,
-                    appointmentToContract: plan.assumptions.conversionRates.appointmentToContract * 100,
+                    engagementToAppointmentSet: plan.assumptions.conversionRates.engagementToAppointmentSet * 100,
+                    appointmentSetToHeld: plan.assumptions.conversionRates.appointmentSetToHeld * 100,
+                    appointmentHeldToContract: plan.assumptions.conversionRates.appointmentHeldToContract * 100,
                     contractToClosing: plan.assumptions.conversionRates.contractToClosing * 100,
                 }
             });
@@ -167,8 +171,9 @@ export default function BusinessPlanPage() {
         workingDaysPerMonth: data.workingDaysPerMonth,
         conversionRates: {
             callToEngagement: data.conversions.callToEngagement / 100,
-            engagementToAppointment: data.conversions.engagementToAppointment / 100,
-            appointmentToContract: data.conversions.appointmentToContract / 100,
+            engagementToAppointmentSet: data.conversions.engagementToAppointmentSet / 100,
+            appointmentSetToHeld: data.conversions.appointmentSetToHeld / 100,
+            appointmentHeldToContract: data.conversions.appointmentHeldToContract / 100,
             contractToClosing: data.conversions.contractToClosing / 100,
         }
     };
@@ -203,7 +208,7 @@ export default function BusinessPlanPage() {
     { label: 'Calls', icon: Phone, data: calculatedPlan.calls },
     { label: 'Engagements', icon: Users, data: calculatedPlan.engagements },
     { label: 'Appointments Set', icon: Calendar, data: calculatedPlan.appointmentsSet },
-    { label: 'Appointments Held', icon: CheckCircle, data: calculatedPlan.appointmentsHeld },
+    { label: 'Appointments Held', icon: CalendarCheck, data: calculatedPlan.appointmentsHeld },
     { label: 'Contracts Written', icon: FileText, data: calculatedPlan.contractsWritten },
     { label: 'Closings', icon: Award, data: calculatedPlan.closings },
   ] : [];
@@ -244,14 +249,17 @@ export default function BusinessPlanPage() {
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg flex items-center gap-2"><TrendingUp /> Conversion Rates</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       <FormField control={form.control} name="conversions.callToEngagement" render={({ field }) => (
                         <FormItem><FormLabel>Call → Engagement</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
-                      <FormField control={form.control} name="conversions.engagementToAppointment" render={({ field }) => (
+                      <FormField control={form.control} name="conversions.engagementToAppointmentSet" render={({ field }) => (
                         <FormItem><FormLabel>Engagement → Appt Set</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
-                      <FormField control={form.control} name="conversions.appointmentToContract" render={({ field }) => (
+                      <FormField control={form.control} name="conversions.appointmentSetToHeld" render={({ field }) => (
+                        <FormItem><FormLabel>Appt Set → Appt Held</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                      )}/>
+                      <FormField control={form.control} name="conversions.appointmentHeldToContract" render={({ field }) => (
                         <FormItem><FormLabel>Appt Held → Contract</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
                       <FormField control={form.control} name="conversions.contractToClosing" render={({ field }) => (
