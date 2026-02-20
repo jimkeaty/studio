@@ -9,12 +9,22 @@ export interface User {
   avatarUrl?: string;
 }
 
+export interface PlanAssumptions {
+  conversionRates: {
+    callToEngagement: number;
+    engagementToAppointment: number;
+    appointmentToContract: number;
+    contractToClosing: number;
+  };
+  avgCommission: number;
+  workingDaysPerMonth: number;
+}
+
 export interface BusinessPlan {
-  id: string;
   userId: string;
   year: number;
   annualIncomeGoal: number;
-  // This would be calculated by a Cloud Function when the plan is created/updated.
+  assumptions: PlanAssumptions;
   calculatedTargets: {
     monthlyNetIncome: number;
     dailyCalls: number;
@@ -24,6 +34,7 @@ export interface BusinessPlan {
     dailyContractsWritten: number;
     closings: number;
   };
+  updatedAt: string;
 }
 
 export interface DailyLog {
