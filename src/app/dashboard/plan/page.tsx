@@ -12,21 +12,14 @@ import { useToast } from '@/hooks/use-toast';
 import { doc, setDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-
-const conversionRates = {
-  appointmentToContract: 0.2, // 20% of appointments held become contracts
-  contractToClosing: 0.8, // 80% of contracts close
-  engagementToAppointment: 0.1, // 10% of engagements become appointments
-  callToEngagement: 0.25, // 25% of calls result in an engagement
-};
-const avgCommission = 3000;
-const workingDaysPerMonth = 21;
-
+import { planAssumptions } from '@/lib/plan-assumptions';
 
 function calculatePlan(incomeGoal: number): BusinessPlan['calculatedTargets'] {
   if (incomeGoal <= 0) {
     return { monthlyNetIncome: 0, dailyCalls: 0, dailyEngagements: 0, dailyAppointmentsSet: 0, dailyAppointmentsHeld: 0, dailyContractsWritten: 0, closings: 0 };
   }
+
+  const { conversionRates, avgCommission, workingDaysPerMonth } = planAssumptions;
 
   const annualClosings = Math.ceil(incomeGoal / avgCommission);
   const monthlyContracts = Math.ceil(annualClosings / 12 / conversionRates.contractToClosing);
@@ -166,7 +159,7 @@ export default function BusinessPlanPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Calendar className="text-primary"/> Your Required Daily Activities</CardTitle>
-                    <CardDescription>Based on industry-standard conversion rates and {workingDaysPerMonth} working days per month.</CardDescription>
+                    <CardDescription>Based on industry-standard conversion rates and {planAssumptions.workingDaysPerMonth} working days per month.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                      <div className="flex items-center gap-4 rounded-lg border p-4">
