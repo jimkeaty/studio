@@ -17,8 +17,9 @@ import { useUser, useFirestore } from '@/firebase';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { defaultAssumptions } from '@/lib/plan-assumptions';
-import type { BusinessPlan, PlanAssumptions } from '@/lib/types';
-import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target, Percent, TrendingUp, VenetianMask } from 'lucide-react';
+import type { BusinessPlan, PlanAssumptions, PlanTargets } from '@/lib/types';
+import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target, Percent, TrendingUp, Award } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const planFormSchema = z.object({
   annualIncomeGoal: z.coerce.number().min(0, "Goal must be positive."),
@@ -34,30 +35,51 @@ const planFormSchema = z.object({
 type PlanFormValues = z.infer<typeof planFormSchema>;
 
 const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): BusinessPlan['calculatedTargets'] => {
-  if (incomeGoal <= 0 || assumptions.avgCommission <= 0) {
-    return { monthlyNetIncome: 0, dailyCalls: 0, dailyEngagements: 0, dailyAppointmentsSet: 0, dailyAppointmentsHeld: 0, dailyContractsWritten: 0, closings: 0 };
-  }
-
   const { conversionRates, avgCommission, workingDaysPerMonth } = assumptions;
 
-  const annualClosings = Math.ceil(incomeGoal / avgCommission);
-  // Note: Appt Held -> Contract in mock data, but we use appt -> contract here. Let's assume they are the same logic for now.
-  // appointmentSetToHeld is usually 90-95%, let's assume apptHeld is what leads to contract.
-  const monthlyContracts = Math.ceil(annualClosings / 12 / conversionRates.contractToClosing);
-  const monthlyAppointments = Math.ceil(monthlyContracts / conversionRates.appointmentToContract);
-  const monthlyEngagements = Math.ceil(monthlyAppointments / conversionRates.engagementToAppointment);
-  const monthlyCalls = Math.ceil(monthlyEngagements / conversionRates.callToEngagement);
+  const emptyTargets: PlanTargets = { yearly: 0, monthly: 0, weekly: 0, daily: 0 };
+
+  if (incomeGoal <= 0 || avgCommission <= 0) {
+    return {
+      monthlyNetIncome: 0,
+      closings: emptyTargets,
+      contractsWritten: emptyTargets,
+      appointmentsHeld: emptyTargets,
+      appointmentsSet: emptyTargets,
+      engagements: emptyTargets,
+      calls: emptyTargets,
+    };
+  }
+
+  const yearlyClosings = Math.ceil(incomeGoal / avgCommission);
+  const yearlyContracts = Math.ceil(yearlyClosings / conversionRates.contractToClosing);
+  const yearlyAppointments = Math.ceil(yearlyContracts / conversionRates.appointmentToContract);
+  const yearlyEngagements = Math.ceil(yearlyAppointments / conversionRates.engagementToAppointment);
+  const yearlyCalls = Math.ceil(yearlyEngagements / conversionRates.callToEngagement);
+
+  const createTargets = (yearlyValue: number): PlanTargets => {
+    const monthly = Math.ceil(yearlyValue / 12);
+    const weekly = Math.ceil(yearlyValue / 52);
+    const daily = Math.ceil(monthly / workingDaysPerMonth);
+    return {
+      yearly: yearlyValue,
+      monthly: monthly,
+      weekly: weekly,
+      daily: daily,
+    };
+  };
 
   return {
     monthlyNetIncome: incomeGoal / 12,
-    closings: annualClosings,
-    dailyContractsWritten: Math.ceil(monthlyContracts / workingDaysPerMonth),
-    dailyAppointmentsHeld: Math.ceil(monthlyAppointments / workingDaysPerMonth),
-    dailyAppointmentsSet: Math.ceil(monthlyAppointments / workingDaysPerMonth),
-    dailyEngagements: Math.ceil(monthlyEngagements / workingDaysPerMonth),
-    dailyCalls: Math.ceil(monthlyCalls / workingDaysPerMonth),
+    closings: createTargets(yearlyClosings),
+    contractsWritten: createTargets(yearlyContracts),
+    appointmentsHeld: createTargets(yearlyAppointments),
+    appointmentsSet: createTargets(yearlyAppointments),
+    engagements: createTargets(yearlyEngagements),
+    calls: createTargets(yearlyCalls),
   };
 }
+
 
 const PlanSkeleton = () => (
     <div className="space-y-8">
@@ -177,6 +199,15 @@ export default function BusinessPlanPage() {
   
   if (isLoading) return <PlanSkeleton />;
 
+  const activityMetrics = calculatedPlan ? [
+    { label: 'Calls', icon: Phone, data: calculatedPlan.calls },
+    { label: 'Engagements', icon: Users, data: calculatedPlan.engagements },
+    { label: 'Appointments Set', icon: Calendar, data: calculatedPlan.appointmentsSet },
+    { label: 'Appointments Held', icon: CheckCircle, data: calculatedPlan.appointmentsHeld },
+    { label: 'Contracts Written', icon: FileText, data: calculatedPlan.contractsWritten },
+    { label: 'Closings', icon: Award, data: calculatedPlan.closings },
+  ] : [];
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -251,7 +282,7 @@ export default function BusinessPlanPage() {
             {isSaving ? "Saving..." : <><ArrowRight className="mr-2 h-4 w-4" /> Calculate & Save Plan</>}
         </Button>
       
-        {calculatedPlan && calculatedPlan.closings > 0 && (
+        {calculatedPlan && calculatedPlan.closings.yearly > 0 && (
           <div className="space-y-6 animate-in fade-in-50">
               <Card>
                   <CardHeader>
@@ -260,23 +291,45 @@ export default function BusinessPlanPage() {
                   <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <PlanResultCard icon={DollarSign} label="Annual Net Income" value={new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(form.getValues('annualIncomeGoal'))} />
                       <PlanResultCard icon={DollarSign} label="Monthly Net Income" value={new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(calculatedPlan.monthlyNetIncome)} />
-                      <PlanResultCard icon={CheckCircle} label="Required Closings" value={calculatedPlan.closings} unit="/ year" />
+                      <PlanResultCard icon={Award} label="Required Closings" value={calculatedPlan.closings.yearly} unit="/ year" />
                   </CardContent>
               </Card>
               
               <Card>
-                  <CardHeader>
-                      <CardTitle className="flex items-center gap-2"><Calendar className="text-primary"/> Your Required Daily Activities</CardTitle>
-                      <CardDescription>Based on your assumptions and {form.getValues('workingDaysPerMonth')} working days per month.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                        <PlanResultCard icon={Phone} label="Calls" value={calculatedPlan.dailyCalls} />
-                        <PlanResultCard icon={Users} label="Engagements" value={calculatedPlan.dailyEngagements} />
-                        <PlanResultCard icon={Calendar} label="Appts Set" value={calculatedPlan.dailyAppointmentsSet} />
-                        <PlanResultCard icon={CheckCircle} label="Appts Held" value={calculatedPlan.dailyAppointmentsHeld} />
-                        <PlanResultCard icon={FileText} label="Contracts" value={calculatedPlan.dailyContractsWritten} />
-                  </CardContent>
-              </Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Calendar className="text-primary"/> Your Required Activities</CardTitle>
+                    <CardDescription>Based on your assumptions and {form.getValues('workingDaysPerMonth')} working days per month.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[180px]">Activity</TableHead>
+                                <TableHead className="text-right">Yearly</TableHead>
+                                <TableHead className="text-right">Monthly</TableHead>
+                                <TableHead className="text-right">Weekly</TableHead>
+                                <TableHead className="text-right text-primary font-bold">Daily</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {activityMetrics.map(({ label, icon: Icon, data }) => (
+                                <TableRow key={label}>
+                                    <TableCell className="font-medium">
+                                      <div className="flex items-center gap-2">
+                                        <Icon className="h-5 w-5 text-muted-foreground" />
+                                        {label}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">{data.yearly.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right tabular-nums">{data.monthly.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right tabular-nums">{data.weekly.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily.toLocaleString()}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
           </div>
         )}
       </form>

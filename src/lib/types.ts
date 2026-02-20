@@ -20,6 +20,13 @@ export interface PlanAssumptions {
   workingDaysPerMonth: number;
 }
 
+export interface PlanTargets {
+  yearly: number;
+  monthly: number;
+  weekly: number;
+  daily: number;
+}
+
 export interface BusinessPlan {
   userId: string;
   year: number;
@@ -27,12 +34,12 @@ export interface BusinessPlan {
   assumptions: PlanAssumptions;
   calculatedTargets: {
     monthlyNetIncome: number;
-    dailyCalls: number;
-    dailyEngagements: number;
-    dailyAppointmentsSet: number;
-    dailyAppointmentsHeld: number;
-    dailyContractsWritten: number;
-    closings: number;
+    closings: PlanTargets;
+    contractsWritten: PlanTargets;
+    appointmentsHeld: PlanTargets;
+    appointmentsSet: PlanTargets;
+    engagements: PlanTargets;
+    calls: PlanTargets;
   };
   updatedAt: string;
 }
