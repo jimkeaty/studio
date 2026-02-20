@@ -331,6 +331,4 @@ export default function BrokerDashboardPage() {
             </Card>
         </div>
     );
-
-    
-
+}
