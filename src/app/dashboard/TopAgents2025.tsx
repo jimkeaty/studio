@@ -1,8 +1,10 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useFirestore } from "@/firebase";
-import { fetchRollupsWithOverrides, type EffectiveRollup } from "@/lib/overrides";
+import { getEffectiveRollups } from "@/lib/rollupsService";
+import type { EffectiveRollup } from "@/lib/overrides";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +30,7 @@ export default function TopAgents2025({ year = 2025 }: { year?: number }) {
         setLoading(true);
         setError("");
 
-        const data = await fetchRollupsWithOverrides(db, year);
+        const data = await getEffectiveRollups(db, year);
 
         if (!cancelled) setRows(data);
       } catch (e: any) {

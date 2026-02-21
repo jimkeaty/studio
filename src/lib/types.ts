@@ -1,3 +1,4 @@
+
 export type UserRole = 'agent' | 'manager' | 'broker' | 'admin';
 
 export interface User {
@@ -170,6 +171,8 @@ export interface LeaderboardAgentMetrics {
   teamType: 'CGL' | 'SGL';
   avatarUrl?: string;
   metrics: Record<LeaderboardMetricKey, number>;
+  isCorrected?: boolean;
+  correctionReason?: string;
 }
 
 export interface LeaderboardRollup {

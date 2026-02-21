@@ -1,36 +1,23 @@
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NewActivityConfig, NewActivityRollup } from '@/lib/types';
-import { Building, FileSignature, Home } from 'lucide-react';
-import React from 'react';
+import { Building, FileSignature, Home, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
+import { useFirestore } from '@/firebase';
+import { getNewActivityRows } from '@/lib/rollupsService';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
-// Mock data simulating the Firestore documents
+// Mock data simulating the Firestore config document
 const mockConfig: NewActivityConfig = {
   lookbackDays: 60,
   showTopN: 25,
   sortOrder: 'newestFirst',
   title: 'New Activity (Last 60 Days)',
   showAddress: true,
-};
-
-const mockRollup: NewActivityRollup = {
-  lookbackDays: 60,
-  generatedAt: new Date().toISOString(),
-  newListings: [
-    { id: 'l1', date: '2024-07-22', agentDisplayName: 'Sonja D.', addressShort: '123 Main St, Lafayette', price: 450000 },
-    { id: 'l2', date: '2024-07-21', agentDisplayName: 'Michael C.', addressShort: '456 Oak Ave, Broussard', price: 320000 },
-    { id: 'l3', date: '2024-07-20', agentDisplayName: 'Alicia R.', addressShort: '789 Pine Ln, Youngsville', price: 680000 },
-    { id: 'l4', date: '2024-07-19', agentDisplayName: 'David B.', addressShort: '101 Maple Dr, Scott', price: 275000 },
-    { id: 'l5', date: '2024-07-18', agentDisplayName: 'Sonja D.', addressShort: '212 Birch Rd, Carencro', price: 510000 },
-  ],
-  newContracts: [
-    { id: 'c1', date: '2024-07-23', agentDisplayName: 'Jessica P.', addressShort: '111 Elm St, New Iberia', price: 310000 },
-    { id: 'c2', date: '2024-07-22', agentDisplayName: 'Emily W.', addressShort: '222 Cedar Ct, Abbeville', price: 240000 },
-    { id: 'c3', date: '2024-07-20', agentDisplayName: 'Chris G.', addressShort: '333 Willow Way, Breaux Bridge', price: 425000 },
-    { id: 'c4', date: '2024-07-19', agentDisplayName: 'Michael C.', addressShort: '444 River Bend, St. Martinville', price: 190000 },
-  ],
 };
 
 const formatCurrency = (amount: number) => 
@@ -43,7 +30,7 @@ const formatCurrency = (amount: number) =>
 const formatDate = (dateStr: string) => format(parseISO(dateStr), 'MMM d');
 
 
-const ActivityColumn = ({ title, items, icon: Icon, showAddress }: { title: string, items: any[], icon: React.ElementType, showAddress: boolean }) => (
+const ActivityColumn = ({ title, items, icon: Icon, showAddress, loading }: { title: string, items: any[], icon: React.ElementType, showAddress: boolean, loading: boolean }) => (
   <Card className="flex-1 bg-gray-800/50 border-gray-700">
     <CardHeader>
       <CardTitle className="flex items-center gap-3 text-2xl font-semibold text-gray-300">
@@ -52,27 +39,73 @@ const ActivityColumn = ({ title, items, icon: Icon, showAddress }: { title: stri
       </CardTitle>
     </CardHeader>
     <CardContent>
-      <div className="space-y-4">
-        {items.map((item) => (
-          <div key={item.id} className="grid grid-cols-3 gap-4 items-center border-b border-gray-700/50 pb-3 last:border-b-0">
-            <div className="col-span-1">
-              <p className="font-semibold text-white">{item.agentDisplayName}</p>
-              <p className="text-sm text-gray-400">{formatDate(item.date)}</p>
+      {loading ? (
+        <div className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+                <div key={i} className="grid grid-cols-3 gap-4 items-center border-b border-gray-700/50 pb-3 last:border-b-0">
+                    <div className="col-span-1 space-y-2">
+                        <Skeleton className="h-5 w-24" />
+                        <Skeleton className="h-4 w-16" />
+                    </div>
+                    <div className="col-span-2 text-right space-y-2">
+                        <Skeleton className="h-6 w-32 ml-auto" />
+                        {showAddress && <Skeleton className="h-4 w-40 ml-auto" />}
+                    </div>
+                </div>
+            ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-center py-10 text-gray-500">
+            No new activity to report.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {items.map((item) => (
+            <div key={item.id} className="grid grid-cols-3 gap-4 items-center border-b border-gray-700/50 pb-3 last:border-b-0">
+              <div className="col-span-1">
+                <p className="font-semibold text-white">{item.agentDisplayName}</p>
+                <p className="text-sm text-gray-400">{formatDate(item.date)}</p>
+              </div>
+              <div className="col-span-2 text-right">
+                <p className="text-xl font-bold text-orange-400">{formatCurrency(item.price)}</p>
+                {showAddress && <p className="text-sm text-gray-500 truncate">{item.addressShort}</p>}
+              </div>
             </div>
-            <div className="col-span-2 text-right">
-              <p className="text-xl font-bold text-orange-400">{formatCurrency(item.price)}</p>
-              {showAddress && <p className="text-sm text-gray-500 truncate">{item.addressShort}</p>}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </CardContent>
   </Card>
 );
 
 export default function NewActivityPage() {
   const config = mockConfig;
-  const data = mockRollup;
+  const db = useFirestore();
+
+  const [data, setData] = useState<NewActivityRollup | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!db) return;
+    
+    setLoading(true);
+    const selectedYear = new Date().getFullYear();
+
+    getNewActivityRows(db, selectedYear)
+        .then(fetchedData => {
+            setData(fetchedData);
+            setError(null);
+        })
+        .catch(err => {
+            console.error("Failed to fetch new activity data:", err);
+            setError("Could not load new activity. Please try again later.");
+        })
+        .finally(() => {
+            setLoading(false);
+        });
+
+  }, [db]);
 
   return (
     <div className="dark min-h-screen bg-gray-900 text-white p-8 font-sans">
@@ -87,12 +120,26 @@ export default function NewActivityPage() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto flex flex-col lg:flex-row gap-8">
-        <ActivityColumn title="New Listings" items={data.newListings} icon={Home} showAddress={config.showAddress} />
-        <ActivityColumn title="New Contracts" items={data.newContracts} icon={FileSignature} showAddress={config.showAddress} />
+        {error ? (
+             <Alert variant="destructive" className="w-full bg-red-900/50 border-red-700 text-red-300">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+            </Alert>
+        ) : (
+            <>
+                <ActivityColumn title="New Listings" items={data?.newListings ?? []} icon={Home} showAddress={config.showAddress} loading={loading} />
+                <ActivityColumn title="New Contracts" items={data?.newContracts ?? []} icon={FileSignature} showAddress={config.showAddress} loading={loading} />
+            </>
+        )}
       </main>
 
       <footer className="text-center mt-12 text-gray-600">
-        <p>Last updated: {format(parseISO(data.generatedAt), 'Pp')}</p>
+        {loading ? (
+             <p>Loading...</p>
+        ) : data ? (
+            <p>Last updated: {format(parseISO(data.generatedAt), 'Pp')}</p>
+        ) : null}
       </footer>
     </div>
   );
