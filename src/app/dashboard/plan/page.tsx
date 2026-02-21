@@ -131,7 +131,7 @@ export default function BusinessPlanPage() {
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
-    // We will set defaults inside the useEffect hook.
+    // Default values will be set in useEffect
   });
   
   const handleCalculate = useCallback(() => {
