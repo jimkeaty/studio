@@ -171,7 +171,7 @@ export default function BusinessPlanPage() {
         });
       };
 
-      if (!user || !db) {
+      if (userLoading || !user || !db) {
         setDefaults();
         setIsLoading(false);
         return;
@@ -205,9 +205,7 @@ export default function BusinessPlanPage() {
       }
     };
 
-    if (!userLoading) {
-      loadPlan();
-    }
+    loadPlan();
   }, [user, db, year, form, userLoading]);
 
   // This effect will run once after the initial data loading is complete.
