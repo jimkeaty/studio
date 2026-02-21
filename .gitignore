@@ -46,3 +46,6 @@ firestore-debug.log
 # Local import data (do not commit)
 imports/data/
 backups/
+
+# --- Secrets / keys (DO NOT COMMIT) ---
+imports/keys/
