@@ -131,22 +131,12 @@ export default function BusinessPlanPage() {
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
-    defaultValues: {
-      annualIncomeGoal: 100000,
-      avgCommission: defaultAssumptions.avgCommission,
-      workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
-      conversions: {
-        callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
-        engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
-        appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
-        appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
-        contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
-      }
-    }
+    // Default values are now set in the useEffect below to ensure they are applied correctly.
   });
   
   const handleCalculate = useCallback(() => {
     const data = form.getValues();
+    if (!data.conversions) return; // Guard against running before form is fully initialized
     const assumptions: PlanAssumptions = {
         avgCommission: data.avgCommission,
         workingDaysPerMonth: data.workingDaysPerMonth,
@@ -169,31 +159,80 @@ export default function BusinessPlanPage() {
   }, [isLoading, handleCalculate]);
 
   useEffect(() => {
-    if (!user || !db) {
-        if (!userLoading) setIsLoading(false);
-        return;
-    };
-
-    const planDocRef = doc(db, 'users', user.uid, 'plans', year);
-    getDoc(planDocRef).then(docSnap => {
-        if (docSnap.exists()) {
-            const plan = docSnap.data() as BusinessPlan;
+    const loadPlan = async () => {
+        if (!user || !db) {
+            // Not signed in, so load defaults
             form.reset({
-                annualIncomeGoal: plan.annualIncomeGoal,
-                avgCommission: plan.assumptions.avgCommission,
-                workingDaysPerMonth: plan.assumptions.workingDaysPerMonth,
+                annualIncomeGoal: 100000,
+                avgCommission: defaultAssumptions.avgCommission,
+                workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
                 conversions: {
-                    callToEngagement: plan.assumptions.conversionRates.callToEngagement * 100,
-                    engagementToAppointmentSet: plan.assumptions.conversionRates.engagementToAppointmentSet * 100,
-                    appointmentSetToHeld: plan.assumptions.conversionRates.appointmentSetToHeld * 100,
-                    appointmentHeldToContract: plan.assumptions.conversionRates.appointmentHeldToContract * 100,
-                    contractToClosing: plan.assumptions.conversionRates.contractToClosing * 100,
+                    callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
+                    engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
+                    appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
+                    appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
+                    contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
                 }
             });
+            setIsLoading(false);
+            return;
+        };
+
+        const planDocRef = doc(db, 'users', user.uid, 'plans', year);
+        try {
+            const docSnap = await getDoc(planDocRef);
+            if (docSnap.exists()) {
+                const plan = docSnap.data() as BusinessPlan;
+                form.reset({
+                    annualIncomeGoal: plan.annualIncomeGoal,
+                    avgCommission: plan.assumptions.avgCommission,
+                    workingDaysPerMonth: plan.assumptions.workingDaysPerMonth,
+                    conversions: {
+                        callToEngagement: plan.assumptions.conversionRates.callToEngagement * 100,
+                        engagementToAppointmentSet: plan.assumptions.conversionRates.engagementToAppointmentSet * 100,
+                        appointmentSetToHeld: plan.assumptions.conversionRates.appointmentSetToHeld * 100,
+                        appointmentHeldToContract: plan.assumptions.conversionRates.appointmentHeldToContract * 100,
+                        contractToClosing: plan.assumptions.conversionRates.contractToClosing * 100,
+                    }
+                });
+            } else {
+                // No saved plan, so load defaults
+                form.reset({
+                    annualIncomeGoal: 100000,
+                    avgCommission: defaultAssumptions.avgCommission,
+                    workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
+                    conversions: {
+                        callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
+                        engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
+                        appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
+                        appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
+                        contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Error loading business plan:", error);
+            // Even if there's an error, load defaults so the user isn't blocked
+            form.reset({
+                annualIncomeGoal: 100000,
+                avgCommission: defaultAssumptions.avgCommission,
+                workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
+                conversions: {
+                    callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
+                    engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
+                    appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
+                    appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
+                    contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
+                }
+            });
+        } finally {
+            setIsLoading(false);
         }
-    }).finally(() => {
-        setIsLoading(false);
-    });
+    };
+
+    if (!userLoading) {
+        loadPlan();
+    }
   }, [user, db, year, form, userLoading]);
 
   const onSubmit = (data: PlanFormValues) => {
