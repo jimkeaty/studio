@@ -160,8 +160,8 @@ export default function BusinessPlanPage() {
 
   useEffect(() => {
     const loadPlan = async () => {
-        if (!user || !db) {
-            // Not signed in, so load defaults
+        setIsLoading(true);
+        const setDefaults = () => {
             form.reset({
                 annualIncomeGoal: 100000,
                 avgCommission: defaultAssumptions.avgCommission,
@@ -174,6 +174,10 @@ export default function BusinessPlanPage() {
                     contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
                 }
             });
+        }
+
+        if (!user || !db) {
+            setDefaults();
             setIsLoading(false);
             return;
         };
@@ -196,35 +200,11 @@ export default function BusinessPlanPage() {
                     }
                 });
             } else {
-                // No saved plan, so load defaults
-                form.reset({
-                    annualIncomeGoal: 100000,
-                    avgCommission: defaultAssumptions.avgCommission,
-                    workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
-                    conversions: {
-                        callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
-                        engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
-                        appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
-                        appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
-                        contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
-                    }
-                });
+                setDefaults();
             }
         } catch (error) {
             console.error("Error loading business plan:", error);
-            // Even if there's an error, load defaults so the user isn't blocked
-            form.reset({
-                annualIncomeGoal: 100000,
-                avgCommission: defaultAssumptions.avgCommission,
-                workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
-                conversions: {
-                    callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
-                    engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
-                    appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
-                    appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
-                    contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
-                }
-            });
+            setDefaults();
         } finally {
             setIsLoading(false);
         }
