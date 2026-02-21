@@ -52,22 +52,37 @@ const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): Busine
     };
   }
 
-  const yearlyClosings = Math.ceil(incomeGoal / avgCommission);
-  const yearlyContracts = Math.ceil(yearlyClosings / conversionRates.contractToClosing);
-  const yearlyAppointmentsHeld = Math.ceil(yearlyContracts / conversionRates.appointmentHeldToContract);
-  const yearlyAppointmentsSet = Math.ceil(yearlyAppointmentsHeld / conversionRates.appointmentSetToHeld);
-  const yearlyEngagements = Math.ceil(yearlyAppointmentsSet / conversionRates.engagementToAppointmentSet);
-  const yearlyCalls = Math.ceil(yearlyEngagements / conversionRates.callToEngagement);
+  const yearlyClosings = incomeGoal / avgCommission;
+  if (yearlyClosings <= 0) {
+      return {
+          monthlyNetIncome: 0,
+          closings: emptyTargets,
+          contractsWritten: emptyTargets,
+          appointmentsHeld: emptyTargets,
+          appointmentsSet: emptyTargets,
+          engagements: emptyTargets,
+          calls: emptyTargets,
+      };
+  }
+  
+  const yearlyContracts = yearlyClosings / (conversionRates.contractToClosing > 0 ? conversionRates.contractToClosing : 1);
+  const yearlyAppointmentsHeld = yearlyContracts / (conversionRates.appointmentHeldToContract > 0 ? conversionRates.appointmentHeldToContract : 1);
+  const yearlyAppointmentsSet = yearlyAppointmentsHeld / (conversionRates.appointmentSetToHeld > 0 ? conversionRates.appointmentSetToHeld : 1);
+  const yearlyEngagements = yearlyAppointmentsSet / (conversionRates.engagementToAppointmentSet > 0 ? conversionRates.engagementToAppointmentSet : 1);
+  const yearlyCalls = yearlyEngagements / (conversionRates.callToEngagement > 0 ? conversionRates.callToEngagement : 1);
 
   const createTargets = (yearlyValue: number): PlanTargets => {
-    const monthly = Math.ceil(yearlyValue / 12);
-    const weekly = Math.ceil(yearlyValue / 52);
-    const daily = Math.ceil(monthly / workingDaysPerMonth);
+    if (yearlyValue <= 0 || !isFinite(yearlyValue)) {
+        return emptyTargets;
+    }
+    const monthly = yearlyValue / 12;
+    const weekly = yearlyValue / 52;
+    const daily = monthly / workingDaysPerMonth;
     return {
-      yearly: yearlyValue,
-      monthly: monthly,
-      weekly: weekly,
-      daily: daily,
+      yearly: Math.ceil(yearlyValue),
+      monthly: Math.ceil(monthly),
+      weekly: parseFloat(weekly.toFixed(2)),
+      daily: parseFloat(daily.toFixed(2)),
     };
   };
 
@@ -129,6 +144,29 @@ export default function BusinessPlanPage() {
       }
     }
   });
+  
+  const handleCalculate = useCallback(() => {
+    const data = form.getValues();
+    const assumptions: PlanAssumptions = {
+        avgCommission: data.avgCommission,
+        workingDaysPerMonth: data.workingDaysPerMonth,
+        conversionRates: {
+            callToEngagement: data.conversions.callToEngagement / 100,
+            engagementToAppointmentSet: data.conversions.engagementToAppointmentSet / 100,
+            appointmentSetToHeld: data.conversions.appointmentSetToHeld / 100,
+            appointmentHeldToContract: data.conversions.appointmentHeldToContract / 100,
+            contractToClosing: data.conversions.contractToClosing / 100,
+        }
+    };
+    const newCalculatedTargets = calculatePlan(data.annualIncomeGoal, assumptions);
+    setCalculatedPlan(newCalculatedTargets);
+  }, [form]);
+
+  useEffect(() => {
+    if (!isLoading) {
+        handleCalculate();
+    }
+  }, [isLoading, handleCalculate]);
 
   useEffect(() => {
     if (!user || !db) {
@@ -152,7 +190,6 @@ export default function BusinessPlanPage() {
                     contractToClosing: plan.assumptions.conversionRates.contractToClosing * 100,
                 }
             });
-            setCalculatedPlan(plan.calculatedTargets);
         }
     }).finally(() => {
         setIsLoading(false);
@@ -235,7 +272,7 @@ export default function BusinessPlanPage() {
                   <FormLabel>Annual Net Income Goal</FormLabel>
                     <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <FormControl><Input type="number" placeholder="100000" className="pl-10" {...field} /></FormControl>
+                        <FormControl><Input type="number" placeholder="100000" className="pl-10" {...field} onChange={(e) => { field.onChange(e); handleCalculate(); }} /></FormControl>
                     </div>
                   <FormMessage />
                 </FormItem>
@@ -251,19 +288,19 @@ export default function BusinessPlanPage() {
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       <FormField control={form.control} name="conversions.callToEngagement" render={({ field }) => (
-                        <FormItem><FormLabel>Call → Engagement</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Call → Engagement</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
                       <FormField control={form.control} name="conversions.engagementToAppointmentSet" render={({ field }) => (
-                        <FormItem><FormLabel>Engagement → Appt Set</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Engagement → Appt Set</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
                       <FormField control={form.control} name="conversions.appointmentSetToHeld" render={({ field }) => (
-                        <FormItem><FormLabel>Appt Set → Appt Held</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Appt Set → Appt Held</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
                       <FormField control={form.control} name="conversions.appointmentHeldToContract" render={({ field }) => (
-                        <FormItem><FormLabel>Appt Held → Contract</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Appt Held → Contract</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
                       <FormField control={form.control} name="conversions.contractToClosing" render={({ field }) => (
-                        <FormItem><FormLabel>Contract → Closing</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8"/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Contract → Closing</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
                       )}/>
                     </CardContent>
                   </Card>
@@ -273,10 +310,10 @@ export default function BusinessPlanPage() {
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <FormField control={form.control} name="avgCommission" render={({ field }) => (
-                            <FormItem><FormLabel>Average Net Commission</FormLabel><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10"/></FormControl></div><FormMessage /></FormItem>
+                            <FormItem><FormLabel>Average Net Commission</FormLabel><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl></div><FormMessage /></FormItem>
                         )}/>
                         <FormField control={form.control} name="workingDaysPerMonth" render={({ field }) => (
-                            <FormItem><FormLabel>Working Days / Month</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                            <FormItem><FormLabel>Working Days / Month</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><FormMessage /></FormItem>
                         )}/>
                     </CardContent>
                   </Card>
@@ -287,7 +324,7 @@ export default function BusinessPlanPage() {
         </Card>
 
         <Button type="submit" className="w-full" disabled={isSaving}>
-            {isSaving ? "Saving..." : <><ArrowRight className="mr-2 h-4 w-4" /> Calculate & Save Plan</>}
+            {isSaving ? "Saving..." : <><CheckCircle className="mr-2 h-4 w-4" /> Save Plan</>}
         </Button>
       
         {calculatedPlan && calculatedPlan.closings.yearly > 0 && (
@@ -330,8 +367,8 @@ export default function BusinessPlanPage() {
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">{data.yearly.toLocaleString()}</TableCell>
                                     <TableCell className="text-right tabular-nums">{data.monthly.toLocaleString()}</TableCell>
-                                    <TableCell className="text-right tabular-nums">{data.weekly.toLocaleString()}</TableCell>
-                                    <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right tabular-nums">{data.weekly < 1 ? '—' : data.weekly.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily < 1 ? '—' : data.daily.toLocaleString()}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
