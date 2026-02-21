@@ -131,7 +131,18 @@ export default function BusinessPlanPage() {
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
-    // Default values are now set in the useEffect below to ensure they are applied correctly.
+    defaultValues: {
+      annualIncomeGoal: 100000,
+      avgCommission: defaultAssumptions.avgCommission,
+      workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
+      conversions: {
+        callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
+        engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
+        appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
+        appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
+        contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
+      },
+    },
   });
   
   const handleCalculate = useCallback(() => {
@@ -155,7 +166,7 @@ export default function BusinessPlanPage() {
   useEffect(() => {
     const loadPlan = async () => {
       setIsLoading(true);
-
+      
       const setDefaults = () => {
         form.reset({
           annualIncomeGoal: 100000,
