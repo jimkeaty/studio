@@ -131,18 +131,6 @@ export default function BusinessPlanPage() {
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
-    defaultValues: {
-      annualIncomeGoal: 100000,
-      avgCommission: defaultAssumptions.avgCommission,
-      workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
-      conversions: {
-        callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
-        engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
-        appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
-        appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
-        contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
-      },
-    },
   });
   
   const handleCalculate = useCallback(() => {
