@@ -131,6 +131,7 @@ export default function BusinessPlanPage() {
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
+    // We will set defaults inside the useEffect hook.
   });
   
   const handleCalculate = useCallback(() => {
@@ -173,6 +174,7 @@ export default function BusinessPlanPage() {
       if (userLoading || !user || !db) {
         setDefaults();
         setIsLoading(false);
+        handleCalculate(); // Calculate after setting defaults
         return;
       }
 
@@ -201,18 +203,12 @@ export default function BusinessPlanPage() {
         setDefaults();
       } finally {
         setIsLoading(false);
+        handleCalculate(); // Calculate after loading data
       }
     };
 
     loadPlan();
-  }, [user, db, year, form, userLoading]);
-
-  // This effect will run once after the initial data loading is complete.
-  useEffect(() => {
-    if (!isLoading) {
-        handleCalculate();
-    }
-  }, [isLoading, handleCalculate]);
+  }, [user, db, year, form, userLoading, handleCalculate]);
 
   const onSubmit = (data: PlanFormValues) => {
     if (!user || !db) {
@@ -221,6 +217,8 @@ export default function BusinessPlanPage() {
     }
     setIsSaving(true);
     
+    handleCalculate(); // Recalculate one last time before saving
+
     const assumptions: PlanAssumptions = {
         avgCommission: data.avgCommission,
         workingDaysPerMonth: data.workingDaysPerMonth,
@@ -232,16 +230,15 @@ export default function BusinessPlanPage() {
             contractToClosing: data.conversions.contractToClosing / 100,
         }
     };
-    
-    const newCalculatedTargets = calculatePlan(data.annualIncomeGoal, assumptions);
-    setCalculatedPlan(newCalculatedTargets);
+
+    const finalCalculatedPlan = calculatePlan(data.annualIncomeGoal, assumptions);
 
     const planToSave: BusinessPlan = {
         userId: user.uid,
         year: parseInt(year, 10),
         annualIncomeGoal: data.annualIncomeGoal,
         assumptions: assumptions,
-        calculatedTargets: newCalculatedTargets,
+        calculatedTargets: finalCalculatedPlan,
         updatedAt: new Date().toISOString(),
     };
 
