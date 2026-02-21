@@ -1,8 +1,54 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // In a real application, this might be a custom claim or a read from an admin collection.
+      // For now, hardcode a list of admin UIDs.
+      // IMPORTANT: Replace with actual admin UIDs.
+      let adminUids = [
+        "ADMIN_USER_UID_1", // Replace with actual admin UID
+        "ADMIN_USER_UID_2"  // Replace with actual admin UID
+      ];
+      return isSignedIn() && request.auth.uid in adminUids;
+    }
+
+    function isEditableYear(year) {
+      return year >= 2025;
+    }
+
+    // --- User Data: Allow users to write to their own docs ---
+    match /users/{userId}/{document=**} {
+       allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    match /dashboards/{userId}/{document=**} {
+       allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    match /agentYearRollups/{docId} {
+      allow read: if isSignedIn();
+
+      // Writes are denied for historical years entirely.
+      allow write: if isAdmin() && isEditableYear(request.resource.data.year);
+    }
+    match /historical_overrides/{overrideId} {
+      allow read: if isSignedIn(); // Dashboards and admin tools need to read this.
+      allow write: if isAdmin();   // Only admins can create, update, or deactivate overrides.
+    }
+    match /historical_corrections/{correctionId} {
+      allow read: if isAdmin(); // Only admins need to read the audit trail.
+      allow create: if isAdmin();  // Append-only, no updates or deletes.
+      allow update, delete: if false;
+    }
+
+    // Default catch-all denies all other access
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }
