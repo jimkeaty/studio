@@ -19,6 +19,7 @@ export interface PlanAssumptions {
   };
   avgCommission: number;
   workingDaysPerMonth: number;
+  weeksOff: number;
 }
 
 export interface PlanTargets {

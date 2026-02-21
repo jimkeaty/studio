@@ -18,13 +18,14 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { defaultAssumptions } from '@/lib/plan-assumptions';
 import type { BusinessPlan, PlanAssumptions, PlanTargets } from '@/lib/types';
-import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target, Percent, TrendingUp, Award, CalendarCheck } from 'lucide-react';
+import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target, Percent, TrendingUp, Award, CalendarCheck, Sailboat } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const planFormSchema = z.object({
   annualIncomeGoal: z.coerce.number().min(0, "Goal must be positive."),
   avgCommission: z.coerce.number().min(0, "Commission must be positive."),
   workingDaysPerMonth: z.coerce.number().int().min(1, "Must be at least 1.").max(31, "Cannot exceed 31."),
+  weeksOff: z.coerce.number().int().min(0, "Cannot be negative.").max(52, "Cannot exceed 52."),
   conversions: z.object({
       callToEngagement: z.coerce.number().min(0).max(100),
       engagementToAppointmentSet: z.coerce.number().min(0).max(100),
@@ -36,7 +37,7 @@ const planFormSchema = z.object({
 type PlanFormValues = z.infer<typeof planFormSchema>;
 
 const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): BusinessPlan['calculatedTargets'] => {
-  const { conversionRates, avgCommission, workingDaysPerMonth } = assumptions;
+  const { conversionRates, avgCommission, workingDaysPerMonth, weeksOff } = assumptions;
 
   const emptyTargets: PlanTargets = { yearly: 0, monthly: 0, weekly: 0, daily: 0 };
 
@@ -70,14 +71,19 @@ const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): Busine
   const yearlyAppointmentsSet = yearlyAppointmentsHeld / (conversionRates.appointmentSetToHeld > 0 ? conversionRates.appointmentSetToHeld : 1);
   const yearlyEngagements = yearlyAppointmentsSet / (conversionRates.engagementToAppointmentSet > 0 ? conversionRates.engagementToAppointmentSet : 1);
   const yearlyCalls = yearlyEngagements / (conversionRates.callToEngagement > 0 ? conversionRates.callToEngagement : 1);
+  
+  const workingWeeksInYear = 52 - (weeksOff || 0);
+  const workingDaysInYear = (workingDaysPerMonth * 12) - ((weeksOff || 0) * 5);
+
 
   const createTargets = (yearlyValue: number): PlanTargets => {
     if (yearlyValue <= 0 || !isFinite(yearlyValue)) {
         return emptyTargets;
     }
     const monthly = yearlyValue / 12;
-    const weekly = yearlyValue / 52;
-    const daily = monthly / workingDaysPerMonth;
+    const weekly = workingWeeksInYear > 0 ? yearlyValue / workingWeeksInYear : 0;
+    const daily = workingDaysInYear > 0 ? yearlyValue / workingDaysInYear : 0;
+
     return {
       yearly: Math.ceil(yearlyValue),
       monthly: Math.ceil(monthly),
@@ -131,14 +137,28 @@ export default function BusinessPlanPage() {
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
+    defaultValues: {
+      annualIncomeGoal: 0,
+      avgCommission: 0,
+      workingDaysPerMonth: 0,
+      weeksOff: 0,
+      conversions: {
+        callToEngagement: 0,
+        engagementToAppointmentSet: 0,
+        appointmentSetToHeld: 0,
+        appointmentHeldToContract: 0,
+        contractToClosing: 0,
+      },
+    }
   });
   
   const handleCalculate = useCallback(() => {
     const data = form.getValues();
-    if (!data.conversions) return; // Guard against running before form is fully initialized
+    if (!data.conversions) return;
     const assumptions: PlanAssumptions = {
         avgCommission: data.avgCommission,
         workingDaysPerMonth: data.workingDaysPerMonth,
+        weeksOff: data.weeksOff,
         conversionRates: {
             callToEngagement: data.conversions.callToEngagement / 100,
             engagementToAppointmentSet: data.conversions.engagementToAppointmentSet / 100,
@@ -160,6 +180,7 @@ export default function BusinessPlanPage() {
           annualIncomeGoal: 100000,
           avgCommission: defaultAssumptions.avgCommission,
           workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
+          weeksOff: defaultAssumptions.weeksOff,
           conversions: {
             callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
             engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
@@ -186,6 +207,7 @@ export default function BusinessPlanPage() {
             annualIncomeGoal: plan.annualIncomeGoal,
             avgCommission: plan.assumptions.avgCommission,
             workingDaysPerMonth: plan.assumptions.workingDaysPerMonth,
+            weeksOff: plan.assumptions.weeksOff || defaultAssumptions.weeksOff,
             conversions: {
               callToEngagement: plan.assumptions.conversionRates.callToEngagement * 100,
               engagementToAppointmentSet: plan.assumptions.conversionRates.engagementToAppointmentSet * 100,
@@ -206,9 +228,7 @@ export default function BusinessPlanPage() {
       }
     };
 
-    if (!form.formState.isDirty) {
-        loadPlan();
-    }
+    loadPlan();
   }, [user, db, year, form, userLoading, handleCalculate]);
 
   const onSubmit = (data: PlanFormValues) => {
@@ -218,11 +238,12 @@ export default function BusinessPlanPage() {
     }
     setIsSaving(true);
     
-    handleCalculate(); // Recalculate one last time before saving
+    handleCalculate(); 
 
     const assumptions: PlanAssumptions = {
         avgCommission: data.avgCommission,
         workingDaysPerMonth: data.workingDaysPerMonth,
+        weeksOff: data.weeksOff,
         conversionRates: {
             callToEngagement: data.conversions.callToEngagement / 100,
             engagementToAppointmentSet: data.conversions.engagementToAppointmentSet / 100,
@@ -324,12 +345,15 @@ export default function BusinessPlanPage() {
                     <CardHeader className="pb-2">
                         <CardTitle className="text-lg flex items-center gap-2"><DollarSign /> Financial & Time</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <FormField control={form.control} name="avgCommission" render={({ field }) => (
                             <FormItem><FormLabel>Average Net Commission</FormLabel><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl></div><FormMessage /></FormItem>
                         )}/>
                         <FormField control={form.control} name="workingDaysPerMonth" render={({ field }) => (
                             <FormItem><FormLabel>Working Days / Month</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={form.control} name="weeksOff" render={({ field }) => (
+                            <FormItem><FormLabel>Weeks Off (Vacation, etc)</FormLabel><div className="relative"><Sailboat className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl></div><FormMessage /></FormItem>
                         )}/>
                     </CardContent>
                   </Card>
@@ -359,7 +383,7 @@ export default function BusinessPlanPage() {
               <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Calendar className="text-primary"/> Your Required Activities</CardTitle>
-                    <CardDescription>Based on your assumptions and {form.getValues('workingDaysPerMonth')} working days per month.</CardDescription>
+                    <CardDescription>Based on your assumptions and {form.getValues('workingDaysPerMonth')} working days per month, with {form.getValues('weeksOff')} weeks off.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
