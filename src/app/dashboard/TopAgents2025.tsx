@@ -1,23 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
-
-type RollupDoc = {
-  agentId: string;
-  year: number;
-  closed: number;
-  pending: number;
-  listings: { active: number; canceled: number; expired: number };
-  totals: { transactions: number; listings: number; all: number };
-  locked: boolean;
-};
+import { fetchRollupsWithOverrides, type EffectiveRollup } from "@/lib/overrides";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function TopAgents2025({ year = 2025 }: { year?: number }) {
   const db = useFirestore();
 
-  const [rows, setRows] = useState<RollupDoc[]>([]);
+  const [rows, setRows] = useState<EffectiveRollup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
@@ -31,15 +28,11 @@ export default function TopAgents2025({ year = 2025 }: { year?: number }) {
         setLoading(true);
         setError("");
 
-        const q = query(collection(db, "agentYearRollups"), where("year", "==", year));
-        const snap = await getDocs(q);
-
-        const data: RollupDoc[] = snap.docs
-          .map((d) => d.data() as RollupDoc)
-          .filter((x) => x && x.agentId && x.year);
+        const data = await fetchRollupsWithOverrides(db, year);
 
         if (!cancelled) setRows(data);
       } catch (e: any) {
+        console.error("Failed to fetch top agents data:", e);
         if (!cancelled) setError(e?.message || String(e));
       } finally {
         if (!cancelled) setLoading(false);
@@ -67,81 +60,107 @@ export default function TopAgents2025({ year = 2025 }: { year?: number }) {
     );
   }, [sorted]);
 
-  if (!db) {
+  if (loading) {
     return (
-      <div style={{ padding: 16, border: "1px solid #e5e7eb", borderRadius: 12 }}>
-        Firestore not ready…
-      </div>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-1/2" />
+          <Skeleton className="h-4 w-3/4" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error Loading Top Agents</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <div style={{ padding: 16, border: "1px solid #e5e7eb", borderRadius: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18 }}>Top Agents ({year})</h2>
-          <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
-            Data source: Firestore → <code>agentYearRollups</code> where <code>year=={year}</code>
-          </div>
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+                <CardTitle>Top Agents ({year})</CardTitle>
+                <CardDescription>
+                    {year < 2025 ? `Historical data for ${year} with corrections.` : `Live data for ${year}.`}
+                </CardDescription>
+            </div>
+            <div className="flex gap-4 text-right">
+                <div>
+                    <div className="text-xs text-muted-foreground">Total Closed</div>
+                    <div className="text-lg font-bold">{totals.closed}</div>
+                </div>
+                <div>
+                    <div className="text-xs text-muted-foreground">Total Pending</div>
+                    <div className="text-lg font-bold">{totals.pending}</div>
+                </div>
+                <div>
+                    <div className="text-xs text-muted-foreground">Total All</div>
+                    <div className="text-lg font-bold">{totals.total}</div>
+                </div>
+            </div>
         </div>
-
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <div>
-            <div style={{ color: "#6b7280", fontSize: 12 }}>Total Closed</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{totals.closed}</div>
-          </div>
-          <div>
-            <div style={{ color: "#6b7280", fontSize: 12 }}>Total Pending</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{totals.pending}</div>
-          </div>
-          <div>
-            <div style={{ color: "#6b7280", fontSize: 12 }}>Total All</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{totals.total}</div>
-          </div>
-        </div>
-      </div>
-
-      {loading && <div style={{ marginTop: 14 }}>Loading…</div>}
-
-      {!loading && error && (
-        <div style={{ marginTop: 14, color: "#b91c1c" }}>
-          <div style={{ fontWeight: 700 }}>Firestore read failed:</div>
-          <div style={{ whiteSpace: "pre-wrap" }}>{error}</div>
-        </div>
-      )}
-
-      {!loading && !error && (
-        <div style={{ marginTop: 14, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
-                <th style={{ padding: "10px 8px" }}>Rank</th>
-                <th style={{ padding: "10px 8px" }}>Agent ID</th>
-                <th style={{ padding: "10px 8px" }}>Closed</th>
-                <th style={{ padding: "10px 8px" }}>Pending</th>
-                <th style={{ padding: "10px 8px" }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.slice(0, 25).map((r, idx) => (
-                <tr key={`${r.agentId}_${r.year}`} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "10px 8px" }}>{idx + 1}</td>
-                  <td style={{ padding: "10px 8px" }}>
-                    <code>{r.agentId}</code>
-                  </td>
-                  <td style={{ padding: "10px 8px" }}>{r.closed || 0}</td>
-                  <td style={{ padding: "10px 8px" }}>{r.pending || 0}</td>
-                  <td style={{ padding: "10px 8px", fontWeight: 700 }}>{r?.totals?.all || 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
-            Showing top 25 of {sorted.length} rollups for {year}.
-          </div>
-        </div>
-      )}
-    </div>
+      </CardHeader>
+      <CardContent>
+        <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[50px]">Rank</TableHead>
+                <TableHead>Agent ID</TableHead>
+                <TableHead className="text-right">Closed</TableHead>
+                <TableHead className="text-right">Pending</TableHead>
+                <TableHead className="text-right">Total Units</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    No agent rollup data found for {year}.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                sorted.slice(0, 10).map((r, idx) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">{idx + 1}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <code>{r.agentId}</code>
+                        {r.isCorrected && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="outline">Corrected</Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">{r.correctionReason}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">{r.closed || 0}</TableCell>
+                    <TableCell className="text-right">{r.pending || 0}</TableCell>
+                    <TableCell className="text-right font-bold">{r?.totals?.all || 0}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+        </Table>
+        <p className="text-xs text-muted-foreground mt-4">
+            Showing top {Math.min(10, sorted.length)} of {sorted.length} agents for {year}.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

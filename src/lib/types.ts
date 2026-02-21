@@ -201,3 +201,22 @@ export interface NewActivityRollup {
   newListings: NewActivityItem[];
   newContracts: NewActivityItem[];
 }
+
+export interface AgentYearRollup {
+  agentId: string;
+  year: number;
+  closed: number;
+  pending: number;
+  listings: {
+    active: number;
+    canceled: number;
+    expired: number;
+  };
+  totals: {
+    transactions: number;
+    listings: number;
+    all: number;
+  };
+  locked: boolean;
+  [key: string]: any;
+}

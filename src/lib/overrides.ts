@@ -1,28 +1,8 @@
 import { collection, getDocs, query, where, Firestore } from 'firebase/firestore';
+import type { AgentYearRollup } from '@/lib/types';
 
-// Define the shape of the rollup and override documents
+// Define the shape of the override document
 // based on the data contract.
-
-export interface AgentYearRollup {
-  agentId: string;
-  year: number;
-  closed: number;
-  pending: number;
-  listings: {
-    active: number;
-    canceled: number;
-    expired: number;
-  };
-  totals: {
-    transactions: number;
-    listings: number;
-    all: number;
-  };
-  locked: boolean;
-  // Potentially other fields like volume etc.
-  [key: string]: any;
-}
-
 export interface HistoricalOverride {
   targetKey: string;
   year: number;
@@ -34,6 +14,7 @@ export interface HistoricalOverride {
 }
 
 export interface EffectiveRollup extends AgentYearRollup {
+  id: string; // The document ID, e.g. "ashley-lombas_2023"
   isCorrected: boolean;
   correctionReason?: string;
   overrideUpdatedAt?: Date;
@@ -49,17 +30,20 @@ export interface EffectiveRollup extends AgentYearRollup {
  * @returns A promise that resolves to an array of effective rollup data.
  */
 export async function fetchRollupsWithOverrides(db: Firestore, year: number): Promise<EffectiveRollup[]> {
-  if (year >= 2025) {
-    console.warn("fetchRollupsWithOverrides should only be used for historical years (< 2025).");
-  }
+  const isHistoricalYear = year < 2025;
 
   // 1. Fetch all base rollups for the given year.
   const rollupsQuery = query(collection(db, 'agentYearRollups'), where('year', '==', year));
   const rollupsSnap = await getDocs(rollupsQuery);
-  const baseRollups = rollupsSnap.docs.map(doc => ({
+  const baseRollups: EffectiveRollup[] = rollupsSnap.docs.map(doc => ({
     id: doc.id,
-    ...doc.data() as AgentYearRollup
+    ...(doc.data() as AgentYearRollup),
+    isCorrected: false,
   }));
+
+  if (!isHistoricalYear || baseRollups.length === 0) {
+    return baseRollups;
+  }
 
   // 2. Fetch all active overrides for the same year.
   const overridesQuery = query(
@@ -69,53 +53,28 @@ export async function fetchRollupsWithOverrides(db: Firestore, year: number): Pr
     where('active', '==', true)
   );
   const overridesSnap = await getDocs(overridesQuery);
+  if (overridesSnap.empty) {
+    return baseRollups;
+  }
+  
   const overridesMap = new Map<string, HistoricalOverride>();
   overridesSnap.forEach(doc => {
     const override = doc.data() as HistoricalOverride;
     overridesMap.set(override.targetKey, override);
   });
 
-  if (overridesMap.size === 0) {
-    return baseRollups.map(rollup => ({ ...rollup, isCorrected: false }));
-  }
-
   // 3. Merge overrides into the base rollups.
-  const effectiveRollups = baseRollups.map(rollup => {
+  return baseRollups.map(rollup => {
     const override = overridesMap.get(rollup.id);
     if (override) {
-      const mergedRollup = {
-        ...rollup,
-        ...override.overrideFields, // Apply the override
-      };
-
-      // Recalculate totals if individual counts were changed
-      if (
-        'closed' in override.overrideFields ||
-        'pending' in override.overrideFields ||
-        'listings' in override.overrideFields
-      ) {
-          const listings = { ...rollup.listings, ...override.overrideFields.listings };
-          mergedRollup.totals = {
-            transactions: (mergedRollup.closed || 0) + (mergedRollup.pending || 0),
-            listings: (listings.active || 0) + (listings.canceled || 0) + (listings.expired || 0),
-            all: 0 // this will be recalculated below
-          };
-          mergedRollup.totals.all = mergedRollup.totals.transactions + mergedRollup.totals.listings;
-      }
-
       return {
-        ...mergedRollup,
+        ...rollup,
+        ...override.overrideFields,
         isCorrected: true,
         correctionReason: override.reason,
-        overrideUpdatedAt: override.updatedAt.toDate(),
-      } as EffectiveRollup;
-    } else {
-      return {
-        ...rollup,
-        isCorrected: false,
-      } as EffectiveRollup;
+        overrideUpdatedAt: override.updatedAt?.toDate(),
+      };
     }
+    return rollup;
   });
-
-  return effectiveRollups;
 }
