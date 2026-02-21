@@ -81,8 +81,8 @@ const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): Busine
     return {
       yearly: Math.ceil(yearlyValue),
       monthly: Math.ceil(monthly),
-      weekly: parseFloat(weekly.toFixed(2)),
-      daily: parseFloat(daily.toFixed(2)),
+      weekly: weekly < 1 ? 0 : parseFloat(weekly.toFixed(2)),
+      daily: daily < 1 ? 0 : parseFloat(daily.toFixed(2)),
     };
   };
 
@@ -131,7 +131,6 @@ export default function BusinessPlanPage() {
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
-    // Default values will be set in useEffect
   });
   
   const handleCalculate = useCallback(() => {
@@ -174,7 +173,7 @@ export default function BusinessPlanPage() {
       if (userLoading || !user || !db) {
         setDefaults();
         setIsLoading(false);
-        handleCalculate(); // Calculate after setting defaults
+        handleCalculate();
         return;
       }
 
@@ -203,11 +202,13 @@ export default function BusinessPlanPage() {
         setDefaults();
       } finally {
         setIsLoading(false);
-        handleCalculate(); // Calculate after loading data
+        handleCalculate();
       }
     };
 
-    loadPlan();
+    if (!form.formState.isDirty) {
+        loadPlan();
+    }
   }, [user, db, year, form, userLoading, handleCalculate]);
 
   const onSubmit = (data: PlanFormValues) => {
@@ -382,8 +383,8 @@ export default function BusinessPlanPage() {
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">{data.yearly.toLocaleString()}</TableCell>
                                     <TableCell className="text-right tabular-nums">{data.monthly.toLocaleString()}</TableCell>
-                                    <TableCell className="text-right tabular-nums">{data.weekly < 1 ? '—' : data.weekly.toLocaleString()}</TableCell>
-                                    <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily < 1 ? '—' : data.daily.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right tabular-nums">{data.weekly === 0 ? '—' : data.weekly.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily === 0 ? '—' : data.daily.toLocaleString()}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
