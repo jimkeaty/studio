@@ -12,10 +12,9 @@ service cloud.firestore {
       // In a real application, this might be a custom claim or a read from an admin collection.
       // For now, hardcode a list of admin UIDs.
       // IMPORTANT: Replace with actual admin UIDs.
-      let adminUids = [
-        "ADMIN_USER_UID_1", // Replace with actual admin UID
-        "ADMIN_USER_UID_2"  // Replace with actual admin UID
-      ];
+    let adminUids = [
+  "1kJsXTU1JjZXMidmoIPXgXxizll1"
+];
       return isSignedIn() && request.auth.uid in adminUids;
     }
 
