@@ -1,6 +1,5 @@
 
 'use client';
-import TopAgents2025 from "./TopAgents2025";
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
@@ -19,6 +18,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
 import { getYtdValueMetrics } from '@/lib/valueMetricsService';
 import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
+import { getAgentWorkdayYearProgress } from '@/lib/workday-utils';
+
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
   new Intl.NumberFormat('en-US', {
@@ -90,6 +91,14 @@ const processMonthlyIncomeData = (monthlyIncome: AgentDashboardData['monthlyInco
     });
 };
 
+const calculateGrade = (performance: number): 'A' | 'B' | 'C' | 'D' | 'F' => {
+    if (performance >= 95) return 'A';
+    if (performance >= 85) return 'B';
+    if (performance >= 75) return 'C';
+    if (performance >= 65) return 'D';
+    return 'F';
+};
+
 
 export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState('');
@@ -104,6 +113,10 @@ export default function AgentDashboardPage() {
   const [ytdValueMetrics, setYtdValueMetrics] = useState<YtdValueMetrics | null>(null);
   const [ytdMetricsLoading, setYtdMetricsLoading] = useState(true);
   const [ytdMetricsError, setYtdMetricsError] = useState<Error | null>(null);
+
+  // TODO: This should come from the user's profile in Firestore. Using a fixed date for now.
+  const agentStartDate = '2024-07-01'; 
+  const holidays: string[] = []; // TODO: In a real app, fetch company holidays from a config collection.
 
   useEffect(() => {
     setSelectedYear(String(new Date().getFullYear()));
@@ -235,68 +248,74 @@ export default function AgentDashboardPage() {
         .finally(() => setYtdMetricsLoading(false));
 
   }, [user?.uid, db, selectedYear]);
+  
+  const annualIncomeGoal = businessPlan?.annualIncomeGoal || 0;
+
+  const processedDashboardData = useMemo(() => {
+    if (!liveDashboardData) return null;
+
+    // Use a base object, either live data or a zeroed-out mock structure
+    const baseData = liveDashboardData;
+
+    // --- Pro-rated Goal Calculation ---
+    const workdayYearProgress = getAgentWorkdayYearProgress(agentStartDate, parseInt(selectedYear, 10), holidays);
+
+    // --- Income Grade Recalculation ---
+    const proRatedExpectedYTDIncomeGoal = annualIncomeGoal * workdayYearProgress;
+    const newIncomePerformance = proRatedExpectedYTDIncomeGoal > 0 ? (baseData.netEarned / proRatedExpectedYTDIncomeGoal) * 100 : 0;
+    const newIncomeGrade = calculateGrade(newIncomePerformance);
+
+    // --- Lead Indicator Grade Recalculation ---
+    let totalKpiPerformance = 0;
+    const newKpis = JSON.parse(JSON.stringify(baseData.kpis)); // Deep copy
+    Object.keys(newKpis).forEach(key => {
+        const kpiKey = key as keyof typeof newKpis;
+        const kpi = newKpis[kpiKey];
+        const proRatedTarget = kpi.target * workdayYearProgress;
+        const performance = proRatedTarget > 0 ? (kpi.actual / proRatedTarget) * 100 : 0;
+        kpi.performance = Math.round(performance);
+        kpi.grade = calculateGrade(performance);
+        totalKpiPerformance += performance;
+    });
+    const newLeadIndicatorPerformance = Math.round(totalKpiPerformance / Object.keys(newKpis).length);
+    const newLeadIndicatorGrade = calculateGrade(newLeadIndicatorPerformance);
+
+    // --- Pipeline Grade Recalculation ---
+    const ytdTotalPotential = baseData.netEarned + baseData.netPending;
+    const newPipelinePerformance = proRatedExpectedYTDIncomeGoal > 0 ? (ytdTotalPotential / proRatedExpectedYTDIncomeGoal) * 100 : 0;
+    const newPipelineGrade = calculateGrade(newPipelinePerformance);
+
+    // --- Monthly Income Processing (Existing Logic) ---
+    const monthlyIncome = processMonthlyIncomeData(baseData.monthlyIncome, selectedYear);
+
+    // --- Final Assembly ---
+    return {
+        ...baseData,
+        kpis: newKpis,
+        incomeGrade: newIncomeGrade,
+        incomePerformance: Math.round(newIncomePerformance),
+        expectedYTDIncomeGoal: proRatedExpectedYTDIncomeGoal,
+        leadIndicatorGrade: newLeadIndicatorGrade,
+        leadIndicatorPerformance: newLeadIndicatorPerformance,
+        pipelineAdjustedIncome: {
+            grade: newPipelineGrade,
+            performance: Math.round(newPipelinePerformance),
+        },
+        ytdTotalPotential: ytdTotalPotential,
+        monthlyIncome: monthlyIncome,
+    };
+  }, [liveDashboardData, selectedYear, annualIncomeGoal, agentStartDate, holidays]);
+
 
   const dataHasLoaded = liveDashboardData !== undefined && businessPlan !== undefined;
   const loading = userLoading || !dataHasLoaded;
 
-  const displayData = useMemo(() => {
-    if (loading) return null;
 
-    const monthlyGoal = businessPlan?.calculatedTargets?.monthlyNetIncome || mockAgentDashboardData.monthlyIncome[0].goal;
-    
-    let baseData: AgentDashboardData;
-    if (liveDashboardData) {
-      baseData = liveDashboardData;
-    } else {
-      // This fallback should now be hit less often due to the auto-creation logic.
-      baseData = JSON.parse(JSON.stringify(mockAgentDashboardData)); 
-      
-      Object.keys(baseData.kpis).forEach(key => {
-        const kpi = key as keyof typeof baseData.kpis;
-        baseData.kpis[kpi].actual = 0;
-        baseData.kpis[kpi].performance = 0;
-        baseData.kpis[kpi].grade = 'F';
-      });
-      
-      baseData.netEarned = 0;
-      baseData.netPending = 0;
-      baseData.ytdTotalPotential = 0;
-      baseData.expectedYTDIncomeGoal = 0;
-      baseData.totalClosedIncomeForYear = 0;
-      baseData.totalPendingIncomeForYear = 0;
-      baseData.totalIncomeWithPipelineForYear = 0;
-      
-      baseData.monthlyIncome = baseData.monthlyIncome.map(m => ({ ...m, closed: 0, pending: 0 }));
-      
-      baseData.incomeGrade = 'F';
-      baseData.leadIndicatorGrade = 'F';
-      baseData.pipelineAdjustedIncome = { grade: 'F', performance: 0 };
-    }
-    
-    const ensuredMonthlyIncome = (baseData.monthlyIncome || []).map(monthData => ({
-        ...monthData,
-        goal: monthlyGoal,
-    }));
-
-    return {
-        ...baseData,
-        monthlyIncome: ensuredMonthlyIncome,
-    };
-
-  }, [loading, liveDashboardData, businessPlan]);
-
-  if (loading || !displayData) {
+  if (loading || !processedDashboardData) {
     return <DashboardSkeleton />;
   }
 
   const isUsingMockData = !liveDashboardData && !dataError;
-
-  const processedMonthlyIncome = processMonthlyIncomeData(displayData.monthlyIncome, selectedYear);
-  const processedDashboardData = {
-    ...displayData,
-    monthlyIncome: processedMonthlyIncome,
-  };
-
 
   return (
     <div className="flex flex-col gap-8">
@@ -327,7 +346,7 @@ export default function AgentDashboardPage() {
             </SelectContent>
         </Select>
       </div>
-      <TopAgents2025 year={Number(selectedYear)} />
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1 flex flex-col items-center justify-center text-center shadow-lg">
           <CardHeader>
