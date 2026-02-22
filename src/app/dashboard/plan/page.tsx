@@ -21,6 +21,7 @@ import { defaultAssumptions } from '@/lib/plan-assumptions';
 import type { BusinessPlan, PlanAssumptions, PlanTargets } from '@/lib/types';
 import { ArrowRight, Calendar, Phone, Users, FileText, CheckCircle, DollarSign, Target, Percent, TrendingUp, Award, CalendarCheck, Sailboat } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
 
 const planFormSchema = z.object({
   annualIncomeGoal: z.coerce.number().min(0, "Goal must be positive."),
@@ -310,51 +311,52 @@ export default function BusinessPlanPage() {
                 </FormItem>
               )}
             />
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="item-1">
-                <AccordionTrigger>Advanced Assumptions</AccordionTrigger>
-                <AccordionContent className="space-y-6 pt-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-lg flex items-center gap-2"><TrendingUp /> Conversion Rates</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <FormField control={form.control} name="conversions.callToEngagement" render={({ field }) => (
-                        <FormItem><FormLabel>Call → Engagement</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+
+            <Separator />
+
+            <div className="pt-2">
+              <h3 className="text-lg font-semibold mb-4">Advanced Assumptions</h3>
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center gap-2"><TrendingUp /> Conversion Rates</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <FormField control={form.control} name="conversions.callToEngagement" render={({ field }) => (
+                      <FormItem><FormLabel>Call → Engagement</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="conversions.engagementToAppointmentSet" render={({ field }) => (
+                      <FormItem><FormLabel>Engagement → Appt Set</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="conversions.appointmentSetToHeld" render={({ field }) => (
+                      <FormItem><FormLabel>Appt Set → Appt Held</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="conversions.appointmentHeldToContract" render={({ field }) => (
+                      <FormItem><FormLabel>Appt Held → Contract</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="conversions.contractToClosing" render={({ field }) => (
+                      <FormItem><FormLabel>Contract → Closing</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                    )}/>
+                  </CardContent>
+                </Card>
+                 <Card>
+                  <CardHeader className="pb-2">
+                      <CardTitle className="text-lg flex items-center gap-2"><DollarSign /> Financial & Time</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <FormField control={form.control} name="avgCommission" render={({ field }) => (
+                          <FormItem><FormLabel>Average Net Commission</FormLabel><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl></div><FormMessage /></FormItem>
                       )}/>
-                      <FormField control={form.control} name="conversions.engagementToAppointmentSet" render={({ field }) => (
-                        <FormItem><FormLabel>Engagement → Appt Set</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                      <FormField control={form.control} name="workingDaysPerMonth" render={({ field }) => (
+                          <FormItem><FormLabel>Working Days / Month</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><FormMessage /></FormItem>
                       )}/>
-                      <FormField control={form.control} name="conversions.appointmentSetToHeld" render={({ field }) => (
-                        <FormItem><FormLabel>Appt Set → Appt Held</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
+                      <FormField control={form.control} name="weeksOff" render={({ field }) => (
+                          <FormItem><FormLabel>Weeks Off (Vacation, etc)</FormLabel><div className="relative"><Sailboat className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl></div><FormMessage /></FormItem>
                       )}/>
-                      <FormField control={form.control} name="conversions.appointmentHeldToContract" render={({ field }) => (
-                        <FormItem><FormLabel>Appt Held → Contract</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
-                      )}/>
-                      <FormField control={form.control} name="conversions.contractToClosing" render={({ field }) => (
-                        <FormItem><FormLabel>Contract → Closing</FormLabel><div className="relative"><FormControl><Input type="number" {...field} className="pr-8" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/></div><FormMessage /></FormItem>
-                      )}/>
-                    </CardContent>
-                  </Card>
-                   <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-lg flex items-center gap-2"><DollarSign /> Financial & Time</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <FormField control={form.control} name="avgCommission" render={({ field }) => (
-                            <FormItem><FormLabel>Average Net Commission</FormLabel><div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl></div><FormMessage /></FormItem>
-                        )}/>
-                        <FormField control={form.control} name="workingDaysPerMonth" render={({ field }) => (
-                            <FormItem><FormLabel>Working Days / Month</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl><FormMessage /></FormItem>
-                        )}/>
-                        <FormField control={form.control} name="weeksOff" render={({ field }) => (
-                            <FormItem><FormLabel>Weeks Off (Vacation, etc)</FormLabel><div className="relative"><Sailboat className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><FormControl><Input type="number" {...field} className="pl-10" onChange={(e) => { field.onChange(e); handleCalculate(); }}/></FormControl></div><FormMessage /></FormItem>
-                        )}/>
-                    </CardContent>
-                  </Card>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
