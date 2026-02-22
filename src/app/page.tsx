@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
 
 import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged } from 'firebase/auth';
-import { useAuth } from '@/firebase';
+import { auth } from '@/lib/firebase';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" {...props}>
@@ -31,48 +31,39 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function Home() {
   const router = useRouter();
-  const auth = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth) {
-        setIsLoading(false);
-        return;
-    }
-
     // This single listener handles both initial state check and post-redirect state.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         // User is signed in, redirect to the dashboard.
-        // We don't set isLoading to false, so the loader shows until navigation completes.
         router.replace('/dashboard');
       } else {
         // No user is signed in. It's now safe to show the login form.
-        // We first check for any redirect errors.
-        getRedirectResult(auth)
-          .catch((error) => {
-            console.error("Redirect sign-in error:", error);
-            setErrorMsg(error.message || 'Failed to sign in after redirect.');
-          });
         setIsLoading(false);
       }
     });
 
+    // We also process the redirect result on component mount. 
+    // If successful, onAuthStateChanged above will be triggered with the user.
+    getRedirectResult(auth)
+      .catch((error) => {
+        console.error("Redirect sign-in error:", error);
+        setErrorMsg(error.message || 'Failed to sign in after redirect.');
+        // If there's an error, we should still stop loading to show the error message.
+        setIsLoading(false);
+      });
+
     // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [auth, router]);
+  }, [router]);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     setErrorMsg(null);
-
-    if (!auth) {
-        setErrorMsg("Authentication service is not available.");
-        setIsSigningIn(false);
-        return;
-    }
 
     const provider = new GoogleAuthProvider();
     await signInWithRedirect(auth, provider).catch(error => {
