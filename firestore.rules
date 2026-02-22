@@ -29,6 +29,27 @@ service cloud.firestore {
     match /dashboards/{userId}/{document=**} {
        allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
+
+    // --- Activity & Transaction Data ---
+    // Users can read/write their own activity logs. The doc ID is {agentId}_{YYYY-MM-DD}.
+    match /daily_activity/{activityId} {
+      allow read, write: if isSignedIn() && activityId.split('_')[0] == request.auth.uid;
+    }
+
+    // Users can C-R-D their own appointment logs, which have auto-generated IDs.
+    match /appointment_logs/{logId} {
+      allow create: if isSignedIn() && request.resource.data.agentId == request.auth.uid;
+      allow read, delete: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      allow update: if false; // No updates are performed on appointment logs.
+    }
+    
+    // Users can only read their own transactions for value metric calculations.
+    // Writes are handled by an admin process (or a future dedicated feature).
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      allow write: if false;
+    }
+
     match /agentYearRollups/{docId} {
   // This collection must be public for the leaderboard and Top Agents components.
   allow read: if true;
