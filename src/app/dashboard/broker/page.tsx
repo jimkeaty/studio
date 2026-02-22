@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { DollarSign, Users, TrendingUp, Target } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -128,7 +129,11 @@ const chartConfig = {
 const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 
 export default function BrokerDashboardPage() {
-    const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+    const [selectedYear, setSelectedYear] = useState('');
+    
+    useEffect(() => {
+        setSelectedYear(String(new Date().getFullYear()));
+    }, []);
     
     return (
         <div className="space-y-8">
@@ -332,3 +337,5 @@ export default function BrokerDashboardPage() {
         </div>
     );
 }
+
+    

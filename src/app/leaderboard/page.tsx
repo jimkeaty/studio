@@ -54,10 +54,14 @@ export default function LeaderboardPage() {
   const [error, setError] = useState<string | null>(null);
   
   const [period, setPeriod] = useState<LeaderboardPeriod>('yearly');
-  const [year, setYear] = useState(new Date().getFullYear());
+  const [year, setYear] = useState(0);
+
+  useEffect(() => {
+    setYear(new Date().getFullYear());
+  }, []);
   
   useEffect(() => {
-    if (!db || period !== 'yearly') {
+    if (!db || period !== 'yearly' || year === 0) {
         setRows([]);
         setLoading(false);
         return;
@@ -210,3 +214,5 @@ export default function LeaderboardPage() {
     </div>
   );
 }
+
+    

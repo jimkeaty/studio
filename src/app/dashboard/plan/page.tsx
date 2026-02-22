@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -130,7 +131,7 @@ export default function BusinessPlanPage() {
   const db = useFirestore();
   const { toast } = useToast();
   
-  const [year] = useState(String(new Date().getFullYear()));
+  const [year, setYear] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [calculatedPlan, setCalculatedPlan] = useState<BusinessPlan['calculatedTargets'] | null>(null);
@@ -151,6 +152,10 @@ export default function BusinessPlanPage() {
       },
     }
   });
+
+  useEffect(() => {
+    setYear(String(new Date().getFullYear()));
+  }, []);
   
   const handleCalculate = useCallback(() => {
     const data = form.getValues();
@@ -191,7 +196,7 @@ export default function BusinessPlanPage() {
         });
       };
 
-      if (userLoading || !user || !db) {
+      if (userLoading || !user || !db || !year) {
         setDefaults();
         setIsLoading(false);
         handleCalculate();
@@ -421,3 +426,5 @@ export default function BusinessPlanPage() {
     </Form>
   );
 }
+
+    
