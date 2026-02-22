@@ -52,8 +52,7 @@ export async function getYtdValueMetrics(
         query(
           collection(db, 'transactions'),
           where('agentId', '==', agentId),
-          where('status', '==', 'closed'),
-          where('year', '==', year)
+          where('status', '==', 'closed')
         )
       ).catch(() => null), // Gracefully handle if transactions collection doesn't exist
       getDoc(doc(db, 'users', agentId, 'plans', String(year))).catch(() => null)
@@ -73,7 +72,13 @@ export async function getYtdValueMetrics(
   if (transactionsSnap) {
     transactionsSnap.forEach((doc) => {
         const data = doc.data() as Transaction;
-        totalClosedNetCommission += data.commissionNet || 0;
+        // Client-side filtering by year because a 3-field query requires a composite index
+        const closeDate = data.closeDate?.toDate();
+        const docYear = data.year || (closeDate ? closeDate.getFullYear() : null);
+
+        if (docYear === year) {
+          totalClosedNetCommission += data.commissionNet || 0;
+        }
     });
   }
 
