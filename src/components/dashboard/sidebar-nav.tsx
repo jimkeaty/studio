@@ -13,7 +13,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Building, Edit, LayoutGrid, Settings, Target, Users, TrendingUp, Newspaper } from 'lucide-react';
+import { BarChart3, Building, Edit, LayoutGrid, Settings, Target, Users, TrendingUp, Newspaper, ClipboardPen } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 
 const agentMenuItems = [
@@ -21,6 +21,7 @@ const agentMenuItems = [
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: Edit },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
+  { href: '/dashboard/log-activities', label: 'Log Activities', icon: ClipboardPen },
 ];
 
 const brokerMenuItems = [{ href: '/dashboard/broker', label: 'Broker Command', icon: Users }];

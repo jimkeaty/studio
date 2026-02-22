@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'agent' | 'manager' | 'broker' | 'admin';
 
 export interface User {
@@ -215,4 +216,34 @@ export interface AgentYearRollup {
   };
   locked: boolean;
   [key: string]: any;
+}
+
+export interface DailyActivity {
+  id: string; // {agentId}_{YYYY-MM-DD}
+  agentId: string;
+  date: string; // YYYY-MM-DD
+  callsCount: number;
+  engagementsCount: number;
+  appointmentsSetCount: number;
+  appointmentsHeldCount: number;
+  contractsWrittenCount: number;
+  notes?: string;
+  updatedAt: any; // Firestore Timestamp
+  updatedByUid: string;
+}
+
+export interface AppointmentLog {
+  id: string; // Firestore auto-ID
+  agentId: string;
+  date: string; // YYYY-MM-DD, the day it was counted
+  category: "buyer" | "seller";
+  status: "set" | "held";
+  contactName: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  scheduledAt?: any; // Firestore Timestamp
+  heldAt?: any; // Firestore Timestamp
+  notes?: string;
+  createdAt: any; // Firestore Timestamp
+  createdByUid: string;
 }
