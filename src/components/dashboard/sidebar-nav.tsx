@@ -19,9 +19,8 @@ import { Card, CardDescription, CardTitle } from '../ui/card';
 const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
-  { href: '/dashboard/tracker', label: 'Daily Tracker', icon: Edit },
+  { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
-  { href: '/dashboard/log-activities', label: 'Log Activities', icon: ClipboardPen },
 ];
 
 const brokerMenuItems = [{ href: '/dashboard/broker', label: 'Broker Command', icon: Users }];

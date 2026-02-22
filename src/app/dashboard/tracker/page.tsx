@@ -1,5 +1,6 @@
 'use client';
 
+// Imports from both files
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -10,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { CalendarIcon, Check, Edit } from 'lucide-react';
+import { CalendarIcon, Check, Edit, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
@@ -19,7 +20,12 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { mockAgentDashboardData } from '@/lib/mock-data';
 import type { AgentDashboardData, BusinessPlan } from '@/lib/types';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ActivityCalendarView } from '@/components/dashboard/log-activities/ActivityCalendarView';
+import { DailyLogPanel } from '@/components/dashboard/log-activities/DailyLogPanel';
+import { RunningAppointmentList } from '@/components/dashboard/log-activities/RunningAppointmentList';
 
 const trackerFormSchema = z.object({
   date: z.date({
@@ -36,7 +42,7 @@ type TrackerFormValues = z.infer<typeof trackerFormSchema>;
 
 export default function DailyTrackerPage() {
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, loading: userLoading } = useUser();
   const db = useFirestore();
   
   const form = useForm<TrackerFormValues>({
@@ -51,9 +57,14 @@ export default function DailyTrackerPage() {
     },
   });
 
+  // State from log-activities
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
   useEffect(() => {
     // Set the date on the client side to avoid hydration mismatch
     form.setValue('date', new Date());
+    setSelectedDate(new Date()); // Also select today's date in the calendar
   }, [form]);
 
 
@@ -96,16 +107,13 @@ export default function DailyTrackerPage() {
       return; // Stop if the primary save fails
     }
     
-    // This part simulates a backend function for immediate feedback during testing.
-    // It creates/updates the main dashboard document when a log is saved.
     try {
         const yearStr = format(data.date, 'yyyy');
         const dashboardDocRef = doc(db, 'dashboards', user.uid, 'agent', yearStr);
         
-        // 1. Fetch the business plan for the year to get the goal, regardless of whether the dashboard exists.
         const planDocRef = doc(db, 'users', user.uid, 'plans', yearStr);
         const planSnap = await getDoc(planDocRef);
-        let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal; // Default goal
+        let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal;
         if (planSnap.exists()) {
             const planData = planSnap.data() as BusinessPlan;
             if (planData.calculatedTargets?.monthlyNetIncome) {
@@ -113,12 +121,10 @@ export default function DailyTrackerPage() {
             }
         }
 
-        // 2. Now handle the dashboard data
         const dashboardSnap = await getDoc(dashboardDocRef);
         let dashboardData: AgentDashboardData;
 
         if (dashboardSnap.exists()) {
-            // If dashboard data already exists, update it
             const existingData = dashboardSnap.data() as AgentDashboardData;
             dashboardData = {
                 ...existingData,
@@ -130,16 +136,14 @@ export default function DailyTrackerPage() {
                     appointmentsHeld: { ...existingData.kpis.appointmentsHeld, actual: (existingData.kpis.appointmentsHeld.actual || 0) + data.appointmentsHeld },
                     contractsWritten: { ...existingData.kpis.contractsWritten, actual: (existingData.kpis.contractsWritten.actual || 0) + data.contractsWritten },
                 },
-                // Re-map the monthly income to ensure the goal is set correctly
                 monthlyIncome: (existingData.monthlyIncome || mockAgentDashboardData.monthlyIncome).map(m => ({
                     month: m.month,
                     closed: m.closed || 0,
                     pending: m.pending || 0,
-                    goal: monthlyGoal, // Always set/update the goal from the plan
+                    goal: monthlyGoal,
                 })),
             };
         } else {
-            // If no dashboard exists for this year, create a new one.
             dashboardData = {
                 ...mockAgentDashboardData,
                 userId: user.uid,
@@ -150,16 +154,14 @@ export default function DailyTrackerPage() {
                     appointmentsSet: { ...mockAgentDashboardData.kpis.appointmentsSet, actual: data.appointmentsSet },
                     appointmentsHeld: { ...mockAgentDashboardData.kpis.appointmentsHeld, actual: data.appointmentsHeld },
                     contractsWritten: { ...mockAgentDashboardData.kpis.contractsWritten, actual: data.contractsWritten },
-                    closings: { ...mockAgentDashboardData.kpis.closings, actual: 0 } // Start with 0 closings
+                    closings: { ...mockAgentDashboardData.kpis.closings, actual: 0 }
                 },
-                // Reset key figures for a fresh dashboard
                 netEarned: 0,
                 netPending: 0,
                 ytdTotalPotential: 0,
                 totalClosedIncomeForYear: 0,
                 totalPendingIncomeForYear: 0,
                 totalIncomeWithPipelineForYear: 0,
-                // Use the retrieved goal for all months
                 monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({
                     ...m,
                     closed: 0, 
@@ -190,21 +192,45 @@ export default function DailyTrackerPage() {
         });
     }
   }
+
+  const handleDateSelect = (date: Date) => {
+      setSelectedDate(date);
+  };
   
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+  if (userLoading) {
+    return (
+        <div className="space-y-6">
+            <Skeleton className="h-10 w-1/3" />
+            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-96 w-full" />
+        </div>
+    );
+  }
+
+  if (!user) {
+      return (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Authentication Error</AlertTitle>
+              <AlertDescription>You must be signed in to log activities.</AlertDescription>
+          </Alert>
+      );
+  }
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Agent Daily Tracker</h1>
-        <p className="text-muted-foreground">Log your daily metrics. You can edit entries up to 7 days back.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Daily Activity Log</h1>
+        <p className="text-muted-foreground">Log your daily metrics and manage appointments. You can edit entries up to 7 days back.</p>
       </div>
 
       <Card className="max-w-2xl mx-auto shadow-lg">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Edit className="text-primary"/>Log Your Activity</CardTitle>
-          <CardDescription>Select a date and enter your numbers for the day.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><Edit className="text-primary"/>Quick Log for Today</CardTitle>
+          <CardDescription>Select a date and enter your numbers for the day. For detailed appointment logging, use the calendar below.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -316,6 +342,33 @@ export default function DailyTrackerPage() {
           </Form>
         </CardContent>
       </Card>
+      
+      <Card>
+          <CardHeader>
+              <CardTitle>Monthly Activity Log</CardTitle>
+              <CardDescription>Click a day to view or edit the detailed log for that day, including appointment names.</CardDescription>
+          </CardHeader>
+          <CardContent>
+              <ActivityCalendarView
+                  agentId={user.uid}
+                  month={currentMonth}
+                  onMonthChange={setCurrentMonth}
+                  selectedDate={selectedDate}
+                  onDateSelect={handleDateSelect}
+              />
+          </CardContent>
+      </Card>
+
+      <RunningAppointmentList agentId={user.uid} currentMonth={currentMonth} />
+
+      <DailyLogPanel
+          date={selectedDate}
+          agentId={user.uid}
+          userId={user.uid}
+          onOpenChange={(isOpen) => {
+              if (!isOpen) setSelectedDate(null);
+          }}
+      />
     </div>
   );
 }
