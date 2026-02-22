@@ -139,16 +139,16 @@ export default function BusinessPlanPage() {
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
     defaultValues: {
-      annualIncomeGoal: 0,
-      avgCommission: 0,
-      workingDaysPerMonth: 0,
-      weeksOff: 0,
+      annualIncomeGoal: 100000,
+      avgCommission: defaultAssumptions.avgCommission,
+      workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
+      weeksOff: defaultAssumptions.weeksOff,
       conversions: {
-        callToEngagement: 0,
-        engagementToAppointmentSet: 0,
-        appointmentSetToHeld: 0,
-        contractToClosing: 0,
-        contractToClosing: 0,
+        callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
+        engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
+        appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
+        appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
+        contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
       },
     }
   });
@@ -177,34 +177,23 @@ export default function BusinessPlanPage() {
   }, [form]);
 
   useEffect(() => {
-    if (!year) return;
+    // This effect is responsible for loading a user's saved plan and overriding
+    // the defaults. If no user is logged in, or no plan is found, the defaults
+    // set in `useForm` will be used.
+
+    if (userLoading || !year) {
+      return; // Wait until auth state is resolved and year is set
+    }
+
+    if (!user || !db) {
+      // User is not logged in, so we're done loading. Calculate plan with defaults.
+      setIsLoading(false);
+      handleCalculate();
+      return;
+    }
     
     const loadPlan = async () => {
       setIsLoading(true);
-      
-      const setDefaults = () => {
-        form.reset({
-          annualIncomeGoal: 100000,
-          avgCommission: defaultAssumptions.avgCommission,
-          workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
-          weeksOff: defaultAssumptions.weeksOff,
-          conversions: {
-            callToEngagement: defaultAssumptions.conversionRates.callToEngagement * 100,
-            engagementToAppointmentSet: defaultAssumptions.conversionRates.engagementToAppointmentSet * 100,
-            appointmentSetToHeld: defaultAssumptions.conversionRates.appointmentSetToHeld * 100,
-            appointmentHeldToContract: defaultAssumptions.conversionRates.appointmentHeldToContract * 100,
-            contractToClosing: defaultAssumptions.conversionRates.contractToClosing * 100,
-          },
-        });
-      };
-
-      if (userLoading || !user || !db) {
-        setDefaults();
-        setIsLoading(false);
-        handleCalculate();
-        return;
-      }
-
       const planDocRef = doc(db, 'users', user.uid, 'plans', year);
       try {
         const docSnap = await getDoc(planDocRef);
@@ -223,12 +212,11 @@ export default function BusinessPlanPage() {
               contractToClosing: plan.assumptions.conversionRates.contractToClosing * 100,
             },
           });
-        } else {
-          setDefaults();
         }
+        // If doc doesn't exist, we don't reset, so the form keeps the initial default values.
       } catch (error) {
         console.error("Error loading business plan:", error);
-        setDefaults();
+        // On error, we also don't reset, allowing defaults to be used.
       } finally {
         setIsLoading(false);
         handleCalculate();
@@ -428,5 +416,3 @@ export default function BusinessPlanPage() {
     </Form>
   );
 }
-
-    
