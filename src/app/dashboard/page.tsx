@@ -4,7 +4,7 @@ import TopAgents2025 from "./TopAgents2025";
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
-import type { AgentDashboardData, BusinessPlan } from '@/lib/types';
+import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
 import { DollarSign, Activity, Users, Info, TrendingUp, Home, Handshake, AlertTriangle } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,8 @@ import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { mockAgentDashboardData } from '@/lib/mock-data';
+import { getYtdValueMetrics } from '@/lib/valueMetricsService';
+import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
   new Intl.NumberFormat('en-US', {
@@ -99,6 +101,10 @@ export default function AgentDashboardPage() {
   const [businessPlan, setBusinessPlan] = useState<BusinessPlan | null | undefined>(undefined);
   const [dataError, setDataError] = useState<Error | null>(null);
 
+  const [ytdValueMetrics, setYtdValueMetrics] = useState<YtdValueMetrics | null>(null);
+  const [ytdMetricsLoading, setYtdMetricsLoading] = useState(true);
+  const [ytdMetricsError, setYtdMetricsError] = useState<Error | null>(null);
+
   useEffect(() => {
     setSelectedYear(String(new Date().getFullYear()));
   }, []);
@@ -140,6 +146,7 @@ export default function AgentDashboardPage() {
           ...mockAgentDashboardData,
           userId: user.uid,
           kpis: {
+            ...mockAgentDashboardData.kpis,
             calls: { ...mockAgentDashboardData.kpis.calls, actual: 0, performance: 0, grade: 'F' },
             engagements: { ...mockAgentDashboardData.kpis.engagements, actual: 0, performance: 0, grade: 'F' },
             appointmentsSet: { ...mockAgentDashboardData.kpis.appointmentsSet, actual: 0, performance: 0, grade: 'F' },
@@ -214,6 +221,20 @@ export default function AgentDashboardPage() {
     );
     return () => unsubscribe();
   }, [planDocRef]);
+
+  useEffect(() => {
+    if (!user?.uid || !db || !selectedYear) {
+        setYtdMetricsLoading(false);
+        return;
+    }
+
+    setYtdMetricsLoading(true);
+    getYtdValueMetrics(db, user.uid, parseInt(selectedYear, 10))
+        .then(setYtdValueMetrics)
+        .catch(setYtdMetricsError)
+        .finally(() => setYtdMetricsLoading(false));
+
+  }, [user?.uid, db, selectedYear]);
 
   const dataHasLoaded = liveDashboardData !== undefined && businessPlan !== undefined;
   const loading = userLoading || !dataHasLoaded;
@@ -401,6 +422,8 @@ export default function AgentDashboardPage() {
         <KpiCard title="Contracts" {...processedDashboardData.kpis.contractsWritten} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
         <KpiCard title="Closings" {...processedDashboardData.kpis.closings} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
       </div>
+
+      <YtdValueMetricsCard metrics={ytdValueMetrics} loading={ytdMetricsLoading} error={ytdMetricsError} />
 
       <Card>
         <CardHeader>

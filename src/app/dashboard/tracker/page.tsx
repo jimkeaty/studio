@@ -19,13 +19,14 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { mockAgentDashboardData } from '@/lib/mock-data';
-import type { AgentDashboardData, BusinessPlan } from '@/lib/types';
+import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
 import { useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ActivityCalendarView } from '@/components/dashboard/log-activities/ActivityCalendarView';
 import { DailyLogPanel } from '@/components/dashboard/log-activities/DailyLogPanel';
 import { RunningAppointmentList } from '@/components/dashboard/log-activities/RunningAppointmentList';
+import { getYtdValueMetrics } from '@/lib/valueMetricsService';
 
 const trackerFormSchema = z.object({
   date: z.date({
@@ -39,6 +40,15 @@ const trackerFormSchema = z.object({
 });
 
 type TrackerFormValues = z.infer<typeof trackerFormSchema>;
+
+
+const ValueMetricDisplay = ({ label, value, loading }: { label: string; value: number | null | undefined, loading: boolean }) => (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="font-semibold">{label}:</span>
+        {loading ? <Skeleton className="h-5 w-20" /> : <span className="font-bold text-lg text-primary">{value ? `$${value.toFixed(2)}` : '—'}</span>}
+    </div>
+);
+
 
 export default function DailyTrackerPage() {
   const { toast } = useToast();
@@ -61,11 +71,29 @@ export default function DailyTrackerPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
+  const [ytdValueMetrics, setYtdValueMetrics] = useState<YtdValueMetrics | null>(null);
+  const [ytdMetricsLoading, setYtdMetricsLoading] = useState(true);
+  const year = currentMonth.getFullYear();
+
   useEffect(() => {
     // Set the date on the client side to avoid hydration mismatch
     form.setValue('date', new Date());
     setSelectedDate(new Date()); // Also select today's date in the calendar
   }, [form]);
+
+  useEffect(() => {
+    if (!user?.uid || !db || !year) {
+        setYtdMetricsLoading(false);
+        return;
+    }
+
+    setYtdMetricsLoading(true);
+    getYtdValueMetrics(db, user.uid, year)
+        .then(setYtdValueMetrics)
+        .catch(console.error) // Don't show a big error card here, just log it.
+        .finally(() => setYtdMetricsLoading(false));
+
+  }, [user?.uid, db, year]);
 
 
   async function onSubmit(data: TrackerFormValues) {
@@ -225,6 +253,15 @@ export default function DailyTrackerPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Daily Activity Log</h1>
         <p className="text-muted-foreground">Log your daily metrics and manage appointments. You can edit entries up to 7 days back.</p>
+        <Card className="mt-4">
+            <CardHeader className="pb-2">
+                <CardTitle className="text-lg">Your Motivational Metrics ({year})</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row gap-x-6 gap-y-2">
+                <ValueMetricDisplay label="Value per Engagement (YTD)" value={ytdValueMetrics?.valuePerEngagement} loading={ytdMetricsLoading} />
+                <ValueMetricDisplay label="Value per Appointment Held (YTD)" value={ytdValueMetrics?.valuePerAppointmentHeld} loading={ytdMetricsLoading} />
+            </CardContent>
+        </Card>
       </div>
 
       <Card className="max-w-2xl mx-auto shadow-lg">

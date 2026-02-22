@@ -1,5 +1,6 @@
 
 
+
 export type UserRole = 'agent' | 'manager' | 'broker' | 'admin';
 
 export interface User {
@@ -246,4 +247,15 @@ export interface AppointmentLog {
   notes?: string;
   createdAt: any; // Firestore Timestamp
   createdByUid: string;
+}
+
+export interface YtdValueMetrics {
+  year: number;
+  closedNetCommission: number;
+  engagements: number;
+  appointmentsHeld: number;
+  valuePerEngagement: number | null;
+  valuePerAppointmentHeld: number | null;
+  targetValuePerEngagement: number | null;
+  targetValuePerAppointmentHeld: number | null;
 }
