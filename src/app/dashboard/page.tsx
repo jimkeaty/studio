@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc, onSnapshot, DocumentReference } from 'firebase/firestore';
+import { doc, onSnapshot, DocumentReference, getDoc, setDoc } from 'firebase/firestore';
 import { useUser, useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -115,6 +115,71 @@ export default function AgentDashboardPage() {
 
 
   useEffect(() => {
+    if (!dashboardDocRef || !planDocRef || !user || !db) return;
+
+    const ensureDashboardExists = async () => {
+      try {
+        const dashboardSnap = await getDoc(dashboardDocRef);
+        if (dashboardSnap.exists()) return; // Already exists, do nothing.
+
+        // If it doesn't exist, create it.
+        console.log(`Dashboard for ${selectedYear} not found. Creating...`);
+
+        // 1. Fetch the business plan for the year to get the goal.
+        const planSnap = await getDoc(planDocRef);
+        let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal; // Default goal
+        if (planSnap.exists()) {
+          const planData = planSnap.data() as BusinessPlan;
+          if (planData.calculatedTargets?.monthlyNetIncome) {
+            monthlyGoal = planData.calculatedTargets.monthlyNetIncome;
+          }
+        }
+
+        // 2. Create the new dashboard data object, zeroing out all metrics.
+        const newDashboardData: AgentDashboardData = {
+          ...mockAgentDashboardData,
+          userId: user.uid,
+          kpis: {
+            calls: { ...mockAgentDashboardData.kpis.calls, actual: 0, performance: 0, grade: 'F' },
+            engagements: { ...mockAgentDashboardData.kpis.engagements, actual: 0, performance: 0, grade: 'F' },
+            appointmentsSet: { ...mockAgentDashboardData.kpis.appointmentsSet, actual: 0, performance: 0, grade: 'F' },
+            appointmentsHeld: { ...mockAgentDashboardData.kpis.appointmentsHeld, actual: 0, performance: 0, grade: 'F' },
+            contractsWritten: { ...mockAgentDashboardData.kpis.contractsWritten, actual: 0, performance: 0, grade: 'F' },
+            closings: { ...mockAgentDashboardData.kpis.closings, actual: 0, performance: 0, grade: 'F' },
+          },
+          netEarned: 0,
+          netPending: 0,
+          ytdTotalPotential: 0,
+          expectedYTDIncomeGoal: 0,
+          totalClosedIncomeForYear: 0,
+          totalPendingIncomeForYear: 0,
+          totalIncomeWithPipelineForYear: 0,
+          monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({
+            ...m,
+            closed: 0,
+            pending: 0,
+            goal: monthlyGoal,
+          })),
+          leadIndicatorGrade: 'F',
+          leadIndicatorPerformance: 0,
+          incomeGrade: 'F',
+          incomePerformance: 0,
+          pipelineAdjustedIncome: { grade: 'F', performance: 0 },
+        };
+
+        // 3. Save the new document to Firestore.
+        await setDoc(dashboardDocRef, newDashboardData);
+        console.log(`Successfully created dashboard for ${selectedYear}.`);
+      } catch (error) {
+        console.error("Failed to create dashboard document:", error);
+        setDataError(error as Error);
+      }
+    };
+
+    ensureDashboardExists();
+  }, [dashboardDocRef, planDocRef, user, db, selectedYear]);
+
+  useEffect(() => {
     if (!dashboardDocRef) {
       setLiveDashboardData(null); // No user/ref, so data is loaded and is null
       return;
@@ -162,7 +227,7 @@ export default function AgentDashboardPage() {
     if (liveDashboardData) {
       baseData = liveDashboardData;
     } else {
-      // Create a fresh, resettable copy of the mock data
+      // This fallback should now be hit less often due to the auto-creation logic.
       baseData = JSON.parse(JSON.stringify(mockAgentDashboardData)); 
       
       Object.keys(baseData.kpis).forEach(key => {
@@ -203,7 +268,7 @@ export default function AgentDashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  const isUsingMockData = !liveDashboardData;
+  const isUsingMockData = !liveDashboardData && !dataError;
 
   const processedMonthlyIncome = processMonthlyIncomeData(displayData.monthlyIncome, selectedYear);
   const processedDashboardData = {
@@ -214,7 +279,7 @@ export default function AgentDashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      {isUsingMockData && (
+      {(isUsingMockData || dataError) && (
         <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-300">
             <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
             <AlertTitle>{dataError ? 'Error Loading Live Data' : 'Displaying Sample Data'}</AlertTitle>
