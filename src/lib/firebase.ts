@@ -1,4 +1,12 @@
-// This file is no longer in use.
-// The new Firebase provider pattern is located in the src/firebase/ directory.
-// Please update any imports to use the new hooks and providers from '@firebase'.
-export {};
+'use client';
+import { getApp, getApps, initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { firebaseConfig } from '@/firebase/config';
+
+// Singleton pattern to prevent re-initializing the app
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+export { app, auth, db };
