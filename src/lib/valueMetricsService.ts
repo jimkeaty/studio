@@ -35,17 +35,14 @@ export async function getYtdValueMetrics(
   year: number
 ): Promise<YtdValueMetrics> {
 
-  const startDate = `${year}-01-01`;
-  const endDate = `${year}-12-31`;
-
   // 1. Fetch daily activities and transactions in parallel
   const [activitySnap, transactionsSnap, planSnap] = await Promise.all([
     getDocs(
       query(
         collection(db, 'daily_activity'),
-        where('agentId', '==', agentId),
-        where('date', '>=', startDate),
-        where('date', '<=', endDate)
+        where('agentId', '==', agentId)
+        // Note: Date range removed to avoid composite index requirement.
+        // Filtering by year is now done on the client side below.
       )
     ),
     getDocs(
@@ -58,13 +55,15 @@ export async function getYtdValueMetrics(
       getDoc(doc(db, 'users', agentId, 'plans', String(year))).catch(() => null)
   ]);
 
-  // 2. Sum activity counts
+  // 2. Sum activity counts with client-side year filtering
   let totalEngagements = 0;
   let totalAppointmentsHeld = 0;
   activitySnap.forEach((doc) => {
     const data = doc.data() as DailyActivity;
-    totalEngagements += data.engagementsCount || 0;
-    totalAppointmentsHeld += data.appointmentsHeldCount || 0;
+    if (data.date.startsWith(String(year))) {
+        totalEngagements += data.engagementsCount || 0;
+        totalAppointmentsHeld += data.appointmentsHeldCount || 0;
+    }
   });
 
   // 3. Sum closed net commission from transactions
