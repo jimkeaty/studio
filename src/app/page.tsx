@@ -54,74 +54,42 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    let authResolved = false;
-    let unsubscribe: (() => void) | undefined;
+    // Process any pending redirect sign-in first.
+    getRedirectResult(auth).catch((error) => {
+      console.error("Redirect sign-in error:", error);
+      setErrorMsg(error.message || 'Failed to sign in after redirect.');
+    });
 
-    const watchdogTimer = setTimeout(() => {
-      if (!authResolved) {
+    // Then, set up the listener for the definitive auth state.
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, redirect to the dashboard.
+        // The new page will have its own loading state.
+        router.replace('/dashboard');
+      } else {
+        // No user is signed in, stop loading and show the login UI.
         setIsLoading(false);
-        setErrorMsg("Authentication did not finish loading. Please sign in again.");
       }
-    }, 5000);
+    });
 
-    const initializeAuth = async () => {
-      try {
-        await setPersistence(auth, browserLocalPersistence);
-
-        unsubscribe = onAuthStateChanged(auth, (user) => {
-          if (!authResolved) {
-            authResolved = true;
-            clearTimeout(watchdogTimer);
-          }
-
-          if (user) {
-            router.replace('/dashboard');
-            setIsLoading(false); // Ensure loading is false even if component doesn't unmount
-          } else {
-            setIsLoading(false);
-          }
-        });
-
-        getRedirectResult(auth).catch((error) => {
-          console.error("Redirect sign-in error:", error);
-          setErrorMsg(error.message || 'Failed to sign in after redirect.');
-          if (!authResolved) {
-            authResolved = true;
-            clearTimeout(watchdogTimer);
-            setIsLoading(false);
-          }
-        });
-      } catch (error) {
-        console.error("Error setting persistence:", error);
-        setErrorMsg("There was a problem setting up authentication.");
-        if (!authResolved) {
-          authResolved = true;
-          clearTimeout(watchdogTimer);
-          setIsLoading(false);
-        }
-      }
-    };
-
-    initializeAuth();
-
-    return () => {
-      clearTimeout(watchdogTimer);
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    // Clean up the listener on component unmount.
+    return () => unsubscribe();
   }, [router]);
+
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     setErrorMsg(null);
-
     const provider = new GoogleAuthProvider();
-    await signInWithRedirect(auth, provider).catch((error) => {
-      console.error("signInWithRedirect error:", error);
-      setErrorMsg(error.message || "Could not start the sign-in process.");
-      setIsSigningIn(false);
-    });
+
+    try {
+        await setPersistence(auth, browserLocalPersistence);
+        await signInWithRedirect(auth, provider);
+    } catch (error: any) {
+        console.error("signInWithRedirect error:", error);
+        setErrorMsg(error.message || "Could not start the sign-in process.");
+        setIsSigningIn(false);
+    }
   };
 
   if (isLoading) {

@@ -32,7 +32,7 @@ export function UserNav() {
   
   if (!user) {
     return (
-        <Link href="/login">
+        <Link href="/">
             <Button variant="outline">Log In</Button>
         </Link>
     );
