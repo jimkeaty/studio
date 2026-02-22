@@ -1,3 +1,4 @@
+
 'use client';
 import TopAgents2025 from "./TopAgents2025";
 import { useState, useEffect, useMemo } from 'react';
@@ -93,17 +94,12 @@ export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
-  const [liveDashboardData, setLiveDashboardData] = useState<AgentDashboardData | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
+  // Use `undefined` as initial state to signify "loading"
+  const [liveDashboardData, setLiveDashboardData] = useState<AgentDashboardData | null | undefined>(undefined);
+  const [businessPlan, setBusinessPlan] = useState<BusinessPlan | null | undefined>(undefined);
   const [dataError, setDataError] = useState<Error | null>(null);
 
-  const [businessPlan, setBusinessPlan] = useState<BusinessPlan | null>(null);
-  const [planLoading, setPlanLoading] = useState(true);
-  
-  const [displayData, setDisplayData] = useState<AgentDashboardData | null>(null);
-
   useEffect(() => {
-    // Set year on client-side to avoid hydration mismatch
     setSelectedYear(String(new Date().getFullYear()));
   }, []);
 
@@ -120,60 +116,54 @@ export default function AgentDashboardPage() {
 
   useEffect(() => {
     if (!dashboardDocRef) {
-        if (!userLoading) setDataLoading(false);
-        return;
+      setLiveDashboardData(null); // No user/ref, so data is loaded and is null
+      return;
     }
-    setDataLoading(true);
     const unsubscribe = onSnapshot(dashboardDocRef,
       (snapshot) => {
         setLiveDashboardData(snapshot.exists() ? snapshot.data() : null);
-        setDataLoading(false);
         setDataError(null);
       },
       (err) => {
         console.error(`[AgentDashboard] Error fetching dashboard document at ${dashboardDocRef.path}:`, err);
         setDataError(err);
-        setLiveDashboardData(null);
-        setDataLoading(false);
+        setLiveDashboardData(null); // Error occurred, so data is loaded and is null
       }
     );
     return () => unsubscribe();
-  }, [dashboardDocRef, userLoading]);
+  }, [dashboardDocRef]);
 
   useEffect(() => {
     if (!planDocRef) {
-        if (!userLoading) setPlanLoading(false);
-        return;
+      setBusinessPlan(null); // No user/ref, so plan is loaded and is null
+      return;
     }
-    setPlanLoading(true);
     const unsubscribe = onSnapshot(planDocRef,
       (snapshot) => {
         setBusinessPlan(snapshot.exists() ? snapshot.data() : null);
-        setPlanLoading(false);
       },
       (err) => {
         console.error(`[AgentDashboard] Error fetching business plan at ${planDocRef.path}:`, err);
-        setBusinessPlan(null);
-        setPlanLoading(false);
+        setBusinessPlan(null); // Error occurred, so plan is loaded and is null
       }
     );
     return () => unsubscribe();
-  }, [planDocRef, userLoading]);
-  
-  useEffect(() => {
-    if (dataLoading || planLoading) {
-      setDisplayData(null);
-      return;
-    }
+  }, [planDocRef]);
+
+  const dataHasLoaded = liveDashboardData !== undefined && businessPlan !== undefined;
+  const loading = userLoading || !dataHasLoaded;
+
+  const displayData = useMemo(() => {
+    if (loading) return null;
 
     const monthlyGoal = businessPlan?.calculatedTargets?.monthlyNetIncome || mockAgentDashboardData.monthlyIncome[0].goal;
-
+    
     let baseData: AgentDashboardData;
-
     if (liveDashboardData) {
       baseData = liveDashboardData;
     } else {
-      baseData = JSON.parse(JSON.stringify(mockAgentDashboardData)); // Deep copy to create a blank slate
+      // Create a fresh, resettable copy of the mock data
+      baseData = JSON.parse(JSON.stringify(mockAgentDashboardData)); 
       
       Object.keys(baseData.kpis).forEach(key => {
         const kpi = key as keyof typeof baseData.kpis;
@@ -197,21 +187,19 @@ export default function AgentDashboardPage() {
       baseData.pipelineAdjustedIncome = { grade: 'F', performance: 0 };
     }
     
-    const ensuredMonthlyIncome = baseData.monthlyIncome.map(monthData => ({
+    const ensuredMonthlyIncome = (baseData.monthlyIncome || []).map(monthData => ({
         ...monthData,
         goal: monthlyGoal,
     }));
 
-    setDisplayData({
+    return {
         ...baseData,
         monthlyIncome: ensuredMonthlyIncome,
-    });
+    };
 
-  }, [liveDashboardData, businessPlan, dataLoading, planLoading]);
+  }, [loading, liveDashboardData, businessPlan]);
 
-  const loading = userLoading || !displayData;
-
-  if (loading) {
+  if (loading || !displayData) {
     return <DashboardSkeleton />;
   }
 
@@ -448,3 +436,5 @@ export default function AgentDashboardPage() {
     </div>
   );
 }
+
+    
