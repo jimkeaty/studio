@@ -10,9 +10,7 @@ import {
   parseISO,
   startOfYear,
 } from 'date-fns';
-import dateFnsTz from 'date-fns-tz';
-
-const { utcToZonedTime } = dateFnsTz;
+import { utcToZonedTime } from 'date-fns-tz';
 
 // All date calculations are performed in this timezone as per requirements.
 const TIME_ZONE = 'America/Chicago';
