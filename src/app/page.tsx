@@ -14,8 +14,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
 
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
-import { useAuth, useUser } from '@/firebase';
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/firebase';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" {...props}>
@@ -32,31 +32,37 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function Home() {
   const router = useRouter();
   const auth = useAuth();
-  const { user, loading: userLoading } = useUser();
-  const [isSigningIn, setIsSigningIn] = useState(false); // For button click
-  const [isCheckingRedirect, setIsCheckingRedirect] = useState(true); // For getRedirectResult
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userLoading && user) {
-      router.replace('/dashboard');
-    }
-  }, [user, userLoading, router]);
-
-  useEffect(() => {
     if (!auth) {
-      setIsCheckingRedirect(false);
-      return;
+        setIsLoading(false);
+        return;
     }
-    getRedirectResult(auth)
-      .catch((error) => {
-        console.error("Redirect sign-in error:", error);
-        setErrorMsg(error.message || 'Failed to sign in after redirect.');
-      })
-      .finally(() => {
-        setIsCheckingRedirect(false);
-      });
-  }, [auth]);
+
+    // This single listener handles both initial state check and post-redirect state.
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, redirect to the dashboard.
+        // We don't set isLoading to false, so the loader shows until navigation completes.
+        router.replace('/dashboard');
+      } else {
+        // No user is signed in. It's now safe to show the login form.
+        // We first check for any redirect errors.
+        getRedirectResult(auth)
+          .catch((error) => {
+            console.error("Redirect sign-in error:", error);
+            setErrorMsg(error.message || 'Failed to sign in after redirect.');
+          });
+        setIsLoading(false);
+      }
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, [auth, router]);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -76,7 +82,7 @@ export default function Home() {
     });
   };
   
-  if (userLoading || isCheckingRedirect) {
+  if (isLoading) {
     return (
        <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="flex flex-col items-center gap-4">
@@ -121,7 +127,7 @@ export default function Home() {
                 {isSigningIn ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    Redirecting to Google...
                   </>
                 ) : (
                   <>
