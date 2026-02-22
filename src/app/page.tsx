@@ -14,7 +14,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
 
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { useAuth, useUser } from '@/firebase';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -33,7 +33,8 @@ export default function Home() {
   const router = useRouter();
   const auth = useAuth();
   const { user, loading: userLoading } = useUser();
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false); // For button click
+  const [isCheckingRedirect, setIsCheckingRedirect] = useState(true); // For getRedirectResult
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,31 +43,40 @@ export default function Home() {
     }
   }, [user, userLoading, router]);
 
+  useEffect(() => {
+    if (!auth) {
+      setIsCheckingRedirect(false);
+      return;
+    }
+    getRedirectResult(auth)
+      .catch((error) => {
+        console.error("Redirect sign-in error:", error);
+        setErrorMsg(error.message || 'Failed to sign in after redirect.');
+      })
+      .finally(() => {
+        setIsCheckingRedirect(false);
+      });
+  }, [auth]);
+
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     setErrorMsg(null);
 
     if (!auth) {
-        setErrorMsg("Authentication service is not available. Please try again later.");
+        setErrorMsg("Authentication service is not available.");
         setIsSigningIn(false);
         return;
     }
 
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // onAuthStateChanged in useUser will handle the redirect
-    } catch (err: any) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        setErrorMsg('An error occurred during sign-in. Please try again.');
-        console.error(err);
-      }
-    } finally {
-      setIsSigningIn(false);
-    }
+    const provider = new GoogleAuthProvider();
+    await signInWithRedirect(auth, provider).catch(error => {
+        console.error("signInWithRedirect error:", error);
+        setErrorMsg(error.message || "Could not start the sign-in process.");
+        setIsSigningIn(false);
+    });
   };
   
-  if (userLoading || user) {
+  if (userLoading || isCheckingRedirect) {
     return (
        <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="flex flex-col items-center gap-4">
