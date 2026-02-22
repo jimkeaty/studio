@@ -89,7 +89,7 @@ const processMonthlyIncomeData = (monthlyIncome: AgentDashboardData['monthlyInco
 
 
 export default function AgentDashboardPage() {
-  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+  const [selectedYear, setSelectedYear] = useState('');
   const { user, loading: userLoading } = useUser();
   const db = useFirestore();
 
@@ -102,13 +102,18 @@ export default function AgentDashboardPage() {
   
   const [displayData, setDisplayData] = useState<AgentDashboardData | null>(null);
 
+  useEffect(() => {
+    // Set year on client-side to avoid hydration mismatch
+    setSelectedYear(String(new Date().getFullYear()));
+  }, []);
+
   const dashboardDocRef = useMemo(() => {
-    if (!user?.uid || !db) return null;
+    if (!user?.uid || !db || !selectedYear) return null;
     return doc(db, 'dashboards', user.uid, 'agent', selectedYear) as DocumentReference<AgentDashboardData>;
   }, [user?.uid, db, selectedYear]);
 
   const planDocRef = useMemo(() => {
-    if (!user?.uid || !db) return null;
+    if (!user?.uid || !db || !selectedYear) return null;
     return doc(db, 'users', user.uid, 'plans', selectedYear) as DocumentReference<BusinessPlan>;
   }, [user?.uid, db, selectedYear]);
 
