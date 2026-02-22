@@ -136,42 +136,35 @@ export interface AgentDashboardData {
   };
 }
 
-export type LeaderboardMetricKey =
-  | 'calls'
-  | 'engagements'
-  | 'apptsSet'
-  | 'apptsHeld'
-  | 'contracts'
-  | 'closings';
+export type LeaderboardMetricKey = 'closed' | 'pending' | 'total';
 
 export const leaderboardMetrics: { key: LeaderboardMetricKey; label: string }[] = [
-  { key: 'calls', label: 'Calls' },
-  { key: 'engagements', label: 'Engagements' },
-  { key: 'apptsSet', label: 'Appointments Set' },
-  { key: 'apptsHeld', label: 'Appointments Held' },
-  { key: 'contracts', label: 'Contracts Written' },
-  { key: 'closings', label: 'Closings' },
+  { key: 'closed', label: 'Closed Units' },
+  { key: 'pending', label: 'Pending Units' },
+  { key: 'total', label: 'Total Units (Closed + Pending)' },
 ];
 
+export type LeaderboardPeriod = 'yearly' | 'quarterly' | 'monthly';
+
 export interface LeaderboardConfig {
-  periodType: 'monthly' | 'quarterly';
-  periodId: string; // e.g., '2026-02' or '2026-Q1'
+  periodType: LeaderboardPeriod;
+  year: number;
+  quarter?: number;
+  month?: number;
   title: string;
   subtitle: string;
   primaryMetricKey: LeaderboardMetricKey;
-  secondaryMetricKey?: LeaderboardMetricKey;
   showTopN: number;
-  visualMode: 'raceTrack' | 'podium' | 'progressBars';
-  sortBy: 'primaryThenSecondary';
 }
 
-export interface LeaderboardAgentMetrics {
+export interface ProductionLeaderboardRow {
   agentId: string;
-  displayName: string; // "First L."
-  teamType: 'CGL' | 'SGL';
+  displayName: string;
   avatarUrl?: string;
-  metrics: Record<LeaderboardMetricKey, number>;
-  isCorrected?: boolean;
+  closed: number;
+  pending: number;
+  total: number;
+  isCorrected: boolean;
   correctionReason?: string;
 }
 
@@ -179,7 +172,7 @@ export interface LeaderboardRollup {
   periodId: string;
   startDate: string;
   endDate: string;
-  agents: LeaderboardAgentMetrics[];
+  agents: ProductionLeaderboardRow[];
 }
 
 export interface NewActivityConfig {

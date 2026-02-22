@@ -1,0 +1,9 @@
+[33mcommit 910f8e3c64a99108817e32544766abab8584ab4e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Jim Keaty <jim@keatyrealestate.com>
+Date:   Sun Feb 22 18:02:07 2026 +0000
+
+    The app isn't starting. Please investigate what could be wrong based on
+
+ package-lock.json | 52 [32m++++++++++++++++++++++++++++++++++++++++++++++++++[m[31m--[m
+ package.json      |  2 [32m+[m[31m-[m
+ 2 files changed, 51 insertions(+), 3 deletions(-)

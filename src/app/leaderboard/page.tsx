@@ -3,9 +3,9 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
-import { LeaderboardConfig, LeaderboardAgentMetrics } from '@/lib/types';
+import { ProductionLeaderboardRow, LeaderboardPeriod } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { Crown, Rocket, Zap, AlertCircle, Loader2 } from 'lucide-react';
+import { Crown, Rocket, Zap, AlertCircle, Loader2, Trophy, BarChart, CalendarDays } from 'lucide-react';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
 import { getLeaderboardRows } from '@/lib/rollupsService';
@@ -13,21 +13,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
-// Mock data simulating the Firestore config document
-const mockConfig: LeaderboardConfig = {
-  periodId: '2026-Q1',
-  periodType: 'quarterly',
-  title: 'Q1 Production Derby',
-  subtitle: 'Appointments Held + Engagements',
-  primaryMetricKey: 'apptsHeld',
-  secondaryMetricKey: 'engagements',
-  showTopN: 10,
-  sortBy: 'primaryThenSecondary',
-  visualMode: 'raceTrack',
-};
-
-const getMetricLabel = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const RaceIcon = ({ rank }: { rank: number }) => {
   if (rank === 0) return <Crown className="h-8 w-8 text-yellow-400" />;
@@ -47,9 +35,9 @@ const LeaderboardSkeleton = () => (
                             <Skeleton className="h-6 w-1/3" />
                             <Skeleton className="h-6 w-full" />
                         </div>
-                        <div className="flex-shrink-0 w-48 space-y-2">
-                             <Skeleton className="h-10 w-full" />
-                             <Skeleton className="h-4 w-2/3 ml-auto" />
+                        <div className="flex-shrink-0 w-48 text-right">
+                             <Skeleton className="h-10 w-24 ml-auto" />
+                             <Skeleton className="h-4 w-32 ml-auto mt-2" />
                         </div>
                     </div>
                 </CardContent>
@@ -60,23 +48,26 @@ const LeaderboardSkeleton = () => (
 
 
 export default function LeaderboardPage() {
-  // Config is mocked for now, but data will be live.
-  const config = mockConfig; 
   const db = useFirestore();
-
-  const [agents, setAgents] = useState<LeaderboardAgentMetrics[]>([]);
+  const [rows, setRows] = useState<ProductionLeaderboardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  const [period, setPeriod] = useState<LeaderboardPeriod>('yearly');
+  const [year, setYear] = useState(new Date().getFullYear());
+  
   useEffect(() => {
-    if (!db) return;
+    if (!db || period !== 'yearly') {
+        setRows([]);
+        setLoading(false);
+        return;
+    };
 
     setLoading(true);
-    const selectedYear = new Date().getFullYear(); // Or from a selector
 
-    getLeaderboardRows(db, selectedYear)
+    getLeaderboardRows(db, year)
       .then(data => {
-        setAgents(data);
+        setRows(data);
         setError(null);
       })
       .catch(err => {
@@ -85,30 +76,41 @@ export default function LeaderboardPage() {
       })
       .finally(() => setLoading(false));
 
-  }, [db]);
-
-
-  const sortedAgents = useMemo(() => {
-    return agents.sort((a, b) => {
-      const primaryDiff = (b.metrics[config.primaryMetricKey] || 0) - (a.metrics[config.primaryMetricKey] || 0);
-      if (primaryDiff !== 0) return primaryDiff;
-      if (config.secondaryMetricKey) {
-        return (b.metrics[config.secondaryMetricKey] || 0) - (a.metrics[config.secondaryMetricKey] || 0);
-      }
-      return 0;
-    }).slice(0, config.showTopN);
-  }, [agents, config]);
+  }, [db, period, year]);
   
-  const leaderScore = sortedAgents.length > 0 ? sortedAgents[0].metrics[config.primaryMetricKey] : 0;
+  const leaderScore = rows.length > 0 ? rows[0].closed : 0;
 
   return (
-    <div className="dark min-h-screen bg-gray-900 text-white p-8 font-sans">
-      <header className="text-center mb-12">
-        <h1 className="text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary to-orange-400">
-          {config.title}
+    <div className="dark min-h-screen bg-gray-900 text-white p-4 sm:p-8 font-sans">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary to-orange-400">
+          Production Leaderboard
         </h1>
-        <p className="text-2xl text-gray-400 mt-2">{config.subtitle}</p>
+        <p className="text-lg sm:text-2xl text-gray-400 mt-2">Brokerage-wide Performance</p>
       </header>
+
+      <Card className="max-w-5xl mx-auto bg-gray-800/30 border-gray-700 mb-8">
+        <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Tabs value={period} onValueChange={(v) => setPeriod(v as LeaderboardPeriod)}>
+                <TabsList>
+                    <TabsTrigger value="yearly">Year</TabsTrigger>
+                    <TabsTrigger value="quarterly">Quarter</TabsTrigger>
+                    <TabsTrigger value="monthly">Month</TabsTrigger>
+                </TabsList>
+            </Tabs>
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                <SelectTrigger className="w-full sm:w-[120px] bg-gray-800 border-gray-600">
+                    <SelectValue placeholder="Select year" />
+                </SelectTrigger>
+                <SelectContent>
+                    {[...Array(5)].map((_, i) => {
+                        const y = new Date().getFullYear() + 1 - i;
+                        return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+                    })}
+                </SelectContent>
+            </Select>
+        </CardContent>
+      </Card>
 
       <main className="max-w-7xl mx-auto">
         {loading ? (
@@ -119,17 +121,22 @@ export default function LeaderboardPage() {
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>{error}</AlertDescription>
             </Alert>
-        ) : sortedAgents.length === 0 ? (
+        ) : period !== 'yearly' ? (
+             <div className="text-center py-16">
+                <CalendarDays className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+                <h3 className="text-lg font-medium text-gray-400">Coming Soon</h3>
+                <p className="text-sm text-gray-500">Quarterly and Monthly leaderboards will be available once transaction-level data is connected.</p>
+            </div>
+        ) : rows.length === 0 ? (
             <div className="text-center py-16">
-                <Loader2 className="mx-auto h-12 w-12 text-gray-500 mb-4" />
-                <h3 className="text-lg font-medium text-gray-400">Awaiting Data...</h3>
-                <p className="text-sm text-gray-500">Leaderboard data for this period is not yet available.</p>
+                <BarChart className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+                <h3 className="text-lg font-medium text-gray-400">No Data Available</h3>
+                <p className="text-sm text-gray-500">Leaderboard data for {year} is not yet available.</p>
             </div>
         ) : (
             <div className="space-y-4">
-            {sortedAgents.map((agent, index) => {
-                const primaryValue = agent.metrics[config.primaryMetricKey];
-                const progress = leaderScore > 0 ? (primaryValue / leaderScore) * 100 : 0;
+            {rows.map((agent, index) => {
+                const progress = leaderScore > 0 ? (agent.closed / leaderScore) * 100 : 0;
 
                 return (
                 <Card
@@ -152,9 +159,8 @@ export default function LeaderboardPage() {
                         </Avatar>
 
                         <div className="flex-grow">
-                        <div className="flex items-baseline gap-3">
+                        <div className="flex items-center gap-2">
                             <div className="text-2xl font-bold">{agent.displayName}</div>
-                            <div className="text-sm font-semibold text-primary">{agent.teamType}</div>
                             {agent.isCorrected && (
                                 <TooltipProvider>
                                     <Tooltip>
@@ -162,6 +168,7 @@ export default function LeaderboardPage() {
                                         <Badge variant="outline" className="border-yellow-400 text-yellow-400">Corrected</Badge>
                                     </TooltipTrigger>
                                     <TooltipContent className="max-w-xs bg-gray-800 text-white border-gray-600">
+                                        <p className="font-semibold">Reason for Correction:</p>
                                         <p>{agent.correctionReason}</p>
                                     </TooltipContent>
                                     </Tooltip>
@@ -182,15 +189,12 @@ export default function LeaderboardPage() {
                         </div>
                         
                         <div className="flex-shrink-0 text-right w-48">
-                        <div className="text-4xl font-black tabular-nums">{primaryValue}</div>
-                        <div className="text-sm text-gray-400 font-medium">{getMetricLabel(config.primaryMetricKey)}</div>
-                        {config.secondaryMetricKey && (
+                            <div className="text-4xl font-black tabular-nums">{agent.closed}</div>
+                            <div className="text-sm text-gray-400 font-medium">Closed Units</div>
                             <div className="text-lg text-gray-500 font-semibold mt-1">
-                            {agent.metrics[config.secondaryMetricKey]} {getMetricLabel(config.secondaryMetricKey)}
+                                {agent.pending} Pending
                             </div>
-                        )}
                         </div>
-
                     </div>
                     </CardContent>
                 </Card>
@@ -199,9 +203,9 @@ export default function LeaderboardPage() {
             </div>
         )}
       </main>
-
+      
        <footer className="text-center mt-12 text-gray-600">
-         <p>Updating in real-time... | {config.periodId} Leaderboard</p>
+         <p>Displaying {period} results for {year}</p>
       </footer>
     </div>
   );
