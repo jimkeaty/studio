@@ -147,7 +147,7 @@ export default function BusinessPlanPage() {
         callToEngagement: 0,
         engagementToAppointmentSet: 0,
         appointmentSetToHeld: 0,
-        appointmentHeldToContract: 0,
+        contractToClosing: 0,
         contractToClosing: 0,
       },
     }
@@ -177,6 +177,8 @@ export default function BusinessPlanPage() {
   }, [form]);
 
   useEffect(() => {
+    if (!year) return;
+    
     const loadPlan = async () => {
       setIsLoading(true);
       
@@ -196,7 +198,7 @@ export default function BusinessPlanPage() {
         });
       };
 
-      if (userLoading || !user || !db || !year) {
+      if (userLoading || !user || !db) {
         setDefaults();
         setIsLoading(false);
         handleCalculate();
