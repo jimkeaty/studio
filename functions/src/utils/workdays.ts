@@ -1,3 +1,4 @@
+
 import {
   addDays,
   endOfYear,
@@ -9,7 +10,7 @@ import {
   parseISO,
   startOfYear,
 } from 'date-fns';
-import * as dateFnsTz from 'date-fns-tz';
+import { utcToZonedTime } from 'date-fns-tz';
 
 // All date calculations are performed in this timezone as per requirements.
 const TIME_ZONE = 'America/Chicago';
@@ -80,7 +81,7 @@ function getEffectiveStartDate(agentStartDateStr: string): Date {
  * @returns The number of workdays elapsed.
  */
 export function getAgentWorkdaysElapsedYTD(agentStartDate: string, year: number, holidays: string[]): number {
-  const chicagoNow = dateFnsTz.utcToZonedTime(new Date(), TIME_ZONE);
+  const chicagoNow = utcToZonedTime(new Date(), TIME_ZONE);
   const currentYear = getFullYear(chicagoNow);
 
   let calculationEndDate: Date;
