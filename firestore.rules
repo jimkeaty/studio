@@ -33,20 +33,31 @@ service cloud.firestore {
     // --- Activity & Transaction Data ---
     // Users can read/write their own activity logs. The doc ID is {agentId}_{YYYY-MM-DD}.
     match /daily_activity/{activityId} {
-      allow read, write: if isSignedIn() && activityId.split('_')[0] == request.auth.uid;
+      // Rule for single document operations (get, write).
+      allow get, write: if isSignedIn() && activityId.split('_')[0] == request.auth.uid;
+      // Rule for collection queries (list).
+      // The client query MUST include `where('agentId', '==', uid)` to be secure.
+      allow list: if isSignedIn();
     }
 
     // Users can C-R-D their own appointment logs, which have auto-generated IDs.
     match /appointment_logs/{logId} {
       allow create: if isSignedIn() && request.resource.data.agentId == request.auth.uid;
-      allow read, delete: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      // Split read into get and list for correctness.
+      allow get, delete: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      // The client query MUST include `where('agentId', '==', uid)`.
+      allow list: if isSignedIn();
       allow update: if false; // No updates are performed on appointment logs.
     }
     
     // Users can only read their own transactions for value metric calculations.
     // Writes are handled by an admin process (or a future dedicated feature).
     match /transactions/{transactionId} {
-      allow read: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      // Rule for single document reads (get).
+      allow get: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      // Rule for collection queries (list).
+      // The client query MUST include `where('agentId', '==', uid)`.
+      allow list: if isSignedIn();
       allow write: if false;
     }
 
