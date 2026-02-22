@@ -19,6 +19,7 @@ import { mockAgentDashboardData } from '@/lib/mock-data';
 import { getYtdValueMetrics } from '@/lib/valueMetricsService';
 import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
 import { getAgentWorkdayYearProgress } from '@/lib/workday-utils';
+import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
@@ -540,6 +541,8 @@ export default function AgentDashboardPage() {
             </div>
         </CardFooter>
       </Card>
+
+      <RecruitingIncentiveTracker />
     </div>
   );
 }

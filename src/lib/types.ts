@@ -1,6 +1,7 @@
 
 
 
+
 export type UserRole = 'agent' | 'manager' | 'broker' | 'admin';
 
 export interface User {
@@ -259,3 +260,5 @@ export interface YtdValueMetrics {
   targetValuePerEngagement: number | null;
   targetValuePerAppointmentHeld: number | null;
 }
+
+export * from './types/incentives';

@@ -16,6 +16,7 @@ import { getEffectiveRollups } from '@/lib/rollupsService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { EffectiveRollup } from '@/lib/overrides';
+import { RecruitingAdminConsole } from '@/components/dashboard/broker/RecruitingAdminConsole';
 
 
 const monthlyBrokerGciData = {
@@ -319,6 +320,8 @@ export default function BrokerDashboardPage() {
                     )}
                 </CardContent>
             </Card>
+
+            <RecruitingAdminConsole />
         </div>
     );
 }
