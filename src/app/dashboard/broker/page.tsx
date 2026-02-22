@@ -1,105 +1,22 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, Users, TrendingUp, Target } from 'lucide-react';
+import { DollarSign, Users, TrendingUp, Target, AlertCircle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AgentDashboardData, User } from '@/lib/types';
+import type { AgentDashboardData, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Scoreboard } from '@/components/dashboard/broker/scoreboard';
+import { useFirestore } from '@/firebase';
+import { getEffectiveRollups } from '@/lib/rollupsService';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import type { EffectiveRollup } from '@/lib/overrides';
 
-
-// Mock data for broker dashboard
-const agents: (User & { data: AgentDashboardData })[] = [
-    { 
-        uid: 'agent-1', name: 'Sonja Doe', email: 'sonja@example.com', role: 'agent', brokerageId: 'b1',
-        data: {
-            userId: 'agent-1',
-            leadIndicatorGrade: 'A',
-            leadIndicatorPerformance: 99,
-            isLeadIndicatorGracePeriod: false,
-            incomeGrade: 'A',
-            incomePerformance: 99,
-            isIncomeGracePeriod: false,
-            expectedYTDIncomeGoal: 30000,
-            ytdTotalPotential: 39000,
-            pipelineAdjustedIncome: { grade: 'A', performance: 110 },
-            kpis: { calls: { actual: 1250, target: 1500, performance: 83, grade: 'C' }, engagements: { actual: 420, target: 500, performance: 84, grade: 'C' }, appointmentsSet: { actual: 50, target: 55, performance: 91, grade: 'B' }, appointmentsHeld: { actual: 45, target: 50, performance: 90, grade: 'B' }, contractsWritten: { actual: 15, target: 12, performance: 125, grade: 'A' }, closings: { actual: 9, target: 8, performance: 113, grade: 'A' } },
-            netEarned: 27000, netPending: 12000,
-            monthlyIncome: [],
-            totalClosedIncomeForYear: 27000,
-            totalPendingIncomeForYear: 12000,
-            totalIncomeWithPipelineForYear: 39000,
-            forecast: { projectedClosings: 11, paceBasedNetIncome: 33000 },
-            conversions: { callToEngagement: { actual: 0.336, plan: 0.25 }, engagementToAppointmentSet: { actual: 0.119, plan: 0.1 }, appointmentSetToHeld: { actual: 0.9, plan: 0.9 }, appointmentHeldToContract: { actual: 0.333, plan: 0.2 }, contractToClosing: { actual: 0.6, plan: 0.8 } },
-            stats: { ytdVolume: 2700000, avgSalesPrice: 300000, buyerClosings: 6, sellerClosings: 3, renterClosings: 0, avgCommission: 3000, engagementValue: 64.28 }
-        }
-    },
-    { 
-        uid: 'agent-2', name: 'Michael Chen', email: 'michael@example.com', role: 'agent', brokerageId: 'b1',
-        data: {
-            userId: 'agent-2',
-            leadIndicatorGrade: 'C',
-            leadIndicatorPerformance: 65,
-            isLeadIndicatorGracePeriod: false,
-            incomeGrade: 'C',
-            incomePerformance: 60,
-            isIncomeGracePeriod: false,
-            expectedYTDIncomeGoal: 15000,
-            ytdTotalPotential: 15000,
-            pipelineAdjustedIncome: { grade: 'B', performance: 100 },
-            kpis: { calls: { actual: 800, target: 1400, performance: 57, grade: 'F' }, engagements: { actual: 250, target: 450, performance: 56, grade: 'F' }, appointmentsSet: { actual: 28, target: 45, performance: 62, grade: 'D' }, appointmentsHeld: { actual: 25, target: 40, performance: 63, grade: 'D' }, contractsWritten: { actual: 5, target: 8, performance: 63, grade: 'D' }, closings: { actual: 3, target: 6, performance: 50, grade: 'F' } },
-            netEarned: 9000, netPending: 6000,
-            monthlyIncome: [],
-            totalClosedIncomeForYear: 9000,
-            totalPendingIncomeForYear: 6000,
-            totalIncomeWithPipelineForYear: 15000,
-            forecast: { projectedClosings: 5, paceBasedNetIncome: 15000 },
-            conversions: { callToEngagement: { actual: 0.3125, plan: 0.25 }, engagementToAppointmentSet: { actual: 0.1, plan: 0.1 }, appointmentSetToHeld: { actual: 0.89, plan: 0.9 }, appointmentHeldToContract: { actual: 0.2, plan: 0.2 }, contractToClosing: { actual: 0.6, plan: 0.8 } },
-            stats: { ytdVolume: 900000, avgSalesPrice: 300000, buyerClosings: 2, sellerClosings: 1, renterClosings: 0, avgCommission: 3000, engagementValue: 60 }
-        }
-    },
-    { 
-        uid: 'agent-3', name: 'Alicia Rodriguez', email: 'alicia@example.com', role: 'agent', brokerageId: 'b1',
-        data: {
-            userId: 'agent-3',
-            leadIndicatorGrade: 'B',
-            leadIndicatorPerformance: 78,
-            isLeadIndicatorGracePeriod: false,
-            incomeGrade: 'B',
-            incomePerformance: 88,
-            isIncomeGracePeriod: false,
-            expectedYTDIncomeGoal: 24000,
-            ytdTotalPotential: 30000,
-            pipelineAdjustedIncome: { grade: 'A', performance: 125 },
-            kpis: { calls: { actual: 1100, target: 1300, performance: 85, grade: 'B' }, engagements: { actual: 380, target: 400, performance: 95, grade: 'A' }, appointmentsSet: { actual: 42, target: 40, performance: 105, grade: 'A' }, appointmentsHeld: { actual: 40, target: 45, performance: 89, grade: 'B' }, contractsWritten: { actual: 10, target: 10, performance: 100, grade: 'A' }, closings: { actual: 7, target: 8, performance: 88, grade: 'B' } },
-            netEarned: 21000, netPending: 9000,
-            monthlyIncome: [],
-            totalClosedIncomeForYear: 21000,
-            totalPendingIncomeForYear: 9000,
-            totalIncomeWithPipelineForYear: 30000,
-            forecast: { projectedClosings: 9, paceBasedNetIncome: 27000 },
-            conversions: { callToEngagement: { actual: 0.34, plan: 0.25 }, engagementToAppointmentSet: { actual: 0.105, plan: 0.1 }, appointmentSetToHeld: { actual: 0.95, plan: 0.9 }, appointmentHeldToContract: { actual: 0.25, plan: 0.2 }, contractToClosing: { actual: 0.7, plan: 0.8 } },
-            stats: { ytdVolume: 2100000, avgSalesPrice: 300000, buyerClosings: 5, sellerClosings: 2, renterClosings: 0, avgCommission: 3000, engagementValue: 71.05 }
-        }
-    },
-];
-
-const totalNetEarned = agents.reduce((sum, agent) => sum + agent.data.netEarned, 0);
-const totalNetPending = agents.reduce((sum, agent) => sum + agent.data.netPending, 0);
-const totalClosings = agents.reduce((sum, agent) => sum + agent.data.kpis.closings.actual, 0);
-const totalAppointmentsHeld = agents.reduce((sum, agent) => sum + agent.data.kpis.appointmentsHeld.actual, 0);
-const totalContractsWritten = agents.reduce((sum, agent) => sum + agent.data.kpis.contractsWritten.actual, 0);
-
-const funnelData = [
-  { name: 'Appts Held', value: totalAppointmentsHeld, fill: 'var(--color-chart-1)' },
-  { name: 'Contracts', value: totalContractsWritten, fill: 'var(--color-chart-2)' },
-  { name: 'Closings', value: totalClosings, fill: 'var(--color-primary)' },
-];
 
 const monthlyBrokerGciData = {
   year: 2024,
@@ -128,72 +45,159 @@ const chartConfig = {
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 
+const BrokerDashboardSkeleton = () => (
+    <div className="space-y-8">
+        <Skeleton className="h-12 w-1/2" />
+        <Card><CardContent className="p-6"><Skeleton className="h-48 w-full" /></CardContent></Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>
+            <Card><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>
+            <Card><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>
+            <Card><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>
+        </div>
+        <Card><CardContent className="p-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
+        <Card><CardContent className="p-6"><Skeleton className="h-48 w-full" /></CardContent></Card>
+    </div>
+);
+
 export default function BrokerDashboardPage() {
     const [selectedYear, setSelectedYear] = useState('');
-    
+    const db = useFirestore();
+    const [rollups, setRollups] = useState<EffectiveRollup[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
     useEffect(() => {
         setSelectedYear(String(new Date().getFullYear()));
     }, []);
+
+    useEffect(() => {
+        if (!db || !selectedYear) return;
+
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const data = await getEffectiveRollups(db, parseInt(selectedYear, 10));
+                if (!cancelled) {
+                    setRollups(data);
+                }
+            } catch (e: any) {
+                console.error("Failed to fetch broker data:", e);
+                if (!cancelled) {
+                    setError(e.message || "Failed to fetch brokerage data.");
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [db, selectedYear]);
+
+    const { totalNetEarned, totalNetPending, totalClosings, totalContractsWritten } = useMemo(() => {
+        // NOTE: This is a simplified calculation. 'netEarned' and 'netPending' are not
+        // part of the rollup data. For this example, we'll derive a simplified version.
+        // A real implementation would need to join with agent-specific financial data.
+        const AVG_COMMISSION = 3000;
+        
+        return rollups.reduce((acc, rollup) => {
+            acc.totalClosings += rollup.closed || 0;
+            acc.totalContractsWritten += (rollup.closed || 0) + (rollup.pending || 0); // Approximation
+            acc.totalNetEarned += (rollup.closed || 0) * AVG_COMMISSION;
+            acc.totalNetPending += (rollup.pending || 0) * AVG_COMMISSION;
+            return acc;
+        }, { totalNetEarned: 0, totalNetPending: 0, totalClosings: 0, totalContractsWritten: 0 });
+
+    }, [rollups]);
     
+    const funnelData = useMemo(() => [
+        // This is a simplified funnel. A real one would need more data points.
+        { name: 'Contracts', value: totalContractsWritten, fill: 'var(--color-chart-2)' },
+        { name: 'Closings', value: totalClosings, fill: 'var(--color-primary)' },
+    ], [totalContractsWritten, totalClosings]);
+
+    if (!selectedYear) {
+        return <BrokerDashboardSkeleton />;
+    }
+
     return (
         <div className="space-y-8">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Broker Command</h1>
-                <p className="text-muted-foreground">Aggregated view of your brokerage&apos;s performance.</p>
+                <p className="text-muted-foreground">Aggregated view of your brokerage&apos;s performance for {selectedYear}.</p>
             </div>
             
             <Scoreboard />
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Net Earned</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(totalNetEarned)}</div>
-                        <p className="text-xs text-muted-foreground">Commission from all closed transactions.</p>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Net Pending</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(totalNetPending)}</div>
-                        <p className="text-xs text-muted-foreground">Commission from all pending deals.</p>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Closings</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{totalClosings}</div>
-                        <p className="text-xs text-muted-foreground">Total units closed this year.</p>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active Agents</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{agents.length}</div>
-                        <p className="text-xs text-muted-foreground">Number of agents in your brokerage.</p>
-                    </CardContent>
-                </Card>
-            </div>
+             {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <Card><CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader><CardContent><Skeleton className="h-8 w-1/2" /></CardContent></Card>
+                    <Card><CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader><CardContent><Skeleton className="h-8 w-1/2" /></CardContent></Card>
+                    <Card><CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader><CardContent><Skeleton className="h-8 w-1/2" /></CardContent></Card>
+                    <Card><CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader><CardContent><Skeleton className="h-8 w-1/2" /></CardContent></Card>
+                </div>
+            ) : error ? (
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total Net Earned (Est.)</CardTitle>
+                            <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{formatCurrency(totalNetEarned)}</div>
+                            <p className="text-xs text-muted-foreground">Est. from all closed transactions.</p>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total Net Pending (Est.)</CardTitle>
+                            <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{formatCurrency(totalNetPending)}</div>
+                            <p className="text-xs text-muted-foreground">Est. from all pending deals.</p>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total Closings</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{totalClosings}</div>
+                            <p className="text-xs text-muted-foreground">Total units closed this year.</p>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Active Agents</CardTitle>
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{rollups.length}</div>
+                            <p className="text-xs text-muted-foreground">Number of agents with activity.</p>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
             
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <div>
-                            <CardTitle>Monthly Broker Net Income (Closed + Pending vs. Goal)</CardTitle>
+                            <CardTitle>Monthly Broker Net Income (Sample Data)</CardTitle>
                             <CardDescription>
-                                Broker net income breakdown for {selectedYear}.
+                                Broker net income breakdown for {selectedYear}. This chart uses sample data.
                             </CardDescription>
                         </div>
                         <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -259,7 +263,7 @@ export default function BrokerDashboardPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Target /> Sales Funnel</CardTitle>
-                        <CardDescription>Appointments to closings conversion overview.</CardDescription>
+                        <CardDescription>Contract to closing overview for the brokerage.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <ChartContainer config={{}} className="h-[250px] w-full">
@@ -282,60 +286,39 @@ export default function BrokerDashboardPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Agent Leaderboard</CardTitle>
-                    <CardDescription>Top performing agents in your brokerage based on Net Earned YTD.</CardDescription>
+                    <CardDescription>Top performing agents in your brokerage based on Closed Units YTD.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Agent</TableHead>
-                                <TableHead className="text-center">Lead Grade</TableHead>
-                                <TableHead className="text-center">Income Grade</TableHead>
-                                <TableHead className="text-right">Net Earned</TableHead>
-                                <TableHead className="text-right">Net Pending</TableHead>
-                                <TableHead className="text-right">Closings</TableHead>
-                                <TableHead className="text-right">Contracts</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {agents.sort((a,b) => b.data.netEarned - a.data.netEarned).map((agent) => (
-                                <TableRow key={agent.uid}>
-                                    <TableCell>
-                                        <div className="font-medium">{agent.name}</div>
-                                        <div className="text-sm text-muted-foreground">{agent.email}</div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        <Badge className={cn(
-                                            'text-lg px-2',
-                                            agent.data.leadIndicatorGrade === 'A' && 'bg-green-500/80',
-                                            agent.data.leadIndicatorGrade === 'B' && 'bg-primary',
-                                            agent.data.leadIndicatorGrade === 'C' && 'bg-yellow-500/80',
-                                            agent.data.leadIndicatorGrade === 'D' && 'bg-orange-500/80',
-                                            agent.data.leadIndicatorGrade === 'F' && 'bg-red-500/80',
-                                        )}>{agent.data.leadIndicatorGrade}</Badge>
-                                    </TableCell>
-                                     <TableCell className="text-center">
-                                        <Badge className={cn(
-                                            'text-lg px-2',
-                                            agent.data.incomeGrade === 'A' && 'bg-green-500/80',
-                                            agent.data.incomeGrade === 'B' && 'bg-primary',
-                                            agent.data.incomeGrade === 'C' && 'bg-yellow-500/80',
-                                            agent.data.incomeGrade === 'D' && 'bg-orange-500/80',
-                                            agent.data.incomeGrade === 'F' && 'bg-red-500/80',
-                                        )}>{agent.data.incomeGrade}</Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">{formatCurrency(agent.data.netEarned)}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(agent.data.netPending)}</TableCell>
-                                    <TableCell className="text-right">{agent.data.kpis.closings.actual}</TableCell>
-                                    <TableCell className="text-right">{agent.data.kpis.contractsWritten.actual}</TableCell>
+                     {loading ? (
+                        <div className="space-y-4">
+                            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                        </div>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Agent</TableHead>
+                                    <TableHead className="text-right">Closed</TableHead>
+                                    <TableHead className="text-right">Pending</TableHead>
+                                    <TableHead className="text-right">Listings</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {rollups.sort((a,b) => (b.closed || 0) - (a.closed || 0)).map((rollup) => (
+                                    <TableRow key={rollup.id}>
+                                        <TableCell>
+                                            <div className="font-medium">{rollup.agentId}</div>
+                                        </TableCell>
+                                        <TableCell className="text-right">{rollup.closed || 0}</TableCell>
+                                        <TableCell className="text-right">{rollup.pending || 0}</TableCell>
+                                        <TableCell className="text-right">{rollup.listings.active || 0}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
                 </CardContent>
             </Card>
         </div>
     );
 }
-
-    

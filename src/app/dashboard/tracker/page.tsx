@@ -19,6 +19,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { mockAgentDashboardData } from '@/lib/mock-data';
 import type { AgentDashboardData, BusinessPlan } from '@/lib/types';
+import { useEffect } from 'react';
 
 const trackerFormSchema = z.object({
   date: z.date({
@@ -41,7 +42,7 @@ export default function DailyTrackerPage() {
   const form = useForm<TrackerFormValues>({
     resolver: zodResolver(trackerFormSchema),
     defaultValues: {
-      date: new Date(),
+      // date is set in useEffect to avoid hydration errors
       calls: 0,
       engagements: 0,
       appointmentsSet: 0,
@@ -49,6 +50,12 @@ export default function DailyTrackerPage() {
       contractsWritten: 0,
     },
   });
+
+  useEffect(() => {
+    // Set the date on the client side to avoid hydration mismatch
+    form.setValue('date', new Date());
+  }, [form]);
+
 
   async function onSubmit(data: TrackerFormValues) {
     if (!user || !db) {

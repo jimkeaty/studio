@@ -30,7 +30,8 @@ service cloud.firestore {
        allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
     match /agentYearRollups/{docId} {
-  allow read: if isSignedIn();
+  // This collection must be public for the leaderboard and Top Agents components.
+  allow read: if true;
 
   // Creates: only allow rollups for 2025+
   allow create: if isAdmin()

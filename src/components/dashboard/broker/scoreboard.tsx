@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -116,18 +116,24 @@ const ScoreboardSegment = ({ segment }: { segment: any }) => (
 
 
 export function Scoreboard() {
-  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+  const [selectedYear, setSelectedYear] = useState('');
     // In a real app, we would fetch data for the selected year. Here we just use the same mock data.
   const data = scoreboardData;
+
+  useEffect(() => {
+    // Set the year on the client side to avoid hydration mismatch
+    setSelectedYear(String(new Date().getFullYear()));
+  }, []);
+
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>YTD Scoreboard</CardTitle>
+            <CardTitle>YTD Scoreboard (Sample Data)</CardTitle>
             <CardDescription>
-              Brokerage performance vs. workday-paced goals for {selectedYear}.
+              Brokerage performance vs. workday-paced goals for {selectedYear}. This component uses sample data.
             </CardDescription>
           </div>
           <Select value={selectedYear} onValueChange={setSelectedYear}>

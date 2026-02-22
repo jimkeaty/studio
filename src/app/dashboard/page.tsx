@@ -226,7 +226,7 @@ export default function AgentDashboardPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{user?.displayName ?? 'Agent'}'s Dashboard</h1>
           <p className="text-muted-foreground">Your performance at a glance for {selectedYear}.</p>
         </div>
         <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -436,5 +436,3 @@ export default function AgentDashboardPage() {
     </div>
   );
 }
-
-    
