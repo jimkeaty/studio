@@ -26,6 +26,14 @@ const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
+function stablePercent(seed: string) {
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  }
+  return `${(hash % 41) + 50}%` // 50–90%
+}
+
 type SidebarContext = {
   state: "expanded" | "collapsed"
   open: boolean
@@ -652,9 +660,8 @@ const SidebarMenuSkeleton = React.forwardRef<
   }
 >(({ className, showIcon = false, ...props }, ref) => {
   // Random width between 50 to 90%.
-  const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
-  }, [])
+  const rid = React.useId()
+  const width = React.useMemo(() => stablePercent(rid), [rid])
 
   return (
     <div
