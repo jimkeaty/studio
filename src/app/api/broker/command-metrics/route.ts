@@ -138,10 +138,24 @@ export async function GET(req: NextRequest) {
   try {
     // 1. Authenticate and Authorize
     const authHeader = req.headers.get('Authorization');
+
+    if (process.env.NODE_ENV === 'development') {
+        console.log("[API/broker/command-metrics] Received request. Admin SDK Project ID:", admin.apps.length ? admin.app().options.projectId : "Admin SDK not initialized");
+        console.log("[API/broker/command-metrics] Auth header exists:", !!authHeader);
+    }
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized: Missing token' }, { status: 401 });
     }
     const idToken = authHeader.split('Bearer ')[1];
+    
+    if (process.env.NODE_ENV === 'development') {
+        console.log("[API/broker/command-metrics] Extracted token details:", {
+            tokenLength: idToken.length,
+            tokenPrefix: idToken.slice(0, 20) + "...",
+        });
+    }
+
     const decodedToken = await admin.auth().verifyIdToken(idToken);
 
     if (decodedToken.uid !== ADMIN_UID) {
@@ -209,7 +223,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error('[API/broker/command-metrics] Error:', error);
+    if (process.env.NODE_ENV === 'development') {
+        console.error('[API/broker/command-metrics] Token verification or processing error:', {
+            code: error.code,
+            message: error.message
+        });
+    }
+    
     if (error.code === 'auth/id-token-expired' || error.code === 'auth/argument-error') {
         return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }

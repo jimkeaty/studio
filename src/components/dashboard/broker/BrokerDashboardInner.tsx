@@ -99,7 +99,19 @@ export function BrokerDashboardInner() {
                     params.append('month', String(month));
                 }
 
-                const response = await fetch(`/api/broker/command-metrics?${params.toString()}`, {
+                const url = `/api/broker/command-metrics?${params.toString()}`;
+
+                if (process.env.NODE_ENV === 'development') {
+                    console.log("[BrokerDashboardInner] Preparing to fetch API:", {
+                        uid: user.uid,
+                        token_type: typeof token,
+                        token_length: token.length,
+                        token_prefix: token.slice(0, 20) + "...",
+                        url: url
+                    });
+                }
+
+                const response = await fetch(url, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
