@@ -8,7 +8,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLe
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useUser } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { getBrokerCommandMetrics } from '@/lib/brokerCommandMetricsService';
@@ -17,6 +17,7 @@ import { RecruitingAdminConsole } from '@/components/dashboard/broker/Recruiting
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 
+const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 const formatCurrency = (amount: number | null | undefined, compact = false) => {
     if (amount === null || amount === undefined) return "—";
@@ -81,6 +82,7 @@ export default function BrokerDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const db = useFirestore();
+    const { user, loading: userLoading } = useUser();
 
     useEffect(() => {
         const now = new Date();
@@ -89,10 +91,14 @@ export default function BrokerDashboardPage() {
     }, []);
 
     useEffect(() => {
-        if (!db || year === null || month === null) {
-            setLoading(true);
+        if (userLoading || !db || year === null || month === null) {
+            return; // Wait for dependencies
+        }
+
+        if (user?.uid !== ADMIN_UID) {
+            setLoading(false); // Not an admin, stop loading.
             return;
-        };
+        }
 
         const period: Period = periodType === 'year' ? { type: 'year', year } : { type: 'month', year, month };
         
@@ -106,7 +112,7 @@ export default function BrokerDashboardPage() {
             })
             .finally(() => setLoading(false));
 
-    }, [db, periodType, year, month]);
+    }, [db, periodType, year, month, user, userLoading]);
 
     const { current, comparison } = useMemo(() => ({
         current: data?.currentPeriodMetrics,
@@ -131,8 +137,23 @@ export default function BrokerDashboardPage() {
         previous: comparison.netRevenue.closed,
     }] : [];
 
-    if (loading) {
+    if (userLoading || (loading && user?.uid === ADMIN_UID)) {
         return <BrokerDashboardSkeleton />;
+    }
+
+    if (user?.uid !== ADMIN_UID) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <Card className="w-full max-w-md text-center">
+                    <CardHeader>
+                        <CardTitle>Access Denied</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p>Broker Command is available to staff only.</p>
+                    </CardContent>
+                </Card>
+            </div>
+        );
     }
     
     if (error) {
