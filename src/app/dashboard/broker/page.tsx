@@ -75,15 +75,24 @@ const CategoryBreakdownCard = ({ title, icon: Icon, closed, pending }: { title: 
 
 export default function BrokerDashboardPage() {
     const [periodType, setPeriodType] = useState<Period['type']>('year');
-    const [year, setYear] = useState<number>(new Date().getFullYear());
-    const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
+    const [year, setYear] = useState<number | null>(null);
+    const [month, setMonth] = useState<number | null>(null);
     const [data, setData] = useState<BrokerCommandMetrics | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const db = useFirestore();
 
     useEffect(() => {
-        if (!db) return;
+        const now = new Date();
+        setYear(now.getFullYear());
+        setMonth(now.getMonth() + 1);
+    }, []);
+
+    useEffect(() => {
+        if (!db || year === null || month === null) {
+            setLoading(true);
+            return;
+        };
 
         const period: Period = periodType === 'year' ? { type: 'year', year } : { type: 'month', year, month };
         
@@ -109,12 +118,12 @@ export default function BrokerDashboardPage() {
     const gradeNow = goal && goal > 0 ? ((current?.netRevenue.closed ?? 0) / goal) * 100 : null;
     const gradePipeline = goal && goal > 0 ? (forecast / goal) * 100 : null;
 
-    const mainChartData = [{
+    const mainChartData = (year !== null && month !== null) ? [{
         name: periodType === 'year' ? String(year) : format(new Date(year, month-1), 'MMM yyyy'),
         closed: current?.netRevenue.closed ?? 0,
         pending: current?.netRevenue.pending ?? 0,
         goal: current?.netRevenue.goal,
-    }];
+    }] : [];
     
     const yoyChartData = (periodType === 'month' && current && comparison) ? [{
         name: 'Net Revenue',
@@ -136,7 +145,7 @@ export default function BrokerDashboardPage() {
         );
     }
 
-    if (!data || !current) {
+    if (!data || !current || year === null || month === null) {
         return <BrokerDashboardSkeleton />;
     }
 
