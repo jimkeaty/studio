@@ -108,8 +108,10 @@ export function RecruitingIncentiveTracker() {
     getFullDownline(db, user.uid)
       .then(setDownline)
       .catch((err) => {
-        console.error(err);
-        setError('Failed to load recruiting data. Please try again later.');
+        // This will only catch truly unexpected errors now, as the service
+        // handles permission errors and empty states gracefully.
+        console.error("Recruiting Tracker UI Error:", err);
+        setError('An unexpected error occurred while loading recruiting data.');
       })
       .finally(() => setLoading(false));
   }, [user, db]);
@@ -223,17 +225,17 @@ export function RecruitingIncentiveTracker() {
                 <TableCell className="font-medium">{member.displayName}</TableCell>
                 <TableCell>{member.tier}</TableCell>
                 <TableCell>
-                  {member.qualificationProgress?.timeRemainingDays !== null ? (
+                  {member.qualificationProgress?.timeRemainingDays !== null && member.qualificationProgress?.windowEndsAt ? (
                     <TooltipProvider>
                        <Tooltip>
                            <TooltipTrigger>
-                                <span className={cn(member.qualificationProgress!.timeRemainingDays <= 60 && "text-destructive font-semibold")}>
-                                    {formatDistanceToNowStrict(member.qualificationProgress!.windowEndsAt!)}
+                                <span className={cn(member.qualificationProgress.timeRemainingDays <= 60 && "text-destructive font-semibold")}>
+                                    {formatDistanceToNowStrict(member.qualificationProgress.windowEndsAt)}
                                 </span>
                            </TooltipTrigger>
                            <TooltipContent>
                                <p>Hire Date: {member.hireDate ? format(member.hireDate, 'PPP') : 'N/A'}</p>
-                               <p>Window Ends: {member.qualificationProgress!.windowEndsAt ? format(member.qualificationProgress!.windowEndsAt, 'PPP') : 'N/A'}</p>
+                               <p>Window Ends: {format(member.qualificationProgress.windowEndsAt, 'PPP')}</p>
                            </TooltipContent>
                        </Tooltip>
                     </TooltipProvider>
