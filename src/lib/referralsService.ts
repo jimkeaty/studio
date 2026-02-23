@@ -1,3 +1,4 @@
+// src/lib/referralsService.ts
 'use client';
 
 import {
@@ -7,11 +8,14 @@ import {
   where,
   getDocs,
   documentId,
+  doc,
+  getDoc
 } from 'firebase/firestore';
 import type {
   AgentReferral,
   DownlineMember,
   QualificationProgress,
+  ReferralQualification,
 } from './types/incentives';
 import { computeQualificationProgress } from './incentivesService';
 import { add, subDays } from 'date-fns';
@@ -19,12 +23,11 @@ import { add, subDays } from 'date-fns';
 // TODO: Replace with a real agent profile fetching service
 // For now, it converts an agentId like 'john-doe' to 'John D.'
 const getAgentDisplayName = (agentId: string): string => {
+  if (!agentId) return "Unknown";
   return agentId
     .split('-')
-    .map((part, index) =>
-      index === 0
-        ? part.charAt(0).toUpperCase() + part.slice(1)
-        : `${part.charAt(0).toUpperCase()}.`
+    .map((part) =>
+        part.charAt(0).toUpperCase() + part.slice(1)
     )
     .join(' ');
 };
@@ -93,14 +96,16 @@ function getMockFullDownline(agentId: string): DownlineMember[] {
   // Helper to create qualification progress
   const createMockProgress = (
     status: 'qualified' | 'in_progress' | 'expired',
-    gci: number
+    closedGci: number,
+    pendingGci: number
   ): QualificationProgress => {
-    const remaining = Math.max(0, 40000 - gci);
+    const remaining = Math.max(0, 40000 - closedGci);
     return {
       status,
-      companyGciGrossInWindow: gci,
+      closedCompanyGciGrossInWindow: closedGci,
+      pendingCompanyGciGrossInWindow: pendingGci,
       remainingToThreshold: remaining,
-      progressPercentage: (gci / 40000) * 100,
+      progressPercentage: (closedGci / 40000) * 100,
       windowEndsAt: add(now, { months: status === 'in_progress' ? 6 : -6 }),
       timeRemainingDays: status === 'in_progress' ? 180 : 0,
       qualifiedAt: status === 'qualified' ? subDays(now, 100) : null,
@@ -114,28 +119,30 @@ function getMockFullDownline(agentId: string): DownlineMember[] {
       displayName: 'Jenna Stone',
       tier: 1,
       hireDate: subDays(now, 200),
-      qualificationProgress: createMockProgress('qualified', 55000),
+      qualificationProgress: createMockProgress('qualified', 55000, 5000),
     },
     {
       agentId: 'brian-miller',
       displayName: 'Brian Miller',
       tier: 1,
       hireDate: subDays(now, 150),
-      qualificationProgress: createMockProgress('in_progress', 25000),
+      qualificationProgress: createMockProgress('in_progress', 25000, 8000),
     },
     {
       agentId: 'sam-wilson',
       displayName: 'Sam Wilson',
       tier: 2,
+      referrerId: 'brian-miller',
       hireDate: subDays(now, 400),
-      qualificationProgress: createMockProgress('expired', 15000),
+      qualificationProgress: createMockProgress('expired', 15000, 0),
     },
      {
       agentId: 'olivia-chen',
       displayName: 'Olivia Chen',
       tier: 2,
+      referrerId: 'jenna-stone',
       hireDate: subDays(now, 90),
-      qualificationProgress: createMockProgress('in_progress', 8000),
+      qualificationProgress: createMockProgress('in_progress', 8000, 12000),
     },
   ];
 }
@@ -143,6 +150,7 @@ function getMockFullDownline(agentId: string): DownlineMember[] {
 
 /**
  * Fetches the full downline (Tier 1 and Tier 2) and their qualification progress.
+ * This is for the individual agent's dashboard view.
  * @param db - The Firestore instance.
  * @param agentId - The ID of the top-level agent.
  * @returns A promise resolving to an array of DownlineMember objects.
@@ -160,7 +168,7 @@ export async function getFullDownline(
       ...tier1Referrals.map((r) => ({ ...r, tier: 1 as const })),
       ...tier2Referrals.map((r) => ({ ...r, tier: 2 as const })),
     ];
-
+    
     // If no real data, use mock data in dev, otherwise return empty.
     if (allReferrals.length === 0) {
         if (process.env.NODE_ENV === 'development') {
@@ -168,27 +176,26 @@ export async function getFullDownline(
         }
         return [];
     }
-
+    
+    const recruitIds = allReferrals.map(r => r.recruitedAgentId);
+    const qualificationDocs: (ReferralQualification | null)[] = [];
+    for (const recruitId of recruitIds) {
+        const qualDocSnap = await getDoc(doc(db, 'referral_qualifications', recruitId));
+        qualificationDocs.push(qualDocSnap.exists() ? qualDocSnap.data() as ReferralQualification : null);
+    }
+    
     // Fetch qualification progress for all downline members in parallel
-    const progressPromises = allReferrals.map((referral) =>
-      computeQualificationProgress(db, referral.recruitedAgentId)
+    const progressPromises = qualificationDocs.map((qualDoc) =>
+        qualDoc ? computeQualificationProgress(db, qualDoc) : Promise.resolve(null)
     );
     const progressResults = await Promise.all(progressPromises);
-
+    
     return allReferrals.map((referral, index) => {
       return {
         agentId: referral.recruitedAgentId,
         displayName: getAgentDisplayName(referral.recruitedAgentId),
         tier: referral.tier,
-        // Note: hireDate is fetched inside computeQualificationProgress, but we expose it here.
-        // A more optimized service would fetch qualification docs directly.
-        hireDate: progressResults[index]?.windowEndsAt
-          ? new Date(
-              progressResults[index]!.windowEndsAt!.getFullYear() - 1,
-              progressResults[index]!.windowEndsAt!.getMonth(),
-              progressResults[index]!.windowEndsAt!.getDate()
-            )
-          : null,
+        hireDate: qualificationDocs[index]?.hireDate.toDate() ?? null,
         qualificationProgress: progressResults[index],
       };
     });
@@ -201,4 +208,60 @@ export async function getFullDownline(
       // In production, return an empty array to show a clean state instead of an error.
       return [];
   }
+}
+
+/**
+ * Fetches ALL recruits in the brokerage and their full downline for the Admin Console.
+ * @param db - The Firestore instance.
+ * @returns A promise resolving to an array of all DownlineMember objects in the system.
+ */
+export async function getAllBrokerageRecruits(db: Firestore): Promise<DownlineMember[]> {
+    try {
+        const referralsSnap = await getDocs(collection(db, 'agent_referrals'));
+        if (referralsSnap.empty) {
+             if (process.env.NODE_ENV === 'development') return getMockFullDownline('broker-admin');
+             return [];
+        }
+
+        const allReferrals = referralsSnap.docs.map(d => d.data() as AgentReferral);
+        const allRecruitIds = allReferrals.map(r => r.recruitedAgentId);
+
+        const qualDocsSnap = await getDocs(query(collection(db, 'referral_qualifications'), where(documentId(), 'in', allRecruitIds)));
+        const qualMap = new Map<string, ReferralQualification>();
+        qualDocsSnap.forEach(d => qualMap.set(d.id, d.data() as ReferralQualification));
+
+        const progressResults = await Promise.all(
+            Array.from(qualMap.values()).map(q => computeQualificationProgress(db, q))
+        );
+        const progressMap = new Map<string, QualificationProgress>();
+        progressResults.forEach((p, i) => {
+            const qual = Array.from(qualMap.values())[i];
+            progressMap.set(qual.recruitedAgentId, p);
+        });
+
+        const referralMap = new Map<string, string>(); // Map<recruitId, referrerId>
+        allReferrals.forEach(r => referralMap.set(r.recruitedAgentId, r.referrerAgentId));
+
+        return allRecruitIds.map(recruitId => {
+            const referrerId = referralMap.get(recruitId)!;
+            const uplineId = referralMap.get(referrerId); // Might be undefined (if referrer is T1)
+            
+            return {
+                agentId: recruitId,
+                displayName: getAgentDisplayName(recruitId),
+                tier: uplineId ? 2 : 1, // Simplified logic: if your referrer was referred, you're T2.
+                referrerId: getAgentDisplayName(referrerId),
+                uplineId: uplineId ? getAgentDisplayName(uplineId) : '—',
+                hireDate: qualMap.get(recruitId)?.hireDate.toDate() ?? null,
+                qualificationProgress: progressMap.get(recruitId) ?? null,
+            };
+        });
+
+    } catch (error) {
+        console.error("Failed to fetch brokerage-wide recruits:", error);
+        if (process.env.NODE_ENV === 'development') {
+            return getMockFullDownline('broker-admin');
+        }
+        return [];
+    }
 }

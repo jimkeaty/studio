@@ -18,6 +18,7 @@ export interface AgentReferral {
 
 /**
  * Tracks the qualification status of a recruited agent.
+ * This is the canonical document stored in Firestore.
  * Stored in the `referral_qualifications` collection.
  */
 export interface ReferralQualification {
@@ -26,7 +27,7 @@ export interface ReferralQualification {
   hireDate: Timestamp;
   windowEndsAt: Timestamp;
   thresholdCompanyGciGross: number;
-  companyGciGrossInWindow: number;
+  companyGciGrossInWindow: number; // IMPORTANT: This is the CLOSED GCI amount.
   status: 'in_progress' | 'qualified' | 'expired';
   qualifiedAt: Timestamp | null;
   lastComputedAt: Timestamp;
@@ -35,6 +36,7 @@ export interface ReferralQualification {
 
 /**
  * A combined data structure for displaying downline information in the UI.
+ * This is an enriched, in-memory object, not a direct Firestore document.
  */
 export interface DownlineMember {
   agentId: string;
@@ -42,16 +44,20 @@ export interface DownlineMember {
   tier: 1 | 2;
   hireDate: Date | null;
   qualificationProgress: QualificationProgress | null;
+  referrerId?: string; // Tier 1 referrer
+  uplineId?: string; // Tier 2 upline
 }
 
 /**
- * Represents the computed progress for a single recruited agent.
+ * Represents the computed progress for a single recruited agent. This is an
+ * in-memory object, calculated on-the-fly for UI display.
  */
 export interface QualificationProgress {
   status: 'in_progress' | 'qualified' | 'expired' | 'missing_data';
-  companyGciGrossInWindow: number;
-  remainingToThreshold: number;
-  progressPercentage: number;
+  closedCompanyGciGrossInWindow: number;
+  pendingCompanyGciGrossInWindow: number;
+  remainingToThreshold: number; // Based on CLOSED GCI only
+  progressPercentage: number; // Based on CLOSED GCI only
   windowEndsAt: Date | null;
   timeRemainingDays: number | null;
   qualifiedAt: Date | null;

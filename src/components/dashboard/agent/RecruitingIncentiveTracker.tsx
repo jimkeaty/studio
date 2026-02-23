@@ -27,11 +27,7 @@ import {
   Users,
   Award,
   DollarSign,
-  Timer,
-  CheckCircle,
-  XCircle,
   TrendingUp,
-  MinusCircle
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { format, formatDistanceToNowStrict } from 'date-fns';
@@ -90,6 +86,43 @@ const StatusBadge = ({
   );
 };
 
+const GciProgressBar = ({
+    closed,
+    pending,
+    threshold
+}: {
+    closed: number;
+    pending: number;
+    threshold: number;
+}) => {
+    const closedPct = Math.min((closed / threshold) * 100, 100);
+    const pendingPct = Math.min((pending / threshold) * 100, 100 - closedPct);
+
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <div className="relative w-full h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                            className="absolute top-0 left-0 h-full bg-blue-500"
+                            style={{ width: `${closedPct}%` }}
+                        />
+                        <div
+                            className="absolute top-0 h-full bg-yellow-400"
+                            style={{ left: `${closedPct}%`, width: `${pendingPct}%` }}
+                        />
+                    </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Closed: ${closed.toLocaleString()}</p>
+                    <p>Pending: ${pending.toLocaleString()}</p>
+                    <p>Remaining: ${Math.max(0, threshold - closed).toLocaleString()}</p>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
+};
+
 
 export function RecruitingIncentiveTracker() {
   const { user } = useUser();
@@ -117,7 +150,6 @@ export function RecruitingIncentiveTracker() {
   }, [user, db]);
 
   const summary = useMemo(() => {
-    const now = new Date();
     return downline.reduce(
       (acc, member) => {
         if (member.tier === 1) acc.tier1Count++;
@@ -125,22 +157,14 @@ export function RecruitingIncentiveTracker() {
         if (member.qualificationProgress?.status === 'qualified') {
           acc.qualifiedCount++;
         }
-        if (
-          member.qualificationProgress?.status === 'in_progress' &&
-          member.qualificationProgress.windowEndsAt &&
-          (member.qualificationProgress.windowEndsAt.getTime() - now.getTime()) /
-            (1000 * 60 * 60 * 24) <=
-            60
-        ) {
-          acc.expiringSoonCount++;
-        }
+        acc.totalRecruits++;
         return acc;
       },
       {
         tier1Count: 0,
         tier2Count: 0,
         qualifiedCount: 0,
-        expiringSoonCount: 0,
+        totalRecruits: 0,
       }
     );
   }, [downline]);
@@ -178,33 +202,33 @@ export function RecruitingIncentiveTracker() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <SummaryCard
             icon={Users}
-            title="Tier 1 Recruits"
-            value={summary.tier1Count}
-            description="Directly referred agents"
-          />
-          <SummaryCard
-            icon={Users}
-            title="Tier 2 Recruits"
-            value={summary.tier2Count}
-            description="Indirectly referred agents"
+            title="Total Recruits"
+            value={summary.totalRecruits}
+            description={`${summary.tier1Count} Tier 1, ${summary.tier2Count} Tier 2`}
           />
           <SummaryCard
             icon={Award}
-            title="Qualified Agents"
-            value={summary.qualifiedCount}
-            description="Met $40k GCI threshold"
+            title="Annual Incentive Locked"
+            value={`$${(summary.qualifiedCount * 500).toLocaleString()}`}
+            description={`${summary.qualifiedCount} qualified agents`}
           />
           <SummaryCard
             icon={DollarSign}
-            title="Annual Payout"
-            value={`$${(summary.qualifiedCount * 500).toLocaleString()}`}
-            description="Your current locked-in incentive"
+            title="Potential if All Qualify"
+            value={`$${(summary.totalRecruits * 500).toLocaleString()}`}
+            description="Your max potential payout"
+          />
+           <SummaryCard
+            icon={TrendingUp}
+            title="Qualified Agents"
+            value={summary.qualifiedCount}
+            description="Met $40k GCI threshold"
           />
         </div>
 
         {downline.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
-                <p>You do not have any referred agents in your downline yet.</p>
+                <p>You have not referred any agents yet.</p>
                 <p className="text-sm">Start recruiting to build your passive income stream.</p>
             </div>
         ) : (
@@ -247,9 +271,13 @@ export function RecruitingIncentiveTracker() {
                   {member.qualificationProgress && member.qualificationProgress.status !== 'missing_data' ? (
                      <div className="flex flex-col">
                         <span className="font-semibold text-sm">
-                            ${member.qualificationProgress.companyGciGrossInWindow.toLocaleString()}
+                            ${member.qualificationProgress.closedCompanyGciGrossInWindow.toLocaleString()}
                         </span>
-                        <Progress value={member.qualificationProgress.progressPercentage} className="h-2 mt-1" />
+                        <GciProgressBar 
+                            closed={member.qualificationProgress.closedCompanyGciGrossInWindow}
+                            pending={member.qualificationProgress.pendingCompanyGciGrossInWindow}
+                            threshold={40000}
+                        />
                         <span className="text-xs text-muted-foreground mt-1">
                             ${member.qualificationProgress.remainingToThreshold.toLocaleString()} to goal
                         </span>

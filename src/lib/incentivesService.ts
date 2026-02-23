@@ -1,85 +1,89 @@
+// src/lib/incentivesService.ts
+'use client';
+
 import {
   Firestore,
   collection,
   query,
   where,
   getDocs,
-  doc,
-  getDoc,
   Timestamp,
 } from 'firebase/firestore';
-import { add } from 'date-fns';
 import type {
   QualificationProgress,
   ReferralQualification,
 } from './types/incentives';
 
-// Assuming a Transaction type exists or defining a minimal one for this service.
+// Minimal Transaction type definition to support GCI calculation.
 interface Transaction {
   agentId: string;
-  status: 'closed';
-  closedDate: Timestamp;
+  status: 'closed' | 'pending' | 'under_contract';
+  closedDate?: Timestamp;
+  contractDate?: Timestamp; // Assumed field for pending transactions
   companyGciGross: number;
 }
 
 /**
- * Computes the qualification progress for a single recruited agent.
+ * Computes the detailed qualification progress for a single recruited agent by
+ * fetching and analyzing their transactions.
+ *
  * @param db - The Firestore instance.
- * @param recruitedAgentId - The ID of the agent whose progress to compute.
- * @returns A promise resolving to the QualificationProgress object.
+ * @param qualification - The base qualification document for the recruit.
+ * @returns A promise resolving to the enriched QualificationProgress object.
  */
 export async function computeQualificationProgress(
   db: Firestore,
-  recruitedAgentId: string
+  qualification: ReferralQualification
 ): Promise<QualificationProgress> {
-  const qualificationDocRef = doc(db, 'referral_qualifications', recruitedAgentId);
-  const qualificationSnap = await getDoc(qualificationDocRef);
-
-  if (!qualificationSnap.exists()) {
-    return {
-      status: 'missing_data',
-      companyGciGrossInWindow: 0,
-      remainingToThreshold: 40000,
-      progressPercentage: 0,
-      windowEndsAt: null,
-      timeRemainingDays: null,
-      qualifiedAt: null,
-      annualPayout: 0,
-    };
-  }
-
-  const qualificationData =
-    qualificationSnap.data() as ReferralQualification;
-  const { hireDate, thresholdCompanyGciGross } = qualificationData;
+  const {
+    hireDate,
+    windowEndsAt,
+    thresholdCompanyGciGross,
+  } = qualification;
   const hireDateObj = hireDate.toDate();
-  const windowEndsAtObj = add(hireDateObj, { years: 1 });
+  const windowEndsAtObj = windowEndsAt.toDate();
 
-  // Fetch all closed transactions for the agent
+  // Fetch all potentially relevant transactions for the agent.
+  // status can be 'closed', 'pending', or 'under_contract'
   const transactionsQuery = query(
     collection(db, 'transactions'),
-    where('agentId', '==', recruitedAgentId),
-    where('status', '==', 'closed')
+    where('agentId', '==', qualification.recruitedAgentId),
+    where('status', 'in', ['closed', 'pending', 'under_contract'])
   );
-
   const transactionsSnap = await getDocs(transactionsQuery);
 
-  // Filter transactions within the 12-month window client-side
-  let gciInWindow = 0;
+  let closedGciInWindow = 0;
+  let pendingGciInWindow = 0;
+
   transactionsSnap.forEach((doc) => {
     const transaction = doc.data() as Transaction;
-    const closedDate = transaction.closedDate.toDate();
-    if (closedDate >= hireDateObj && closedDate < windowEndsAtObj) {
-      gciInWindow += transaction.companyGciGross || 0;
+    
+    // Process CLOSED transactions
+    if (transaction.status === 'closed' && transaction.closedDate) {
+      const closedDate = transaction.closedDate.toDate();
+      if (closedDate >= hireDateObj && closedDate < windowEndsAtObj) {
+        closedGciInWindow += transaction.companyGciGross || 0;
+      }
+    }
+
+    // Process PENDING/UNDER CONTRACT transactions
+    // SCHEMA ASSUMPTION: Assumes a `contractDate` field exists for pending deals.
+    if ((transaction.status === 'pending' || transaction.status === 'under_contract') && transaction.contractDate) {
+        const contractDate = transaction.contractDate.toDate();
+        if (contractDate >= hireDateObj && contractDate < windowEndsAtObj) {
+            pendingGciInWindow += transaction.companyGciGross || 0;
+        }
     }
   });
 
+  // Qualification status is based ONLY on CLOSED GCI.
   const remainingToThreshold = Math.max(
     0,
-    thresholdCompanyGciGross - gciInWindow
+    thresholdCompanyGciGross - closedGciInWindow
   );
   const progressPercentage =
     thresholdCompanyGciGross > 0
-      ? (gciInWindow / thresholdCompanyGciGross) * 100
+      ? (closedGciInWindow / thresholdCompanyGciGross) * 100
       : 0;
 
   const timeRemainingDays = Math.max(
@@ -89,16 +93,25 @@ export async function computeQualificationProgress(
     )
   );
 
+  let currentStatus = qualification.status;
+  if (currentStatus === 'in_progress' && closedGciInWindow >= thresholdCompanyGciGross) {
+    // This logic is for UI display. A separate backend job would officially update the doc.
+    currentStatus = 'qualified';
+  } else if (currentStatus === 'in_progress' && timeRemainingDays <= 0) {
+    currentStatus = 'expired';
+  }
+
   return {
-    status: qualificationData.status,
-    companyGciGrossInWindow: gciInWindow,
+    status: currentStatus,
+    closedCompanyGciGrossInWindow: closedGciInWindow,
+    pendingCompanyGciGrossInWindow: pendingGciInWindow,
     remainingToThreshold,
     progressPercentage,
     windowEndsAt: windowEndsAtObj,
     timeRemainingDays,
-    qualifiedAt: qualificationData.qualifiedAt
-      ? qualificationData.qualifiedAt.toDate()
+    qualifiedAt: qualification.qualifiedAt
+      ? qualification.qualifiedAt.toDate()
       : null,
-    annualPayout: qualificationData.status === 'qualified' ? 500 : 0,
+    annualPayout: currentStatus === 'qualified' ? 500 : 0,
   };
 }
