@@ -21,26 +21,39 @@ const BrokerDashboardSkeleton = () => (
 export default function BrokerDashboardPage() {
     const { user, loading: userLoading } = useUser();
 
+    // DEV-ONLY: Temporary debug readout to diagnose gating issues.
+    // This will not be present in production builds.
+    if (process.env.NODE_ENV === 'development') {
+        console.log('[Broker Page Auth State]', {
+            authReady: !userLoading,
+            userUid: user?.uid ?? 'null',
+            expectedAdminUid: ADMIN_UID,
+            isAdmin: !userLoading && user?.uid === ADMIN_UID,
+        });
+    }
+
+    // 1. While auth state is loading, show a skeleton UI.
     if (userLoading) {
         return <BrokerDashboardSkeleton />;
     }
 
-    if (user?.uid !== ADMIN_UID) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <Card className="w-full max-w-md text-center">
-                    <CardHeader>
-                        <CardTitle>Access Denied</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p>Broker Command is available to staff only.</p>
-                    </CardContent>
-                </Card>
-            </div>
-        );
+    // 2. Once auth is ready, check if the user is the designated admin.
+    if (user?.uid === ADMIN_UID) {
+        // Only render the data-heavy component if the user is an authorized admin.
+        return <BrokerDashboardInner />;
     }
 
-    // Only render the inner component if the user is a confirmed admin.
-    // This inner component contains all the data fetching logic.
-    return <BrokerDashboardInner />;
+    // 3. If auth is loaded and the user is not the admin, show an access denied message.
+    return (
+        <div className="flex items-center justify-center h-full">
+            <Card className="w-full max-w-md text-center">
+                <CardHeader>
+                    <CardTitle>Access Denied</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p>Broker Command is available to staff only.</p>
+                </CardContent>
+            </Card>
+        </div>
+    );
 }
