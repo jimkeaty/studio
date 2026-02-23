@@ -8,7 +8,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
 import {
   GoogleAuthProvider,
-  signInWithRedirect,
   signInWithPopup,
   getRedirectResult,
   onAuthStateChanged,
@@ -49,7 +48,19 @@ export default function Home() {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const authCheckRef = useRef(false);
 
+    // New state for environment detection
+    const [isPreview, setIsPreview] = useState(false);
+    
     useEffect(() => {
+        // This effect runs only on the client, so `window` is safe.
+        const currentHostname = window.location.hostname;
+        const isPreviewEnv = currentHostname.endsWith('.cloudworkstations.dev');
+        setIsPreview(isPreviewEnv);
+
+        if (process.env.NODE_ENV === 'development') {
+            console.log(`[Auth Guard] Hostname: ${currentHostname}, Is Preview: ${isPreviewEnv}`);
+        }
+        
         if (authCheckRef.current) {
             return;
         }
@@ -59,14 +70,12 @@ export default function Home() {
             console.log('[Auth Guard] Starting auth checks...');
         }
         
-        // 1. Process redirect result first, exactly once.
         getRedirectResult(auth)
             .then((result) => {
                 if (result) {
                     if (process.env.NODE_ENV === 'development') {
                         console.log('[Auth Guard] getRedirectResult SUCCESS:', { uid: result.user.uid });
                     }
-                    // onAuthStateChanged will handle the redirect, so we do nothing here.
                 }
             })
             .catch((error) => {
@@ -77,7 +86,6 @@ export default function Home() {
                 setErrorMsg(error.message || 'Failed to complete sign-in after redirect.');
             });
 
-        // 2. Attach the primary state listener.
         const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
             if (process.env.NODE_ENV === 'development') {
                 console.log('[Auth Guard] onAuthStateChanged fired. User:', user?.uid ?? 'null');
@@ -111,35 +119,14 @@ export default function Home() {
         const provider = new GoogleAuthProvider();
 
         try {
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[Sign In] Setting persistence to browserLocalPersistence...');
-            }
             await setPersistence(auth, browserLocalPersistence);
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[Sign In] Persistence set successfully.');
-            }
-
-            const hostname = window.location.hostname;
-            const useRedirect = hostname.endsWith('.cloudworkstations.dev');
-            
-            if (process.env.NODE_ENV === 'development') {
-                 console.log(`[Sign In] Hostname: ${hostname}. Using method: ${useRedirect ? 'signInWithRedirect' : 'signInWithPopup'}`);
-            }
-
-            if (useRedirect) {
-                await signInWithRedirect(auth, provider);
-                // Redirect will happen, so no more code will run here.
-            } else {
-                await signInWithPopup(auth, provider);
-                // The onAuthStateChanged listener will handle redirecting to the dashboard.
-            }
+            await signInWithPopup(auth, provider);
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
             if (error.code !== 'auth/popup-closed-by-user') {
                 setErrorMsg(error.message || "Could not complete the sign-in process.");
             }
         } finally {
-            // This will only be reached in the popup flow.
             setIsSigningIn(false);
         }
     };
@@ -155,50 +142,77 @@ export default function Home() {
         );
     }
     
-    // By this point, authReady is true and we know there is no user.
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <div className="w-full max-w-md">
                 <div className="flex justify-center mb-6">
                     <Building className="h-12 w-12 text-primary" />
                 </div>
-                <Card>
-                    <CardHeader className="text-center">
-                        <CardTitle className="text-2xl font-bold">
-                            Welcome to Smart Broker USA
-                        </CardTitle>
-                        <CardDescription>
-                            Sign in to access your dashboard.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {errorMsg && (
-                            <Alert variant="destructive" className="mb-4">
+                
+                {isPreview ? (
+                     <Card>
+                        <CardHeader className="text-center">
+                            <CardTitle className="text-2xl font-bold">
+                                Preview Environment
+                            </CardTitle>
+                            <CardDescription>
+                                Authentication is disabled in this preview window.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center">
+                             <Alert>
                                 <AlertTriangle className="h-4 w-4" />
-                                <AlertTitle>Sign-in Error</AlertTitle>
-                                <AlertDescription>{errorMsg}</AlertDescription>
+                                <AlertTitle>Action Required</AlertTitle>
+                                <AlertDescription>
+                                    To sign in and test the application, please use the live production URL.
+                                </AlertDescription>
                             </Alert>
-                        )}
-                        <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={handleGoogleSignIn}
-                            disabled={isSigningIn}
-                        >
-                            {isSigningIn ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Please wait...
-                                </>
-                            ) : (
-                                <>
-                                    <GoogleIcon className="mr-2 h-5 w-5" />
-                                    Sign in with Google
-                                </>
+                            <Button asChild className="w-full mt-4">
+                                <a href="https://smart-broker-usa.web.app" target="_blank" rel="noopener noreferrer">
+                                    Open Production App
+                                </a>
+                            </Button>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <Card>
+                        <CardHeader className="text-center">
+                            <CardTitle className="text-2xl font-bold">
+                                Welcome to Smart Broker USA
+                            </CardTitle>
+                            <CardDescription>
+                                Sign in to access your dashboard.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {errorMsg && (
+                                <Alert variant="destructive" className="mb-4">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertTitle>Sign-in Error</AlertTitle>
+                                    <AlertDescription>{errorMsg}</AlertDescription>
+                                </Alert>
                             )}
-                        </Button>
-                    </CardContent>
-                </Card>
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={handleGoogleSignIn}
+                                disabled={isSigningIn}
+                            >
+                                {isSigningIn ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Please wait...
+                                    </>
+                                ) : (
+                                    <>
+                                        <GoogleIcon className="mr-2 h-5 w-5" />
+                                        Sign in with Google
+                                    </>
+                                )}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </div>
     );
