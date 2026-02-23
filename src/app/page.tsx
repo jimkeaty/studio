@@ -54,7 +54,12 @@ export default function Home() {
     useEffect(() => {
         // This effect runs only on the client, so `window` is safe.
         const currentHostname = window.location.hostname;
-        const isPreviewEnv = currentHostname.endsWith('.cloudworkstations.dev');
+        const isCloudworkstations = currentHostname.endsWith('.cloudworkstations.dev');
+
+        // Treat ONLY Studio embedded preview as "preview" (usually port 9000 or embedded param).
+        const isStudioEmbedded = window.location.search.includes('embedded=');
+        const isPreviewEnv = isCloudworkstations && (window.location.port === '9000' || isStudioEmbedded);
+
         setIsPreview(isPreviewEnv);
 
         const authTimeout = window.setTimeout(() => {
