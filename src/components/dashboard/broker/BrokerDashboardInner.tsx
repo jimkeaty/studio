@@ -79,6 +79,10 @@ export function BrokerDashboardInner() {
     const [error, setError] = useState<string | null>(null);
     
     useEffect(() => {
+        if (process.env.NODE_ENV === 'development') {
+            console.log("BrokerDashboardInner: Using Admin API route for metrics; no client-wide Firestore reads allowed.");
+        }
+
         if (!user) return; // Wait for user to be available
 
         setLoading(true);
