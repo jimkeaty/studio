@@ -17,6 +17,7 @@ import { Building, Loader2, AlertTriangle } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithRedirect,
+  signInWithPopup,
   getRedirectResult,
   onAuthStateChanged,
   setPersistence,
@@ -54,7 +55,11 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    // Process any pending redirect sign-in first.
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Auth] Page loaded. Location:', window.location.origin);
+    }
+    
+    // Process any pending redirect sign-in first. This is for the production flow.
     getRedirectResult(auth).catch((error) => {
       console.error("Redirect sign-in error:", error);
       setErrorMsg(error.message || 'Failed to sign in after redirect.');
@@ -62,9 +67,18 @@ export default function Home() {
 
     // Then, set up the listener for the definitive auth state.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Auth] Auth state changed:', {
+            authReady: true,
+            'user.uid': user?.uid ?? 'null',
+        });
+      }
+      
       if (user) {
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[Auth] User found, redirecting to /dashboard...');
+        }
         // User is signed in, redirect to the dashboard.
-        // The new page will have its own loading state.
         router.replace('/dashboard');
       } else {
         // No user is signed in, stop loading and show the login UI.
@@ -84,10 +98,28 @@ export default function Home() {
 
     try {
         await setPersistence(auth, browserLocalPersistence);
-        await signInWithRedirect(auth, provider);
+
+        const isDevEnv = process.env.NODE_ENV === 'development';
+        const isPreviewDomain = window.location.hostname.endsWith('.cloudworkstations.dev');
+
+        if (isDevEnv || isPreviewDomain) {
+            // Use signInWithPopup for dev/preview environments to avoid redirect issues
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[Auth] Using signInWithPopup() for dev/preview environment.');
+            }
+            await signInWithPopup(auth, provider);
+            // The onAuthStateChanged listener will handle the redirect.
+            setIsSigningIn(false);
+        } else {
+            // Use signInWithRedirect for production
+             if (process.env.NODE_ENV === 'development') { // This will only log in dev builds pointing to prod
+                console.log('[Auth] Using signInWithRedirect() for production environment.');
+            }
+            await signInWithRedirect(auth, provider);
+        }
     } catch (error: any) {
-        console.error("signInWithRedirect error:", error);
-        setErrorMsg(error.message || "Could not start the sign-in process.");
+        console.error("Google Sign-In Error:", error);
+        setErrorMsg(error.message || "Could not complete the sign-in process.");
         setIsSigningIn(false);
     }
   };
@@ -137,7 +169,7 @@ export default function Home() {
               {isSigningIn ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Redirecting to Google...
+                  Please wait...
                 </>
               ) : (
                 <>
