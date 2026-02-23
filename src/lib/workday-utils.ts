@@ -4,7 +4,6 @@ import {
   endOfYear,
   format,
   getDay,
-  getFullYear,
   isAfter,
   isBefore,
   parseISO,
@@ -80,7 +79,7 @@ function getEffectiveStartDate(agentStartDateStr: string): Date {
  */
 export function getAgentWorkdaysElapsedYTD(agentStartDate: string, year: number, holidays: string[]): number {
   const now = new Date();
-  const currentYear = getFullYear(now);
+  const currentYear = now.getFullYear();
 
   let calculationEndDate: Date;
   if (year < currentYear) {
