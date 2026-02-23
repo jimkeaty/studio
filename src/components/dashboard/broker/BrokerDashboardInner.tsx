@@ -1,3 +1,4 @@
+// src/components/dashboard/broker/BrokerDashboardInner.tsx
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -7,11 +8,9 @@ import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, LabelList } from 'rec
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
-import { useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { getBrokerCommandMetrics } from '@/lib/brokerCommandMetricsService';
 import type { BrokerCommandMetrics, Period } from '@/lib/types/brokerCommandMetrics';
 import { RecruitingAdminConsole } from '@/components/dashboard/broker/RecruitingAdminConsole';
 import { format } from 'date-fns';
@@ -71,45 +70,58 @@ const CategoryBreakdownCard = ({ title, icon: Icon, closed, pending }: { title: 
 );
 
 export function BrokerDashboardInner() {
+    const { user } = useUser();
     const [periodType, setPeriodType] = useState<Period['type']>('year');
-    const [year, setYear] = useState<number | null>(null);
-    const [month, setMonth] = useState<number | null>(null);
+    const [year, setYear] = useState<number>(new Date().getFullYear());
+    const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
     const [data, setData] = useState<BrokerCommandMetrics | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const db = useFirestore();
-
+    
     useEffect(() => {
-        const now = new Date();
-        setYear(now.getFullYear());
-        setMonth(now.getMonth() + 1);
-    }, []);
+        if (!user) return; // Wait for user to be available
 
-    useEffect(() => {
-        if (!db || year === null || month === null) {
-            return; // Wait for dependencies
-        }
-
-        const period: Period = periodType === 'year' ? { type: 'year', year } : { type: 'month', year, month };
-        
         setLoading(true);
         setError(null);
+        
+        const fetchData = async () => {
+            try {
+                const token = await user.getIdToken();
+                const params = new URLSearchParams({
+                    type: periodType,
+                    year: String(year),
+                });
+                if (periodType === 'month') {
+                    params.append('month', String(month));
+                }
 
-        // This fetch is now safe because this component only mounts for admins.
-        console.log("[BrokerCommand] Querying broker metrics...", { period });
-        getBrokerCommandMetrics(db, period)
-            .then(setData)
-            .catch(e => {
-                console.error("[BrokerCommand] Failed to get broker metrics:", e);
-                if (e.code === 'permission-denied') {
+                const response = await fetch(`/api/broker/command-metrics?${params.toString()}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Request failed with status ${response.status}`);
+                }
+
+                const metrics: BrokerCommandMetrics = await response.json();
+                setData(metrics);
+            } catch (e: any) {
+                 console.error("[BrokerCommand] Failed to fetch broker metrics:", e);
+                if (e.message?.includes('Forbidden')) {
                     setError("You do not have sufficient permissions to view broker command data.");
                 } else {
                     setError(e.message || "An error occurred while fetching dashboard data.");
                 }
-            })
-            .finally(() => setLoading(false));
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    }, [db, periodType, year, month]);
+        fetchData();
+    }, [user, periodType, year, month]);
 
     const { current, comparison } = useMemo(() => ({
         current: data?.currentPeriodMetrics,
@@ -121,11 +133,11 @@ export function BrokerDashboardInner() {
     const gradeNow = goal && goal > 0 ? ((current?.netRevenue.closed ?? 0) / goal) * 100 : null;
     const gradePipeline = goal && goal > 0 ? (forecast / goal) * 100 : null;
 
-    const mainChartData = (year !== null && month !== null) ? [{
+    const mainChartData = (year !== null && month !== null && current) ? [{
         name: periodType === 'year' ? String(year) : format(new Date(year, month-1), 'MMM yyyy'),
-        closed: current?.netRevenue.closed ?? 0,
-        pending: current?.netRevenue.pending ?? 0,
-        goal: current?.netRevenue.goal,
+        closed: current.netRevenue.closed ?? 0,
+        pending: current.netRevenue.pending ?? 0,
+        goal: current.netRevenue.goal,
     }] : [];
     
     const yoyChartData = (periodType === 'month' && current && comparison) ? [{
@@ -148,7 +160,7 @@ export function BrokerDashboardInner() {
         );
     }
 
-    if (!data || !current || year === null || month === null) {
+    if (!data || !current) {
         return <BrokerDashboardSkeleton />;
     }
 
@@ -210,7 +222,7 @@ export function BrokerDashboardInner() {
             </Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {periodType === 'month' && yoyChartData.length > 0 && (
+                {periodType === 'month' && yoyChartData.length > 0 && comparison && (
                      <Card>
                         <CardHeader><CardTitle>YoY Monthly Net Revenue</CardTitle><CardDescription>Closed net revenue this month vs. same month last year.</CardDescription></CardHeader>
                         <CardContent>
