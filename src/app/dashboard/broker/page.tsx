@@ -4,6 +4,7 @@ import { useUser } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BrokerDashboardInner } from '@/components/dashboard/broker/BrokerDashboardInner';
+import type { User } from 'firebase/auth';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
@@ -18,34 +19,75 @@ const BrokerDashboardSkeleton = () => (
     </div>
 );
 
+const DebugPanel = ({ userLoading, user }: { userLoading: boolean, user: User | null }) => {
+  if (process.env.NODE_ENV !== 'development') {
+    return null;
+  }
+  return (
+    <div className="fixed bottom-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-lg z-50 border-2 border-yellow-400 font-mono text-xs">
+      <h4 className="font-bold text-base text-yellow-300 mb-2">Auth Debug Panel</h4>
+      <pre>
+        {JSON.stringify(
+          {
+            'auth.loading': userLoading,
+            'user.uid': user?.uid ?? 'null',
+            'ADMIN_UID': ADMIN_UID,
+            'gate.passes': !userLoading && user?.uid === ADMIN_UID,
+          },
+          null,
+          2
+        )}
+      </pre>
+    </div>
+  );
+};
+
+
 export default function BrokerDashboardPage() {
     const { user, loading: userLoading } = useUser();
 
-    // DEV-ONLY: Temporary debug readout to diagnose gating issues.
-    // This will not be present in production builds.
-    if (process.env.NODE_ENV === 'development') {
-        console.log('[Broker Page Auth State]', {
-            authReady: !userLoading,
-            userUid: user?.uid ?? 'null',
-            expectedAdminUid: ADMIN_UID,
-            isAdmin: !userLoading && user?.uid === ADMIN_UID,
-        });
-    }
-
     // 1. While auth state is loading, show a skeleton UI.
     if (userLoading) {
-        return <BrokerDashboardSkeleton />;
+        return (
+            <>
+                <DebugPanel userLoading={userLoading} user={user} />
+                <BrokerDashboardSkeleton />
+            </>
+        );
     }
 
-    // 2. Once auth is ready, check if the user is the designated admin.
-    if (user?.uid === ADMIN_UID) {
+    // 2. Once auth is ready, check if user is logged in at all.
+    if (!user) {
+        return (
+             <div className="flex items-center justify-center h-full">
+                <DebugPanel userLoading={userLoading} user={user} />
+                <Card className="w-full max-w-md text-center">
+                    <CardHeader>
+                        <CardTitle>Authentication Required</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p>Please sign in to access the dashboard.</p>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+    
+    // 3. Now that we have a user, check if they are the admin.
+    if (user.uid === ADMIN_UID) {
         // Only render the data-heavy component if the user is an authorized admin.
-        return <BrokerDashboardInner />;
+        return (
+            <>
+                <DebugPanel userLoading={userLoading} user={user} />
+                <BrokerDashboardInner />
+            </>
+        );
     }
 
-    // 3. If auth is loaded and the user is not the admin, show an access denied message.
+    // 4. If auth is loaded and the user is not the admin, show an access denied message.
     return (
         <div className="flex items-center justify-center h-full">
+            <DebugPanel userLoading={userLoading} user={user} />
             <Card className="w-full max-w-md text-center">
                 <CardHeader>
                     <CardTitle>Access Denied</CardTitle>
