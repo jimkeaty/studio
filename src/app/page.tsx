@@ -14,6 +14,7 @@ import {
   setPersistence,
   browserLocalPersistence,
   User,
+  signInWithRedirect,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -48,20 +49,7 @@ export default function Home() {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const authCheckRef = useRef(false);
 
-    // New state for environment detection
-    const [isPreview, setIsPreview] = useState(false);
-    
     useEffect(() => {
-        // This effect runs only on the client, so `window` is safe.
-        const currentHostname = window.location.hostname;
-        const isCloudworkstations = currentHostname.endsWith('.cloudworkstations.dev');
-
-        // Treat ONLY Studio embedded preview as "preview" (usually port 9000 or embedded param).
-        const isStudioEmbedded = window.location.search.includes('embedded=');
-        const isPreviewEnv = isCloudworkstations && (window.location.port === '9000' || isStudioEmbedded);
-
-        setIsPreview(isPreviewEnv);
-
         const authTimeout = window.setTimeout(() => {
           if (process.env.NODE_ENV === 'development') {
             console.log('[Auth Guard] Failsafe timer fired. Forcing authReady=true');
@@ -70,7 +58,8 @@ export default function Home() {
         }, 2500);
 
         if (process.env.NODE_ENV === 'development') {
-            console.log(`[Auth Guard] Hostname: ${currentHostname}, Is Preview: ${isPreviewEnv}`);
+             const currentHostname = window.location.hostname;
+            console.log(`[Auth Guard] Hostname: ${currentHostname}`);
         }
         
         if (authCheckRef.current) {
@@ -134,14 +123,26 @@ export default function Home() {
 
         try {
             await setPersistence(auth, browserLocalPersistence);
-            await signInWithPopup(auth, provider);
+            
+            const currentHostname = window.location.hostname;
+            if (currentHostname.endsWith('.cloudworkstations.dev')) {
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[Auth Method] Using signInWithRedirect for cloudworkstations.dev');
+                }
+                await signInWithRedirect(auth, provider);
+            } else {
+                 if (process.env.NODE_ENV === 'development') {
+                    console.log('[Auth Method] Using signInWithPopup for other environments');
+                }
+                await signInWithPopup(auth, provider);
+                setIsSigningIn(false);
+            }
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
             if (error.code !== 'auth/popup-closed-by-user') {
                 setErrorMsg(error.message || "Could not complete the sign-in process.");
             }
-        } finally {
-            setIsSigningIn(false);
+             setIsSigningIn(false);
         }
     };
 
@@ -163,70 +164,43 @@ export default function Home() {
                     <Building className="h-12 w-12 text-primary" />
                 </div>
                 
-                {isPreview ? (
-                     <Card>
-                        <CardHeader className="text-center">
-                            <CardTitle className="text-2xl font-bold">
-                                Preview Environment
-                            </CardTitle>
-                            <CardDescription>
-                                Authentication is disabled in this preview window.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="text-center">
-                             <Alert>
+                <Card>
+                    <CardHeader className="text-center">
+                        <CardTitle className="text-2xl font-bold">
+                            Welcome to Smart Broker USA
+                        </CardTitle>
+                        <CardDescription>
+                            Sign in to access your dashboard.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {errorMsg && (
+                            <Alert variant="destructive" className="mb-4">
                                 <AlertTriangle className="h-4 w-4" />
-                                <AlertTitle>Action Required</AlertTitle>
-                                <AlertDescription>
-                                    To sign in and test the application, please use the live production URL.
-                                </AlertDescription>
+                                <AlertTitle>Sign-in Error</AlertTitle>
+                                <AlertDescription>{errorMsg}</AlertDescription>
                             </Alert>
-                            <Button asChild className="w-full mt-4">
-                                <a href="https://smart-broker-usa.web.app" target="_blank" rel="noopener noreferrer">
-                                    Open Production App
-                                </a>
-                            </Button>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <Card>
-                        <CardHeader className="text-center">
-                            <CardTitle className="text-2xl font-bold">
-                                Welcome to Smart Broker USA
-                            </CardTitle>
-                            <CardDescription>
-                                Sign in to access your dashboard.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {errorMsg && (
-                                <Alert variant="destructive" className="mb-4">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <AlertTitle>Sign-in Error</AlertTitle>
-                                    <AlertDescription>{errorMsg}</AlertDescription>
-                                </Alert>
+                        )}
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleGoogleSignIn}
+                            disabled={isSigningIn}
+                        >
+                            {isSigningIn ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Please wait...
+                                </>
+                            ) : (
+                                <>
+                                    <GoogleIcon className="mr-2 h-5 w-5" />
+                                    Sign in with Google
+                                </>
                             )}
-                            <Button
-                                variant="outline"
-                                className="w-full"
-                                onClick={handleGoogleSignIn}
-                                disabled={isSigningIn}
-                            >
-                                {isSigningIn ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Please wait...
-                                    </>
-                                ) : (
-                                    <>
-                                        <GoogleIcon className="mr-2 h-5 w-5" />
-                                        Sign in with Google
-                                    </>
-                                )}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                )}
+                        </Button>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );
