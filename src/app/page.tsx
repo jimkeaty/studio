@@ -56,14 +56,26 @@ export default function Home() {
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('[Auth] Page loaded. Location:', window.location.origin);
+      console.log('[Auth] Page loaded. Hostname:', window.location.hostname);
     }
     
     // Process any pending redirect sign-in first. This is for the production flow.
-    getRedirectResult(auth).catch((error) => {
-      console.error("Redirect sign-in error:", error);
-      setErrorMsg(error.message || 'Failed to sign in after redirect.');
-    });
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Auth] getRedirectResult success. User UID:', result.user.uid);
+          }
+          // The onAuthStateChanged listener will handle the redirect to dashboard.
+        }
+      })
+      .catch((error) => {
+        console.error("Redirect sign-in error:", error);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Auth] getRedirectResult error. Code:', error.code, 'Message:', error.message);
+        }
+        setErrorMsg(error.message || 'Failed to sign in after redirect.');
+      });
 
     // Then, set up the listener for the definitive auth state.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -99,23 +111,21 @@ export default function Home() {
     try {
         await setPersistence(auth, browserLocalPersistence);
 
-        const isDevEnv = process.env.NODE_ENV === 'development';
         const isPreviewDomain = window.location.hostname.endsWith('.cloudworkstations.dev');
 
-        if (isDevEnv || isPreviewDomain) {
-            // Use signInWithPopup for dev/preview environments to avoid redirect issues
+        if (isPreviewDomain) {
             if (process.env.NODE_ENV === 'development') {
-                console.log('[Auth] Using signInWithPopup() for dev/preview environment.');
+                console.log('[Auth] Using signInWithRedirect() for preview domain.');
+            }
+            await signInWithRedirect(auth, provider);
+            // The browser will redirect, and the result will be handled by getRedirectResult on page load.
+        } else {
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[Auth] Using signInWithPopup() for local/other environment.');
             }
             await signInWithPopup(auth, provider);
             // The onAuthStateChanged listener will handle the redirect.
             setIsSigningIn(false);
-        } else {
-            // Use signInWithRedirect for production
-             if (process.env.NODE_ENV === 'development') { // This will only log in dev builds pointing to prod
-                console.log('[Auth] Using signInWithRedirect() for production environment.');
-            }
-            await signInWithRedirect(auth, provider);
         }
     } catch (error: any) {
         console.error("Google Sign-In Error:", error);
