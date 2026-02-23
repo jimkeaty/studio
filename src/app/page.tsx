@@ -7,14 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
 import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  getRedirectResult,
   onAuthStateChanged,
-  setPersistence,
-  browserLocalPersistence,
   User,
-  signInWithRedirect,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -48,8 +42,14 @@ export default function Home() {
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const authCheckRef = useRef(false);
+    const [isPreview, setIsPreview] = useState(false);
 
     useEffect(() => {
+        const currentHostname = window.location.hostname;
+        const isCloudworkstations = currentHostname.endsWith('.cloudworkstations.dev');
+        const isPreviewEnv = isCloudworkstations;
+        setIsPreview(isPreviewEnv);
+        
         const authTimeout = window.setTimeout(() => {
           if (process.env.NODE_ENV === 'development') {
             console.log('[Auth Guard] Failsafe timer fired. Forcing authReady=true');
@@ -57,94 +57,26 @@ export default function Home() {
           setAuthReady(true);
         }, 2500);
 
-        if (process.env.NODE_ENV === 'development') {
-             const currentHostname = window.location.hostname;
-            console.log(`[Auth Guard] Hostname: ${currentHostname}`);
-        }
-        
         if (authCheckRef.current) {
             return;
         }
         authCheckRef.current = true;
-
-        if (process.env.NODE_ENV === 'development') {
-            console.log('[Auth Guard] Starting auth checks...');
-        }
         
-        getRedirectResult(auth)
-            .then((result) => {
-                if (result) {
-                    if (process.env.NODE_ENV === 'development') {
-                        console.log('[Auth Guard] getRedirectResult SUCCESS:', { uid: result.user.uid });
-                    }
-                }
-            })
-            .catch((error) => {
-                console.error("[Auth Guard] getRedirectResult ERROR:", error);
-                if (process.env.NODE_ENV === 'development') {
-                    console.log('[Auth Guard] getRedirectResult ERROR details:', { code: error.code, message: error.message });
-                }
-                setErrorMsg(error.message || 'Failed to complete sign-in after redirect.');
-            });
-
         const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
             window.clearTimeout(authTimeout);
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[Auth Guard] onAuthStateChanged fired. User:', user?.uid ?? 'null');
-            }
-
             if (user) {
-                if (process.env.NODE_ENV === 'development') {
-                    console.log('[Auth Guard] User is signed in, redirecting to /dashboard');
-                }
                 router.replace('/dashboard');
             } else {
-                if (process.env.NODE_ENV === 'development') {
-                    console.log('[Auth Guard] No user found. Setting authReady=true');
-                }
                 setAuthReady(true);
             }
         });
 
         return () => {
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[Auth Guard] Cleaning up onAuthStateChanged listener.');
-            }
             window.clearTimeout(authTimeout);
             unsubscribe();
         };
     }, [router]);
 
-
-    const handleGoogleSignIn = async () => {
-        setIsSigningIn(true);
-        setErrorMsg(null);
-        const provider = new GoogleAuthProvider();
-
-        try {
-            await setPersistence(auth, browserLocalPersistence);
-            
-            const currentHostname = window.location.hostname;
-            if (currentHostname.endsWith('.cloudworkstations.dev')) {
-                if (process.env.NODE_ENV === 'development') {
-                    console.log('[Auth Method] Using signInWithRedirect for cloudworkstations.dev');
-                }
-                await signInWithRedirect(auth, provider);
-            } else {
-                 if (process.env.NODE_ENV === 'development') {
-                    console.log('[Auth Method] Using signInWithPopup for other environments');
-                }
-                await signInWithPopup(auth, provider);
-                setIsSigningIn(false);
-            }
-        } catch (error: any) {
-            console.error("Google Sign-In Error:", error);
-            if (error.code !== 'auth/popup-closed-by-user') {
-                setErrorMsg(error.message || "Could not complete the sign-in process.");
-            }
-             setIsSigningIn(false);
-        }
-    };
 
     if (!authReady) {
         return (
@@ -181,24 +113,40 @@ export default function Home() {
                                 <AlertDescription>{errorMsg}</AlertDescription>
                             </Alert>
                         )}
-                        <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={handleGoogleSignIn}
-                            disabled={isSigningIn}
-                        >
-                            {isSigningIn ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Please wait...
-                                </>
-                            ) : (
-                                <>
-                                    <GoogleIcon className="mr-2 h-5 w-5" />
-                                    Sign in with Google
-                                </>
-                            )}
-                        </Button>
+                        
+                        {isPreview ? (
+                            <Alert>
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertTitle>Preview Mode</AlertTitle>
+                                <AlertDescription>
+                                    Authentication is disabled in this preview environment. Please use the live application to sign in.
+                                    <Button asChild className="w-full mt-4">
+                                        <a href="https://smart-broker-usa.web.app" target="_blank" rel="noopener noreferrer">
+                                            Open Live App
+                                        </a>
+                                    </Button>
+                                </AlertDescription>
+                            </Alert>
+                        ) : (
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setErrorMsg("Sign-in is temporarily disabled. Please use the live app link.")}
+                                disabled={isSigningIn}
+                            >
+                                {isSigningIn ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Please wait...
+                                    </>
+                                ) : (
+                                    <>
+                                        <GoogleIcon className="mr-2 h-5 w-5" />
+                                        Sign in with Google
+                                    </>
+                                )}
+                            </Button>
+                        )}
                     </CardContent>
                 </Card>
             </div>
