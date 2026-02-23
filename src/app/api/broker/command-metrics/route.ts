@@ -25,6 +25,7 @@ if (!admin.apps.length) {
   try {
     admin.initializeApp({
       credential: admin.credential.applicationDefault(),
+      projectId: 'smart-broker-usa', // Explicitly set project ID
     });
   } catch (error) {
     console.error('Firebase admin initialization error', error);
