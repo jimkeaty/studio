@@ -57,6 +57,13 @@ export default function Home() {
         const isPreviewEnv = currentHostname.endsWith('.cloudworkstations.dev');
         setIsPreview(isPreviewEnv);
 
+        const authTimeout = window.setTimeout(() => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Auth Guard] Failsafe timer fired. Forcing authReady=true');
+          }
+          setAuthReady(true);
+        }, 2500);
+
         if (process.env.NODE_ENV === 'development') {
             console.log(`[Auth Guard] Hostname: ${currentHostname}, Is Preview: ${isPreviewEnv}`);
         }
@@ -87,6 +94,7 @@ export default function Home() {
             });
 
         const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+            window.clearTimeout(authTimeout);
             if (process.env.NODE_ENV === 'development') {
                 console.log('[Auth Guard] onAuthStateChanged fired. User:', user?.uid ?? 'null');
             }
@@ -108,6 +116,7 @@ export default function Home() {
             if (process.env.NODE_ENV === 'development') {
                 console.log('[Auth Guard] Cleaning up onAuthStateChanged listener.');
             }
+            window.clearTimeout(authTimeout);
             unsubscribe();
         };
     }, [router]);
