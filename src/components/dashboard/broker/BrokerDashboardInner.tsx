@@ -1,4 +1,3 @@
-// src/components/dashboard/broker/BrokerDashboardInner.tsx
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -90,7 +89,7 @@ export function BrokerDashboardInner() {
         
         const fetchData = async () => {
             try {
-                const token = await user.getIdToken();
+                const token = await user.getIdToken(true);
                 const params = new URLSearchParams({
                     type: periodType,
                     year: String(year),
