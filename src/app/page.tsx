@@ -1,19 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
-
 import {
   GoogleAuthProvider,
   signInWithRedirect,
@@ -22,158 +14,192 @@ import {
   onAuthStateChanged,
   setPersistence,
   browserLocalPersistence,
+  User,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" {...props}>
-    <g fill="none" fillRule="evenodd">
-      <path
-        fill="#4285F4"
-        d="M17.64 9.2045c0-.6364-.0568-1.2727-.1705-1.8182H9v3.4545h4.8409c-.2159.9773-.625 1.875-1.5341 2.5682v2.3182h2.8864c1.6818-1.5568 2.6591-3.75 2.6591-6.5227z"
-      />
-      <path
-        fill="#34A853"
-        d="M9 18c2.4545 0 4.5114-.8068 6.0227-2.1818l-2.8864-2.3182c-.8068.5455-1.8409.8636-3.1363.8636-2.4205 0-4.4659-1.625-5.1932-3.8182H.9773v2.375C2.4886 16.9205 5.4545 18 9 18z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M3.8068 10.7727c-.1818-.5454-.2841-1.125-.2841-1.7272s.1023-1.1818.2841-1.7273V5.0909H.9773C.6023 6.2841.3864 7.5455.3864 8.9545s.2159 2.6705.5909 3.8636l2.8295-2.0454z"
-      />
-      <path
-        fill="#EA4335"
-        d="M9 3.5455c1.3295 0 2.5114.4545 3.4432 1.3523l2.5568-2.5569C13.5114 1.1364 11.4545.3182 9 .3182c-3.5455 0-6.5114 2.0795-8.0227 4.8636L3.8068 7.5c.7273-2.1932 2.7727-3.9545 5.1932-3.9545z"
-      />
-    </g>
-  </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" {...props}>
+      <g fill="none" fillRule="evenodd">
+        <path
+          fill="#4285F4"
+          d="M17.64 9.2045c0-.6364-.0568-1.2727-.1705-1.8182H9v3.4545h4.8409c-.2159.9773-.625 1.875-1.5341 2.5682v2.3182h2.8864c1.6818-1.5568 2.6591-3.75 2.6591-6.5227z"
+        />
+        <path
+          fill="#34A853"
+          d="M9 18c2.4545 0 4.5114-.8068 6.0227-2.1818l-2.8864-2.3182c-.8068.5455-1.8409.8636-3.1363.8636-2.4205 0-4.4659-1.625-5.1932-3.8182H.9773v2.375C2.4886 16.9205 5.4545 18 9 18z"
+        />
+        <path
+          fill="#FBBC05"
+          d="M3.8068 10.7727c-.1818-.5454-.2841-1.125-.2841-1.7272s.1023-1.1818.2841-1.7273V5.0909H.9773C.6023 6.2841.3864 7.5455.3864 8.9545s.2159 2.6705.5909 3.8636l2.8295-2.0454z"
+        />
+        <path
+          fill="#EA4335"
+          d="M9 3.5455c1.3295 0 2.5114.4545 3.4432 1.3523l2.5568-2.5569C13.5114 1.1364 11.4545.3182 9 .3182c-3.5455 0-6.5114 2.0795-8.0227 4.8636L3.8068 7.5c.7273-2.1932 2.7727-3.9545 5.1932-3.9545z"
+        />
+      </g>
+    </svg>
 );
 
+
 export default function Home() {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const router = useRouter();
+    const [authReady, setAuthReady] = useState(false);
+    const [isSigningIn, setIsSigningIn] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const authCheckRef = useRef(false);
 
-  useEffect(() => {
-    // This is the primary auth state listener. It's the single source of truth.
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    useEffect(() => {
+        if (authCheckRef.current) {
+            return;
+        }
+        authCheckRef.current = true;
+
         if (process.env.NODE_ENV === 'development') {
-            console.log('[Auth] onAuthStateChanged fired. User:', user?.uid ?? 'null');
+            console.log('[Auth Guard] Starting auth checks...');
         }
-      if (user) {
-        // User is signed in (from a popup, redirect, or existing session).
-        // Redirect to the dashboard.
-        router.replace('/dashboard');
-      } else {
-        // No user is signed in. Stop loading and show the login page.
-        setIsLoading(false);
-      }
-    });
+        
+        // 1. Process redirect result first, exactly once.
+        getRedirectResult(auth)
+            .then((result) => {
+                if (result) {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log('[Auth Guard] getRedirectResult SUCCESS:', { uid: result.user.uid });
+                    }
+                    // onAuthStateChanged will handle the redirect, so we do nothing here.
+                }
+            })
+            .catch((error) => {
+                console.error("[Auth Guard] getRedirectResult ERROR:", error);
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[Auth Guard] getRedirectResult ERROR details:', { code: error.code, message: error.message });
+                }
+                setErrorMsg(error.message || 'Failed to complete sign-in after redirect.');
+            });
 
-    // Also process any pending redirect results on initial load.
-    // We don't need to act on the result directly, as onAuthStateChanged will fire if it's successful.
-    getRedirectResult(auth).catch((error) => {
-        console.error("Error processing redirect result:", error);
-        setErrorMsg(error.message || 'Failed to complete sign-in after redirect.');
-        setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [router]);
-
-
-  const handleGoogleSignIn = async () => {
-    setIsSigningIn(true);
-    setErrorMsg(null);
-    const provider = new GoogleAuthProvider();
-
-    try {
-        await setPersistence(auth, browserLocalPersistence);
-
-        const isDevEnvironment = window.location.hostname.endsWith('.cloudworkstations.dev') || window.location.hostname === 'localhost';
-
-        if (isDevEnvironment) {
+        // 2. Attach the primary state listener.
+        const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
             if (process.env.NODE_ENV === 'development') {
-                console.log(`[Auth] Using signInWithPopup() for host: ${window.location.hostname}`);
+                console.log('[Auth Guard] onAuthStateChanged fired. User:', user?.uid ?? 'null');
             }
-            await signInWithPopup(auth, provider);
-            // The onAuthStateChanged listener will handle redirecting to the dashboard.
-        } else {
+
+            if (user) {
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[Auth Guard] User is signed in, redirecting to /dashboard');
+                }
+                router.replace('/dashboard');
+            } else {
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[Auth Guard] No user found. Setting authReady=true');
+                }
+                setAuthReady(true);
+            }
+        });
+
+        return () => {
             if (process.env.NODE_ENV === 'development') {
-                console.log(`[Auth] Using signInWithRedirect() for host: ${window.location.hostname}`);
+                console.log('[Auth Guard] Cleaning up onAuthStateChanged listener.');
             }
-            // This will trigger a full page redirect.
-            await signInWithRedirect(auth, provider);
+            unsubscribe();
+        };
+    }, [router]);
+
+
+    const handleGoogleSignIn = async () => {
+        setIsSigningIn(true);
+        setErrorMsg(null);
+        const provider = new GoogleAuthProvider();
+
+        try {
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[Sign In] Setting persistence to browserLocalPersistence...');
+            }
+            await setPersistence(auth, browserLocalPersistence);
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[Sign In] Persistence set successfully.');
+            }
+
+            const hostname = window.location.hostname;
+            const useRedirect = hostname.endsWith('.cloudworkstations.dev');
+            
+            if (process.env.NODE_ENV === 'development') {
+                 console.log(`[Sign In] Hostname: ${hostname}. Using method: ${useRedirect ? 'signInWithRedirect' : 'signInWithPopup'}`);
+            }
+
+            if (useRedirect) {
+                await signInWithRedirect(auth, provider);
+                // Redirect will happen, so no more code will run here.
+            } else {
+                await signInWithPopup(auth, provider);
+                // The onAuthStateChanged listener will handle redirecting to the dashboard.
+            }
+        } catch (error: any) {
+            console.error("Google Sign-In Error:", error);
+            if (error.code !== 'auth/popup-closed-by-user') {
+                setErrorMsg(error.message || "Could not complete the sign-in process.");
+            }
+        } finally {
+            // This will only be reached in the popup flow.
+            setIsSigningIn(false);
         }
-    } catch (error: any) {
-        console.error("Google Sign-In Error:", error);
-        // Don't show an error message if the user simply closes the popup.
-        if (error.code !== 'auth/popup-closed-by-user') {
-          setErrorMsg(error.message || "Could not complete the sign-in process.");
-        }
-    } finally {
-        // This will only be reached in the popup flow.
-        setIsSigningIn(false);
+    };
+
+    if (!authReady) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-background p-4">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-muted-foreground">Authenticating...</p>
+                </div>
+            </div>
+        );
     }
-  };
-
-  if (isLoading) {
+    
+    // By this point, authReady is true and we know there is no user.
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Authenticating...</p>
+        <div className="flex min-h-screen items-center justify-center bg-background p-4">
+            <div className="w-full max-w-md">
+                <div className="flex justify-center mb-6">
+                    <Building className="h-12 w-12 text-primary" />
+                </div>
+                <Card>
+                    <CardHeader className="text-center">
+                        <CardTitle className="text-2xl font-bold">
+                            Welcome to Smart Broker USA
+                        </CardTitle>
+                        <CardDescription>
+                            Sign in to access your dashboard.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {errorMsg && (
+                            <Alert variant="destructive" className="mb-4">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertTitle>Sign-in Error</AlertTitle>
+                                <AlertDescription>{errorMsg}</AlertDescription>
+                            </Alert>
+                        )}
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleGoogleSignIn}
+                            disabled={isSigningIn}
+                        >
+                            {isSigningIn ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Please wait...
+                                </>
+                            ) : (
+                                <>
+                                    <GoogleIcon className="mr-2 h-5 w-5" />
+                                    Sign in with Google
+                                </>
+                            )}
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
-      </div>
     );
-  }
-
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
-        <div className="flex justify-center mb-6">
-          <Building className="h-12 w-12 text-primary" />
-        </div>
-
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">
-              Welcome to Smart Broker USA
-            </CardTitle>
-            <CardDescription>
-              Sign in to access your dashboard.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            {errorMsg && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Sign-in Error</AlertTitle>
-                <AlertDescription>{errorMsg}</AlertDescription>
-              </Alert>
-            )}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleGoogleSignIn}
-              disabled={isSigningIn}
-            >
-              {isSigningIn ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Please wait...
-                </>
-              ) : (
-                <>
-                  <GoogleIcon className="mr-2 h-5 w-5" />
-                  Sign in with Google
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
 }
