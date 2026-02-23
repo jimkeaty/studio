@@ -50,6 +50,9 @@ export async function computeQualificationProgress(
     where('agentId', '==', qualification.recruitedAgentId),
     where('status', 'in', ['closed', 'pending', 'under_contract'])
   );
+  
+  // This query will fail for any user who is not the agent themselves,
+  // as per security rules. The caller MUST handle this exception.
   const transactionsSnap = await getDocs(transactionsQuery);
 
   let closedGciInWindow = 0;

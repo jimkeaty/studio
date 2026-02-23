@@ -144,6 +144,13 @@ function getMockFullDownline(agentId: string): DownlineMember[] {
       hireDate: subDays(now, 90),
       qualificationProgress: createMockProgress('in_progress', 8000, 12000),
     },
+     {
+      agentId: 'missing-data-agent',
+      displayName: 'Missing Data Agent',
+      tier: 1,
+      hireDate: subDays(now, 60),
+      qualificationProgress: null, // Simulate a permissions error
+    },
   ];
 }
 
@@ -184,11 +191,16 @@ export async function getFullDownline(
         qualificationDocs.push(qualDocSnap.exists() ? qualDocSnap.data() as ReferralQualification : null);
     }
     
-    // Fetch qualification progress for all downline members in parallel
-    const progressPromises = qualificationDocs.map((qualDoc) =>
-        qualDoc ? computeQualificationProgress(db, qualDoc) : Promise.resolve(null)
+    // Fetch qualification progress for all downline members, handling individual errors.
+    const progressResults = await Promise.all(
+      qualificationDocs.map((qualDoc) => {
+        if (!qualDoc) return Promise.resolve(null);
+        return computeQualificationProgress(db, qualDoc).catch(err => {
+          console.error(`Could not compute progress for ${qualDoc.recruitedAgentId}:`, err.message);
+          return null; // Return null on failure for this specific recruit
+        });
+      })
     );
-    const progressResults = await Promise.all(progressPromises);
     
     return allReferrals.map((referral, index) => {
       return {
@@ -199,8 +211,8 @@ export async function getFullDownline(
         qualificationProgress: progressResults[index],
       };
     });
-  } catch(error) {
-      console.error("Failed to fetch real downline data:", error);
+  } catch(error: any) {
+      console.error("Failed to fetch real downline data:", error.message);
       // If there's an error (e.g., permissions), fall back to mock data in dev.
       if (process.env.NODE_ENV === 'development') {
           return getMockFullDownline(agentId);
@@ -231,9 +243,15 @@ export async function getAllBrokerageRecruits(db: Firestore): Promise<DownlineMe
         qualDocsSnap.forEach(d => qualMap.set(d.id, d.data() as ReferralQualification));
 
         const progressResults = await Promise.all(
-            Array.from(qualMap.values()).map(q => computeQualificationProgress(db, q))
+            Array.from(qualMap.values()).map(q => 
+                computeQualificationProgress(db, q).catch(err => {
+                    console.error(`Admin Console: Could not compute progress for ${q.recruitedAgentId}:`, err.message);
+                    return null;
+                })
+            )
         );
-        const progressMap = new Map<string, QualificationProgress>();
+        
+        const progressMap = new Map<string, QualificationProgress | null>();
         progressResults.forEach((p, i) => {
             const qual = Array.from(qualMap.values())[i];
             progressMap.set(qual.recruitedAgentId, p);
@@ -257,8 +275,8 @@ export async function getAllBrokerageRecruits(db: Firestore): Promise<DownlineMe
             };
         });
 
-    } catch (error) {
-        console.error("Failed to fetch brokerage-wide recruits:", error);
+    } catch (error: any) {
+        console.error("Failed to fetch brokerage-wide recruits:", error.message);
         if (process.env.NODE_ENV === 'development') {
             return getMockFullDownline('broker-admin');
         }
