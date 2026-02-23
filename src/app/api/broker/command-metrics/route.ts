@@ -230,7 +230,7 @@ export async function GET(req: NextRequest) {
         });
     }
     
-    if (error.code === 'auth/id-token-expired' || error.code === 'auth/argument-error') {
+    if (error.code && error.code.startsWith('auth/')) {
         return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

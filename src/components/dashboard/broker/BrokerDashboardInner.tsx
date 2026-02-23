@@ -12,7 +12,7 @@ import { useUser } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { BrokerCommandMetrics, Period } from '@/lib/types/brokerCommandMetrics';
-import { RecruitingAdminConsole } from '@/components/dashboard/broker/RecruitingAdminConsole';
+// import { RecruitingAdminConsole } from '@/components/dashboard/broker/RecruitingAdminConsole';
 import { format } from 'date-fns';
 
 const formatCurrency = (amount: number | null | undefined, compact = false) => {
@@ -80,7 +80,7 @@ export function BrokerDashboardInner() {
     
     useEffect(() => {
         if (process.env.NODE_ENV === 'development') {
-            console.log("BrokerDashboardInner: Using Admin API route for metrics; no client-wide Firestore reads allowed.");
+            console.log("Broker Command running in API-only mode (no client Firestore reads).");
         }
 
         if (!user) return; // Wait for user to be available
@@ -126,9 +126,12 @@ export function BrokerDashboardInner() {
                 setData(metrics);
             } catch (e: any) {
                  console.error("[BrokerCommand] Failed to fetch broker metrics:", e);
-                if (e.message?.includes('Forbidden')) {
+                if (e.message?.includes('Forbidden') || e.message?.includes('permission-denied') ) {
                     setError("You do not have sufficient permissions to view broker command data.");
-                } else {
+                } else if (e.message?.includes('Invalid token')) {
+                    setError(`Authorization Error: ${e.message}. Please try signing out and back in.`);
+                }
+                else {
                     setError(e.message || "An error occurred while fetching dashboard data.");
                 }
             } finally {
@@ -288,8 +291,10 @@ export function BrokerDashboardInner() {
                     <CategoryBreakdownCard title="Commercial Sale" icon={BuildingIcon} closed={current.categoryBreakdown.closed.commercial_sale} pending={current.categoryBreakdown.pending.commercial_sale} />
                  </div>
             </div>
-
-            <RecruitingAdminConsole />
+            {/*
+                TODO: The RecruitingAdminConsole must be migrated to a secure Admin API route.
+                It has been removed for now to prevent client-side permission errors.
+            */}
         </div>
     );
 }
