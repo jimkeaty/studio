@@ -55,50 +55,29 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Auth] Page loaded. Hostname:', window.location.hostname);
-    }
-    
-    // Process any pending redirect sign-in first. This is for the production flow.
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[Auth] getRedirectResult success. User UID:', result.user.uid);
-          }
-          // The onAuthStateChanged listener will handle the redirect to dashboard.
-        }
-      })
-      .catch((error) => {
-        console.error("Redirect sign-in error:", error);
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[Auth] getRedirectResult error. Code:', error.code, 'Message:', error.message);
-        }
-        setErrorMsg(error.message || 'Failed to sign in after redirect.');
-      });
-
-    // Then, set up the listener for the definitive auth state.
+    // This is the primary auth state listener. It's the single source of truth.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Auth] Auth state changed:', {
-            authReady: true,
-            'user.uid': user?.uid ?? 'null',
-        });
-      }
-      
-      if (user) {
         if (process.env.NODE_ENV === 'development') {
-            console.log('[Auth] User found, redirecting to /dashboard...');
+            console.log('[Auth] onAuthStateChanged fired. User:', user?.uid ?? 'null');
         }
-        // User is signed in, redirect to the dashboard.
+      if (user) {
+        // User is signed in (from a popup, redirect, or existing session).
+        // Redirect to the dashboard.
         router.replace('/dashboard');
       } else {
-        // No user is signed in, stop loading and show the login UI.
+        // No user is signed in. Stop loading and show the login page.
         setIsLoading(false);
       }
     });
 
-    // Clean up the listener on component unmount.
+    // Also process any pending redirect results on initial load.
+    // We don't need to act on the result directly, as onAuthStateChanged will fire if it's successful.
+    getRedirectResult(auth).catch((error) => {
+        console.error("Error processing redirect result:", error);
+        setErrorMsg(error.message || 'Failed to complete sign-in after redirect.');
+        setIsLoading(false);
+    });
+
     return () => unsubscribe();
   }, [router]);
 
@@ -111,25 +90,29 @@ export default function Home() {
     try {
         await setPersistence(auth, browserLocalPersistence);
 
-        const isPreviewDomain = window.location.hostname.endsWith('.cloudworkstations.dev');
+        const isDevEnvironment = window.location.hostname.endsWith('.cloudworkstations.dev') || window.location.hostname === 'localhost';
 
-        if (isPreviewDomain) {
+        if (isDevEnvironment) {
             if (process.env.NODE_ENV === 'development') {
-                console.log('[Auth] Using signInWithRedirect() for preview domain.');
-            }
-            await signInWithRedirect(auth, provider);
-            // The browser will redirect, and the result will be handled by getRedirectResult on page load.
-        } else {
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[Auth] Using signInWithPopup() for local/other environment.');
+                console.log(`[Auth] Using signInWithPopup() for host: ${window.location.hostname}`);
             }
             await signInWithPopup(auth, provider);
-            // The onAuthStateChanged listener will handle the redirect.
-            setIsSigningIn(false);
+            // The onAuthStateChanged listener will handle redirecting to the dashboard.
+        } else {
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`[Auth] Using signInWithRedirect() for host: ${window.location.hostname}`);
+            }
+            // This will trigger a full page redirect.
+            await signInWithRedirect(auth, provider);
         }
     } catch (error: any) {
         console.error("Google Sign-In Error:", error);
-        setErrorMsg(error.message || "Could not complete the sign-in process.");
+        // Don't show an error message if the user simply closes the popup.
+        if (error.code !== 'auth/popup-closed-by-user') {
+          setErrorMsg(error.message || "Could not complete the sign-in process.");
+        }
+    } finally {
+        // This will only be reached in the popup flow.
         setIsSigningIn(false);
     }
   };
