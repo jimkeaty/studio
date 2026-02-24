@@ -1,21 +1,19 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
 import {
-  onAuthStateChanged,
-  User,
   GoogleAuthProvider,
   signInWithRedirect,
-  getRedirectResult,
   setPersistence,
   browserLocalPersistence,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { useUser } from '@/firebase'; // Use the main hook
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" {...props}>
@@ -43,7 +41,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function Home() {
     const router = useRouter();
-    const [authReady, setAuthReady] = useState(false);
+    const { user, loading: userLoading } = useUser();
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isPreview, setIsPreview] = useState(false);
@@ -54,52 +52,23 @@ export default function Home() {
         const isStudioEmbedded = window.location.search.includes('embedded=');
         const isPreviewEnv = isCloudworkstations && (window.location.port === '9000' || isStudioEmbedded);
         setIsPreview(isPreviewEnv);
+    }, []);
 
-        const authTimeout = window.setTimeout(() => {
-            if (process.env.NODE_ENV === 'development') {
-                console.log('[Auth Guard] Failsafe timer fired. Forcing authReady=true');
-            }
-            setAuthReady(true);
-        }, 3000); // Increased timeout slightly
-
-        // Process any redirect result from Google Sign-In.
-        // This is called to trigger the auth state change, which is then handled by onAuthStateChanged.
-        getRedirectResult(auth).catch((error) => {
-            console.error("Error processing redirect result:", error);
-            setErrorMsg(error.message);
-            setAuthReady(true); // Show login UI with error on redirect failure
-            window.clearTimeout(authTimeout);
-        });
-        
-        // onAuthStateChanged is the single source of truth for the user's sign-in state.
-        const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-            window.clearTimeout(authTimeout);
-            if (user) {
-                // A user is signed in (from a session or a successful redirect).
-                // We redirect them to the dashboard. We don't setAuthReady(true) here
-                // to avoid a brief flash of the login page before the redirect happens.
-                router.replace('/dashboard');
-            } else {
-                // No user is signed in. It's now safe to show the login UI.
-                setAuthReady(true);
-            }
-        });
-
-        return () => {
-            window.clearTimeout(authTimeout);
-            unsubscribe();
-        };
-    }, [router]);
+    useEffect(() => {
+      // Redirect if user is found
+      if (!userLoading && user) {
+        router.replace('/dashboard');
+      }
+    }, [user, userLoading, router]);
     
     const handleSignIn = async () => {
         setIsSigningIn(true);
         setErrorMsg(null);
         try {
-            // Set persistence BEFORE initiating the sign-in flow.
             await setPersistence(auth, browserLocalPersistence);
             const provider = new GoogleAuthProvider();
-            // Use redirect, as it's more reliable in cross-origin or sandboxed environments.
             await signInWithRedirect(auth, provider);
+            // The page will redirect, and getRedirectResult will be handled by the provider
         } catch (error: any) {
             console.error("Sign-in initiation error:", error);
             setErrorMsg(error.message);
@@ -107,8 +76,8 @@ export default function Home() {
         }
     };
 
-
-    if (!authReady && !isPreview) {
+    // While checking for user or if user exists (and redirect is happening)
+    if (userLoading || user) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background p-4">
                 <div className="flex flex-col items-center gap-4">
