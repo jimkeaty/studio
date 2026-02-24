@@ -1,5 +1,8 @@
+
 import { collection, getDocs, query, where, Firestore } from 'firebase/firestore';
 import type { AgentYearRollup } from '@/lib/types';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // Define the shape of the override document
 // based on the data contract.
@@ -34,7 +37,18 @@ export async function fetchRollupsWithOverrides(db: Firestore, year: number): Pr
 
   // 1. Fetch all base rollups for the given year.
   const rollupsQuery = query(collection(db, 'agentYearRollups'), where('year', '==', year));
-  const rollupsSnap = await getDocs(rollupsQuery);
+  
+  let rollupsSnap;
+  try {
+    rollupsSnap = await getDocs(rollupsQuery);
+  } catch(err) {
+    errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: 'agentYearRollups',
+        operation: 'list',
+    }));
+    throw err;
+  }
+
   const baseRollups: EffectiveRollup[] = rollupsSnap.docs.map(doc => ({
     id: doc.id,
     ...(doc.data() as AgentYearRollup),
@@ -52,7 +66,18 @@ export async function fetchRollupsWithOverrides(db: Firestore, year: number): Pr
     where('targetType', '==', 'rollup'),
     where('active', '==', true)
   );
-  const overridesSnap = await getDocs(overridesQuery);
+  
+  let overridesSnap;
+  try {
+    overridesSnap = await getDocs(overridesQuery);
+  } catch (err) {
+    errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: 'historical_overrides',
+        operation: 'list',
+    }));
+    throw err;
+  }
+  
   if (overridesSnap.empty) {
     return baseRollups;
   }
