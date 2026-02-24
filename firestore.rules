@@ -31,12 +31,14 @@ service cloud.firestore {
     }
 
     // --- Activity & Transaction Data ---
-    // Users can read/write their own activity logs. The doc ID is {agentId}_{YYYY-MM-DD}.
+    // Users can read/write their own activity logs.
     match /daily_activity/{activityId} {
-      // Rule for single document operations (get, write).
-      allow get, write: if isSignedIn() && activityId.split('_')[0] == request.auth.uid;
-      // Rule for collection queries (list).
-      // The client query MUST include `where('agentId', '==', uid)` to be secure.
+      allow get: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.agentId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.agentId == request.auth.uid;
+      allow delete: if false; // Deletes are not a feature.
+
+      // Allow listing, but require the client to filter by agentId for security.
       allow list: if isSignedIn();
     }
 
