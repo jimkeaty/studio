@@ -12,10 +12,9 @@ import {
     signInWithRedirect,
     setPersistence,
     browserLocalPersistence,
-    browserSessionPersistence,
   } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { useUser } from '@/firebase'; // Use the main hook
+import { useUser } from '@/firebase';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" {...props}>
@@ -46,16 +45,9 @@ export default function Home() {
     const { user, loading: userLoading } = useUser();
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [isPreview, setIsPreview] = useState(false);
 
     useEffect(() => {
-        const currentHostname = window.location.hostname;
-        const isPreviewEnv = currentHostname.endsWith('.cloudworkstations.dev');
-setIsPreview(isPreviewEnv);
-    }, []);
-
-    useEffect(() => {
-      // Redirect if user is found
+      // Redirect if user is found after loading has completed
       if (!userLoading && user) {
         router.replace('/dashboard');
       }
@@ -67,25 +59,15 @@ setIsPreview(isPreviewEnv);
       
         try {
           const provider = new GoogleAuthProvider();
-      
-          const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-          const isCloudworkstations = hostname.endsWith('.cloudworkstations.dev');
-      
-          // Preview = redirect (popups are unreliable inside studio/preview)
-          if (isCloudworkstations) {
-            await setPersistence(auth, browserSessionPersistence);
-            await signInWithRedirect(auth, provider);
-            return; // redirect will happen
-          }
-      
-          // Production = popup (best UX)
+          // Use local persistence to keep the user signed in across browser sessions.
+          // Use the redirect method as it's most robust for all environments, including previews/iframes.
           await setPersistence(auth, browserLocalPersistence);
-          await signInWithPopup(auth, provider);
-          // user will be set by auth state listener
-          setIsSigningIn(false);
+          await signInWithRedirect(auth, provider);
+          // The page will now redirect. The user state will be handled by the onAuthStateChanged
+          // listener and the getRedirectResult call in FirebaseClientProvider.
         } catch (error: any) {
           console.error('Sign-in initiation error:', error);
-          setErrorMsg(error?.message ?? 'Failed to sign in');
+          setErrorMsg(error?.message ?? 'Failed to initiate sign-in. Please try again.');
           setIsSigningIn(false);
         }
       };
@@ -102,6 +84,7 @@ setIsPreview(isPreviewEnv);
         );
     }
     
+    // If loading is done and there's no user, show the login page.
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <div className="w-full max-w-md">
@@ -127,39 +110,24 @@ setIsPreview(isPreviewEnv);
                             </Alert>
                         )}
                         
-                        {isPreview ? (
-                            <Alert>
-                                <AlertTriangle className="h-4 w-4" />
-                                <AlertTitle>Preview Mode</AlertTitle>
-                                <AlertDescription>
-                                    Authentication is disabled in this preview environment. Please use the live application to sign in.
-                                    <Button asChild className="w-full mt-4">
-                                        <a href="https://smart-broker-usa.web.app" target="_blank" rel="noopener noreferrer">
-                                            Open Live App
-                                        </a>
-                                    </Button>
-                                </AlertDescription>
-                            </Alert>
-                        ) : (
-                            <Button
-                                variant="outline"
-                                className="w-full"
-                                onClick={handleSignIn}
-                                disabled={isSigningIn}
-                            >
-                                {isSigningIn ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Redirecting to sign in...
-                                    </>
-                                ) : (
-                                    <>
-                                        <GoogleIcon className="mr-2 h-5 w-5" />
-                                        Sign in with Google
-                                    </>
-                                )}
-                            </Button>
-                        )}
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleSignIn}
+                            disabled={isSigningIn}
+                        >
+                            {isSigningIn ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Redirecting to sign in...
+                                </>
+                            ) : (
+                                <>
+                                    <GoogleIcon className="mr-2 h-5 w-5" />
+                                    Sign in with Google
+                                </>
+                            )}
+                        </Button>
                     </CardContent>
                 </Card>
             </div>

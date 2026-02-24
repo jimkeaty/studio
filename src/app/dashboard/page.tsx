@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
+import { APP_CONFIG } from '@/lib/config';
 
 
 const formatCurrency = (amount: number, minimumFractionDigits = 0) =>
@@ -76,7 +77,7 @@ export default function AgentDashboardPage() {
   const [dataError, setDataError] = useState<Error | null>(null);
 
   useEffect(() => {
-    setSelectedYear(String(new Date().getFullYear()));
+    setSelectedYear(String(APP_CONFIG.DEFAULT_DASHBOARD_YEAR));
   }, []);
 
   useEffect(() => {
@@ -86,6 +87,7 @@ export default function AgentDashboardPage() {
         }
 
         setLoading(true);
+        setDataError(null);
         try {
             const token = await user.getIdToken();
             const res = await fetch(`/api/dashboard?year=${selectedYear}`, {
@@ -99,11 +101,9 @@ export default function AgentDashboardPage() {
                 throw new Error(errorData.error || 'Failed to load dashboard data');
             }
             
-            // Assuming API returns an object with both dashboard and ytdMetrics data
             const data = await res.json();
             setProcessedDashboardData(data.dashboard);
             setYtdValueMetrics(data.ytdMetrics);
-            setDataError(null);
         } catch (error: any) {
             console.error('Failed to load dashboard data', error);
             setDataError(error);
@@ -127,7 +127,7 @@ export default function AgentDashboardPage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>{dataError ? 'Error Loading Data' : 'No Data Available'}</AlertTitle>
             <AlertDescription>
-                {dataError ? `We encountered an issue fetching your live data: ${dataError.message}.` : `Could not find dashboard data for your user for the year ${selectedYear}.`}
+                {dataError ? `We encountered an issue fetching your data: ${dataError.message}.` : `Could not find dashboard data for your user for the year ${selectedYear}.`}
             </AlertDescription>
         </Alert>
     );
@@ -145,10 +145,9 @@ export default function AgentDashboardPage() {
                 <SelectValue placeholder="Select year" />
             </SelectTrigger>
             <SelectContent>
-                {[...Array(5)].map((_, i) => {
-                const year = new Date().getFullYear() + 2 - i;
-                return <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                })}
+                {APP_CONFIG.ALLOWED_DASHBOARD_YEARS.map((year) => (
+                    <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                ))}
             </SelectContent>
         </Select>
       </div>
@@ -218,7 +217,7 @@ export default function AgentDashboardPage() {
                             <p className="text-2xl font-bold">{formatCurrency(processedDashboardData.netPending)}</p>
                         </div>
                         <div>
-                            <p className="text-sm font-medium text-primary">Total Potential YTD</p>
+                            <p className="text-sm font-semibold text-primary">Total Potential YTD</p>
                             <p className="text-2xl font-bold text-primary">{formatCurrency(processedDashboardData.ytdTotalPotential)}</p>
                         </div>
                     </div>
