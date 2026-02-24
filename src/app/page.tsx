@@ -46,7 +46,6 @@ export default function Home() {
     const [authReady, setAuthReady] = useState(false);
     const [isSigningIn, setIsSigningIn] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const authCheckRef = useRef(false);
     const [isPreview, setIsPreview] = useState(false);
 
     useEffect(() => {
@@ -56,49 +55,39 @@ export default function Home() {
         const isPreviewEnv = isCloudworkstations && (window.location.port === '9000' || isStudioEmbedded);
         setIsPreview(isPreviewEnv);
 
-        if (authCheckRef.current) {
-            return;
-        }
-        authCheckRef.current = true;
-
-        const handleAuth = async () => {
-            try {
-                // First, check for the result of a redirect. This is crucial for completing the sign-in flow.
-                const result = await getRedirectResult(auth);
-                if (result) {
-                    // A user has just signed in via redirect. onAuthStateChanged will now fire with the user object.
-                    // We don't need to do anything else here.
-                    return;
-                }
-
-                // If there was no redirect result, we set up the permanent auth state listener.
-                // This will handle both initial page load checks and subsequent sign-in/out events.
-                const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-                    if (user) {
-                        // A user is signed in. Redirect to the dashboard.
-                        router.replace('/dashboard');
-                    } else {
-                        // No user is signed in. It's now safe to show the login UI.
-                        setAuthReady(true);
-                    }
-                });
-                return unsubscribe;
-
-            } catch (error: any) {
-                console.error("Authentication handling error:", error);
-                setErrorMsg(error.message);
-                setAuthReady(true); // Unlock UI to show the error.
+        const authTimeout = window.setTimeout(() => {
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[Auth Guard] Failsafe timer fired. Forcing authReady=true');
             }
-        };
+            setAuthReady(true);
+        }, 3000); // Increased timeout slightly
 
-        const unsubscribePromise = handleAuth();
+        // Process any redirect result from Google Sign-In.
+        // This is called to trigger the auth state change, which is then handled by onAuthStateChanged.
+        getRedirectResult(auth).catch((error) => {
+            console.error("Error processing redirect result:", error);
+            setErrorMsg(error.message);
+            setAuthReady(true); // Show login UI with error on redirect failure
+            window.clearTimeout(authTimeout);
+        });
+        
+        // onAuthStateChanged is the single source of truth for the user's sign-in state.
+        const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+            window.clearTimeout(authTimeout);
+            if (user) {
+                // A user is signed in (from a session or a successful redirect).
+                // We redirect them to the dashboard. We don't setAuthReady(true) here
+                // to avoid a brief flash of the login page before the redirect happens.
+                router.replace('/dashboard');
+            } else {
+                // No user is signed in. It's now safe to show the login UI.
+                setAuthReady(true);
+            }
+        });
 
         return () => {
-            unsubscribePromise.then(unsubscribe => {
-                if (unsubscribe) {
-                    unsubscribe();
-                }
-            });
+            window.clearTimeout(authTimeout);
+            unsubscribe();
         };
     }, [router]);
     
