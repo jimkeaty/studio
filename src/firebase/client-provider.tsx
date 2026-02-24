@@ -14,13 +14,7 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
 
   // Prevent hydration mismatch by ensuring server + first client render match
   if (!mounted) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
