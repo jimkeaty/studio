@@ -1,3 +1,4 @@
+
 'use client';
 
 // Imports from both files
@@ -15,7 +16,7 @@ import { CalendarIcon, Check, Edit, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { mockAgentDashboardData } from '@/lib/mock-data';
@@ -107,14 +108,19 @@ export default function DailyTrackerPage() {
     }
 
     const dateStr = format(data.date, 'yyyy-MM-dd');
-    const logDocRef = doc(db, 'users', user.uid, 'dailyLogs', dateStr);
+    const docId = `${user.uid}_${dateStr}`;
+    const logDocRef = doc(db, 'daily_activity', docId);
 
-    const { date, ...logData } = data;
     const dataToSave = {
-        ...logData,
-        userId: user.uid,
+        agentId: user.uid,
         date: dateStr,
-        updatedAt: new Date().toISOString(),
+        callsCount: data.calls,
+        engagementsCount: data.engagements,
+        appointmentsSetCount: data.appointmentsSet,
+        appointmentsHeldCount: data.appointmentsHeld,
+        contractsWrittenCount: data.contractsWritten,
+        updatedAt: serverTimestamp(),
+        updatedByUid: user.uid,
     };
 
     // Save the daily log first
