@@ -1,4 +1,3 @@
-// src/lib/incentivesService.ts
 'use client';
 
 import {
@@ -13,13 +12,15 @@ import type {
   QualificationProgress,
   ReferralQualification,
 } from './types/incentives';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
-// Minimal Transaction type definition to support GCI calculation.
+
 interface Transaction {
   agentId: string;
   status: 'closed' | 'pending' | 'under_contract';
   closedDate?: Timestamp;
-  contractDate?: Timestamp; // Assumed field for pending transactions
+  contractDate?: Timestamp; 
   companyGciGross: number;
 }
 
@@ -43,17 +44,22 @@ export async function computeQualificationProgress(
   const hireDateObj = hireDate.toDate();
   const windowEndsAtObj = windowEndsAt.toDate();
 
-  // Fetch all potentially relevant transactions for the agent.
-  // status can be 'closed', 'pending', or 'under_contract'
   const transactionsQuery = query(
     collection(db, 'transactions'),
     where('agentId', '==', qualification.recruitedAgentId),
     where('status', 'in', ['closed', 'pending', 'under_contract'])
   );
   
-  // This query will fail for any user who is not the agent themselves,
-  // as per security rules. The caller MUST handle this exception.
-  const transactionsSnap = await getDocs(transactionsQuery);
+  let transactionsSnap;
+  try {
+    transactionsSnap = await getDocs(transactionsQuery);
+  } catch (err) {
+    errorEmitter.emit('permission-error', new FirestorePermissionError({
+      path: 'transactions',
+      operation: 'list',
+    }));
+    throw err;
+  }
 
   let closedGciInWindow = 0;
   let pendingGciInWindow = 0;
@@ -69,8 +75,6 @@ export async function computeQualificationProgress(
       }
     }
 
-    // Process PENDING/UNDER CONTRACT transactions
-    // SCHEMA ASSUMPTION: Assumes a `contractDate` field exists for pending deals.
     if ((transaction.status === 'pending' || transaction.status === 'under_contract') && transaction.contractDate) {
         const contractDate = transaction.contractDate.toDate();
         if (contractDate >= hireDateObj && contractDate < windowEndsAtObj) {
@@ -79,7 +83,6 @@ export async function computeQualificationProgress(
     }
   });
 
-  // Qualification status is based ONLY on CLOSED GCI.
   const remainingToThreshold = Math.max(
     0,
     thresholdCompanyGciGross - closedGciInWindow
@@ -98,7 +101,6 @@ export async function computeQualificationProgress(
 
   let currentStatus = qualification.status;
   if (currentStatus === 'in_progress' && closedGciInWindow >= thresholdCompanyGciGross) {
-    // This logic is for UI display. A separate backend job would officially update the doc.
     currentStatus = 'qualified';
   } else if (currentStatus === 'in_progress' && timeRemainingDays <= 0) {
     currentStatus = 'expired';

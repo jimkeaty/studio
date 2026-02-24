@@ -11,6 +11,8 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import type { YtdValueMetrics, DailyActivity, BusinessPlan } from './types';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 interface Transaction {
     id: string;
@@ -35,36 +37,50 @@ export async function getYtdValueMetrics(
   year: number
 ): Promise<YtdValueMetrics> {
 
-  // 1. Fetch daily activities and transactions in parallel
-  const [activitySnap, transactionsSnap, planSnap] = await Promise.all([
-    getDocs(
-      query(
+    const activityQuery = query(
         collection(db, 'daily_activity'),
         where('agentId', '==', agentId)
-        // Note: Date range removed to avoid composite index requirement.
-        // Filtering by year is now done on the client side below.
-      )
-    ),
-    getDocs(
-        query(
-          collection(db, 'transactions'),
-          where('agentId', '==', agentId),
-          where('status', '==', 'closed')
-        )
-      ).catch(() => null), // Gracefully handle if transactions collection doesn't exist
-      getDoc(doc(db, 'users', agentId, 'plans', String(year))).catch(() => null)
-  ]);
+    );
+    const transactionsQuery = query(
+        collection(db, 'transactions'),
+        where('agentId', '==', agentId),
+        where('status', '==', 'closed')
+    );
+    const planRef = doc(db, 'users', agentId, 'plans', String(year));
+
+    const [activitySnap, transactionsSnap, planSnap] = await Promise.all([
+        getDocs(activityQuery).catch(err => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'daily_activity', operation: 'list' }));
+            throw err;
+        }),
+        getDocs(transactionsQuery).catch(err => {
+            if ((err as any).code === 'permission-denied') {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'transactions', operation: 'list' }));
+            }
+            console.warn("Could not fetch transactions for value metrics. This may be expected.");
+            return null;
+        }),
+        getDoc(planRef).catch(err => {
+            if ((err as any).code === 'permission-denied') {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({ path: planRef.path, operation: 'get' }));
+            }
+            return null;
+        })
+    ]);
+
 
   // 2. Sum activity counts with client-side year filtering
   let totalEngagements = 0;
   let totalAppointmentsHeld = 0;
-  activitySnap.forEach((doc) => {
-    const data = doc.data() as DailyActivity;
-    if (data.date.startsWith(String(year))) {
-        totalEngagements += data.engagementsCount || 0;
-        totalAppointmentsHeld += data.appointmentsHeldCount || 0;
-    }
-  });
+  if (activitySnap) {
+    activitySnap.forEach((doc) => {
+        const data = doc.data() as DailyActivity;
+        if (data.date.startsWith(String(year))) {
+            totalEngagements += data.engagementsCount || 0;
+            totalAppointmentsHeld += data.appointmentsHeldCount || 0;
+        }
+    });
+  }
 
   // 3. Sum closed net commission from transactions
   let totalClosedNetCommission = 0;
