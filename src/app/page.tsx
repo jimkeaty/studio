@@ -9,6 +9,11 @@ import { Building, Loader2, AlertTriangle } from 'lucide-react';
 import {
   onAuthStateChanged,
   User,
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  setPersistence,
+  browserLocalPersistence,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -47,38 +52,74 @@ export default function Home() {
     useEffect(() => {
         const currentHostname = window.location.hostname;
         const isCloudworkstations = currentHostname.endsWith('.cloudworkstations.dev');
-        const isPreviewEnv = isCloudworkstations;
+        const isStudioEmbedded = window.location.search.includes('embedded=');
+        const isPreviewEnv = isCloudworkstations && (window.location.port === '9000' || isStudioEmbedded);
         setIsPreview(isPreviewEnv);
-        
-        const authTimeout = window.setTimeout(() => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[Auth Guard] Failsafe timer fired. Forcing authReady=true');
-          }
-          setAuthReady(true);
-        }, 2500);
 
         if (authCheckRef.current) {
             return;
         }
         authCheckRef.current = true;
-        
-        const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-            window.clearTimeout(authTimeout);
-            if (user) {
-                router.replace('/dashboard');
-            } else {
-                setAuthReady(true);
+
+        const handleAuth = async () => {
+            try {
+                // First, check for the result of a redirect. This is crucial for completing the sign-in flow.
+                const result = await getRedirectResult(auth);
+                if (result) {
+                    // A user has just signed in via redirect. onAuthStateChanged will now fire with the user object.
+                    // We don't need to do anything else here.
+                    return;
+                }
+
+                // If there was no redirect result, we set up the permanent auth state listener.
+                // This will handle both initial page load checks and subsequent sign-in/out events.
+                const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+                    if (user) {
+                        // A user is signed in. Redirect to the dashboard.
+                        router.replace('/dashboard');
+                    } else {
+                        // No user is signed in. It's now safe to show the login UI.
+                        setAuthReady(true);
+                    }
+                });
+                return unsubscribe;
+
+            } catch (error: any) {
+                console.error("Authentication handling error:", error);
+                setErrorMsg(error.message);
+                setAuthReady(true); // Unlock UI to show the error.
             }
-        });
+        };
+
+        const unsubscribePromise = handleAuth();
 
         return () => {
-            window.clearTimeout(authTimeout);
-            unsubscribe();
+            unsubscribePromise.then(unsubscribe => {
+                if (unsubscribe) {
+                    unsubscribe();
+                }
+            });
         };
     }, [router]);
+    
+    const handleSignIn = async () => {
+        setIsSigningIn(true);
+        setErrorMsg(null);
+        try {
+            // Set persistence BEFORE initiating the sign-in flow.
+            await setPersistence(auth, browserLocalPersistence);
+            const provider = new GoogleAuthProvider();
+            // Use redirect, as it's more reliable in cross-origin or sandboxed environments.
+            await signInWithRedirect(auth, provider);
+        } catch (error: any) {
+            console.error("Sign-in initiation error:", error);
+            setErrorMsg(error.message);
+            setIsSigningIn(false);
+        }
+    };
 
 
-    if (!authReady) {
+    if (!authReady && !isPreview) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background p-4">
                 <div className="flex flex-col items-center gap-4">
@@ -131,13 +172,13 @@ export default function Home() {
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => setErrorMsg("Sign-in is temporarily disabled. Please use the live app link.")}
+                                onClick={handleSignIn}
                                 disabled={isSigningIn}
                             >
                                 {isSigningIn ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Please wait...
+                                        Redirecting to sign in...
                                     </>
                                 ) : (
                                     <>
