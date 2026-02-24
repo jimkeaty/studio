@@ -1,9 +1,9 @@
 
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { KpiCard } from '@/components/dashboard/kpi-card';
-import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
+import type { AgentDashboardData, YtdValueMetrics } from '@/lib/types';
 import { DollarSign, Activity, Users, Info, TrendingUp, Home, Handshake, AlertTriangle } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
@@ -11,14 +11,10 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { doc, onSnapshot, DocumentReference, getDoc, setDoc } from 'firebase/firestore';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { mockAgentDashboardData } from '@/lib/mock-data';
-import { getYtdValueMetrics } from '@/lib/valueMetricsService';
 import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
-import { getAgentWorkdayYearProgress } from '@/lib/workday-utils';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 
 
@@ -70,266 +66,75 @@ const DashboardSkeleton = () => (
     </div>
 );
 
-const processMonthlyIncomeData = (monthlyIncome: AgentDashboardData['monthlyIncome'], selectedYear: string) => {
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
-    const displayYear = parseInt(selectedYear, 10);
-
-    return monthlyIncome.map((monthData, index) => {
-        const newMonthData = { ...monthData };
-
-        if (displayYear > currentYear) {
-            newMonthData.closed = 0;
-            newMonthData.pending = 0;
-        } else if (displayYear < currentYear) {
-            newMonthData.pending = 0;
-        } else { // Current year
-            if (index < currentMonth) {
-                newMonthData.pending = 0;
-            }
-        }
-        return newMonthData;
-    });
-};
-
-const calculateGrade = (performance: number): 'A' | 'B' | 'C' | 'D' | 'F' => {
-    if (performance >= 95) return 'A';
-    if (performance >= 85) return 'B';
-    if (performance >= 75) return 'C';
-    if (performance >= 65) return 'D';
-    return 'F';
-};
-
-
 export default function AgentDashboardPage() {
   const [selectedYear, setSelectedYear] = useState('');
   const { user, loading: userLoading } = useUser();
-  const db = useFirestore();
-
-  // Use `undefined` as initial state to signify "loading"
-  const [liveDashboardData, setLiveDashboardData] = useState<AgentDashboardData | null | undefined>(undefined);
-  const [businessPlan, setBusinessPlan] = useState<BusinessPlan | null | undefined>(undefined);
-  const [dataError, setDataError] = useState<Error | null>(null);
-
+  
+  const [processedDashboardData, setProcessedDashboardData] = useState<AgentDashboardData | null>(null);
   const [ytdValueMetrics, setYtdValueMetrics] = useState<YtdValueMetrics | null>(null);
-  const [ytdMetricsLoading, setYtdMetricsLoading] = useState(true);
-  const [ytdMetricsError, setYtdMetricsError] = useState<Error | null>(null);
-
-  // TODO: This should come from the user's profile in Firestore. Using a fixed date for now.
-  const agentStartDate = '2024-07-01'; 
-  const holidays: string[] = []; // TODO: In a real app, fetch company holidays from a config collection.
+  const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState<Error | null>(null);
 
   useEffect(() => {
     setSelectedYear(String(new Date().getFullYear()));
   }, []);
 
-  const dashboardDocRef = useMemo(() => {
-    if (!user?.uid || !db || !selectedYear) return null;
-    return doc(db, 'dashboards', user.uid, 'agent', selectedYear) as DocumentReference<AgentDashboardData>;
-  }, [user?.uid, db, selectedYear]);
-
-  const planDocRef = useMemo(() => {
-    if (!user?.uid || !db || !selectedYear) return null;
-    return doc(db, 'users', user.uid, 'plans', selectedYear) as DocumentReference<BusinessPlan>;
-  }, [user?.uid, db, selectedYear]);
-
-
   useEffect(() => {
-    if (!dashboardDocRef || !planDocRef || !user || !db) return;
-
-    const ensureDashboardExists = async () => {
-      try {
-        const dashboardSnap = await getDoc(dashboardDocRef);
-        if (dashboardSnap.exists()) return; // Already exists, do nothing.
-
-        // If it doesn't exist, create it.
-        console.log(`Dashboard for ${selectedYear} not found. Creating...`);
-
-        // 1. Fetch the business plan for the year to get the goal.
-        const planSnap = await getDoc(planDocRef);
-        let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal; // Default goal
-        if (planSnap.exists()) {
-          const planData = planSnap.data() as BusinessPlan;
-          if (planData.calculatedTargets?.monthlyNetIncome) {
-            monthlyGoal = planData.calculatedTargets.monthlyNetIncome;
-          }
+    const loadDashboard = async () => {
+        if (!user || !selectedYear) {
+            return;
         }
 
-        // 2. Create the new dashboard data object, zeroing out all metrics.
-        const newDashboardData: AgentDashboardData = {
-          ...mockAgentDashboardData,
-          userId: user.uid,
-          kpis: {
-            ...mockAgentDashboardData.kpis,
-            calls: { ...mockAgentDashboardData.kpis.calls, actual: 0, performance: 0, grade: 'F' },
-            engagements: { ...mockAgentDashboardData.kpis.engagements, actual: 0, performance: 0, grade: 'F' },
-            appointmentsSet: { ...mockAgentDashboardData.kpis.appointmentsSet, actual: 0, performance: 0, grade: 'F' },
-            appointmentsHeld: { ...mockAgentDashboardData.kpis.appointmentsHeld, actual: 0, performance: 0, grade: 'F' },
-            contractsWritten: { ...mockAgentDashboardData.kpis.contractsWritten, actual: 0, performance: 0, grade: 'F' },
-            closings: { ...mockAgentDashboardData.kpis.closings, actual: 0, performance: 0, grade: 'F' },
-          },
-          netEarned: 0,
-          netPending: 0,
-          ytdTotalPotential: 0,
-          expectedYTDIncomeGoal: 0,
-          totalClosedIncomeForYear: 0,
-          totalPendingIncomeForYear: 0,
-          totalIncomeWithPipelineForYear: 0,
-          monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({
-            ...m,
-            closed: 0,
-            pending: 0,
-            goal: monthlyGoal,
-          })),
-          leadIndicatorGrade: 'F',
-          leadIndicatorPerformance: 0,
-          incomeGrade: 'F',
-          incomePerformance: 0,
-          pipelineAdjustedIncome: { grade: 'F', performance: 0 },
-        };
+        setLoading(true);
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/dashboard?year=${selectedYear}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
 
-        // 3. Save the new document to Firestore.
-        await setDoc(dashboardDocRef, newDashboardData);
-        console.log(`Successfully created dashboard for ${selectedYear}.`);
-      } catch (error) {
-        console.error("Failed to create dashboard document:", error);
-        setDataError(error as Error);
-      }
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || 'Failed to load dashboard data');
+            }
+            
+            // Assuming API returns an object with both dashboard and ytdMetrics data
+            const data = await res.json();
+            setProcessedDashboardData(data.dashboard);
+            setYtdValueMetrics(data.ytdMetrics);
+            setDataError(null);
+        } catch (error: any) {
+            console.error('Failed to load dashboard data', error);
+            setDataError(error);
+            setProcessedDashboardData(null);
+            setYtdValueMetrics(null);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    ensureDashboardExists();
-  }, [dashboardDocRef, planDocRef, user, db, selectedYear]);
+    loadDashboard();
+  }, [user, selectedYear]);
 
-  useEffect(() => {
-    if (!dashboardDocRef) {
-      setLiveDashboardData(null); // No user/ref, so data is loaded and is null
-      return;
-    }
-    const unsubscribe = onSnapshot(dashboardDocRef,
-      (snapshot) => {
-        setLiveDashboardData(snapshot.exists() ? snapshot.data() : null);
-        setDataError(null);
-      },
-      (err) => {
-        console.error(`[AgentDashboard] Error fetching dashboard document at ${dashboardDocRef.path}:`, err);
-        setDataError(err);
-        setLiveDashboardData(null); // Error occurred, so data is loaded and is null
-      }
-    );
-    return () => unsubscribe();
-  }, [dashboardDocRef]);
-
-  useEffect(() => {
-    if (!planDocRef) {
-      setBusinessPlan(null); // No user/ref, so plan is loaded and is null
-      return;
-    }
-    const unsubscribe = onSnapshot(planDocRef,
-      (snapshot) => {
-        setBusinessPlan(snapshot.exists() ? snapshot.data() : null);
-      },
-      (err) => {
-        console.error(`[AgentDashboard] Error fetching business plan at ${planDocRef.path}:`, err);
-        setBusinessPlan(null); // Error occurred, so plan is loaded and is null
-      }
-    );
-    return () => unsubscribe();
-  }, [planDocRef]);
-
-  useEffect(() => {
-    if (!user?.uid || !db || !selectedYear) {
-        setYtdMetricsLoading(false);
-        return;
-    }
-
-    setYtdMetricsLoading(true);
-    getYtdValueMetrics(db, user.uid, parseInt(selectedYear, 10))
-        .then(setYtdValueMetrics)
-        .catch(setYtdMetricsError)
-        .finally(() => setYtdMetricsLoading(false));
-
-  }, [user?.uid, db, selectedYear]);
-  
-  const annualIncomeGoal = businessPlan?.annualIncomeGoal || 0;
-
-  const processedDashboardData = useMemo(() => {
-    if (!liveDashboardData) return null;
-
-    // Use a base object, either live data or a zeroed-out mock structure
-    const baseData = liveDashboardData;
-
-    // --- Pro-rated Goal Calculation ---
-    const workdayYearProgress = getAgentWorkdayYearProgress(agentStartDate, parseInt(selectedYear, 10), holidays);
-
-    // --- Income Grade Recalculation ---
-    const proRatedExpectedYTDIncomeGoal = annualIncomeGoal * workdayYearProgress;
-    const newIncomePerformance = proRatedExpectedYTDIncomeGoal > 0 ? (baseData.netEarned / proRatedExpectedYTDIncomeGoal) * 100 : 0;
-    const newIncomeGrade = calculateGrade(newIncomePerformance);
-
-    // --- Lead Indicator Grade Recalculation ---
-    let totalKpiPerformance = 0;
-    const newKpis = JSON.parse(JSON.stringify(baseData.kpis)); // Deep copy
-    Object.keys(newKpis).forEach(key => {
-        const kpiKey = key as keyof typeof newKpis;
-        const kpi = newKpis[kpiKey];
-        const proRatedTarget = kpi.target * workdayYearProgress;
-        const performance = proRatedTarget > 0 ? (kpi.actual / proRatedTarget) * 100 : 0;
-        kpi.performance = Math.round(performance);
-        kpi.grade = calculateGrade(performance);
-        totalKpiPerformance += performance;
-    });
-    const newLeadIndicatorPerformance = Math.round(totalKpiPerformance / Object.keys(newKpis).length);
-    const newLeadIndicatorGrade = calculateGrade(newLeadIndicatorPerformance);
-
-    // --- Pipeline Grade Recalculation ---
-    const ytdTotalPotential = baseData.netEarned + baseData.netPending;
-    const newPipelinePerformance = proRatedExpectedYTDIncomeGoal > 0 ? (ytdTotalPotential / proRatedExpectedYTDIncomeGoal) * 100 : 0;
-    const newPipelineGrade = calculateGrade(newPipelinePerformance);
-
-    // --- Monthly Income Processing (Existing Logic) ---
-    const monthlyIncome = processMonthlyIncomeData(baseData.monthlyIncome, selectedYear);
-
-    // --- Final Assembly ---
-    return {
-        ...baseData,
-        kpis: newKpis,
-        incomeGrade: newIncomeGrade,
-        incomePerformance: Math.round(newIncomePerformance),
-        expectedYTDIncomeGoal: proRatedExpectedYTDIncomeGoal,
-        leadIndicatorGrade: newLeadIndicatorGrade,
-        leadIndicatorPerformance: newLeadIndicatorPerformance,
-        pipelineAdjustedIncome: {
-            grade: newPipelineGrade,
-            performance: Math.round(newPipelinePerformance),
-        },
-        ytdTotalPotential: ytdTotalPotential,
-        monthlyIncome: monthlyIncome,
-    };
-  }, [liveDashboardData, selectedYear, annualIncomeGoal, agentStartDate, holidays]);
-
-
-  const dataHasLoaded = liveDashboardData !== undefined && businessPlan !== undefined;
-  const loading = userLoading || !dataHasLoaded;
-
-
-  if (loading || !processedDashboardData) {
+  if (userLoading || loading) {
     return <DashboardSkeleton />;
   }
 
-  const isUsingMockData = !liveDashboardData && !dataError;
+  if (dataError || !processedDashboardData) {
+    return (
+        <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>{dataError ? 'Error Loading Data' : 'No Data Available'}</AlertTitle>
+            <AlertDescription>
+                {dataError ? `We encountered an issue fetching your live data: ${dataError.message}.` : `Could not find dashboard data for your user for the year ${selectedYear}.`}
+            </AlertDescription>
+        </Alert>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8">
-      {(isUsingMockData || dataError) && (
-        <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-300">
-            <AlertTriangle className="h-4 w-4 !text-yellow-600 dark:!text-yellow-400" />
-            <AlertTitle>{dataError ? 'Error Loading Live Data' : 'Displaying Sample Data'}</AlertTitle>
-            <AlertDescription>
-                {dataError ? `We encountered an issue fetching your live data: ${dataError.message}. This can happen due to network or permission issues.` : `Could not find live data for your user for the year ${selectedYear}. This is expected for new users or for years without imported historical data. We're showing you sample data in the meantime.`}
-            </AlertDescription>
-        </Alert>
-      )}
-
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{user?.displayName ?? 'Agent'}'s Dashboard</h1>
@@ -443,7 +248,7 @@ export default function AgentDashboardPage() {
         <KpiCard title="Closings" {...processedDashboardData.kpis.closings} isGracePeriod={processedDashboardData.isLeadIndicatorGracePeriod} />
       </div>
 
-      <YtdValueMetricsCard metrics={ytdValueMetrics} loading={ytdMetricsLoading} error={ytdMetricsError} />
+      <YtdValueMetricsCard metrics={ytdValueMetrics} loading={loading} error={dataError} />
 
       <Card>
         <CardHeader>
