@@ -43,8 +43,8 @@ export async function getYtdValueMetrics(
     );
     const transactionsQuery = query(
         collection(db, 'transactions'),
-        where('agentId', '==', agentId),
-        where('status', '==', 'closed')
+        where('agentId', '==', agentId)
+        // where('status', '==', 'closed') // This requires a composite index. Filter on client.
     );
     const planRef = doc(db, 'users', agentId, 'plans', String(year));
 
@@ -87,7 +87,13 @@ export async function getYtdValueMetrics(
   if (transactionsSnap) {
     transactionsSnap.forEach((doc) => {
         const data = doc.data() as Transaction;
-        // Client-side filtering by year because a 3-field query requires a composite index
+        
+        // Client-side filtering for status
+        if (data.status !== 'closed') {
+            return;
+        }
+
+        // Client-side filtering by year
         const closeDate = data.closeDate?.toDate();
         const docYear = data.year || (closeDate ? closeDate.getFullYear() : null);
 
