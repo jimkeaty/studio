@@ -13,8 +13,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         )}
         ref={ref}
         {...props}
-        value={Number.isNaN(props.value) ? '' : props.value ?? ''}
-        suppressHydrationWarning
+        value={props.value ?? ''}
       />
     )
   }
