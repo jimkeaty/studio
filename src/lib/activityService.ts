@@ -122,12 +122,17 @@ export async function listAppointmentLogsForDate(db: Firestore, agentId: string,
     const q = query(
         collection(db, 'appointment_logs'),
         where('agentId', '==', agentId),
-        where('date', '==', date),
-        orderBy('createdAt', 'desc')
+        where('date', '==', date)
+        // Ordering by a field different from the where() clauses requires a composite index.
+        // To avoid this, we sort the results in memory.
+        // orderBy('createdAt', 'desc')
     );
     try {
         const snap = await getDocs(q);
-        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentLog));
+        const logs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentLog));
+        // Sort logs by creation time, newest first.
+        logs.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+        return logs;
     } catch (err) {
         const permissionError = new FirestorePermissionError({
             path: 'appointment_logs',
