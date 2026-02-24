@@ -32,9 +32,18 @@ export const getAgentId = (user: { uid: string }) => user.uid;
 export async function getDailyActivity(db: Firestore, agentId: string, date: string): Promise<DailyActivity | null> {
   const docId = `${agentId}_${date}`;
   const ref = doc(db, 'daily_activity', docId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as DailyActivity;
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as DailyActivity;
+  } catch (err) {
+    const permissionError = new FirestorePermissionError({
+      path: ref.path,
+      operation: 'get',
+    });
+    errorEmitter.emit('permission-error', permissionError);
+    throw err;
+  }
 }
 
 export async function listDailyActivitiesForMonth(db: Firestore, agentId: string, year: number, month: number): Promise<DailyActivity[]> {
@@ -50,8 +59,17 @@ export async function listDailyActivitiesForMonth(db: Firestore, agentId: string
     endAt(endDate)
   );
 
-  const snap = await getDocs(q);
-  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyActivity));
+  try {
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyActivity));
+  } catch (err) {
+    const permissionError = new FirestorePermissionError({
+      path: 'daily_activity',
+      operation: 'list',
+    });
+    errorEmitter.emit('permission-error', permissionError);
+    throw err;
+  }
 }
 
 export async function upsertDailyActivity(db: Firestore, agentId: string, uid: string, date: string, data: Partial<Omit<DailyActivity, 'id' | 'agentId' | 'date'>>) {
@@ -107,8 +125,17 @@ export async function listAppointmentLogsForDate(db: Firestore, agentId: string,
         where('date', '==', date),
         orderBy('createdAt', 'desc')
     );
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentLog));
+    try {
+        const snap = await getDocs(q);
+        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentLog));
+    } catch (err) {
+        const permissionError = new FirestorePermissionError({
+            path: 'appointment_logs',
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw err;
+    }
 }
 
 export async function listAppointmentLogsForRange(
@@ -132,8 +159,17 @@ export async function listAppointmentLogsForRange(
     qConstraints.push(orderBy('date', 'desc'));
 
     const q = query(collection(db, 'appointment_logs'), ...qConstraints);
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentLog));
+    try {
+        const snap = await getDocs(q);
+        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppointmentLog));
+    } catch (err) {
+        const permissionError = new FirestorePermissionError({
+            path: 'appointment_logs',
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw err;
+    }
 }
 
 export async function deleteAppointmentLog(db: Firestore, id: string) {
@@ -164,9 +200,18 @@ export async function findSimilarAppointment(
         orderBy('date', 'desc'),
         limit(1)
     );
-    const snap = await getDocs(q);
-    if (snap.empty) {
-        return null;
+    try {
+        const snap = await getDocs(q);
+        if (snap.empty) {
+            return null;
+        }
+        return { id: snap.docs[0].id, ...snap.docs[0].data() } as AppointmentLog;
+    } catch (err) {
+        const permissionError = new FirestorePermissionError({
+            path: 'appointment_logs',
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw err;
     }
-    return { id: snap.docs[0].id, ...snap.docs[0].data() } as AppointmentLog;
 }
