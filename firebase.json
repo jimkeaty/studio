@@ -4,5 +4,10 @@
     "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
-  }
+  },
+  "apphosting": [
+    {
+      "backendId": "smart-broker-usa-next"
+    }
+  ]
 }

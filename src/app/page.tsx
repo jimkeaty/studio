@@ -7,11 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Building, Loader2, AlertTriangle } from 'lucide-react';
 import {
-  GoogleAuthProvider,
-  signInWithRedirect,
-  setPersistence,
-  browserLocalPersistence,
-} from 'firebase/auth';
+    GoogleAuthProvider,
+    signInWithPopup,
+    signInWithRedirect,
+    setPersistence,
+    browserLocalPersistence,
+    browserSessionPersistence,
+  } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useUser } from '@/firebase'; // Use the main hook
 
@@ -48,10 +50,8 @@ export default function Home() {
 
     useEffect(() => {
         const currentHostname = window.location.hostname;
-        const isCloudworkstations = currentHostname.endsWith('.cloudworkstations.dev');
-        const isStudioEmbedded = window.location.search.includes('embedded=');
-        const isPreviewEnv = isCloudworkstations && (window.location.port === '9000' || isStudioEmbedded);
-        setIsPreview(isPreviewEnv);
+        const isPreviewEnv = currentHostname.endsWith('.cloudworkstations.dev');
+setIsPreview(isPreviewEnv);
     }, []);
 
     useEffect(() => {
@@ -64,17 +64,31 @@ export default function Home() {
     const handleSignIn = async () => {
         setIsSigningIn(true);
         setErrorMsg(null);
+      
         try {
-            await setPersistence(auth, browserLocalPersistence);
-            const provider = new GoogleAuthProvider();
+          const provider = new GoogleAuthProvider();
+      
+          const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+          const isCloudworkstations = hostname.endsWith('.cloudworkstations.dev');
+      
+          // Preview = redirect (popups are unreliable inside studio/preview)
+          if (isCloudworkstations) {
+            await setPersistence(auth, browserSessionPersistence);
             await signInWithRedirect(auth, provider);
-            // The page will redirect, and getRedirectResult will be handled by the provider
+            return; // redirect will happen
+          }
+      
+          // Production = popup (best UX)
+          await setPersistence(auth, browserLocalPersistence);
+          await signInWithPopup(auth, provider);
+          // user will be set by auth state listener
+          setIsSigningIn(false);
         } catch (error: any) {
-            console.error("Sign-in initiation error:", error);
-            setErrorMsg(error.message);
-            setIsSigningIn(false);
+          console.error('Sign-in initiation error:', error);
+          setErrorMsg(error?.message ?? 'Failed to sign in');
+          setIsSigningIn(false);
         }
-    };
+      };
 
     // While checking for user or if user exists (and redirect is happening)
     if (userLoading || user) {
