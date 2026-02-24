@@ -2,6 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin from "firebase-admin";
 import { APP_CONFIG } from "@/lib/config";
+import type { BusinessPlan, YtdValueMetrics, AgentDashboardData } from "@/lib/types";
+import { type Timestamp } from 'firebase-admin/firestore';
+
 
 if (!admin.apps.length) {
   try {
@@ -24,7 +27,7 @@ type Role = "agent" | "broker" | "admin";
  * @param data The raw dashboard data from Firestore.
  * @returns A sanitized dashboard data object or null.
  */
-const sanitizeDashboardData = (data: any | null) => {
+const sanitizeDashboardData = (data: any | null): AgentDashboardData | null => {
     if (!data) return null;
 
     const safeData = { ...data };
@@ -55,7 +58,7 @@ const sanitizeDashboardData = (data: any | null) => {
         safeData.stats[key] = safeData.stats[key] ?? 0;
     });
 
-    return safeData;
+    return safeData as AgentDashboardData;
 }
 
 
@@ -108,48 +111,69 @@ export async function GET(req: NextRequest) {
 
     const rawDashboard = dashSnap.exists() ? dashSnap.data() : null;
     const dashboard = sanitizeDashboardData(rawDashboard);
-    const plan = planSnap.exists ? planSnap.data() : null;
+    const plan = planSnap.exists() ? planSnap.data() as BusinessPlan : null;
 
     // 5) YTD Metrics calculation
-    let ytd: any | null = null;
+    let ytdMetrics: YtdValueMetrics | null = null;
     try {
-      const txQuery = db
-        .collection("transactions")
-        .where("year", "==", year)
-        .where("agentId", "==", uid);
-
-      const txSnap = await txQuery.get();
-
-      let closedCount = 0;
-      let pendingCount = 0;
-      let brokerProfitClosed = 0;
-      let volumeClosed = 0;
-
-      txSnap.forEach((doc) => {
-        const t = doc.data() as any;
-        const status = t.status;
-        const dealValue = Number(t.dealValue || 0);
-        const brokerProfit = Number(t.brokerProfit || 0);
-
-        if (status === "closed") {
-          closedCount++;
-          brokerProfitClosed += brokerProfit;
-          volumeClosed += dealValue;
-        } else if (status === "pending" || status === "under_contract") {
-          pendingCount++;
+        // Query transactions (simplified to avoid composite index)
+        const txQuery = db.collection("transactions").where("agentId", "==", uid);
+        const txSnap = await txQuery.get();
+    
+        let closedNetCommission = 0;
+        txSnap.forEach((doc) => {
+            const t = doc.data();
+            const commissionNet = Number(t.commissionNet || 0);
+            const closeDate = (t.closeDate as Timestamp)?.toDate();
+            if (t.status === "closed" && closeDate && closeDate.getFullYear() === year) {
+                closedNetCommission += commissionNet;
+            }
+        });
+    
+        // Query daily activities
+        const activityQuery = db.collection("daily_activity").where("agentId", "==", uid);
+        const activitySnap = await activityQuery.get();
+    
+        let totalEngagements = 0;
+        let totalAppointmentsHeld = 0;
+        activitySnap.forEach((doc) => {
+            const activity = doc.data();
+            if (activity.date.startsWith(String(year))) {
+                totalEngagements += Number(activity.engagementsCount || 0);
+                totalAppointmentsHeld += Number(activity.appointmentsHeldCount || 0);
+            }
+        });
+    
+        // Calculate target values from business plan (already fetched)
+        let targetValuePerEngagement: number | null = null;
+        let targetValuePerAppointmentHeld: number | null = null;
+        
+        if (plan) {
+            const incomeGoal = plan.annualIncomeGoal;
+            const engagementGoal = plan.calculatedTargets?.engagements.yearly;
+            const apptsHeldGoal = plan.calculatedTargets?.appointmentsHeld.yearly;
+    
+            if (incomeGoal > 0 && engagementGoal > 0) {
+                targetValuePerEngagement = incomeGoal / engagementGoal;
+            }
+            if (incomeGoal > 0 && apptsHeldGoal > 0) {
+                targetValuePerAppointmentHeld = incomeGoal / apptsHeldGoal;
+            }
         }
-      });
-
-      ytd = {
-        year,
-        closedCount,
-        pendingCount,
-        brokerProfitClosed,
-        volumeClosed,
-      };
-    } catch (e) {
-      console.warn("Could not calculate YTD metrics, possibly due to missing transaction data.", e);
-      ytd = null;
+    
+        ytdMetrics = {
+            year,
+            closedNetCommission,
+            engagements: totalEngagements,
+            appointmentsHeld: totalAppointmentsHeld,
+            valuePerEngagement: totalEngagements > 0 ? closedNetCommission / totalEngagements : null,
+            valuePerAppointmentHeld: totalAppointmentsHeld > 0 ? closedNetCommission / totalAppointmentsHeld : null,
+            targetValuePerEngagement,
+            targetValuePerAppointmentHeld,
+        };
+    } catch (e: any) {
+        console.warn(`[API/dashboard] Could not calculate YTD metrics for ${uid} in ${year}:`, e.message);
+        ytdMetrics = null;
     }
 
     return NextResponse.json({
@@ -160,7 +184,7 @@ export async function GET(req: NextRequest) {
       brokerageId,
       dashboard,
       plan,
-      ytdMetrics: ytd,
+      ytdMetrics,
     });
   } catch (error: any) {
     if (process.env.NODE_ENV === "development") {
