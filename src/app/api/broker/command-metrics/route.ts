@@ -77,6 +77,7 @@ async function getActiveAgentCount(atDate: Date): Promise<number> {
 async function getMetricsForPeriod(
   period: Period,
   activeAgentCount: number,
+  allTransactions: Transaction[],
 ): Promise<PeriodMetrics> {
   let startDate: Date, endDate: Date;
 
@@ -88,9 +89,7 @@ async function getMetricsForPeriod(
     endDate = endOfMonth(new Date(period.year, period.month! - 1, 1));
   }
 
-  const transactionsQuery = db.collection('transactions').where('year', '==', period.year);
-  const transactionsSnap = await transactionsQuery.get();
-  const transactions = transactionsSnap.docs.map(d => d.data() as Transaction);
+  const transactions = allTransactions.filter(t => t.year === period.year);
 
   const metrics: PeriodMetrics = {
     period,
@@ -166,25 +165,33 @@ export async function GET(req: NextRequest) {
     // 2. Get Query Params
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type') as Period['type'] | null;
-    const year = searchParams.get('year') ? parseInt(searchParams.get('year')!, 10) : null;
-    const month = searchParams.get('month') ? parseInt(searchParams.get('month')!, 10) : null;
+    const yearParam = searchParams.get('year') ? parseInt(searchParams.get('year')!, 10) : null;
+    const monthParam = searchParams.get('month') ? parseInt(searchParams.get('month')!, 10) : null;
 
-    if (!type || !year || (type === 'month' && !month)) {
-      return NextResponse.json({ error: 'Bad Request: Missing query parameters' }, { status: 400 });
+    const year = yearParam ?? new Date().getFullYear();
+    const month = monthParam ?? new Date().getMonth() + 1;
+
+    if (!type) {
+      return NextResponse.json({ error: 'Bad Request: Missing type parameter' }, { status: 400 });
     }
 
-    const period: Period = type === 'year' ? { type: 'year', year } : { type: 'month', year, month: month! };
+    const period: Period = type === 'year' ? { type: 'year', year } : { type: 'month', year, month };
 
     // 3. Perform Data Aggregation
+    
+    // Fetch all transactions once to avoid multiple complex queries
+    const allTransactionsSnap = await db.collection('transactions').get();
+    const allTransactions = allTransactionsSnap.docs.map(doc => doc.data() as Transaction);
+
     const currentPeriodEndDate = period.type === 'year' ? endOfYear(new Date(period.year, 0, 1)) : endOfMonth(new Date(period.year, period.month! - 1));
     const activeAgentCount = await getActiveAgentCount(currentPeriodEndDate);
-    const currentPeriodMetrics = await getMetricsForPeriod(period, activeAgentCount);
+    const currentPeriodMetrics = await getMetricsForPeriod(period, activeAgentCount, allTransactions);
     
     let comparisonPeriodMetrics: PeriodMetrics | undefined = undefined;
     if (period.type === 'month') {
         const comparisonPeriod: Period = { ...period, year: period.year - 1 };
         const comparisonActiveAgentCount = await getActiveAgentCount(subYears(currentPeriodEndDate, 1));
-        comparisonPeriodMetrics = await getMetricsForPeriod(comparisonPeriod, comparisonActiveAgentCount);
+        comparisonPeriodMetrics = await getMetricsForPeriod(comparisonPeriod, comparisonActiveAgentCount, allTransactions);
     }
 
     const trendEndDate = period.type === 'month' ? startOfMonth(new Date(period.year, period.month! - 1)) : new Date();
@@ -196,15 +203,13 @@ export async function GET(req: NextRequest) {
             const trendYear = monthDate.getFullYear();
             const trendMonth = monthDate.getMonth();
             const agentCount = await getActiveAgentCount(endOfMonth(monthDate));
-            const transQuery = db.collection('transactions').where('year', '==', trendYear).where('status', '==', 'closed');
-            const transSnap = await transQuery.get();
-            let closedDeals = 0;
-            transSnap.forEach(doc => {
-                const t = doc.data() as Transaction;
-                if (t.closedDate && t.closedDate.toDate().getMonth() === trendMonth) {
-                    closedDeals++;
-                }
-            });
+            
+            const closedDeals = allTransactions.filter(t => 
+                t.year === trendYear &&
+                t.status === 'closed' &&
+                t.closedDate && t.closedDate.toDate().getMonth() === trendMonth
+            ).length;
+
             return {
                 month: format(monthDate, 'MMM yy'),
                 activeAgents: agentCount,
