@@ -29,3 +29,14 @@ export const DASHBOARD_DEFAULT_YEAR: number = (() => {
   const n = parseInt(raw, 10);
   return Number.isFinite(n) ? n : 2025;
 })();
+
+/**
+ * Back-compat export used by existing imports in API routes.
+ * (Your /api/dashboard route imports APP_CONFIG today.)
+ */
+export const APP_CONFIG = {
+  dashboard: {
+    allowedYears: DASHBOARD_ALLOWED_YEARS,
+    defaultYear: DASHBOARD_DEFAULT_YEAR,
+  },
+} as const;
