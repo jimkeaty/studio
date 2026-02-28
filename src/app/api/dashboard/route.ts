@@ -107,28 +107,26 @@ export async function GET(req: NextRequest) {
 
     const year = getYearFromReq(req);
 
-    // 2) Allowed years guard
-    const allowedYears =
-      (APP_CONFIG as any)?.ALLOWED_DASHBOARD_YEARS ??
-      (APP_CONFIG as any)?.ALLOWED_YEARS ??
-      [2025, 2026];
+    // 2) Allowed years guard (safe version)
+let allowedYears: number[] = [2025, 2026]; // hard fallback
 
-    if (!Array.isArray(allowedYears) || allowedYears.length === 0) {
-      return NextResponse.json(
-        { error: "Server misconfiguration: allowed years not set." },
-        { status: 500 }
-      );
-    }
+if (typeof APP_CONFIG === "object" && APP_CONFIG !== null) {
+  if (Array.isArray((APP_CONFIG as any).ALLOWED_DASHBOARD_YEARS)) {
+    allowedYears = (APP_CONFIG as any).ALLOWED_DASHBOARD_YEARS;
+  } else if (Array.isArray((APP_CONFIG as any).ALLOWED_YEARS)) {
+    allowedYears = (APP_CONFIG as any).ALLOWED_YEARS;
+  }
+}
 
-    if (!allowedYears.includes(year)) {
-      return NextResponse.json(
-        {
-          error: `Data for year ${year} is not available.`,
-          allowedYears,
-        },
-        { status: 400 }
-      );
-    }
+if (!allowedYears.includes(year)) {
+  return NextResponse.json(
+    {
+      error: `Data for year ${year} is not available.`,
+      allowedYears,
+    },
+    { status: 400 }
+  );
+}
 
     // 3) Load user profile (role + brokerageId)
     const userSnap = await db.collection("users").doc(uid).get();
