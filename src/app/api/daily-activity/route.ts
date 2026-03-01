@@ -1,135 +1,133 @@
+// src/app/api/daily-activity/route.ts
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { getAdminDb } from "@/lib/firebase/admin"; // or wherever your admin db helper lives
-import { verifyBearerToken } from "@/lib/auth/verifyBearerToken"; // reuse your dashboard helper
+import { getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-const GetSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
+/**
+ * Admin SDK init (safe to run multiple times)
+ * In Firebase App Hosting, initializeApp() uses Application Default Credentials.
+ */
+const adminApp = getApps().length ? getApps()[0] : initializeApp();
+const adminAuth = getAuth(adminApp);
+const adminDb = getFirestore(adminApp);
 
-const PostSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  calls: z.number().int().nonnegative().optional(),
-  engagements: z.number().int().nonnegative().optional(),
-  appointmentsSet: z.number().int().nonnegative().optional(),
-  appointmentsHeld: z.number().int().nonnegative().optional(),
-  contractsWritten: z.number().int().nonnegative().optional(),
-});
-
-function num(v: unknown, fallback = 0) {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
+function jsonError(status: number, error: string, code?: string, details?: unknown) {
+  return NextResponse.json(
+    {
+      error,
+      code: code ?? `http_${status}`,
+      details: details ?? null,
+    },
+    { status }
+  );
 }
 
-function sanitize(doc: any) {
-  return {
-    agentId: String(doc?.agentId ?? ""),
-    date: String(doc?.date ?? ""),
-    callsCount: num(doc?.callsCount, 0),
-    engagementsCount: num(doc?.engagementsCount, 0),
-    appointmentsSetCount: num(doc?.appointmentsSetCount, 0),
-    appointmentsHeldCount: num(doc?.appointmentsHeldCount, 0),
-    contractsWrittenCount: num(doc?.contractsWrittenCount, 0),
-    updatedByUid: typeof doc?.updatedByUid === "string" ? doc.updatedByUid : null,
-    updatedAt: doc?.updatedAt ?? null,
-  };
-}
+async function requireUser(req: Request): Promise<{ uid: string }> {
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    throw Object.assign(new Error("Missing Authorization bearer token"), { status: 401, code: "auth/missing-bearer" });
+  }
 
-export async function GET(req: Request) {
+  const token = authHeader.slice("Bearer ".length).trim();
   try {
-    const { uid } = await verifyBearerToken(req);
-
-    const url = new URL(req.url);
-    const parsed = GetSchema.safeParse({ date: url.searchParams.get("date") });
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid query", code: "BAD_REQUEST", details: parsed.error.flatten() },
-        { status: 400 }
-      );
-    }
-
-    const { date } = parsed.data;
-    const docId = `${uid}_${date}`;
-
-    const db = getAdminDb();
-    const snap = await db.collection("daily_activity").doc(docId).get();
-
-    const dailyActivity = snap.exists
-      ? sanitize(snap.data())
-      : sanitize({
-          agentId: uid,
-          date,
-          callsCount: 0,
-          engagementsCount: 0,
-          appointmentsSetCount: 0,
-          appointmentsHeldCount: 0,
-          contractsWrittenCount: 0,
-        });
-
-    return NextResponse.json({ ok: true, date, docId, dailyActivity });
+    const decoded = await adminAuth.verifyIdToken(token);
+    return { uid: decoded.uid };
   } catch (err: any) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "Failed to load daily activity",
-        code: err?.code ?? "INTERNAL",
-        details: err?.message ?? String(err),
-      },
-      { status: 500 }
-    );
+    throw Object.assign(new Error("Invalid or expired token"), {
+      status: 401,
+      code: "auth/invalid-token",
+      details: err?.message ?? String(err),
+    });
   }
 }
 
-export async function POST(req: Request) {
+/**
+ * GET /api/daily-activity?date=YYYY-MM-DD
+ * Returns daily_activity doc for the signed-in user for that date.
+ */
+export async function GET(req: Request) {
   try {
-    const { uid } = await verifyBearerToken(req);
+    const { uid } = await requireUser(req);
 
-    const body = await req.json().catch(() => ({}));
-    const parsed = PostSchema.safeParse(body);
+    const url = new URL(req.url);
+    const date = url.searchParams.get("date");
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid body", code: "BAD_REQUEST", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+    if (!date) {
+      return jsonError(400, "Missing required query param: date", "bad_request/missing-date");
     }
 
-    const { date } = parsed.data;
     const docId = `${uid}_${date}`;
+    const ref = adminDb.collection("daily_activity").doc(docId);
+    const snap = await ref.get();
 
-    const db = getAdminDb();
+    if (!snap.exists) {
+      // Return a predictable shape so the UI can render without special-casing.
+      return NextResponse.json({
+        ok: true,
+        data: null,
+      });
+    }
 
-    // match your existing field names exactly
-    const now = new Date().toISOString();
-    const toSave = {
+    return NextResponse.json({
+      ok: true,
+      data: snap.data(),
+    });
+  } catch (err: any) {
+    const status = err?.status ?? 500;
+    return jsonError(status, err?.message ?? "Failed to load daily activity", err?.code, err?.details);
+  }
+}
+
+/**
+ * POST /api/daily-activity
+ * Body should include:
+ * {
+ *   date: "YYYY-MM-DD",
+ *   callsCount, engagementsCount, appointmentsSetCount, appointmentsHeldCount, contractsWrittenCount
+ * }
+ */
+export async function POST(req: Request) {
+  try {
+    const { uid } = await requireUser(req);
+
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return jsonError(400, "Invalid JSON body", "bad_request/invalid-json");
+    }
+
+    const date = body.date;
+    if (!date || typeof date !== "string") {
+      return jsonError(400, "Missing or invalid field: date", "bad_request/missing-date");
+    }
+
+    // Coerce counts to numbers (default 0)
+    const callsCount = Number(body.callsCount ?? 0) || 0;
+    const engagementsCount = Number(body.engagementsCount ?? 0) || 0;
+    const appointmentsSetCount = Number(body.appointmentsSetCount ?? 0) || 0;
+    const appointmentsHeldCount = Number(body.appointmentsHeldCount ?? 0) || 0;
+    const contractsWrittenCount = Number(body.contractsWrittenCount ?? 0) || 0;
+
+    const docId = `${uid}_${date}`;
+    const ref = adminDb.collection("daily_activity").doc(docId);
+
+    const dataToSave = {
       agentId: uid,
       date,
-      callsCount: num(parsed.data.calls, 0),
-      engagementsCount: num(parsed.data.engagements, 0),
-      appointmentsSetCount: num(parsed.data.appointmentsSet, 0),
-      appointmentsHeldCount: num(parsed.data.appointmentsHeld, 0),
-      contractsWrittenCount: num(parsed.data.contractsWritten, 0),
+      callsCount,
+      engagementsCount,
+      appointmentsSetCount,
+      appointmentsHeldCount,
+      contractsWrittenCount,
+      updatedAt: FieldValue.serverTimestamp(),
       updatedByUid: uid,
-      // use Firestore server timestamp via Admin SDK
-      updatedAt: (await import("firebase-admin")).default.firestore.FieldValue.serverTimestamp(),
-      // if you want createdAt, we can add it safely later
     };
 
-    await db.collection("daily_activity").doc(docId).set(toSave, { merge: true });
+    await ref.set(dataToSave, { merge: true });
 
-    const snap = await db.collection("daily_activity").doc(docId).get();
-
-    return NextResponse.json({ ok: true, date, docId, dailyActivity: sanitize(snap.data()) });
+    return NextResponse.json({ ok: true });
   } catch (err: any) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "Failed to save daily activity",
-        code: err?.code ?? "INTERNAL",
-        details: err?.message ?? String(err),
-      },
-      { status: 500 }
-    );
+    const status = err?.status ?? 500;
+    return jsonError(status, err?.message ?? "Failed to save daily activity", err?.code, err?.details);
   }
 }
