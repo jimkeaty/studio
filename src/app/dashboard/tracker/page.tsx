@@ -1,417 +1,185 @@
-
 'use client';
 
-// Imports from both files
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
-import { CalendarIcon, Check, Edit, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { mockAgentDashboardData } from '@/lib/mock-data';
-import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
 import { useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
+import { useUser } from '@/firebase';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ActivityCalendarView } from '@/components/dashboard/log-activities/ActivityCalendarView';
-import { DailyLogPanel } from '@/components/dashboard/log-activities/DailyLogPanel';
-import { RunningAppointmentList } from '@/components/dashboard/log-activities/RunningAppointmentList';
-import { getYtdValueMetrics } from '@/lib/valueMetricsService';
+import { AlertTriangle } from 'lucide-react';
 
-const trackerFormSchema = z.object({
-  date: z.date({
-    required_error: 'A date is required.',
-  }),
-  calls: z.coerce.number().min(0, 'Cannot be negative.'),
-  engagements: z.coerce.number().min(0, 'Cannot be negative.'),
-  appointmentsSet: z.coerce.number().min(0, 'Cannot be negative.'),
-  appointmentsHeld: z.coerce.number().min(0, 'Cannot be negative.'),
-  contractsWritten: z.coerce.number().min(0, 'Cannot be negative.'),
-});
-
-type TrackerFormValues = z.infer<typeof trackerFormSchema>;
-
-
-const ValueMetricDisplay = ({ label, value, loading }: { label: string; value: number | null | undefined, loading: boolean }) => (
-    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="font-semibold">{label}:</span>
-        {loading ? <Skeleton className="h-5 w-20" /> : <span className="font-bold text-lg text-primary">{value ? `$${value.toFixed(2)}` : '—'}</span>}
-    </div>
-);
-
+interface DailyActivity {
+  callsCount: number;
+  engagementsCount: number;
+  appointmentsSetCount: number;
+  appointmentsHeldCount: number;
+  contractsWrittenCount: number;
+}
 
 export default function DailyTrackerPage() {
-  const { toast } = useToast();
   const { user, loading: userLoading } = useUser();
-  const db = useFirestore();
-  
-  const form = useForm<TrackerFormValues>({
-    resolver: zodResolver(trackerFormSchema),
-    defaultValues: {
-      // date is set in useEffect to avoid hydration errors
-      calls: 0,
-      engagements: 0,
-      appointmentsSet: 0,
-      appointmentsHeld: 0,
-      contractsWritten: 0,
-    },
+
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [formData, setFormData] = useState<DailyActivity>({
+    callsCount: 0,
+    engagementsCount: 0,
+    appointmentsSetCount: 0,
+    appointmentsHeldCount: 0,
+    contractsWrittenCount: 0,
   });
 
-  // State from log-activities
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [ytdValueMetrics, setYtdValueMetrics] = useState<YtdValueMetrics | null>(null);
-  const [ytdMetricsLoading, setYtdMetricsLoading] = useState(true);
-  const year = currentMonth.getFullYear();
+  const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
+  // ---------------------------
+  // Load Daily Activity
+  // ---------------------------
   useEffect(() => {
-    // Set the date on the client side to avoid hydration mismatch
-    form.setValue('date', new Date());
-    setSelectedDate(new Date()); // Also select today's date in the calendar
-  }, [form]);
+    const load = async () => {
+      if (!user) return;
 
-  useEffect(() => {
-    if (!user?.uid || !db || !year) {
-        setYtdMetricsLoading(false);
-        return;
-    }
-
-    setYtdMetricsLoading(true);
-    getYtdValueMetrics(db, user.uid, year)
-        .then(setYtdValueMetrics)
-        .catch(console.error) // Don't show a big error card here, just log it.
-        .finally(() => setYtdMetricsLoading(false));
-
-  }, [user?.uid, db, year]);
-
-
-  async function onSubmit(data: TrackerFormValues) {
-    if (!user || !db) {
-        toast({
-            variant: "destructive",
-            title: "Not Signed In",
-            description: "You must be signed in to log your daily activity.",
+      setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/daily-activity?date=${dateStr}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
         });
-        return;
-    }
 
-    const dateStr = format(data.date, 'yyyy-MM-dd');
-    const docId = `${user.uid}_${dateStr}`;
-    const logDocRef = doc(db, 'daily_activity', docId);
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error || 'Failed to load daily activity');
+        }
 
-    const dataToSave = {
-        agentId: user.uid,
-        date: dateStr,
-        callsCount: data.calls,
-        engagementsCount: data.engagements,
-        appointmentsSetCount: data.appointmentsSet,
-        appointmentsHeldCount: data.appointmentsHeld,
-        contractsWrittenCount: data.contractsWritten,
-        updatedAt: serverTimestamp(),
-        updatedByUid: user.uid,
+        setFormData({
+          callsCount: json.dailyActivity.callsCount ?? 0,
+          engagementsCount: json.dailyActivity.engagementsCount ?? 0,
+          appointmentsSetCount: json.dailyActivity.appointmentsSetCount ?? 0,
+          appointmentsHeldCount: json.dailyActivity.appointmentsHeldCount ?? 0,
+          contractsWrittenCount: json.dailyActivity.contractsWrittenCount ?? 0,
+        });
+
+        setError(null);
+      } catch (err: any) {
+        console.error(err);
+        setError(err.message || 'Failed to load daily activity');
+      } finally {
+        setLoading(false);
+      }
     };
 
-    // Save the daily log first
-    try {
-      await setDoc(logDocRef, dataToSave, { merge: true });
-    } catch (err) {
-      const permissionError = new FirestorePermissionError({
-          path: logDocRef.path,
-          operation: 'update',
-          requestResourceData: dataToSave,
-      });
-      errorEmitter.emit('permission-error', permissionError);
-      toast({
-        variant: "destructive",
-        title: "Log Save Failed",
-        description: "Could not save your daily log due to a permission error."
-      });
-      return; // Stop if the primary save fails
-    }
-    
-    try {
-        const yearStr = format(data.date, 'yyyy');
-        const dashboardDocRef = doc(db, 'dashboards', user.uid, 'agent', yearStr);
-        
-        const planDocRef = doc(db, 'users', user.uid, 'plans', yearStr);
-        const planSnap = await getDoc(planDocRef);
-        let monthlyGoal = mockAgentDashboardData.monthlyIncome[0].goal;
-        if (planSnap.exists()) {
-            const planData = planSnap.data() as BusinessPlan;
-            if (planData.calculatedTargets?.monthlyNetIncome) {
-                monthlyGoal = planData.calculatedTargets.monthlyNetIncome;
-            }
-        }
+    load();
+  }, [user, dateStr]);
 
-        const dashboardSnap = await getDoc(dashboardDocRef);
-        let dashboardData: AgentDashboardData;
+  // ---------------------------
+  // Save Daily Activity
+  // ---------------------------
+  const handleSave = async () => {
+    if (!user) return;
 
-        if (dashboardSnap.exists()) {
-            const existingData = dashboardSnap.data() as AgentDashboardData;
-            dashboardData = {
-                ...existingData,
-                kpis: {
-                    ...existingData.kpis,
-                    calls: { ...existingData.kpis.calls, actual: (existingData.kpis.calls.actual || 0) + data.calls },
-                    engagements: { ...existingData.kpis.engagements, actual: (existingData.kpis.engagements.actual || 0) + data.engagements },
-                    appointmentsSet: { ...existingData.kpis.appointmentsSet, actual: (existingData.kpis.appointmentsSet.actual || 0) + data.appointmentsSet },
-                    appointmentsHeld: { ...existingData.kpis.appointmentsHeld, actual: (existingData.kpis.appointmentsHeld.actual || 0) + data.appointmentsHeld },
-                    contractsWritten: { ...existingData.kpis.contractsWritten, actual: (existingData.kpis.contractsWritten.actual || 0) + data.contractsWritten },
-                },
-                monthlyIncome: (existingData.monthlyIncome || mockAgentDashboardData.monthlyIncome).map(m => ({
-                    month: m.month,
-                    closed: m.closed || 0,
-                    pending: m.pending || 0,
-                    goal: monthlyGoal,
-                })),
-            };
-        } else {
-            dashboardData = {
-                ...mockAgentDashboardData,
-                userId: user.uid,
-                kpis: {
-                    ...mockAgentDashboardData.kpis,
-                    calls: { ...mockAgentDashboardData.kpis.calls, actual: data.calls },
-                    engagements: { ...mockAgentDashboardData.kpis.engagements, actual: data.engagements },
-                    appointmentsSet: { ...mockAgentDashboardData.kpis.appointmentsSet, actual: data.appointmentsSet },
-                    appointmentsHeld: { ...mockAgentDashboardData.kpis.appointmentsHeld, actual: data.appointmentsHeld },
-                    contractsWritten: { ...mockAgentDashboardData.kpis.contractsWritten, actual: data.contractsWritten },
-                    closings: { ...mockAgentDashboardData.kpis.closings, actual: 0 }
-                },
-                netEarned: 0,
-                netPending: 0,
-                ytdTotalPotential: 0,
-                totalClosedIncomeForYear: 0,
-                totalPendingIncomeForYear: 0,
-                totalIncomeWithPipelineForYear: 0,
-                monthlyIncome: mockAgentDashboardData.monthlyIncome.map(m => ({
-                    ...m,
-                    closed: 0, 
-                    pending: 0, 
-                    goal: monthlyGoal 
-                })),
-            };
-        }
-        
-        await setDoc(dashboardDocRef, dashboardData, { merge: true });
-        
-        toast({
-            title: "Log Saved & Dashboard Updated!",
-            description: `Your dashboard for ${yearStr} now reflects this activity. Go check it out!`,
-            action: <Check className="h-5 w-5 text-green-500" />,
-        });
-    } catch (err) {
-        console.error("Error updating dashboard document for testing:", err);
-        const permissionError = new FirestorePermissionError({
-            path: `dashboards/${user.uid}/agent/${format(data.date, 'yyyy')}`,
-            operation: 'update',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        toast({
-          variant: "destructive",
-          title: "Dashboard Update Failed",
-          description: "Your log was saved, but the dashboard could not be updated for testing due to a permission error."
-        });
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/daily-activity`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          date: dateStr,
+          calls: formData.callsCount,
+          engagements: formData.engagementsCount,
+          appointmentsSet: formData.appointmentsSetCount,
+          appointmentsHeld: formData.appointmentsHeldCount,
+          contractsWritten: formData.contractsWrittenCount,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || 'Failed to save daily activity');
+      }
+
+      setError(null);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to save daily activity');
     }
+  };
+
+  if (userLoading || loading) {
+    return <div className="p-6">Loading...</div>;
   }
 
-  const handleDateSelect = (date: Date) => {
-      setSelectedDate(date);
-  };
-  
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-  if (userLoading) {
+  if (error) {
     return (
-        <div className="space-y-6">
-            <Skeleton className="h-10 w-1/3" />
-            <Skeleton className="h-80 w-full" />
-            <Skeleton className="h-96 w-full" />
-        </div>
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
     );
   }
 
-  if (!user) {
-      return (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Authentication Error</AlertTitle>
-              <AlertDescription>You must be signed in to log activities.</AlertDescription>
-          </Alert>
-      );
-  }
-
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Daily Activity Log</h1>
-        <p className="text-muted-foreground">Log your daily metrics and manage appointments. You can edit entries up to 7 days back.</p>
-        <Card className="mt-4">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Your Motivational Metrics ({year})</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-x-6 gap-y-2">
-                <ValueMetricDisplay label="Value per Engagement (YTD)" value={ytdValueMetrics?.valuePerEngagement} loading={ytdMetricsLoading} />
-                <ValueMetricDisplay label="Value per Appointment Held (YTD)" value={ytdValueMetrics?.valuePerAppointmentHeld} loading={ytdMetricsLoading} />
-            </CardContent>
-        </Card>
-      </div>
-
-      <Card className="max-w-2xl mx-auto shadow-lg">
+    <div className="p-6 space-y-6">
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Edit className="text-primary"/>Quick Log for Today</CardTitle>
-          <CardDescription>Select a date and enter your numbers for the day. For detailed appointment logging, use the calendar below.</CardDescription>
+          <CardTitle>Daily Tracker — {dateStr}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={'outline'}
-                            className={cn(
-                              'w-full pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
-                            )}
-                          >
-                            {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date > new Date() || date < sevenDaysAgo}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="calls"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Calls</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="engagements"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Engagements (Spoke to)</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="appointmentsSet"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Appointments Set</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="appointmentsHeld"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Appointments Held</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="contractsWritten"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contracts Written</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <Button type="submit" className="w-full">Save Log</Button>
-            </form>
-          </Form>
+        <CardContent className="space-y-4">
+
+          <Input
+            type="number"
+            placeholder="Calls"
+            value={formData.callsCount}
+            onChange={(e) =>
+              setFormData({ ...formData, callsCount: Number(e.target.value) })
+            }
+          />
+
+          <Input
+            type="number"
+            placeholder="Engagements"
+            value={formData.engagementsCount}
+            onChange={(e) =>
+              setFormData({ ...formData, engagementsCount: Number(e.target.value) })
+            }
+          />
+
+          <Input
+            type="number"
+            placeholder="Appointments Set"
+            value={formData.appointmentsSetCount}
+            onChange={(e) =>
+              setFormData({ ...formData, appointmentsSetCount: Number(e.target.value) })
+            }
+          />
+
+          <Input
+            type="number"
+            placeholder="Appointments Held"
+            value={formData.appointmentsHeldCount}
+            onChange={(e) =>
+              setFormData({ ...formData, appointmentsHeldCount: Number(e.target.value) })
+            }
+          />
+
+          <Input
+            type="number"
+            placeholder="Contracts Written"
+            value={formData.contractsWrittenCount}
+            onChange={(e) =>
+              setFormData({ ...formData, contractsWrittenCount: Number(e.target.value) })
+            }
+          />
+
+          <Button onClick={handleSave}>Save Daily Log</Button>
         </CardContent>
       </Card>
-      
-      <Card>
-          <CardHeader>
-              <CardTitle>Monthly Activity Log</CardTitle>
-              <CardDescription>Click a day to view or edit the detailed log for that day, including appointment names.</CardDescription>
-          </CardHeader>
-          <CardContent>
-              <ActivityCalendarView
-                  agentId={user.uid}
-                  month={currentMonth}
-                  onMonthChange={setCurrentMonth}
-                  selectedDate={selectedDate}
-                  onDateSelect={handleDateSelect}
-              />
-          </CardContent>
-      </Card>
-
-      <RunningAppointmentList agentId={user.uid} currentMonth={currentMonth} />
-
-      <DailyLogPanel
-          date={selectedDate}
-          agentId={user.uid}
-          userId={user.uid}
-          onOpenChange={(isOpen) => {
-              if (!isOpen) setSelectedDate(null);
-          }}
-      />
     </div>
   );
 }
