@@ -1,17 +1,16 @@
 // src/components/dashboard/agent/RecruitingIncentiveTracker.tsx
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { useUser, useFirestore } from '@/firebase';
-import { getFullDownline } from '@/lib/referralsService';
-import type { DownlineMember } from '@/lib/types';
+import { useState, useEffect, useMemo } from "react";
+import { useUser } from "@/firebase";
+import type { DownlineMember } from "@/lib/types";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -19,25 +18,18 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AlertCircle,
-  Users,
-  Award,
-  DollarSign,
-  TrendingUp,
-} from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
-import { format, formatDistanceToNowStrict } from 'date-fns';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AlertCircle, Users, Award, DollarSign, TrendingUp } from "lucide-react";
+import { formatDistanceToNowStrict } from "date-fns";
+import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
+} from "@/components/ui/tooltip";
 
 const SummaryCard = ({
   icon: Icon,
@@ -65,96 +57,131 @@ const SummaryCard = ({
 const StatusBadge = ({
   status,
 }: {
-  status: 'qualified' | 'in_progress' | 'expired' | 'missing_data';
+  status: "qualified" | "in_progress" | "expired" | "missing_data";
 }) => {
   const variants = {
-    qualified: 'bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30',
-    in_progress: 'bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/30',
-    expired: 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30',
-    missing_data: 'bg-gray-500/20 text-gray-700 dark:text-gray-400 border-gray-500/30',
+    qualified:
+      "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30",
+    in_progress:
+      "bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/30",
+    expired: "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30",
+    missing_data:
+      "bg-gray-500/20 text-gray-700 dark:text-gray-400 border-gray-500/30",
   };
   const text = {
-    qualified: 'Qualified',
-    in_progress: 'In Progress',
-    expired: 'Expired',
-    missing_data: 'No Data',
+    qualified: "Qualified",
+    in_progress: "In Progress",
+    expired: "Expired",
+    missing_data: "No Data",
   };
   return (
-    <Badge variant="outline" className={cn('font-normal', variants[status])}>
+    <Badge variant="outline" className={cn("font-normal", variants[status])}>
       {text[status]}
     </Badge>
   );
 };
 
 const GciProgressBar = ({
-    closed,
-    pending,
-    threshold
+  closed,
+  pending,
+  threshold,
 }: {
-    closed: number;
-    pending: number;
-    threshold: number;
+  closed: number;
+  pending: number;
+  threshold: number;
 }) => {
-    const closedPct = Math.min((closed / threshold) * 100, 100);
-    const pendingPct = Math.min((pending / threshold) * 100, 100 - closedPct);
+  const closedPct = Math.min((closed / threshold) * 100, 100);
+  const pendingPct = Math.min((pending / threshold) * 100, 100 - closedPct);
 
-    return (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <div className="relative w-full h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                            className="absolute top-0 left-0 h-full bg-blue-500"
-                            style={{ width: `${closedPct}%` }}
-                        />
-                        <div
-                            className="absolute top-0 h-full bg-yellow-400"
-                            style={{ left: `${closedPct}%`, width: `${pendingPct}%` }}
-                        />
-                    </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                    <p>Closed: ${closed.toLocaleString()}</p>
-                    <p>Pending: ${pending.toLocaleString()}</p>
-                    <p>Remaining: ${Math.max(0, threshold - closed).toLocaleString()}</p>
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
-    );
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="relative w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="absolute top-0 left-0 h-full bg-blue-500"
+              style={{ width: `${closedPct}%` }}
+            />
+            <div
+              className="absolute top-0 h-full bg-yellow-400"
+              style={{ left: `${closedPct}%`, width: `${pendingPct}%` }}
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Closed: ${closed.toLocaleString()}</p>
+          <p>Pending: ${pending.toLocaleString()}</p>
+          <p>Remaining: ${Math.max(0, threshold - closed).toLocaleString()}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 };
 
+type RecruitingApiResponse =
+  | {
+      ok: true;
+      uid: string;
+      summary?: {
+        tier1Count: number;
+        tier2Count: number;
+        qualifiedCount: number;
+        totalRecruits: number;
+      };
+      downline: DownlineMember[];
+    }
+  | { ok: false; error: string };
 
 export function RecruitingIncentiveTracker() {
   const { user } = useUser();
-  const db = useFirestore();
+
   const [downline, setDownline] = useState<DownlineMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || !db) {
+    const load = async () => {
+      if (!user) {
         setLoading(false);
         return;
+      }
+      setLoading(true);
+      setError(null);
+
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/recruiting", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+
+        const json = (await res.json()) as RecruitingApiResponse;
+
+        if (!res.ok || !json || (json as any).ok !== true) {
+          const msg =
+            (json as any)?.error ||
+            `Failed to load recruiting data (HTTP ${res.status})`;
+          throw new Error(msg);
+        }
+
+        setDownline(json.downline || []);
+      } catch (e: any) {
+        console.error("Recruiting Tracker UI Error:", e?.message || e);
+        setError("An unexpected error occurred while loading recruiting data.");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    setLoading(true);
-    getFullDownline(db, user.uid)
-      .then(setDownline)
-      .catch((err) => {
-        // This will only catch truly unexpected errors now, as the service
-        // handles permission errors and empty states gracefully.
-        console.error("Recruiting Tracker UI Error:", err);
-        setError('An unexpected error occurred while loading recruiting data.');
-      })
-      .finally(() => setLoading(false));
-  }, [user, db]);
+    load();
+  }, [user]);
 
   const summary = useMemo(() => {
     return downline.reduce(
       (acc, member) => {
         if (member.tier === 1) acc.tier1Count++;
         if (member.tier === 2) acc.tier2Count++;
-        if (member.qualificationProgress?.status === 'qualified') {
+        if ((member as any).qualificationProgress?.status === "qualified") {
           acc.qualifiedCount++;
         }
         acc.totalRecruits++;
@@ -171,22 +198,28 @@ export function RecruitingIncentiveTracker() {
 
   if (loading) {
     return (
-        <Card>
-            <CardHeader><Skeleton className="h-6 w-1/3" /></CardHeader>
-            <CardContent><Skeleton className="h-48 w-full" /></CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-1/3" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
     );
   }
-  
+
   if (error) {
-     return (
-        <Card>
-            <CardHeader><CardTitle>Recruiting Tracker</CardTitle></CardHeader>
-            <CardContent className="text-center text-red-500">
-                <AlertCircle className="mx-auto h-8 w-8 mb-2" />
-                <p>{error}</p>
-            </CardContent>
-        </Card>
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recruiting Tracker</CardTitle>
+        </CardHeader>
+        <CardContent className="text-center text-red-500">
+          <AlertCircle className="mx-auto h-8 w-8 mb-2" />
+          <p>{error}</p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -195,9 +228,11 @@ export function RecruitingIncentiveTracker() {
       <CardHeader>
         <CardTitle>Recruiting Incentive Tracker</CardTitle>
         <CardDescription>
-          Track the progress of agents you've referred and your potential annual incentive.
+          Track the progress of agents you've referred and your potential annual
+          incentive.
         </CardDescription>
       </CardHeader>
+
       <CardContent className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <SummaryCard
@@ -218,7 +253,7 @@ export function RecruitingIncentiveTracker() {
             value={`$${(summary.totalRecruits * 500).toLocaleString()}`}
             description="Your max potential payout"
           />
-           <SummaryCard
+          <SummaryCard
             icon={TrendingUp}
             title="Qualified Agents"
             value={summary.qualifiedCount}
@@ -227,75 +262,83 @@ export function RecruitingIncentiveTracker() {
         </div>
 
         {downline.length === 0 ? (
-            <div className="text-center text-muted-foreground py-12">
-                <p>You have not referred any agents yet.</p>
-                <p className="text-sm">Start recruiting to build your passive income stream.</p>
-            </div>
+          <div className="text-center text-muted-foreground py-12">
+            <p>You have not referred any agents yet.</p>
+            <p className="text-sm">
+              Start recruiting to build your passive income stream.
+            </p>
+          </div>
         ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Agent</TableHead>
-              <TableHead>Tier</TableHead>
-              <TableHead>Time Left</TableHead>
-              <TableHead>GCI Progress ($40k Goal)</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Your Payout</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {downline.map((member) => (
-              <TableRow key={member.agentId}>
-                <TableCell className="font-medium">{member.displayName}</TableCell>
-                <TableCell>{member.tier}</TableCell>
-                <TableCell>
-                  {member.qualificationProgress?.timeRemainingDays !== null && member.qualificationProgress?.windowEndsAt ? (
-                    <TooltipProvider>
-                       <Tooltip>
-                           <TooltipTrigger>
-                                <span className={cn(member.qualificationProgress.timeRemainingDays <= 60 && "text-destructive font-semibold")}>
-                                    {formatDistanceToNowStrict(member.qualificationProgress.windowEndsAt)}
-                                </span>
-                           </TooltipTrigger>
-                           <TooltipContent>
-                               <p>Hire Date: {member.hireDate ? format(member.hireDate, 'PPP') : 'N/A'}</p>
-                               <p>Window Ends: {format(member.qualificationProgress.windowEndsAt, 'PPP')}</p>
-                           </TooltipContent>
-                       </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    'N/A'
-                  )}
-                </TableCell>
-                <TableCell>
-                  {member.qualificationProgress && member.qualificationProgress.status !== 'missing_data' ? (
-                     <div className="flex flex-col">
-                        <span className="font-semibold text-sm">
-                            ${member.qualificationProgress.closedCompanyGciGrossInWindow.toLocaleString()}
-                        </span>
-                        <GciProgressBar 
-                            closed={member.qualificationProgress.closedCompanyGciGrossInWindow}
-                            pending={member.qualificationProgress.pendingCompanyGciGrossInWindow}
-                            threshold={40000}
-                        />
-                        <span className="text-xs text-muted-foreground mt-1">
-                            ${member.qualificationProgress.remainingToThreshold.toLocaleString()} to goal
-                        </span>
-                     </div>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">Missing GCI Data</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                   <StatusBadge status={member.qualificationProgress?.status ?? 'missing_data'} />
-                </TableCell>
-                <TableCell className="text-right font-semibold">
-                   ${member.qualificationProgress?.annualPayout ?? 0}
-                </TableCell>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Agent</TableHead>
+                <TableHead>Tier</TableHead>
+                <TableHead>Time Left</TableHead>
+                <TableHead>Progress to $40k GCI</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Annual Payout</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {downline.map((member: any) => {
+                const qp = member.qualificationProgress as any | null;
+
+                const status: "qualified" | "in_progress" | "expired" | "missing_data" =
+                  qp?.status ?? "missing_data";
+
+                const closed = Number(qp?.closedCompanyGciGrossInWindow || 0);
+                const pending = Number(qp?.pendingCompanyGciGrossInWindow || 0);
+                const annualPayout = Number(qp?.annualPayout || 0);
+
+                let timeLeft = "—";
+                if (qp?.windowEndsAt) {
+                  const d =
+                    typeof qp.windowEndsAt === "string"
+                      ? new Date(qp.windowEndsAt)
+                      : new Date(qp.windowEndsAt);
+                  if (!isNaN(d.getTime()) && status === "in_progress") {
+                    timeLeft = formatDistanceToNowStrict(d);
+                  }
+                }
+
+                return (
+                  <TableRow key={member.agentId}>
+                    <TableCell className="font-medium">
+                      {member.displayName || member.agentId}
+                      {member.referrerId ? (
+                        <div className="text-xs text-muted-foreground">
+                          Referred by: {member.referrerId}
+                        </div>
+                      ) : null}
+                    </TableCell>
+
+                    <TableCell>Tier {member.tier}</TableCell>
+
+                    <TableCell>{status === "in_progress" ? timeLeft : "—"}</TableCell>
+
+                    <TableCell>
+                      <div className="space-y-2">
+                        <GciProgressBar closed={closed} pending={pending} threshold={40000} />
+                        <div className="text-xs text-muted-foreground">
+                          Closed ${closed.toLocaleString()} · Pending $
+                          {pending.toLocaleString()}
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <StatusBadge status={status} />
+                    </TableCell>
+
+                    <TableCell className="text-right font-semibold">
+                      ${annualPayout.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>

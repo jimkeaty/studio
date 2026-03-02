@@ -43,7 +43,7 @@ async function requireUser(req: Request): Promise<{ uid: string; role: string }>
 }
 
 /**
- * ✅ Fix #1: prevent saving future dates.
+ * Prevent saving future dates.
  * - Admin can edit anything
  * - Agents can only edit dates 0..45 days ago (inclusive)
  */
@@ -58,8 +58,6 @@ function isDateEditable(dateStr: string, role: string): boolean {
     new Date(date.getFullYear(), date.getMonth(), date.getDate())
   );
 
-  // BEFORE: return diff <= EDIT_WINDOW_DAYS;
-  // AFTER:
   return diff >= 0 && diff <= EDIT_WINDOW_DAYS;
 }
 
@@ -73,6 +71,11 @@ function emptyDailyActivity(date: string) {
     contractsWrittenCount: 0,
     notes: "",
   };
+}
+
+function toNumberOrZero(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export async function GET(req: Request) {
@@ -94,11 +97,11 @@ export async function GET(req: Request) {
       : emptyDailyActivity(date);
 
     // Guarantee counts are numbers
-    dailyActivity.callsCount = Number(dailyActivity.callsCount ?? 0) || 0;
-    dailyActivity.engagementsCount = Number(dailyActivity.engagementsCount ?? 0) || 0;
-    dailyActivity.appointmentsSetCount = Number(dailyActivity.appointmentsSetCount ?? 0) || 0;
-    dailyActivity.appointmentsHeldCount = Number(dailyActivity.appointmentsHeldCount ?? 0) || 0;
-    dailyActivity.contractsWrittenCount = Number(dailyActivity.contractsWrittenCount ?? 0) || 0;
+    dailyActivity.callsCount = toNumberOrZero(dailyActivity.callsCount);
+    dailyActivity.engagementsCount = toNumberOrZero(dailyActivity.engagementsCount);
+    dailyActivity.appointmentsSetCount = toNumberOrZero(dailyActivity.appointmentsSetCount);
+    dailyActivity.appointmentsHeldCount = toNumberOrZero(dailyActivity.appointmentsHeldCount);
+    dailyActivity.contractsWrittenCount = toNumberOrZero(dailyActivity.contractsWrittenCount);
 
     return NextResponse.json({ ok: true, dailyActivity });
   } catch (err: any) {
@@ -125,34 +128,40 @@ export async function POST(req: Request) {
       return jsonError(403, "Edits are locked after 45 days.", "edit_window_expired");
     }
 
+    // ✅ Accept BOTH shapes:
+    // 1) { date, callsCount, engagementsCount, ... }
+    // 2) { date, dailyActivity: { callsCount, engagementsCount, ... }, notes? }
+    const payload =
+      (body as any).dailyActivity && typeof (body as any).dailyActivity === "object"
+        ? (body as any).dailyActivity
+        : body;
+
     const docId = `${uid}_${date}`;
     const ref = adminDb.collection("daily_activity").doc(docId);
 
     const dataToSave = {
       agentId: uid,
       date,
-      callsCount: Number((body as any).callsCount ?? 0) || 0,
-      engagementsCount: Number((body as any).engagementsCount ?? 0) || 0,
-      appointmentsSetCount: Number((body as any).appointmentsSetCount ?? 0) || 0,
-      appointmentsHeldCount: Number((body as any).appointmentsHeldCount ?? 0) || 0,
-      contractsWrittenCount: Number((body as any).contractsWrittenCount ?? 0) || 0,
-      notes: (body as any).notes ?? "",
-      updatedAt: FieldValue.serverTimestamp(), // ✅ KEEP storing server timestamp
+      callsCount: toNumberOrZero((payload as any).callsCount),
+      engagementsCount: toNumberOrZero((payload as any).engagementsCount),
+      appointmentsSetCount: toNumberOrZero((payload as any).appointmentsSetCount),
+      appointmentsHeldCount: toNumberOrZero((payload as any).appointmentsHeldCount),
+      contractsWrittenCount: toNumberOrZero((payload as any).contractsWrittenCount),
+      // notes can be top-level or inside payload; support both
+      notes: String((body as any).notes ?? (payload as any).notes ?? ""),
+      updatedAt: FieldValue.serverTimestamp(), // ✅ keep storing server timestamp
       updatedByUid: uid,
     };
 
     await ref.set(dataToSave, { merge: true });
 
-    /**
-     * ✅ Fix #2: don't return Firestore serverTimestamp sentinel to the client.
-     * Return a clean object the UI can safely consume.
-     */
+    // ✅ Don't return the serverTimestamp sentinel to the client
     return NextResponse.json({
       ok: true,
       dailyActivity: {
         ...emptyDailyActivity(date),
         ...dataToSave,
-        updatedAt: null, // sentinel stripped from response
+        updatedAt: null,
       },
     });
   } catch (err: any) {
