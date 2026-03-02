@@ -1,203 +1,189 @@
-"use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
-import { useUser } from "@/firebase";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+'use client';
 
-type DailyActivity = {
-  date: string;
-  callsCount: number;
-  engagementsCount: number;
-  appointmentsSetCount: number;
-  appointmentsHeldCount: number;
-  contractsWrittenCount: number;
-};
+import { useEffect, useState } from 'react';
+import { useUser } from '@/firebase';
+import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
+import { KpiCard } from '@/components/dashboard/kpi-card';
+import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle, DollarSign, Target, TrendingUp } from 'lucide-react';
+import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
+import TopAgents2025 from './TopAgents2025';
 
-const emptyFor = (date: string): DailyActivity => ({
-  date,
-  callsCount: 0,
-  engagementsCount: 0,
-  appointmentsSetCount: 0,
-  appointmentsHeldCount: 0,
-  contractsWrittenCount: 0,
-});
+const DashboardSkeleton = () => (
+  <div className="space-y-8">
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <Skeleton className="h-40" />
+      <Skeleton className="h-40" />
+      <Skeleton className="h-40" />
+      <Skeleton className="h-40" />
+    </div>
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <Skeleton className="h-32" />
+      <Skeleton className="h-32" />
+      <Skeleton className="h-32" />
+      <Skeleton className="h-32" />
+      <Skeleton className="h-32" />
+      <Skeleton className="h-32" />
+    </div>
+    <Skeleton className="h-96" />
+  </div>
+);
 
-export default function DailyTrackerPage() {
+const StatCard = ({ title, value, icon: Icon, description }: { title: string; value: string; icon: React.ElementType; description?: string }) => (
+  <Card>
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      <Icon className="h-4 w-4 text-muted-foreground" />
+    </CardHeader>
+    <CardContent>
+      <div className="text-2xl font-bold">{value}</div>
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+    </CardContent>
+  </Card>
+);
+
+export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
-
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const dateStr = useMemo(() => format(selectedDate, "yyyy-MM-dd"), [selectedDate]);
-
-  const [formData, setFormData] = useState<DailyActivity>(() => emptyFor(dateStr));
+  const [data, setData] = useState<{
+    dashboard: AgentDashboardData | null;
+    plan: BusinessPlan | null;
+    ytdMetrics: YtdValueMetrics | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // keep state in sync when date changes
-  useEffect(() => {
-    setFormData(emptyFor(dateStr));
-  }, [dateStr]);
+  // Per requirements, the dashboard is locked to 2025 for now.
+  const year = 2025;
 
-  // Load daily activity via server route
   useEffect(() => {
-    const load = async () => {
+    const loadDashboard = async () => {
       if (!user) return;
-
       setLoading(true);
       setError(null);
-
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/daily-activity?date=${dateStr}`, {
+        const res = await fetch(`/api/dashboard?year=${year}`, {
           headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
         });
 
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.ok) {
-          throw new Error(json?.error || "Failed to load daily activity");
+        if (!res.ok) {
+          const errorData = await res.json();
+          // Check for specific allowedYears error from API
+          if (res.status === 400 && errorData.allowedYears) {
+             throw new Error(`Data for year ${year} is not available. Allowed years: ${errorData.allowedYears.join(', ')}`);
+          }
+          throw new Error(errorData.error || 'Failed to load dashboard data');
         }
 
-        const daily: DailyActivity = json.dailyActivity ?? emptyFor(dateStr);
-
-        // harden numbers
-        setFormData({
-          date: daily.date ?? dateStr,
-          callsCount: Number(daily.callsCount ?? 0) || 0,
-          engagementsCount: Number(daily.engagementsCount ?? 0) || 0,
-          appointmentsSetCount: Number(daily.appointmentsSetCount ?? 0) || 0,
-          appointmentsHeldCount: Number(daily.appointmentsHeldCount ?? 0) || 0,
-          contractsWrittenCount: Number(daily.contractsWrittenCount ?? 0) || 0,
-        });
+        const responseData = await res.json();
+        if (!responseData.ok) {
+          throw new Error(responseData.error || 'API returned an error');
+        }
+        setData(responseData);
       } catch (err: any) {
+        setError(err.message);
         console.error(err);
-        setError(err?.message || "Failed to load daily activity");
       } finally {
         setLoading(false);
       }
     };
 
-    load();
-  }, [user, dateStr]);
-
-  // Save daily activity via server route
-  const handleSave = async () => {
-    if (!user) return;
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/daily-activity`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          date: dateStr,
-          callsCount: formData.callsCount,
-          engagementsCount: formData.engagementsCount,
-          appointmentsSetCount: formData.appointmentsSetCount,
-          appointmentsHeldCount: formData.appointmentsHeldCount,
-          contractsWrittenCount: formData.contractsWrittenCount,
-        }),
-      });
-
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Failed to save daily activity");
-      }
-
-      // optional: refresh with server response
-      const daily: DailyActivity = json.dailyActivity ?? formData;
-      setFormData({
-        date: daily.date ?? dateStr,
-        callsCount: Number(daily.callsCount ?? 0) || 0,
-        engagementsCount: Number(daily.engagementsCount ?? 0) || 0,
-        appointmentsSetCount: Number(daily.appointmentsSetCount ?? 0) || 0,
-        appointmentsHeldCount: Number(daily.appointmentsHeldCount ?? 0) || 0,
-        contractsWrittenCount: Number(daily.contractsWrittenCount ?? 0) || 0,
-        contractsWrittenCount: Number(daily.contractsWrittenCount ?? 0) || 0,
-      });
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || "Failed to save daily activity");
-    } finally {
-      setSaving(false);
+    if (!userLoading && user) {
+      loadDashboard();
+    } else if (!userLoading && !user) {
+      // If not logged in, the root page will handle the redirect.
+      setLoading(false);
     }
-  };
+  }, [user, userLoading, year]);
 
-  if (userLoading || loading) {
-    return <div className="p-6">Loading...</div>;
+  if (loading || userLoading) {
+    return <DashboardSkeleton />;
   }
 
   if (error) {
     return (
-      <div className="p-6">
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      </div>
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Error Loading Dashboard</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
     );
   }
 
+  if (!data || !data.dashboard) {
+    return (
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>No Data Available</AlertTitle>
+        <AlertDescription>
+          Dashboard data for {year} could not be found for your account. Please check your business plan setup or contact support.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const { dashboard, ytdMetrics } = data;
+  const kpis = Object.entries(dashboard.kpis || {});
+
   return (
-    <div className="p-6 space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Daily Tracker — {dateStr}</CardTitle>
-        </CardHeader>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
+        <p className="text-muted-foreground">Your performance summary for {year}.</p>
+      </div>
 
-        <CardContent className="space-y-4">
-          <Input
-            type="number"
-            placeholder="Calls"
-            value={formData.callsCount}
-            onChange={(e) => setFormData({ ...formData, callsCount: Number(e.target.value) || 0 })}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Net Earned (YTD)"
+          value={dashboard.netEarned.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          icon={DollarSign}
+          description="Total commission earned"
+        />
+        <StatCard
+          title="Net Pending"
+          value={dashboard.netPending.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          icon={TrendingUp}
+          description="Commission in pipeline"
+        />
+        <StatCard
+          title="YTD Income Goal"
+          value={dashboard.expectedYTDIncomeGoal.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          icon={Target}
+          description="Workday-paced goal"
+        />
+        <StatCard
+          title="YTD Total Potential"
+          value={dashboard.ytdTotalPotential.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          icon={DollarSign}
+          description="Earned + Pending"
+        />
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {kpis.map(([key, kpi]) => (
+          <KpiCard
+            key={key}
+            title={key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}
+            actual={kpi.actual}
+            target={kpi.target}
+            performance={kpi.performance}
+            grade={kpi.grade}
+            isGracePeriod={dashboard.isLeadIndicatorGracePeriod}
           />
+        ))}
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
+        <RecruitingIncentiveTracker />
+      </div>
 
-          <Input
-            type="number"
-            placeholder="Engagements"
-            value={formData.engagementsCount}
-            onChange={(e) => setFormData({ ...formData, engagementsCount: Number(e.target.value) || 0 })}
-          />
+      <TopAgents2025 year={year} />
 
-          <Input
-            type="number"
-            placeholder="Appointments Set"
-            value={formData.appointmentsSetCount}
-            onChange={(e) => setFormData({ ...formData, appointmentsSetCount: Number(e.target.value) || 0 })}
-          />
-
-          <Input
-            type="number"
-            placeholder="Appointments Held"
-            value={formData.appointmentsHeldCount}
-            onChange={(e) => setFormData({ ...formData, appointmentsHeldCount: Number(e.target.value) || 0 })}
-          />
-
-          <Input
-            type="number"
-            placeholder="Contracts Written"
-            value={formData.contractsWrittenCount}
-            onChange={(e) => setFormData({ ...formData, contractsWrittenCount: Number(e.target.value) || 0 })}
-          />
-
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save Daily Log"}
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

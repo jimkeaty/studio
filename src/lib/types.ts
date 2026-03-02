@@ -3,6 +3,7 @@
 
 
 
+
 export type UserRole = 'agent' | 'manager' | 'broker' | 'admin';
 
 export interface User {
@@ -55,11 +56,11 @@ export interface DailyLog {
   id: string;
   userId: string;
   date: string; // ISO string e.g., '2023-10-27'
-  calls: number;
-  engagements: number;
-  appointmentsSet: number;
-  appointmentsHeld: number;
-  contractsWritten: number;
+  callsCount: number;
+  engagementsCount: number;
+  appointmentsSetCount: number;
+  appointmentsHeldCount: number;
+  contractsWrittenCount: number;
 }
 
 export interface Transaction {
