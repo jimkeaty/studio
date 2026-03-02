@@ -1,5 +1,5 @@
 // src/app/api/daily-activity/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getApps, initializeApp, App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue, DocumentData } from "firebase-admin/firestore";
@@ -18,7 +18,7 @@ function jsonError(status: number, error: string, code?: string, details?: unkno
   );
 }
 
-async function requireUser(req: Request): Promise<{ uid: string, role: string }> {
+async function requireUser(req: Request): Promise<{ uid: string; role: string }> {
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     throw Object.assign(new Error("Missing Authorization bearer token"), {
@@ -30,8 +30,8 @@ async function requireUser(req: Request): Promise<{ uid: string, role: string }>
   const token = authHeader.slice("Bearer ".length).trim();
   try {
     const decoded = await adminAuth.verifyIdToken(token);
-    const userSnap = await adminDb.collection('users').doc(decoded.uid).get();
-    const role = userSnap.exists ? (userSnap.data() as DocumentData).role : 'agent';
+    const userSnap = await adminDb.collection("users").doc(decoded.uid).get();
+    const role = userSnap.exists ? (userSnap.data() as DocumentData).role : "agent";
     return { uid: decoded.uid, role };
   } catch (err: any) {
     throw Object.assign(new Error("Invalid or expired token"), {
@@ -42,21 +42,26 @@ async function requireUser(req: Request): Promise<{ uid: string, role: string }>
   }
 }
 
+/**
+ * ✅ Fix #1: prevent saving future dates.
+ * - Admin can edit anything
+ * - Agents can only edit dates 0..45 days ago (inclusive)
+ */
 function isDateEditable(dateStr: string, role: string): boolean {
-    if (role === 'admin') return true;
+  if (role === "admin") return true;
 
-    const date = new Date(dateStr + "T00:00:00"); // Ensure parsing in local timezone of server
-    const today = new Date();
-    
-    // Compare date parts only, ignoring time
-    const diff = differenceInDays(
-        new Date(today.getFullYear(), today.getMonth(), today.getDate()),
-        new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    );
+  const date = new Date(dateStr + "T00:00:00");
+  const today = new Date();
 
-    return diff <= EDIT_WINDOW_DAYS;
+  const diff = differenceInDays(
+    new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+    new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  );
+
+  // BEFORE: return diff <= EDIT_WINDOW_DAYS;
+  // AFTER:
+  return diff >= 0 && diff <= EDIT_WINDOW_DAYS;
 }
-
 
 function emptyDailyActivity(date: string) {
   return {
@@ -66,7 +71,7 @@ function emptyDailyActivity(date: string) {
     appointmentsSetCount: 0,
     appointmentsHeldCount: 0,
     contractsWrittenCount: 0,
-    notes: '',
+    notes: "",
   };
 }
 
@@ -117,28 +122,39 @@ export async function POST(req: Request) {
     }
 
     if (!isDateEditable(date, role)) {
-        return jsonError(403, 'Edits are locked after 45 days.', 'edit_window_expired');
+      return jsonError(403, "Edits are locked after 45 days.", "edit_window_expired");
     }
 
     const docId = `${uid}_${date}`;
     const ref = adminDb.collection("daily_activity").doc(docId);
 
     const dataToSave = {
-        agentId: uid,
-        date,
-        callsCount: Number((body as any).callsCount ?? 0) || 0,
-        engagementsCount: Number((body as any).engagementsCount ?? 0) || 0,
-        appointmentsSetCount: Number((body as any).appointmentsSetCount ?? 0) || 0,
-        appointmentsHeldCount: Number((body as any).appointmentsHeldCount ?? 0) || 0,
-        contractsWrittenCount: Number((body as any).contractsWrittenCount ?? 0) || 0,
-        notes: (body as any).notes ?? '',
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedByUid: uid,
+      agentId: uid,
+      date,
+      callsCount: Number((body as any).callsCount ?? 0) || 0,
+      engagementsCount: Number((body as any).engagementsCount ?? 0) || 0,
+      appointmentsSetCount: Number((body as any).appointmentsSetCount ?? 0) || 0,
+      appointmentsHeldCount: Number((body as any).appointmentsHeldCount ?? 0) || 0,
+      contractsWrittenCount: Number((body as any).contractsWrittenCount ?? 0) || 0,
+      notes: (body as any).notes ?? "",
+      updatedAt: FieldValue.serverTimestamp(), // ✅ KEEP storing server timestamp
+      updatedByUid: uid,
     };
 
     await ref.set(dataToSave, { merge: true });
 
-    return NextResponse.json({ ok: true, dailyActivity: dataToSave });
+    /**
+     * ✅ Fix #2: don't return Firestore serverTimestamp sentinel to the client.
+     * Return a clean object the UI can safely consume.
+     */
+    return NextResponse.json({
+      ok: true,
+      dailyActivity: {
+        ...emptyDailyActivity(date),
+        ...dataToSave,
+        updatedAt: null, // sentinel stripped from response
+      },
+    });
   } catch (err: any) {
     const status = err?.status ?? 500;
     return jsonError(status, err?.message ?? "Failed to save daily activity", err?.code, err?.details);
