@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle, DollarSign, Target, TrendingUp } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
+import { AgentIncomeByMonthCard } from '@/components/dashboard/agent/AgentIncomeByMonthCard';
 import TopAgents2025 from './TopAgents2025';
 
 const DashboardSkeleton = () => (
@@ -126,7 +127,7 @@ export default function AgentDashboardPage() {
     );
   }
 
-  const { dashboard, ytdMetrics } = data;
+  const { dashboard, plan, ytdMetrics } = data;
   const kpis = Object.entries(dashboard.kpis || {});
 
   return (
@@ -178,9 +179,11 @@ export default function AgentDashboardPage() {
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
+        <AgentIncomeByMonthCard year={year} dashboard={dashboard} plan={plan} />
         <RecruitingIncentiveTracker />
       </div>
+
+      <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
 
       <TopAgents2025 year={year} />
 

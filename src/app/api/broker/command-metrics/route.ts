@@ -38,8 +38,8 @@ const db = admin.firestore();
 interface Transaction {
   agentId: string;
   status: 'closed' | 'pending' | 'under_contract';
-  closedDate?: admin.firestore.Timestamp;
-  contractDate?: admin.firestore.Timestamp;
+  closedDate?: admin.firestore.Timestamp | string;
+  contractDate?: admin.firestore.Timestamp | string;
   brokerProfit: number;
   dealValue: number;
   transactionType: 'residential_sale' | 'rental' | 'commercial_lease' | 'commercial_sale';
@@ -48,7 +48,7 @@ interface Transaction {
 
 interface AgentProfile {
   status: 'active';
-  hireDate: admin.firestore.Timestamp;
+  hireDate: admin.firestore.Timestamp | string;
 }
 
 // --- Data Aggregation Logic (moved from service) ---
@@ -67,7 +67,20 @@ async function getActiveAgentCount(atDate: Date): Promise<number> {
   let count = 0;
   agentsSnap.forEach(doc => {
     const agent = doc.data() as AgentProfile;
-    if (agent.hireDate && agent.hireDate.toDate() <= atDate) {
+    
+    let hireDate: Date | null = null;
+    if (agent.hireDate) {
+        if (typeof (agent.hireDate as any).toDate === 'function') {
+            hireDate = (agent.hireDate as admin.firestore.Timestamp).toDate();
+        } else if (typeof agent.hireDate === 'string') {
+            const parsed = new Date(agent.hireDate);
+            if (!isNaN(parsed.getTime())) {
+                hireDate = parsed;
+            }
+        }
+    }
+
+    if (hireDate && hireDate <= atDate) {
       count++;
     }
   });
@@ -106,23 +119,41 @@ async function getMetricsForPeriod(
   for (const t of transactions) {
     const type = t.transactionType || 'unknown';
     if (t.status === 'closed' && t.closedDate) {
-      const closedDate = t.closedDate.toDate();
-      if (closedDate >= startDate && closedDate <= endDate) {
-        metrics.netRevenue.closed += t.brokerProfit || 0;
-        metrics.volume.closed += t.dealValue || 0;
-        metrics.transactions.closed++;
-        metrics.categoryBreakdown.closed[type as keyof CategoryMetrics].count++;
-        metrics.categoryBreakdown.closed[type as keyof CategoryMetrics].netRevenue += t.brokerProfit || 0;
-      }
+        let closedDate: Date | null = null;
+        if (t.closedDate && typeof (t.closedDate as any).toDate === 'function') {
+            closedDate = (t.closedDate as admin.firestore.Timestamp).toDate();
+        } else if (typeof t.closedDate === 'string') {
+            const parsed = new Date(t.closedDate);
+            if (!isNaN(parsed.getTime())) {
+                closedDate = parsed;
+            }
+        }
+        
+        if (closedDate && closedDate >= startDate && closedDate <= endDate) {
+            metrics.netRevenue.closed += t.brokerProfit || 0;
+            metrics.volume.closed += t.dealValue || 0;
+            metrics.transactions.closed++;
+            metrics.categoryBreakdown.closed[type as keyof CategoryMetrics].count++;
+            metrics.categoryBreakdown.closed[type as keyof CategoryMetrics].netRevenue += t.brokerProfit || 0;
+        }
     } else if ((t.status === 'pending' || t.status === 'under_contract') && t.contractDate) {
-      const contractDate = t.contractDate.toDate();
-      if (contractDate >= startDate && contractDate <= endDate) {
-        metrics.netRevenue.pending += t.brokerProfit || 0;
-        metrics.volume.pending += t.dealValue || 0;
-        metrics.transactions.pending++;
-        metrics.categoryBreakdown.pending[type as keyof CategoryMetrics].count++;
-        metrics.categoryBreakdown.pending[type as keyof CategoryMetrics].netRevenue += t.brokerProfit || 0;
-      }
+        let contractDate: Date | null = null;
+        if (t.contractDate && typeof (t.contractDate as any).toDate === 'function') {
+            contractDate = (t.contractDate as admin.firestore.Timestamp).toDate();
+        } else if (typeof t.contractDate === 'string') {
+            const parsed = new Date(t.contractDate);
+            if (!isNaN(parsed.getTime())) {
+                contractDate = parsed;
+            }
+        }
+
+        if (contractDate && contractDate >= startDate && contractDate <= endDate) {
+            metrics.netRevenue.pending += t.brokerProfit || 0;
+            metrics.volume.pending += t.dealValue || 0;
+            metrics.transactions.pending++;
+            metrics.categoryBreakdown.pending[type as keyof CategoryMetrics].count++;
+            metrics.categoryBreakdown.pending[type as keyof CategoryMetrics].netRevenue += t.brokerProfit || 0;
+        }
     }
   }
 
@@ -201,7 +232,18 @@ export async function GET(req: NextRequest) {
             let closedDeals = 0;
             transSnap.forEach(doc => {
                 const t = doc.data() as Transaction;
-                if (t.closedDate && t.closedDate.toDate().getMonth() === trendMonth) {
+                
+                let closedDate: Date | null = null;
+                if (t.closedDate && typeof (t.closedDate as any).toDate === 'function') {
+                    closedDate = (t.closedDate as admin.firestore.Timestamp).toDate();
+                } else if (typeof t.closedDate === 'string') {
+                    const parsed = new Date(t.closedDate);
+                    if (!isNaN(parsed.getTime())) {
+                        closedDate = parsed;
+                    }
+                }
+
+                if (closedDate && closedDate.getMonth() === trendMonth) {
                     closedDeals++;
                 }
             });
