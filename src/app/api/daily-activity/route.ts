@@ -1,14 +1,13 @@
 // src/app/api/daily-activity/route.ts
-import { NextResponse } from "next/server";
-import { getApps, initializeApp } from "firebase-admin/app";
+import { NextRequest, NextResponse } from "next/server";
+import { getApps, initializeApp, App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, DocumentData } from "firebase-admin/firestore";
+import { differenceInDays } from "date-fns";
 
-/**
- * Admin SDK init (safe to run multiple times)
- * In Firebase App Hosting, initializeApp() uses Application Default Credentials.
- */
-const adminApp = getApps().length ? getApps()[0] : initializeApp();
+const EDIT_WINDOW_DAYS = 45;
+
+const adminApp: App = getApps().length ? getApps()[0] : initializeApp();
 const adminAuth = getAuth(adminApp);
 const adminDb = getFirestore(adminApp);
 
@@ -19,7 +18,7 @@ function jsonError(status: number, error: string, code?: string, details?: unkno
   );
 }
 
-async function requireUser(req: Request): Promise<{ uid: string }> {
+async function requireUser(req: Request): Promise<{ uid: string, role: string }> {
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     throw Object.assign(new Error("Missing Authorization bearer token"), {
@@ -31,7 +30,9 @@ async function requireUser(req: Request): Promise<{ uid: string }> {
   const token = authHeader.slice("Bearer ".length).trim();
   try {
     const decoded = await adminAuth.verifyIdToken(token);
-    return { uid: decoded.uid };
+    const userSnap = await adminDb.collection('users').doc(decoded.uid).get();
+    const role = userSnap.exists ? (userSnap.data() as DocumentData).role : 'agent';
+    return { uid: decoded.uid, role };
   } catch (err: any) {
     throw Object.assign(new Error("Invalid or expired token"), {
       status: 401,
@@ -41,6 +42,22 @@ async function requireUser(req: Request): Promise<{ uid: string }> {
   }
 }
 
+function isDateEditable(dateStr: string, role: string): boolean {
+    if (role === 'admin') return true;
+
+    const date = new Date(dateStr + "T00:00:00"); // Ensure parsing in local timezone of server
+    const today = new Date();
+    
+    // Compare date parts only, ignoring time
+    const diff = differenceInDays(
+        new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+        new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    );
+
+    return diff <= EDIT_WINDOW_DAYS;
+}
+
+
 function emptyDailyActivity(date: string) {
   return {
     date,
@@ -49,17 +66,13 @@ function emptyDailyActivity(date: string) {
     appointmentsSetCount: 0,
     appointmentsHeldCount: 0,
     contractsWrittenCount: 0,
+    notes: '',
   };
 }
 
-/**
- * GET /api/daily-activity?date=YYYY-MM-DD
- * Returns dailyActivity for the signed-in user for that date.
- */
 export async function GET(req: Request) {
   try {
     const { uid } = await requireUser(req);
-
     const url = new URL(req.url);
     const date = url.searchParams.get("date");
 
@@ -72,18 +85,15 @@ export async function GET(req: Request) {
     const snap = await ref.get();
 
     const dailyActivity = snap.exists
-      ? {
-          ...emptyDailyActivity(date),
-          ...(snap.data() ?? {}),
-        }
+      ? { ...emptyDailyActivity(date), ...(snap.data() ?? {}) }
       : emptyDailyActivity(date);
 
     // Guarantee counts are numbers
-    dailyActivity.callsCount = Number((dailyActivity as any).callsCount ?? 0) || 0;
-    dailyActivity.engagementsCount = Number((dailyActivity as any).engagementsCount ?? 0) || 0;
-    dailyActivity.appointmentsSetCount = Number((dailyActivity as any).appointmentsSetCount ?? 0) || 0;
-    dailyActivity.appointmentsHeldCount = Number((dailyActivity as any).appointmentsHeldCount ?? 0) || 0;
-    dailyActivity.contractsWrittenCount = Number((dailyActivity as any).contractsWrittenCount ?? 0) || 0;
+    dailyActivity.callsCount = Number(dailyActivity.callsCount ?? 0) || 0;
+    dailyActivity.engagementsCount = Number(dailyActivity.engagementsCount ?? 0) || 0;
+    dailyActivity.appointmentsSetCount = Number(dailyActivity.appointmentsSetCount ?? 0) || 0;
+    dailyActivity.appointmentsHeldCount = Number(dailyActivity.appointmentsHeldCount ?? 0) || 0;
+    dailyActivity.contractsWrittenCount = Number(dailyActivity.contractsWrittenCount ?? 0) || 0;
 
     return NextResponse.json({ ok: true, dailyActivity });
   } catch (err: any) {
@@ -92,17 +102,9 @@ export async function GET(req: Request) {
   }
 }
 
-/**
- * POST /api/daily-activity
- * Body:
- * {
- *   date: "YYYY-MM-DD",
- *   callsCount, engagementsCount, appointmentsSetCount, appointmentsHeldCount, contractsWrittenCount
- * }
- */
 export async function POST(req: Request) {
   try {
-    const { uid } = await requireUser(req);
+    const { uid, role } = await requireUser(req);
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
@@ -110,38 +112,33 @@ export async function POST(req: Request) {
     }
 
     const date = (body as any).date;
-    if (!date || typeof date !== "string") {
+    if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return jsonError(400, "Missing or invalid field: date", "bad_request/missing-date");
     }
 
-    const callsCount = Number((body as any).callsCount ?? 0) || 0;
-    const engagementsCount = Number((body as any).engagementsCount ?? 0) || 0;
-    const appointmentsSetCount = Number((body as any).appointmentsSetCount ?? 0) || 0;
-    const appointmentsHeldCount = Number((body as any).appointmentsHeldCount ?? 0) || 0;
-    const contractsWrittenCount = Number((body as any).contractsWrittenCount ?? 0) || 0;
+    if (!isDateEditable(date, role)) {
+        return jsonError(403, 'Edits are locked after 45 days.', 'edit_window_expired');
+    }
 
     const docId = `${uid}_${date}`;
     const ref = adminDb.collection("daily_activity").doc(docId);
 
-    await ref.set(
-      {
+    const dataToSave = {
         agentId: uid,
         date,
-        callsCount,
-        engagementsCount,
-        appointmentsSetCount,
-        appointmentsHeldCount,
-        contractsWrittenCount,
+        callsCount: Number((body as any).callsCount ?? 0) || 0,
+        engagementsCount: Number((body as any).engagementsCount ?? 0) || 0,
+        appointmentsSetCount: Number((body as any).appointmentsSetCount ?? 0) || 0,
+        appointmentsHeldCount: Number((body as any).appointmentsHeldCount ?? 0) || 0,
+        contractsWrittenCount: Number((body as any).contractsWrittenCount ?? 0) || 0,
+        notes: (body as any).notes ?? '',
         updatedAt: FieldValue.serverTimestamp(),
         updatedByUid: uid,
-      },
-      { merge: true }
-    );
+    };
 
-    return NextResponse.json({
-      ok: true,
-      dailyActivity: { date, callsCount, engagementsCount, appointmentsSetCount, appointmentsHeldCount, contractsWrittenCount },
-    });
+    await ref.set(dataToSave, { merge: true });
+
+    return NextResponse.json({ ok: true, dailyActivity: dataToSave });
   } catch (err: any) {
     const status = err?.status ?? 500;
     return jsonError(status, err?.message ?? "Failed to save daily activity", err?.code, err?.details);

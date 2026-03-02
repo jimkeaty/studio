@@ -1,43 +1,58 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useFirestore } from '@/firebase';
-import { listAppointmentLogsForRange } from '@/lib/activityService';
+import { useState, useEffect, useCallback } from 'react';
+import { useUser } from '@/firebase';
 import type { AppointmentLog } from '@/lib/types';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
 
 type CategoryFilter = 'all' | 'buyer' | 'seller';
 type StatusFilter = 'all' | 'set' | 'held';
 
 export function RunningAppointmentList({ agentId, currentMonth }: { agentId: string, currentMonth: Date }) {
-  const db = useFirestore();
+  const { user } = useUser();
+  const { toast } = useToast();
   const [logs, setLogs] = useState<AppointmentLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  useEffect(() => {
-    if (!db) return;
+  const fetchLogs = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
 
-    const startDate = startOfMonth(currentMonth);
-    const endDate = endOfMonth(currentMonth);
-    
-    const filters: { category?: 'buyer' | 'seller', status?: 'set' | 'held' } = {};
-    if (categoryFilter !== 'all') filters.category = categoryFilter;
-    if (statusFilter !== 'all') filters.status = statusFilter;
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams({
+        year: String(currentMonth.getFullYear()),
+        month: String(currentMonth.getMonth() + 1),
+      });
+      if (categoryFilter !== 'all') params.append('category', categoryFilter);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      
+      const res = await fetch(`/api/appointments?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-    listAppointmentLogsForRange(db, agentId, startDate, endDate, filters)
-      .then(setLogs)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      if (!res.ok) throw new Error('Failed to load appointments for the month.');
+      const data = await res.json();
+      setLogs(data.appointments || []);
 
-  }, [db, agentId, currentMonth, categoryFilter, statusFilter]);
+    } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+        setLoading(false);
+    }
+  }, [user, currentMonth, categoryFilter, statusFilter, toast]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   return (
     <Card>
@@ -95,11 +110,11 @@ export function RunningAppointmentList({ agentId, currentMonth }: { agentId: str
                     ) : (
                         logs.map(log => (
                             <TableRow key={log.id}>
-                                <TableCell>{format(new Date(log.date), 'MMM d')}</TableCell>
+                                <TableCell>{format(parseISO(log.date), 'MMM d')}</TableCell>
                                 <TableCell className="font-medium">{log.contactName}</TableCell>
                                 <TableCell><Badge variant={log.category === 'buyer' ? 'default' : 'secondary'}>{log.category}</Badge></TableCell>
                                 <TableCell><Badge variant="outline">{log.status}</Badge></TableCell>
-                                <TableCell>{log.scheduledAt ? format(log.scheduledAt.toDate(), 'Pp') : '—'}</TableCell>
+                                <TableCell>{log.scheduledAt ? format(parseISO(log.scheduledAt), 'Pp') : '—'}</TableCell>
                             </TableRow>
                         ))
                     )}

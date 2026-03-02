@@ -5,9 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { useFirestore } from '@/firebase';
-import { getDailyActivity, upsertDailyActivity } from '@/lib/activityService';
-import type { DailyActivity } from '@/lib/types';
+import { useUser } from '@/firebase';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,9 +29,10 @@ const dailyLogSchema = z.object({
 type DailyLogFormValues = z.infer<typeof dailyLogSchema>;
 
 export function DailyLogPanel({ date, agentId, userId, onOpenChange }: { date: Date | null, agentId: string, userId: string, onOpenChange: (isOpen: boolean) => void }) {
-  const db = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -52,42 +51,58 @@ export function DailyLogPanel({ date, agentId, userId, onOpenChange }: { date: D
   const dateString = useMemo(() => date ? format(date, 'yyyy-MM-dd') : null, [date]);
 
   useEffect(() => {
-    if (dateString && db) {
+    if (dateString && user) {
       setLoading(true);
       setError(null);
-      getDailyActivity(db, agentId, dateString)
-        .then(data => {
-          if (data) {
-            form.reset(data);
-            if (data.updatedAt?.toDate) setLastSaved(data.updatedAt.toDate());
-          } else {
-            form.reset({
-              callsCount: 0,
-              engagementsCount: 0,
-              appointmentsSetCount: 0,
-              appointmentsHeldCount: 0,
-              contractsWrittenCount: 0,
-              notes: '',
-            });
-            setLastSaved(null);
+      const fetchDailyActivity = async () => {
+          try {
+              const token = await user.getIdToken();
+              const res = await fetch(`/api/daily-activity?date=${dateString}`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (!res.ok) throw new Error('Failed to load log for this day.');
+              const data = await res.json();
+              if (data.ok && data.dailyActivity) {
+                  form.reset(data.dailyActivity);
+              } else {
+                  form.reset(); // Reset to defaults
+              }
+          } catch (err: any) {
+              setError(err.message);
+              console.error(err);
+          } finally {
+              setLoading(false);
           }
-        })
-        .catch(err => {
-          console.error(err);
-          setError("Failed to load daily log. You may not have permission to view this data.");
-        })
-        .finally(() => setLoading(false));
+      };
+      fetchDailyActivity();
     }
-  }, [dateString, db, agentId, form]);
+  }, [dateString, user, form]);
 
   const onSubmit = async (values: DailyLogFormValues) => {
-    if (!dateString) return;
+    if (!dateString || !user) return;
+    setIsSubmitting(true);
     try {
-      await upsertDailyActivity(db, agentId, userId, dateString, values);
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/daily-activity`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ date: dateString, ...values })
+      });
+      
+      const resData = await res.json();
+      if (!res.ok) {
+          throw new Error(resData.error || 'Could not save daily log.');
+      }
+      
       toast({ title: 'Success', description: `Activities for ${format(date!, 'PPP')} saved.` });
       setLastSaved(new Date());
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Save Failed', description: err.message || 'Could not save daily log.' });
+      toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
@@ -97,7 +112,7 @@ export function DailyLogPanel({ date, agentId, userId, onOpenChange }: { date: D
         <SheetHeader>
           <SheetTitle>Log for {date ? format(date, 'PPP') : ''}</SheetTitle>
           <SheetDescription>
-            Enter your counts for the day. Your changes are saved automatically.
+            Enter your counts for the day. Press save when you are done.
           </SheetDescription>
         </SheetHeader>
         <div className="py-6">
@@ -137,8 +152,8 @@ export function DailyLogPanel({ date, agentId, userId, onOpenChange }: { date: D
                       <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea placeholder="Optional notes for the day..." {...field} /></FormControl><FormMessage /></FormItem>
                   )} />
                    <div className="flex justify-between items-center">
-                        <Button type="submit" disabled={form.formState.isSubmitting}>
-                            <Save className="mr-2 h-4 w-4" /> Save Daily Counts
+                        <Button type="submit" disabled={isSubmitting}>
+                            <Save className="mr-2 h-4 w-4" /> {isSubmitting ? 'Saving...' : 'Save Daily Counts'}
                         </Button>
                         {lastSaved && (
                             <p className="text-xs text-muted-foreground">
@@ -151,7 +166,7 @@ export function DailyLogPanel({ date, agentId, userId, onOpenChange }: { date: D
 
               <Separator className="my-8" />
               
-              {date && (
+              {date && user && (
                 <AppointmentLogger
                     selectedDate={date}
                     agentId={agentId}

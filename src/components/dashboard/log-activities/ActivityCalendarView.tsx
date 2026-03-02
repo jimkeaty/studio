@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useFirestore } from '@/firebase';
-import { listDailyActivitiesForMonth } from '@/lib/activityService';
-import type { DailyActivity } from '@/lib/types';
 import {
   startOfMonth,
   endOfMonth,
@@ -21,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import type { DailyActivity } from '@/lib/types';
+import { useUser } from '@/firebase';
 
 const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -37,27 +36,36 @@ export function ActivityCalendarView({
   selectedDate: Date | null;
   onDateSelect: (date: Date) => void;
 }) {
-  const db = useFirestore();
-  const [activities, setActivities] = useState<Map<string, DailyActivity>>(new Map());
+  const { user } = useUser();
+  const [activities, setActivities] = useState<Record<string, DailyActivity>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!db) return;
+    if (!user) return;
     setLoading(true);
-    const year = month.getFullYear();
-    const monthIndex = month.getMonth();
-    
-    listDailyActivitiesForMonth(db, agentId, year, monthIndex)
-      .then(data => {
-        const map = new Map<string, DailyActivity>();
-        data.forEach(activity => {
-          map.set(activity.date, activity);
+
+    const startDate = format(startOfMonth(month), 'yyyy-MM-dd');
+    const endDate = format(endOfMonth(month), 'yyyy-MM-dd');
+
+    const fetchActivities = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/daily-activity/range?start=${startDate}&end=${endDate}`, {
+          headers: { Authorization: `Bearer ${token}` }
         });
-        setActivities(map);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [db, agentId, month]);
+        if (!res.ok) throw new Error('Failed to fetch activities');
+        const data = await res.json();
+        setActivities(data.activities || {});
+      } catch (error) {
+        console.error("Failed to load activities for calendar:", error);
+        setActivities({});
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchActivities();
+  }, [user, month]);
 
   const monthStart = startOfMonth(month);
   const monthEnd = endOfMonth(month);
@@ -88,8 +96,15 @@ export function ActivityCalendarView({
         ))}
         {days.map(day => {
           const dateString = format(day, 'yyyy-MM-dd');
-          const activity = activities.get(dateString);
+          const activity = activities[dateString];
           const isSelected = selectedDate && isSameDay(day, selectedDate);
+          const hasActivity = activity && (
+              activity.callsCount > 0 ||
+              activity.engagementsCount > 0 ||
+              activity.appointmentsSetCount > 0 ||
+              activity.appointmentsHeldCount > 0 ||
+              activity.contractsWrittenCount > 0
+          );
 
           return (
             <div
@@ -107,12 +122,9 @@ export function ActivityCalendarView({
                     <Skeleton className="h-3 w-full" />
                     <Skeleton className="h-3 w-2/3" />
                 </div>
-              ) : activity ? (
+              ) : hasActivity ? (
                 <div className="mt-1 text-xs space-y-0.5 overflow-hidden">
-                    <Badge variant="secondary" className="mb-1">Tracked</Badge>
-                    <p>C: {activity.callsCount}</p>
-                    <p>E: {activity.engagementsCount}</p>
-                    <p>A: {activity.appointmentsSetCount}/{activity.appointmentsHeldCount}</p>
+                    <Badge variant="secondary" className="mb-1 bg-green-500/20 text-green-700">Complete</Badge>
                 </div>
               ) : (
                 <div className="mt-1">

@@ -1,22 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { format, parseISO } from 'date-fns';
-import { addAppointmentLog, deleteAppointmentLog, findSimilarAppointment, listAppointmentLogsForDate } from '@/lib/activityService';
 import type { AppointmentLog } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, PlusCircle, AlertCircle, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { Trash2, PlusCircle, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -27,9 +25,6 @@ const appointmentSchema = z.object({
   category: z.enum(['buyer', 'seller']),
   status: z.enum(['set', 'held']),
   contactName: z.string().min(2, 'Name is required.'),
-  contactPhone: z.string().optional(),
-  contactEmail: z.string().email().optional().or(z.literal('')),
-  notes: z.string().optional(),
   scheduledAtDate: z.date().optional(),
   scheduledAtTime: z.string().optional(),
   heldAtDate: z.date().optional(),
@@ -37,104 +32,103 @@ const appointmentSchema = z.object({
 });
 type AppointmentFormValues = z.infer<typeof appointmentSchema>;
 
-export function AppointmentLogger({ selectedDate, agentId, userId }: { selectedDate: Date, agentId: string, userId: string }) {
-  const db = useFirestore();
+const timeToISO = (date?: Date, time?: string): string | undefined => {
+    if (!date) return undefined;
+    const d = new Date(date);
+    if (time) {
+        const [h, m] = time.split(':').map(Number);
+        d.setHours(h, m, 0, 0);
+    }
+    return d.toISOString();
+}
+
+export function AppointmentLogger({ selectedDate, agentId }: { selectedDate: Date, agentId: string, userId: string }) {
+  const { user } = useUser();
   const { toast } = useToast();
   const [logs, setLogs] = useState<AppointmentLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [warningState, setWarningState] = useState<{ open: boolean; onConfirm: (() => void) | null; similarLog: AppointmentLog | null }>({ open: false, onConfirm: null, similarLog: null });
-  
   const dateString = format(selectedDate, 'yyyy-MM-dd');
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
-    defaultValues: {
-      category: 'buyer',
-      status: 'set',
-      contactName: '',
-      contactEmail: '',
-      contactPhone: '',
-      notes: '',
-    },
+    defaultValues: { category: 'buyer', status: 'set', contactName: '' },
   });
 
-  const fetchLogs = () => {
-    if (!db) return;
+  const fetchLogs = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
-    listAppointmentLogsForDate(db, agentId, dateString)
-      .then(setLogs)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  };
-  
-  useEffect(fetchLogs, [db, agentId, dateString]);
-  
-  const combineDateTime = (date?: Date, time?: string) => {
-    if (!date) return undefined;
-    const d = new Date(date);
-    if (time) {
-        const [hours, minutes] = time.split(':').map(Number);
-        d.setHours(hours, minutes);
+    try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/appointments?date=${dateString}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) throw new Error('Failed to load appointments.');
+        const data = await res.json();
+        setLogs(data.appointments || []);
+    } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+        setLoading(false);
     }
-    return d;
-  }
-
+  }, [user, dateString, toast]);
+  
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+  
   const handleSave = async (values: AppointmentFormValues) => {
-    if (!db) return;
+    if (!user) return;
     setIsSubmitting(true);
 
-    const dataToSave = {
+    const payload = {
         date: dateString,
         category: values.category,
         status: values.status,
         contactName: values.contactName,
-        contactPhone: values.contactPhone,
-        contactEmail: values.contactEmail,
-        notes: values.notes,
-        scheduledAt: combineDateTime(values.scheduledAtDate, values.scheduledAtTime),
-        heldAt: combineDateTime(values.heldAtDate, values.heldAtTime),
+        scheduledAt: timeToISO(values.scheduledAtDate, values.scheduledAtTime),
+        heldAt: timeToISO(values.heldAtDate, values.heldAtTime),
     };
 
     try {
-        await addAppointmentLog(db, agentId, userId, dataToSave);
+        const token = await user.getIdToken();
+        const res = await fetch('/api/appointments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify(payload)
+        });
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.error || 'Failed to save appointment.');
+
         toast({ title: 'Success', description: 'Appointment logged.' });
         form.reset();
         setShowForm(false);
         fetchLogs();
-    } catch(err) {
-        toast({ variant: 'destructive', title: 'Save Failed', description: 'Could not save the appointment log.' });
+    } catch(err: any) {
+        toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
     } finally {
         setIsSubmitting(false);
     }
   };
   
   const onSubmit = async (values: AppointmentFormValues) => {
-    const similar = await findSimilarAppointment(db, agentId, values.contactName, values.status);
-    if (similar) {
-        setWarningState({
-            open: true,
-            similarLog: similar,
-            onConfirm: () => {
-                handleSave(values);
-                setWarningState({ open: false, onConfirm: null, similarLog: null });
-            }
-        });
-    } else {
-        handleSave(values);
-    }
+    handleSave(values);
   };
 
   const handleDelete = async (id: string) => {
-    if (!db) return;
+    if (!user) return;
     try {
-      await deleteAppointmentLog(db, id);
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/appointments/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}`}
+      });
+      if (!res.ok) throw new Error('Failed to delete appointment.');
+
       toast({ title: 'Deleted', description: 'Appointment log removed.' });
       fetchLogs();
-    } catch(err) {
-      toast({ variant: 'destructive', title: 'Delete Failed', description: 'Could not remove the appointment log.' });
+    } catch(err: any) {
+      toast({ variant: 'destructive', title: 'Delete Failed', description: err.message });
     }
   };
 
@@ -229,24 +223,6 @@ export function AppointmentLogger({ selectedDate, agentId, userId }: { selectedD
             </Table>
           </div>
         </div>
-
-        <AlertDialog open={warningState.open} onOpenChange={(open) => !open && setWarningState({ open: false, onConfirm: null, similarLog: null })}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2"><AlertCircle className="text-amber-500" /> Potential Duplicate</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        You may have already logged an appointment for <span className="font-bold">{warningState.similarLog?.contactName}</span> with status <span className="font-bold">&quot;{warningState.similarLog?.status}&quot;</span> on {warningState.similarLog ? format(parseISO(warningState.similarLog.date), 'PPP') : ''}.
-                        <br/><br/>
-                        Do you want to continue saving this new record anyway?
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => warningState.onConfirm?.()}>Continue Anyway</AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-
       </CardContent>
     </Card>
   );
