@@ -1,3 +1,4 @@
+
 // src/app/api/dashboard/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import admin from "firebase-admin";
@@ -76,10 +77,7 @@ function getYearFromReq(req: NextRequest): number {
   const { searchParams } = new URL(req.url);
   const yearParam = searchParams.get("year");
 
-  const fallbackDefault =
-    (APP_CONFIG as any)?.DEFAULT_DASHBOARD_YEAR ??
-    (APP_CONFIG as any)?.DEFAULT_YEAR ??
-    2025;
+  const fallbackDefault = APP_CONFIG.dashboard.defaultYear;
 
   const year = yearParam ? parseInt(yearParam, 10) : fallbackDefault;
   return Number.isFinite(year) ? year : fallbackDefault;
@@ -107,26 +105,17 @@ export async function GET(req: NextRequest) {
 
     const year = getYearFromReq(req);
 
-    // 2) Allowed years guard (safe version)
-let allowedYears: number[] = [2025, 2026]; // hard fallback
-
-if (typeof APP_CONFIG === "object" && APP_CONFIG !== null) {
-  if (Array.isArray((APP_CONFIG as any).ALLOWED_DASHBOARD_YEARS)) {
-    allowedYears = (APP_CONFIG as any).ALLOWED_DASHBOARD_YEARS;
-  } else if (Array.isArray((APP_CONFIG as any).ALLOWED_YEARS)) {
-    allowedYears = (APP_CONFIG as any).ALLOWED_YEARS;
-  }
-}
-
-if (!allowedYears.includes(year)) {
-  return NextResponse.json(
-    {
-      error: `Data for year ${year} is not available.`,
-      allowedYears,
-    },
-    { status: 400 }
-  );
-}
+    // 2) Allowed years guard
+    const allowedYears = APP_CONFIG.dashboard.allowedYears;
+    if (!allowedYears.includes(year)) {
+      return NextResponse.json(
+        {
+          error: `Data for year ${year} is not available.`,
+          allowedYears,
+        },
+        { status: 400 }
+      );
+    }
 
     // 3) Load user profile (role + brokerageId)
     const userSnap = await db.collection("users").doc(uid).get();
