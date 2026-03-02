@@ -3,15 +3,11 @@
 
 import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
-import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
-import { KpiCard } from '@/components/dashboard/kpi-card';
-import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
+import type { AgentYearRollup } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle, DollarSign, Target, TrendingUp } from 'lucide-react';
-import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
-import { AgentIncomeByMonthCard } from '@/components/dashboard/agent/AgentIncomeByMonthCard';
+import { AlertTriangle, DollarSign, Home, TrendingUp, Link as LinkIcon } from 'lucide-react';
 import TopAgents2025 from './TopAgents2025';
 
 const DashboardSkeleton = () => (
@@ -21,14 +17,6 @@ const DashboardSkeleton = () => (
       <Skeleton className="h-40" />
       <Skeleton className="h-40" />
       <Skeleton className="h-40" />
-    </div>
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
     </div>
     <Skeleton className="h-96" />
   </div>
@@ -47,18 +35,24 @@ const StatCard = ({ title, value, icon: Icon, description }: { title: string; va
   </Card>
 );
 
+interface ApiResponse {
+  ok: boolean;
+  needsLink?: boolean;
+  year?: number;
+  agentId?: string;
+  rollupDocId?: string;
+  rollup?: AgentYearRollup | null;
+  error?: string;
+}
+
 export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
-  const [data, setData] = useState<{
-    dashboard: AgentDashboardData | null;
-    plan: BusinessPlan | null;
-    ytdMetrics: YtdValueMetrics | null;
-  } | null>(null);
+  const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Per requirements, the dashboard is locked to 2025 for now.
-  const year = 2025;
+  // Per requirements, the dashboard is locked to 2026 for now.
+  const year = 2026;
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -71,19 +65,12 @@ export default function AgentDashboardPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (!res.ok) {
-          const errorData = await res.json();
-          // Check for specific allowedYears error from API
-          if (res.status === 400 && errorData.allowedYears) {
-             throw new Error(`Data for year ${year} is not available. Allowed years: ${errorData.allowedYears.join(', ')}`);
-          }
-          throw new Error(errorData.error || 'Failed to load dashboard data');
+        const responseData: ApiResponse = await res.json();
+        
+        if (!res.ok || !responseData.ok) {
+          throw new Error(responseData.error || 'Failed to load dashboard data');
         }
 
-        const responseData = await res.json();
-        if (!responseData.ok) {
-          throw new Error(responseData.error || 'API returned an error');
-        }
         setData(responseData);
       } catch (err: any) {
         setError(err.message);
@@ -96,7 +83,6 @@ export default function AgentDashboardPage() {
     if (!userLoading && user) {
       loadDashboard();
     } else if (!userLoading && !user) {
-      // If not logged in, the root page will handle the redirect.
       setLoading(false);
     }
   }, [user, userLoading, year]);
@@ -115,20 +101,37 @@ export default function AgentDashboardPage() {
     );
   }
 
-  if (!data || !data.dashboard) {
+  if (data?.needsLink) {
+    return (
+       <Card className="max-w-2xl mx-auto mt-10">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LinkIcon className="h-6 w-6 text-primary" />
+            Account Linking Required
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>Your user account is not yet linked to an agent data profile.</p>
+          <p className="mt-2 text-muted-foreground">Please contact your brokerage administrator to complete this setup. They will need your email address ({user?.email}).</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data || !data.rollup) {
     return (
       <Alert>
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>No Data Available</AlertTitle>
+        <AlertTitle>No Data Available for {year}</AlertTitle>
         <AlertDescription>
-          Dashboard data for {year} could not be found for your account. Please check your business plan setup or contact support.
+          A rollup document for your agent ID could not be found for {year}. Please contact support if you believe this is an error.
+          {data?.rollupDocId && <code className="block mt-2 text-xs bg-muted p-2 rounded-md">Expected Doc ID: {data.rollupDocId}</code>}
         </AlertDescription>
       </Alert>
     );
   }
 
-  const { dashboard, plan, ytdMetrics } = data;
-  const kpis = Object.entries(dashboard.kpis || {});
+  const { rollup } = data;
 
   return (
     <div className="space-y-8">
@@ -137,55 +140,31 @@ export default function AgentDashboardPage() {
         <p className="text-muted-foreground">Your performance summary for {year}.</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Net Earned (YTD)"
-          value={dashboard.netEarned.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
-          icon={DollarSign}
-          description="Total commission earned"
-        />
-        <StatCard
-          title="Net Pending"
-          value={dashboard.netPending.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
-          icon={TrendingUp}
-          description="Commission in pipeline"
-        />
-        <StatCard
-          title="YTD Income Goal"
-          value={dashboard.expectedYTDIncomeGoal.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
-          icon={Target}
-          description="Workday-paced goal"
-        />
-        <StatCard
-          title="YTD Total Potential"
-          value={dashboard.ytdTotalPotential.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
-          icon={DollarSign}
-          description="Earned + Pending"
-        />
-      </div>
-
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {kpis.map(([key, kpi]) => (
-          <KpiCard
-            key={key}
-            title={key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}
-            actual={kpi.actual}
-            target={kpi.target}
-            performance={kpi.performance}
-            grade={kpi.grade}
-            isGracePeriod={dashboard.isLeadIndicatorGracePeriod}
-          />
-        ))}
+        <StatCard
+          title="Closed Units (YTD)"
+          value={(rollup.closed || 0).toLocaleString()}
+          icon={Home}
+        />
+        <StatCard
+          title="Pending Units"
+          value={(rollup.pending || 0).toLocaleString()}
+          icon={TrendingUp}
+        />
+        <StatCard
+          title="Total Transactions"
+          value={(rollup.totals?.transactions || 0).toLocaleString()}
+          icon={DollarSign}
+          description="Closed + Pending"
+        />
       </div>
+
+       <div className="fixed bottom-2 left-2 z-50 rounded-md border bg-background/90 px-2 py-1 text-[10px] text-muted-foreground shadow">
+          Data Source: {data.rollupDocId}
+       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AgentIncomeByMonthCard year={year} dashboard={dashboard} plan={plan} />
-        <RecruitingIncentiveTracker />
-      </div>
-
-      <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
-
-      <TopAgents2025 year={year} />
+      {/* For now, we will show the 2025 leaderboard on the 2026 page as there is no 2026 data */}
+      <TopAgents2025 year={2025} />
 
     </div>
   );
