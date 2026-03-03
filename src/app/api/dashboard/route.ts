@@ -2,133 +2,95 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin from "firebase-admin";
 
-// --- Firebase Admin Initialization ---
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      projectId: "smart-broker-usa",
-    });
-  } catch (error) {
-    console.error("Firebase admin initialization error", error);
+import type { AgentDashboardData } from "@/lib/types";
+import { mockAgentDashboardData } from "@/lib/mock-data";
+
+function getBearerToken(req: NextRequest) {
+  const authHeader = req.headers.get("authorization") || "";
+  const match = authHeader.match(/^Bearer (.+)$/i);
+  return match?.[1] ?? null;
+}
+
+function initAdmin() {
+  if (admin.apps.length) return admin.app();
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("Missing Firebase Admin env vars");
   }
-}
-const db = admin.firestore();
 
-// --- API Helpers ---
-function extractBearerToken(req: NextRequest): string | null {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
-  return authHeader.split("Bearer ")[1]?.trim() || null;
-}
-
-function jsonError(status: number, error: string, details?: any) {
-  return NextResponse.json({ ok: false, error, details: details || null }, { status });
+  return admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    }),
+  });
 }
 
-function parseYear(req: NextRequest): number | NextResponse {
-  const url = new URL(req.url);
-  const rawYear = url.searchParams.get("year") || "2025";
-  const year = Number(rawYear);
-
-  if (!Number.isFinite(year) || year < 2000 || year > 2100) {
-    return jsonError(400, "Invalid year");
-  }
-  return year;
+// Keep consistent with /api/plan
+function planDocRef(db: FirebaseFirestore.Firestore, uid: string, year: string) {
+  return db
+    .collection("dashboards")
+    .doc(year)
+    .collection("agent")
+    .collection("users")
+    .doc(uid)
+    .collection("plans")
+    .doc("plan");
 }
 
-// --- Route Handler ---
+function parseYear(req: NextRequest): string {
+  const { searchParams } = new URL(req.url);
+  const year = searchParams.get("year") || "2025";
+  const n = Number(year);
+  if (!Number.isFinite(n) || n < 2000 || n > 2100) return "2025";
+  return String(n);
+}
+
 export async function GET(req: NextRequest) {
-  const parsed = parseYear(req);
-  if (parsed instanceof NextResponse) return parsed;
-  const year = parsed;
-
   try {
-    // 1. Authenticate Token
-    const idToken = extractBearerToken(req);
-    if (!idToken) {
-      return jsonError(401, "Unauthorized: Missing token");
-    }
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const { uid, email, name } = decodedToken;
+    initAdmin();
 
-    // 2. Upsert User Profile
-    const userRef = db.collection("users").doc(uid);
-    const userSnap = await userRef.get();
+    const token = getBearerToken(req);
+    if (!token) return NextResponse.json({ ok: false, error: "Missing token" }, { status: 401 });
 
-    const dataToSet: { email?: string; name?: string; updatedAt: any; createdAt?: any } = {
-      email,
-      name,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-    if (!userSnap.exists) {
-      dataToSet.createdAt = admin.firestore.FieldValue.serverTimestamp();
-    }
-    await userRef.set(dataToSet, { merge: true });
+    const decoded = await admin.auth().verifyIdToken(token);
+    const uid = decoded.uid;
 
-    // Re-fetch the potentially updated user document
-    const updatedUserSnap = await userRef.get();
-    const userData = updatedUserSnap.data();
+    const year = parseYear(req);
+    const db = admin.firestore();
 
-    // 3. Check for linked agentId
-    const agentId = userData?.agentId;
-    if (!agentId) {
-      return NextResponse.json({
-        ok: true,
-        needsLink: true,
-        year,
-      });
-    }
+    // Load plan (safe default {} like /api/plan)
+    const planSnap = await planDocRef(db, uid, year).get();
+    const plan = planSnap.exists ? (planSnap.data() ?? {}) : {};
 
-    // Helper to fetch rollup by docId
-    const fetchRollup = async (agentIdToUse: string, yearToUse: number) => {
-      const rollupDocId = `${agentIdToUse}_${yearToUse}`;
-      const rollupRef = db.collection("agentYearRollups").doc(rollupDocId);
-      const snap = await rollupRef.get();
-      return { exists: snap.exists, rollupDocId, data: snap.exists ? snap.data() : null };
+    // TEMP: return a valid AgentDashboardData so the UI renders again
+    // (We will replace this with real calculated values once data wiring is finalized.)
+    const dashboard: AgentDashboardData = {
+      ...mockAgentDashboardData,
+      userId: uid,
     };
 
-    // 4. Fetch requested year rollup
-    const primary = await fetchRollup(agentId, year);
+    // ytdMetrics is optional in the UI; keep it null until we wire it
+    const ytdMetrics = null;
 
-    // 4B. Fallback: if missing and year != 2025, try 2025
-    if (!primary.exists && year !== 2025) {
-      const fallbackYear = 2025;
-      const fallback = await fetchRollup(agentId, fallbackYear);
-
-      if (fallback.exists) {
-        return NextResponse.json({
-          ok: true,
-          year: fallbackYear,
-          requestedYear: year,
-          agentId,
-          rollupDocId: fallback.rollupDocId,
-          rollup: fallback.data,
-          note: `No rollup for ${year}; fell back to ${fallbackYear}.`,
-        });
-      }
-    }
-
-    // 5. Return response (even if rollup missing)
     return NextResponse.json({
       ok: true,
-      year,
-      agentId,
-      rollupDocId: primary.rollupDocId,
-      rollup: primary.data,
-      missingRollup: !primary.exists,
-      expectedDocId: primary.rollupDocId,
+      year: Number(year),
+      dashboard,
+      plan,
+      ytdMetrics,
+      // debug helpers (harmless)
+      note: "TEMP: dashboard is mockAgentDashboardData (server). Plan is loaded from Firestore if it exists.",
     });
-  } catch (error: any) {
-    console.error("[API/dashboard] Error:", {
-      code: error?.code,
-      message: error?.message,
-    });
-
-    if (error?.code?.startsWith("auth/")) {
-      return jsonError(401, `Unauthorized: ${error.message}`);
-    }
-
-    return jsonError(500, "Internal Server Error", { message: error.message });
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, error: e?.message ?? "Failed to load dashboard" },
+      { status: 500 }
+    );
   }
 }
