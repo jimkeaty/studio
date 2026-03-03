@@ -52,7 +52,7 @@ export default function AgentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Per requirements, the dashboard is locked to 2026 for now.
-  const year = 2026;
+  const year = 2025;
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -122,9 +122,9 @@ export default function AgentDashboardPage() {
     return (
       <Alert>
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>No Data Available for {year}</AlertTitle>
+        <AlertTitle>No Data Available for {displayYear}</AlertTitle>
         <AlertDescription>
-          A rollup document for your agent ID could not be found for {year}. Please contact support if you believe this is an error.
+          A rollup document for your agent ID could not be found for {displayYear}. Please contact support if you believe this is an error.
           {data?.rollupDocId && <code className="block mt-2 text-xs bg-muted p-2 rounded-md">Expected Doc ID: {data.rollupDocId}</code>}
         </AlertDescription>
       </Alert>
@@ -132,12 +132,14 @@ export default function AgentDashboardPage() {
   }
 
   const { rollup } = data;
+  const displayYear = data?.year ?? year;
+
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
-        <p className="text-muted-foreground">Your performance summary for {year}.</p>
+        <p className="text-muted-foreground">Your performance summary for {displayYear}.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
