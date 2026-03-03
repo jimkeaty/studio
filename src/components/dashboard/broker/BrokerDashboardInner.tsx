@@ -13,6 +13,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { BrokerCommandMetrics, Period } from '@/lib/types/brokerCommandMetrics';
 // import { RecruitingAdminConsole } from '@/components/dashboard/broker/RecruitingAdminConsole';
 import { format } from 'date-fns';
+import { AdminAgentLinker } from '@/components/dashboard/broker/AdminAgentLinker';
+
 
 const formatCurrency = (amount: number | null | undefined, compact = false) => {
     if (amount === null || amount === undefined) return "—";
@@ -39,6 +41,7 @@ const chartConfig = {
 
 const BrokerDashboardSkeleton = () => (
     <div className="space-y-8">
+
         <Skeleton className="h-12 w-1/2" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(4)].map((_, i) => <Card key={i}><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>)}
@@ -184,6 +187,8 @@ export function BrokerDashboardInner() {
 
     return (
         <div className="space-y-8">
+            <AdminAgentLinker className="mb-6" />
+
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Broker Command Center</h1>
