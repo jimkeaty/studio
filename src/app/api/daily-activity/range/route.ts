@@ -1,14 +1,7 @@
 // src/app/api/daily-activity/range/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getApps, initializeApp, App } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import type { DailyActivity } from '@/lib/types';
-
-// --- Admin SDK Init ---
-const adminApp: App = getApps().length ? getApps()[0] : initializeApp();
-const adminAuth = getAuth(adminApp);
-const adminDb: Firestore = getFirestore(adminApp);
 
 // --- API Helpers ---
 function jsonError(status: number, error: string, code?: string) {
@@ -71,8 +64,7 @@ export async function GET(req: NextRequest) {
     return jsonError(
       err.status ?? 500,
       err.message ?? 'Failed to load activity range',
-      err.code,
-      err.details
+      err.code
     );
   }
 }

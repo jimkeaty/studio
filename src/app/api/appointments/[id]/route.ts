@@ -1,15 +1,10 @@
 // src/app/api/appointments/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getApps, initializeApp, App } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { adminDb, adminAuth, admin } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { differenceInDays } from 'date-fns';
 
 const EDIT_WINDOW_DAYS = 45;
-
-const adminApp: App = getApps().length ? getApps()[0] : initializeApp();
-const adminAuth = getAuth(adminApp);
-const adminDb = getFirestore(adminApp);
 
 function jsonError(status: number, error: string, code?: string) {
   return NextResponse.json({ ok: false, error, code: code ?? `http_${status}` }, { status });

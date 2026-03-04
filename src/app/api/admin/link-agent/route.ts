@@ -1,14 +1,6 @@
 // src/app/api/admin/link-agent/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import admin from 'firebase-admin';
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    projectId: 'smart-broker-usa',
-  });
-}
-const db = admin.firestore();
+import { admin, adminDb, adminAuth } from '@/lib/firebase/admin';
 
 function jsonError(status: number, error: string, details?: any) {
   return NextResponse.json({ ok: false, error, details: details || null }, { status });
@@ -30,7 +22,7 @@ export async function POST(req: NextRequest) {
     const idToken = extractBearerToken(req);
     if (!idToken) return jsonError(401, 'Unauthorized: Missing token');
 
-    const decoded = await admin.auth().verifyIdToken(idToken);
+    const decoded = await adminAuth.verifyIdToken(idToken);
     const callerEmail = decoded.email || '';
 
     // 2) Authorize caller
@@ -66,17 +58,17 @@ export async function POST(req: NextRequest) {
 
     if (!resolvedUid) {
       // look up by email
-      const u = await admin.auth().getUserByEmail(resolvedEmail!);
+      const u = await adminAuth.getUserByEmail(resolvedEmail!);
       resolvedUid = u.uid;
       resolvedEmail = u.email || resolvedEmail;
     } else if (!resolvedEmail) {
       // look up email for convenience/confirmation
-      const u = await admin.auth().getUser(resolvedUid);
+      const u = await adminAuth.getUser(resolvedUid);
       resolvedEmail = u.email || undefined;
     }
 
     // 5) Write link
-    const userRef = db.collection('users').doc(resolvedUid!);
+    const userRef = adminDb.collection('users').doc(resolvedUid!);
     await userRef.set(
       {
         agentId,

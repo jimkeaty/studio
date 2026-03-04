@@ -1,14 +1,6 @@
 // src/app/api/admin/agents/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import admin from 'firebase-admin';
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    projectId: 'smart-broker-usa',
-  });
-}
-const db = admin.firestore();
+import { adminDb, adminAuth } from '@/lib/firebase/admin';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -32,7 +24,7 @@ export async function GET(req: NextRequest) {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized: Missing token');
 
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
     const email = decoded.email || '';
 
     // Keep admin rules consistent with link-agent:
@@ -52,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     // Pull from agentYearRollups for that year and build a distinct list.
     // We are intentionally defensive because your rollups may not all have agentName.
-    const snap = await db.collection('agentYearRollups')
+    const snap = await adminDb.collection('agentYearRollups')
       .where('year', '==', year)
       .limit(5000)
       .get();

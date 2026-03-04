@@ -1,18 +1,7 @@
 // src/app/api/recruiting/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import admin from "firebase-admin";
+import { adminAuth } from '@/lib/firebase/admin';
 import { add, subDays } from "date-fns";
-
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      projectId: "smart-broker-usa",
-    });
-  } catch (e) {
-    console.error("Firebase admin init error:", e);
-  }
-}
 
 type QualificationProgress = {
   status: "qualified" | "in_progress" | "expired";
@@ -119,7 +108,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Verify user
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
 
     // For now, always return mock data so dashboard works immediately.

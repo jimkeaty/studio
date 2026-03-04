@@ -1,16 +1,10 @@
 // src/app/api/appointments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getApps, initializeApp, App } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue, Query } from 'firebase-admin/firestore';
+import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { FieldValue, Query } from 'firebase-admin/firestore';
 import { differenceInDays, startOfMonth, endOfMonth, format } from 'date-fns';
 
 const EDIT_WINDOW_DAYS = 45;
-
-// --- Admin SDK Init ---
-const adminApp: App = getApps().length ? getApps()[0] : initializeApp();
-const adminAuth = getAuth(adminApp);
-const adminDb = getFirestore(adminApp);
 
 // --- API Helpers ---
 function jsonError(status: number, error: string, code?: string) {

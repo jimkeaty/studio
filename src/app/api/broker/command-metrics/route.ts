@@ -1,6 +1,7 @@
 // src/app/api/broker/command-metrics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import admin from 'firebase-admin';
+import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import type admin from 'firebase-admin';
 import {
   startOfYear,
   endOfYear,
@@ -20,19 +21,6 @@ import type {
 
 // --- Firebase Admin Initialization ---
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      projectId: 'smart-broker-usa', // Explicitly set project ID
-    });
-  } catch (error) {
-    console.error('Firebase admin initialization error', error);
-  }
-}
-
-const db = admin.firestore();
 
 // --- Type Definitions (from original service) ---
 interface Transaction {
@@ -62,7 +50,7 @@ const getInitialCategoryMetrics = (): CategoryMetrics => ({
 });
 
 async function getActiveAgentCount(atDate: Date): Promise<number> {
-  const agentsQuery = db.collection('users').where('status', '==', 'active');
+  const agentsQuery = adminDb.collection('users').where('status', '==', 'active');
   const agentsSnap = await agentsQuery.get();
   let count = 0;
   agentsSnap.forEach(doc => {
@@ -101,7 +89,7 @@ async function getMetricsForPeriod(
     endDate = endOfMonth(new Date(period.year, period.month! - 1, 1));
   }
 
-  const transactionsQuery = db.collection('transactions').where('year', '==', period.year);
+  const transactionsQuery = adminDb.collection('transactions').where('year', '==', period.year);
   const transactionsSnap = await transactionsQuery.get();
   const transactions = transactionsSnap.docs.map(d => d.data() as Transaction);
 
@@ -172,7 +160,7 @@ export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('Authorization');
 
     if (process.env.NODE_ENV === 'development') {
-        console.log("[API/broker/command-metrics] Received request. Admin SDK Project ID:", admin.apps.length ? admin.app().options.projectId : "Admin SDK not initialized");
+        console.log("[API/broker/command-metrics] Received request.");
         console.log("[API/broker/command-metrics] Auth header exists:", !!authHeader);
     }
 
@@ -188,7 +176,7 @@ export async function GET(req: NextRequest) {
         });
     }
 
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
 
     if (decodedToken.uid !== ADMIN_UID) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -227,7 +215,7 @@ export async function GET(req: NextRequest) {
             const trendYear = monthDate.getFullYear();
             const trendMonth = monthDate.getMonth();
             const agentCount = await getActiveAgentCount(endOfMonth(monthDate));
-            const transQuery = db.collection('transactions').where('year', '==', trendYear).where('status', '==', 'closed');
+            const transQuery = adminDb.collection('transactions').where('year', '==', trendYear).where('status', '==', 'closed');
             const transSnap = await transQuery.get();
             let closedDeals = 0;
             transSnap.forEach(doc => {

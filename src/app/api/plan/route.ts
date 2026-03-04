@@ -1,31 +1,11 @@
 // src/app/api/plan/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import admin from "firebase-admin";
+import { admin, adminAuth, adminDb } from '@/lib/firebase/admin';
 
 function getBearerToken(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const match = authHeader.match(/^Bearer (.+)$/i);
   return match?.[1] ?? null;
-}
-
-function initAdmin() {
-  if (admin.apps.length) return admin.app();
-
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Missing Firebase Admin env vars");
-  }
-
-  return admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
-  });
 }
 
 function planDocRef(db: FirebaseFirestore.Firestore, uid: string, year: string) {
@@ -43,18 +23,16 @@ function planDocRef(db: FirebaseFirestore.Firestore, uid: string, year: string) 
 
 export async function GET(req: NextRequest) {
   try {
-    initAdmin();
     const token = getBearerToken(req);
     if (!token) return NextResponse.json({ ok: false, error: "Missing token" }, { status: 401 });
 
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
 
     const { searchParams } = new URL(req.url);
     const year = searchParams.get("year") || new Date().getFullYear().toString();
 
-    const db = admin.firestore();
-    const ref = planDocRef(db, uid, year);
+    const ref = planDocRef(adminDb, uid, year);
     const snap = await ref.get();
 
     // Always return defined plan object
@@ -71,19 +49,17 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    initAdmin();
     const token = getBearerToken(req);
     if (!token) return NextResponse.json({ ok: false, error: "Missing token" }, { status: 401 });
 
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
 
     const body = await req.json().catch(() => ({}));
     const year = String(body?.year ?? new Date().getFullYear());
     const plan = (body?.plan ?? {}) as Record<string, any>;
 
-    const db = admin.firestore();
-    const ref = planDocRef(db, uid, year);
+    const ref = planDocRef(adminDb, uid, year);
 
     await ref.set(
       { ...plan, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
