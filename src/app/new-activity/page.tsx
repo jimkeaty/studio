@@ -6,8 +6,6 @@ import { NewActivityConfig, NewActivityRollup } from '@/lib/types';
 import { Building, FileSignature, Home, AlertCircle, Loader2 } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
-import { useFirestore } from '@/firebase';
-import { getNewActivityRows } from '@/lib/rollupsService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
@@ -80,8 +78,6 @@ const ActivityColumn = ({ title, items, icon: Icon, showAddress, loading }: { ti
 
 export default function NewActivityPage() {
   const config = mockConfig;
-  const db = useFirestore();
-
   const [data, setData] = useState<NewActivityRollup | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +88,9 @@ export default function NewActivityPage() {
     setLoading(true);
     const selectedYear = new Date().getFullYear();
 
-    getNewActivityRows(db, selectedYear)
+    fetch(`/api/rollups/new-activity?year=${selectedYear}`)
+        .then(r => r.json())
+        .then(json => json.rows ?? [])
         .then(fetchedData => {
             setData(fetchedData);
             setError(null);

@@ -1,6 +1,8 @@
 import 'server-only';
 import admin from 'firebase-admin';
 
+const EXPECTED_FIREBASE_PROJECT_ID = "smart-broker-usa";
+
 export function initAdmin() {
   if (admin.apps.length) return admin.app();
 
@@ -13,7 +15,7 @@ export function initAdmin() {
   }
 
   // Hard guardrail: never allow wrong project
-  if (projectId !== "smart-broker-usa") {
+  if (projectId !== EXPECTED_FIREBASE_PROJECT_ID) {
     throw new Error(`WRONG FIREBASE PROJECT: expected smart-broker-usa, got ${projectId}`);
   }
 

@@ -7,8 +7,6 @@ import { ProductionLeaderboardRow, LeaderboardPeriod } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Crown, Rocket, Zap, AlertCircle, Loader2, Trophy, BarChart, CalendarDays } from 'lucide-react';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useFirestore } from '@/firebase';
-import { getLeaderboardRows } from '@/lib/rollupsService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -48,7 +46,6 @@ const LeaderboardSkeleton = () => (
 
 
 export default function LeaderboardPage() {
-  const db = useFirestore();
   const [rows, setRows] = useState<ProductionLeaderboardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +66,9 @@ export default function LeaderboardPage() {
 
     setLoading(true);
 
-    getLeaderboardRows(db, year)
+    fetch(`/api/rollups/leaderboard?year=${year}`)
+      .then(r => r.json())
+      .then(json => json.rows ?? [])
       .then(data => {
         setRows(data);
         setError(null);
