@@ -14,8 +14,7 @@ function planDocRef(db: FirebaseFirestore.Firestore, uid: string, year: string) 
   return db
     .collection("dashboards")
     .doc(year)
-    .doc("agent")
-    .collection("users")
+    .collection("agent")
     .doc(uid)
     .collection("plans")
     .doc("plan");
