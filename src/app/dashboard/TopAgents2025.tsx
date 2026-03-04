@@ -2,8 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFirestore } from "@/firebase";
-import { getEffectiveRollups } from "@/lib/rollupsService";
 import type { EffectiveRollup } from "@/lib/overrides";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,15 +12,11 @@ import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function TopAgents2025({ year = 2025 }: { year?: number }) {
-  const db = useFirestore();
-
   const [rows, setRows] = useState<EffectiveRollup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
-    if (!db) return;
-
     let cancelled = false;
 
     (async () => {
@@ -30,9 +24,11 @@ export default function TopAgents2025({ year = 2025 }: { year?: number }) {
         setLoading(true);
         setError("");
 
-        const data = await getEffectiveRollups(db, year);
-
-        if (!cancelled) setRows(data);
+        const res = await fetch(`/api/rollups/top-agents?year=${year}`);
+        const json = await res.json();
+        if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load top agents');
+        const data = json.rows ?? [];
+if (!cancelled) setRows(data);
       } catch (e: any) {
         console.error("Failed to fetch top agents data:", e);
         if (!cancelled) setError(e?.message || String(e));
@@ -44,7 +40,7 @@ export default function TopAgents2025({ year = 2025 }: { year?: number }) {
     return () => {
       cancelled = true;
     };
-  }, [db, year]);
+  }, [year]);
 
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => (b?.totals?.all || 0) - (a?.totals?.all || 0));
