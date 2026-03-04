@@ -1,4 +1,3 @@
-import 'server-only';
 import { adminDb } from '@/lib/firebaseAdmin';
 import { fetchRollupsWithOverrides, type EffectiveRollup } from '@/lib/overrides';
 
