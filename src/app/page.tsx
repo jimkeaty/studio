@@ -14,8 +14,9 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { useUser } from '@/firebase'; // Use the main hook
+import { useUser } from '@/firebase/auth/use-user';
+import { useAuth } from '@/firebase/provider';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" {...props}>
@@ -42,6 +43,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function Home() {
   const router = useRouter();
+  const auth = useAuth();
   const { user, loading: userLoading } = useUser();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -146,9 +148,13 @@ export default function Home() {
                 <AlertDescription>
                   Authentication is disabled in this preview environment. Please use the live application to sign in.
                   <Button asChild className="w-full mt-4">
-                    <a href="https://smart-broker-usa.web.app" target="_blank" rel="noopener noreferrer">
-                      Open Live App
-                    </a>
+                    <a
+  href="https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  Open Live App
+</a>
                   </Button>
                 </AlertDescription>
               </Alert>
