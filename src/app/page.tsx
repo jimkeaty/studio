@@ -15,7 +15,6 @@ import {
   browserSessionPersistence,
 } from 'firebase/auth';
 import { useUser } from '@/firebase'; // Use the main hook
-import { useUser } from '@/firebase/auth/use-user';
 import { useAuth } from '@/firebase/provider';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
