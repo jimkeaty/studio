@@ -91,6 +91,26 @@ export async function GET(req: NextRequest) {
       };
     });
 
+
+      // Sort leaderboard so rank order is top-to-bottom (highest performers first)
+      rows.sort((a: any, b: any) => {
+        const bClosed = Number(b?.closed ?? 0);
+        const aClosed = Number(a?.closed ?? 0);
+        if (bClosed !== aClosed) return bClosed - aClosed;
+
+        const bPending = Number(b?.pending ?? 0);
+        const aPending = Number(a?.pending ?? 0);
+        if (bPending !== aPending) return bPending - aPending;
+
+        const bTotal = Number(b?.totals?.all ?? 0);
+        const aTotal = Number(a?.totals?.all ?? 0);
+        if (bTotal !== aTotal) return bTotal - aTotal;
+
+        const aName = String(a?.displayName ?? "");
+        const bName = String(b?.displayName ?? "");
+        return aName.localeCompare(bName);
+      });
+
     return NextResponse.json({ ok: true, year, rows });
   } catch (e: any) {
     return NextResponse.json(
