@@ -58,28 +58,27 @@ export default function LeaderboardPage() {
   }, []);
   
   useEffect(() => {
-    if (!db || period !== 'yearly' || year === 0) {
-        setRows([]);
-        setLoading(false);
-        return;
-    };
+  if (period !== 'yearly' || year === 0) {
+    setRows([]);
+    setLoading(false);
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    fetch(`/api/rollups/leaderboard?year=${year}`)
-      .then(r => r.json())
-      .then(json => json.rows ?? [])
-      .then(data => {
-        setRows(data);
-        setError(null);
-      })
-      .catch(err => {
-        console.error("Failed to fetch leaderboard data:", err);
-        setError("Could not load leaderboard data. Please try again later.");
-      })
-      .finally(() => setLoading(false));
-
-  }, [db, period, year]);
+  fetch(`/api/rollups/leaderboard?year=${year}`, { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((json) => json.rows ?? [])
+    .then((data) => {
+      setRows(data);
+      setError(null);
+    })
+    .catch((err) => {
+      console.error('Failed to fetch leaderboard data:', err);
+      setError('Could not load leaderboard data. Please try again later.');
+    })
+    .finally(() => setLoading(false));
+}, [period, year]);
   
   const leaderScore = rows.length > 0 ? rows[0].closed : 0;
 
