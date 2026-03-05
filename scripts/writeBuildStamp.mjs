@@ -25,11 +25,17 @@ const full =
 
 const short = full ? full.slice(0, 7) : "unknown";
 
+let gitBranch = safe("git rev-parse --abbrev-ref HEAD");
+
+// If Cloud Build checks out detached HEAD, gitBranch can be "HEAD" or misleading.
+// If it isn't a real branch name, prefer our known branch.
+if (!gitBranch || gitBranch === "HEAD") gitBranch = "";
+
 const branch =
-  safe("git rev-parse --abbrev-ref HEAD") ||
   process.env.GIT_BRANCH ||
   process.env.BRANCH_NAME ||
   process.env.GITHUB_REF_NAME ||
+  gitBranch ||
   "fix/hydration-mismatch";
 
 const stamp = `${short}-${branch}`;
