@@ -4,7 +4,7 @@
  */
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
-
+import { FIREBASE_WEBAPP_CONFIG_JSON } from "@/lib/firebaseWebAppConfig";
 type WebAppConfig = {
   apiKey: string;
   authDomain: string;
@@ -16,9 +16,11 @@ type WebAppConfig = {
 };
 
 function readWebAppConfig(): WebAppConfig {
-  // Firebase App Hosting provides FIREBASE_WEBAPP_CONFIG at build time.
-  // Locally, you may need NEXT_PUBLIC_FIREBASE_* env vars.
-  const raw = process.env.FIREBASE_WEBAPP_CONFIG;
+  const raw =
+    FIREBASE_WEBAPP_CONFIG_JSON ||
+    process.env.NEXT_PUBLIC_FIREBASE_WEBAPP_CONFIG;
+
+  if (raw) return JSON.parse(raw) as WebAppConfig;
 
   if (raw) {
     return JSON.parse(raw) as WebAppConfig;
