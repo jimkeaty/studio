@@ -142,7 +142,7 @@ export default function LeaderboardPage() {
 
                 return (
                 <Card
-                    key={agent.agentId}
+                    key={agent.agentId ?? `${index}`}
                     className={cn(
                     'bg-gray-800/50 border-2 transition-all duration-300 ease-out',
                     index === 0 && 'border-yellow-400 shadow-2xl shadow-yellow-500/20',
@@ -157,12 +157,12 @@ export default function LeaderboardPage() {
                         
                         <Avatar className="h-16 w-16 border-2 border-gray-600">
                         <AvatarImage src={agent.avatarUrl} alt={agent.displayName} />
-                        <AvatarFallback>{agent.displayName.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{(agent.displayName ?? '—').charAt(0)}</AvatarFallback>
                         </Avatar>
 
                         <div className="flex-grow">
                         <div className="flex items-center gap-2">
-                            <div className="text-2xl font-bold">{agent.displayName}</div>
+                            <div className="text-2xl font-bold">{agent.displayName ?? 'Unknown Agent'}</div>
                             {agent.isCorrected && (
                                 <TooltipProvider>
                                     <Tooltip>
