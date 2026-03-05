@@ -1,27 +1,20 @@
-import { adminDb } from '@/lib/firebaseAdmin';
 import { fetchRollupsWithOverrides, type EffectiveRollup } from '@/lib/overrides';
 
 /**
- * Public server-side helpers used by:
- * - /api/rollups/leaderboard
- * - /api/rollups/new-activity
- * - /api/rollups/top-agents
- *
- * IMPORTANT: Server-only (Admin SDK). No client Firestore.
+ * IMPORTANT:
+ * - This module must NOT touch Firestore directly.
+ * - API routes should create db via adminDb() and pass it in.
+ * - Guardrails enforces no Firestore usage here.
  */
-export async function getEffectiveRollups(year: number): Promise<EffectiveRollup[]> {
-  const db = adminDb();
+
+export async function getEffectiveRollups(db: any, year: number): Promise<EffectiveRollup[]> {
   return fetchRollupsWithOverrides(db, year);
 }
 
-export async function getLeaderboardRows(year: number = new Date().getFullYear()) {
-  return getEffectiveRollups(year);
+export async function getNewActivityRows(db: any, year: number = new Date().getFullYear()) {
+  return getEffectiveRollups(db, year);
 }
 
-export async function getNewActivityRows(year: number = new Date().getFullYear()) {
-  return getEffectiveRollups(year);
-}
-
-export async function getTopAgentsRows(year: number = new Date().getFullYear()) {
-  return getEffectiveRollups(year);
+export async function getTopAgentsRows(db: any, year: number = new Date().getFullYear()) {
+  return getEffectiveRollups(db, year);
 }
