@@ -1,4 +1,4 @@
-import type { Timestamp } from 'firebase/firestore';
+import type { TimestampLike } from './timestamp';
 
 /**
  * Defines the relationship between a recruited agent and their referrer.
@@ -8,9 +8,9 @@ export interface AgentReferral {
   id: string; // Document ID is the recruitedAgentId
   recruitedAgentId: string;
   referrerAgentId: string;
-  createdAt: Timestamp;
+  createdAt: TimestampLike;
   createdByUid: string;
-  updatedAt: Timestamp;
+  updatedAt: TimestampLike;
   updatedByUid: string;
   status: 'active' | 'disputed' | 'removed';
   note?: string;
@@ -24,13 +24,13 @@ export interface AgentReferral {
 export interface ReferralQualification {
   id: string; // Document ID is the recruitedAgentId
   recruitedAgentId: string;
-  hireDate: Timestamp;
-  windowEndsAt: Timestamp;
+  hireDate: TimestampLike;
+  windowEndsAt: TimestampLike;
   thresholdCompanyGciGross: number;
   companyGciGrossInWindow: number; // IMPORTANT: This is the CLOSED GCI amount.
   status: 'in_progress' | 'qualified' | 'expired';
-  qualifiedAt: Timestamp | null;
-  lastComputedAt: Timestamp;
+  qualifiedAt: TimestampLike | null;
+  lastComputedAt: TimestampLike;
   computedByUid: string;
 }
 
