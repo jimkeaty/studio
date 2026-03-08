@@ -91,6 +91,19 @@ export async function GET(req: NextRequest) {
       getAgentNameMap(db, year),
     ]);
 
+    if (searchParams.get("debug") === "1") {
+      return NextResponse.json({
+        ok: true,
+        year,
+        count: transactionsSnap.size,
+        samples: transactionsSnap.docs.slice(0, 3).map((doc: any) => ({
+          id: doc.id,
+          data: doc.data(),
+        })),
+      });
+    }
+
+
     const newListings: any[] = [];
     const newContracts: any[] = [];
 
