@@ -89,11 +89,17 @@ export default function NewActivityPage() {
 
     fetch(`/api/rollups/new-activity?year=${selectedYear}`)
         .then(r => r.json())
-        .then(() => ({
-            newListings: [],
-            newContracts: [],
-            generatedAt: new Date().toISOString(),
-        }))
+        .then(json => {
+            if (!json?.ok) {
+                throw new Error(json?.error || "Failed to load new activity");
+            }
+            return {
+                lookbackDays: json.lookbackDays ?? 60,
+                generatedAt: json.generatedAt ?? new Date().toISOString(),
+                newListings: Array.isArray(json.newListings) ? json.newListings : [],
+                newContracts: Array.isArray(json.newContracts) ? json.newContracts : [],
+            };
+        })
         .then(fetchedData => {
             setData(fetchedData as any);
             setError(null);
