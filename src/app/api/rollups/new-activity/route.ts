@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     const lookbackDays = 60;
     const showTopN = 25;
 
-    const db = adminDb();
+    const db = adminDb;
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - lookbackDays);
 
