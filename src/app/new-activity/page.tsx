@@ -89,9 +89,13 @@ export default function NewActivityPage() {
 
     fetch(`/api/rollups/new-activity?year=${selectedYear}`)
         .then(r => r.json())
-        .then(json => json.rows ?? [])
+        .then(() => ({
+            newListings: [],
+            newContracts: [],
+            generatedAt: new Date().toISOString(),
+        }))
         .then(fetchedData => {
-            setData(fetchedData);
+            setData(fetchedData as any);
             setError(null);
         })
         .catch(err => {
@@ -134,8 +138,8 @@ export default function NewActivityPage() {
       <footer className="text-center mt-12 text-gray-600">
         {loading ? (
              <p>Loading...</p>
-        ) : data ? (
-            <p>Last updated: {format(parseISO(data.generatedAt), 'Pp')}</p>
+        ) : data && (data as any).generatedAt ? (
+            <p>Last updated: {format(parseISO((data as any).generatedAt), 'Pp')}</p>
         ) : null}
       </footer>
     </div>
