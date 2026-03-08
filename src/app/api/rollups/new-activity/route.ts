@@ -103,21 +103,25 @@ export async function GET(req: NextRequest) {
         agentNameMap.get(agentId) ||
         fallbackDisplayName(agentId);
 
-      const addressShort = shortAddress(t.address || t.propertyAddress || t.streetAddress);
+      const addressShort = shortAddress(
+        t.address ||
+        t.propertyAddress ||
+        t.streetAddress ||
+        t.transactionType ||
+        "Transaction"
+      );
       const price = toMoney(t.dealValue ?? t.price ?? t.salePrice ?? t.netCommission);
 
-      const listingDateRaw =
-        t.listingDate || t.listDate || t.createdAt || t.dateListed || null;
-      const contractDateRaw =
-        t.contractDate || t.pendingDate || t.underContractDate || null;
+      const closedDateRaw = t.closedDate || t.closingDate || null;
+      const contractDateRaw = t.contractDate || t.pendingDate || t.underContractDate || null;
 
-      const listingDate = toDate(listingDateRaw);
+      const closedDate = toDate(closedDateRaw);
       const contractDate = toDate(contractDateRaw);
 
-      if (listingDate && listingDate >= cutoff) {
+      if (closedDate && closedDate >= cutoff) {
         newListings.push({
-          id: `${doc.id}_listing`,
-          date: toYmd(listingDateRaw),
+          id: `${doc.id}_closed`,
+          date: toYmd(closedDateRaw),
           agentDisplayName,
           addressShort,
           price,
