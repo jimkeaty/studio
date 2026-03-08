@@ -25,7 +25,7 @@ const formatCurrency = (amount: number) =>
         minimumFractionDigits: 0 
     }).format(amount);
 
-const formatDate = (dateStr: string) => format(parseISO(dateStr), 'MMM d');
+const formatDate = (dateStr?: string) => dateStr ? format(parseISO(dateStr), 'MMM d') : '—';
 
 
 const ActivityColumn = ({ title, items, icon: Icon, showAddress, loading }: { title: string, items: any[], icon: React.ElementType, showAddress: boolean, loading: boolean }) => (
