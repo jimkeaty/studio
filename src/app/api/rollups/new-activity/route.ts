@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
     cutoff.setDate(cutoff.getDate() - lookbackDays);
 
     const [transactionsSnap, agentNameMap] = await Promise.all([
-      db.collection("transactions").where("year", "==", year).get(),
+      db.collection("transactions").limit(5).get(),
       getAgentNameMap(db, year),
     ]);
 
