@@ -83,7 +83,6 @@ export default function NewActivityPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!db) return;
     
     setLoading(true);
     const selectedYear = new Date().getFullYear();
@@ -103,7 +102,7 @@ export default function NewActivityPage() {
             setLoading(false);
         });
 
-  }, [db]);
+  }, []);
 
   return (
     <div className="dark min-h-screen bg-gray-900 text-white p-8 font-sans">
