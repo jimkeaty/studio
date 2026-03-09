@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 import AgentProfileForm, {
   type AgentProfileFormValues,
 } from '@/components/admin/agents/AgentProfileForm';
@@ -20,18 +21,20 @@ export default function AgentProfileEditor({
 
   useEffect(() => {
     let isMounted = true;
+    const auth = getFirebaseAuth();
 
-    async function loadAgent() {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!isMounted) return;
+
+      if (!currentUser) {
+        setErrorMessage('You must be signed in to load this agent profile.');
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         setErrorMessage('');
-
-        const auth = getFirebaseAuth();
-        const currentUser = auth.currentUser;
-
-        if (!currentUser) {
-          throw new Error('You must be signed in to load this agent profile.');
-        }
 
         const token = await currentUser.getIdToken();
 
@@ -59,9 +62,13 @@ export default function AgentProfileEditor({
           office: agent.office || '',
           status: agent.status || 'active',
           startDate: agent.startDate || '',
-          compType: agent.compType || 'standard',
-          defaultSplitPlanId: agent.defaultSplitPlanId || 'cgl_standard',
-          hasCustomSplitOverride: Boolean(agent.hasCustomSplitOverride),
+          agentType: agent.agentType || 'CGL',
+          progressionMetric: 'companyDollar',
+          primaryTeamId: agent.primaryTeamId || '',
+          teamRole: agent.teamRole || null,
+          defaultPlanType: agent.defaultPlanType || 'individual',
+          defaultPlanId: agent.defaultPlanId || '',
+          tiers: Array.isArray(agent.tiers) ? agent.tiers : [],
           notes: agent.notes || '',
         });
       } catch (err: any) {
@@ -72,12 +79,11 @@ export default function AgentProfileEditor({
           setIsLoading(false);
         }
       }
-    }
-
-    loadAgent();
+    });
 
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, [agentId]);
 

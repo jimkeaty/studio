@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { onAuthStateChanged } from 'firebase/auth';
 import { getFirebaseAuth } from '@/lib/firebase';
 
 type AgentRow = {
@@ -9,31 +10,10 @@ type AgentRow = {
   displayName: string;
   office: string | null;
   status: string;
-  defaultSplitPlanId: string | null;
+  agentType: string;
   anniversaryMonth?: number;
   anniversaryDay?: number;
 };
-
-function formatPlanLabel(planId: string | null | undefined) {
-  switch (planId) {
-    case 'cgl_first_year':
-      return 'CGL First Year';
-    case 'cgl_standard':
-      return 'CGL Standard';
-    case 'sbl_team_standard':
-      return 'SBL Team Standard';
-    case 'salary_flat':
-      return 'Salary Flat';
-    case 'referral_flat':
-      return 'Referral Flat';
-    case null:
-    case undefined:
-    case '':
-      return '—';
-    default:
-      return planId;
-  }
-}
 
 function formatAnniversary(month?: number, day?: number) {
   if (!month || !day) return '—';
@@ -45,6 +25,21 @@ function formatAnniversary(month?: number, day?: number) {
   });
 }
 
+function formatAgentType(agentType?: string) {
+  switch (agentType) {
+    case 'TeamMember':
+      return 'Team Member';
+    case 'TeamLeader':
+      return 'Team Leader';
+    case 'CGL':
+      return 'CGL';
+    case 'SGL':
+      return 'SGL';
+    default:
+      return agentType || '—';
+  }
+}
+
 export default function AgentsList() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,18 +47,20 @@ export default function AgentsList() {
 
   useEffect(() => {
     let isMounted = true;
+    const auth = getFirebaseAuth();
 
-    async function loadAgents() {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!isMounted) return;
+
+      if (!currentUser) {
+        setErrorMessage('You must be signed in to load agent profiles.');
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         setErrorMessage('');
-
-        const auth = getFirebaseAuth();
-        const currentUser = auth.currentUser;
-
-        if (!currentUser) {
-          throw new Error('You must be signed in to load agent profiles.');
-        }
 
         const token = await currentUser.getIdToken();
 
@@ -89,12 +86,11 @@ export default function AgentsList() {
           setIsLoading(false);
         }
       }
-    }
-
-    loadAgents();
+    });
 
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, []);
 
@@ -133,7 +129,7 @@ export default function AgentsList() {
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Office</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Plan</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700">Agent Type</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Anniversary</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Action</th>
                 </tr>
@@ -153,9 +149,7 @@ export default function AgentsList() {
                       <td className="px-4 py-3 capitalize">
                         {(agent.status || '—').replace('_', ' ')}
                       </td>
-                      <td className="px-4 py-3">
-                        {formatPlanLabel(agent.defaultSplitPlanId)}
-                      </td>
+                      <td className="px-4 py-3">{formatAgentType(agent.agentType)}</td>
                       <td className="px-4 py-3">
                         {formatAnniversary(agent.anniversaryMonth, agent.anniversaryDay)}
                       </td>
