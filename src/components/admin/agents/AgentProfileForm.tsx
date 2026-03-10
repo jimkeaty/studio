@@ -207,6 +207,38 @@ function createEmptyTier(nextIndex: number): AgentTierFormValue {
   };
 }
 
+async function fetchTeamOptions(token: string) {
+  const [teamsRes, teamPlansRes, memberPlansRes] = await Promise.all([
+    fetch('/api/admin/teams', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    fetch('/api/admin/team-plans', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    fetch('/api/admin/member-plans', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  ]);
+
+  const [teamsJson, teamPlansJson, memberPlansJson] = await Promise.all([
+    teamsRes.json(),
+    teamPlansRes.json(),
+    memberPlansRes.json(),
+  ]);
+
+  return {
+    teams: Array.isArray(teamsJson?.teams)
+      ? teamsJson.teams.filter((team) => team.status !== 'inactive')
+      : [],
+    teamPlans: Array.isArray(teamPlansJson?.teamPlans)
+      ? teamPlansJson.teamPlans.filter((plan) => plan.status !== 'inactive')
+      : [],
+    memberPlans: Array.isArray(memberPlansJson?.memberPlans)
+      ? memberPlansJson.memberPlans.filter((plan) => plan.status !== 'inactive')
+      : [],
+  };
+}
+
 export default function AgentProfileForm({
   agentId,
   initialValues,
@@ -231,6 +263,12 @@ export default function AgentProfileForm({
   const [teamPlans, setTeamPlans] = useState<TeamPlanOption[]>([]);
   const [memberPlans, setMemberPlans] = useState<MemberPlanOption[]>([]);
   const [isLoadingTeamOptions, setIsLoadingTeamOptions] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
+  const [createTeamError, setCreateTeamError] = useState('');
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamOffice, setNewTeamOffice] = useState('');
+  const [newTeamNotes, setNewTeamNotes] = useState('');
 
   useEffect(() => {
     if (!initialValues) return;
@@ -266,43 +304,13 @@ export default function AgentProfileForm({
 
         const token = await currentUser.getIdToken();
 
-        const [teamsRes, teamPlansRes, memberPlansRes] = await Promise.all([
-          fetch('/api/admin/teams', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch('/api/admin/team-plans', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch('/api/admin/member-plans', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
-
-        const [teamsJson, teamPlansJson, memberPlansJson] = await Promise.all([
-          teamsRes.json(),
-          teamPlansRes.json(),
-          memberPlansRes.json(),
-        ]);
+        const options = await fetchTeamOptions(token);
 
         if (!isMounted) return;
 
-        setTeams(
-          Array.isArray(teamsJson?.teams)
-            ? teamsJson.teams.filter((team) => team.status !== 'inactive')
-            : []
-        );
-
-        setTeamPlans(
-          Array.isArray(teamPlansJson?.teamPlans)
-            ? teamPlansJson.teamPlans.filter((plan) => plan.status !== 'inactive')
-            : []
-        );
-
-        setMemberPlans(
-          Array.isArray(memberPlansJson?.memberPlans)
-            ? memberPlansJson.memberPlans.filter((plan) => plan.status !== 'inactive')
-            : []
-        );
+        setTeams(options.teams);
+        setTeamPlans(options.teamPlans);
+        setMemberPlans(options.memberPlans);
       } catch (err) {
         console.error('[AgentProfileForm] Failed to load team options', err);
       } finally {
@@ -383,6 +391,65 @@ export default function AgentProfileForm({
       primaryTeamId: nextTeamId,
       defaultPlanId: '',
     }));
+  }
+
+  async function handleCreateTeam() {
+    setCreateTeamError('');
+
+    try {
+      const auth = getFirebaseAuth();
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        throw new Error('You must be signed in to create a team.');
+      }
+
+      if (!newTeamName.trim()) {
+        throw new Error('Team name is required.');
+      }
+
+      setIsCreatingTeam(true);
+
+      const token = await currentUser.getIdToken();
+
+      const response = await fetch('/api/admin/teams', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          teamName: newTeamName.trim(),
+          leaderAgentId: agentId || 'unassigned-leader',
+          teamPlanId: 'pending-team-plan',
+          status: 'active',
+          office: newTeamOffice.trim() || null,
+          notes: newTeamNotes.trim() || null,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || 'Failed to create team.');
+      }
+
+      const options = await fetchTeamOptions(token);
+
+      setTeams(options.teams);
+      setTeamPlans(options.teamPlans);
+      setMemberPlans(options.memberPlans);
+
+      updatePrimaryTeamId(result.team.teamId);
+      setShowCreateTeam(false);
+      setNewTeamName('');
+      setNewTeamOffice('');
+      setNewTeamNotes('');
+    } catch (err) {
+      setCreateTeamError(err?.message || 'Failed to create team.');
+    } finally {
+      setIsCreatingTeam(false);
+    }
   }
 
   function updateTier(
@@ -665,7 +732,20 @@ export default function AgentProfileForm({
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium">Team</label>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label className="block text-sm font-medium">Team</label>
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-blue-600 hover:underline"
+                    onClick={() => {
+                      setCreateTeamError('');
+                      setShowCreateTeam((prev) => !prev);
+                    }}
+                  >
+                    {showCreateTeam ? 'Cancel' : '+ Create Team'}
+                  </button>
+                </div>
+
                 <select
                   className="w-full rounded-md border px-3 py-2"
                   value={values.primaryTeamId}
@@ -694,6 +774,67 @@ export default function AgentProfileForm({
                   <option value="member">Member</option>
                 </select>
               </div>
+
+              {showCreateTeam && (
+                <div className="md:col-span-2 rounded-md border border-gray-200 bg-white p-4">
+                  <h4 className="text-sm font-semibold">Create Team</h4>
+
+                  <div className="mt-3 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Team Name</label>
+                      <input
+                        className="w-full rounded-md border px-3 py-2"
+                        value={newTeamName}
+                        onChange={(e) => setNewTeamName(e.target.value)}
+                        placeholder="Enter team name"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Office</label>
+                      <input
+                        className="w-full rounded-md border px-3 py-2"
+                        value={newTeamOffice}
+                        onChange={(e) => setNewTeamOffice(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-sm font-medium">Notes</label>
+                      <textarea
+                        className="min-h-24 w-full rounded-md border px-3 py-2"
+                        value={newTeamNotes}
+                        onChange={(e) => setNewTeamNotes(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+                  </div>
+
+                  {createTeamError && (
+                    <p className="mt-3 text-sm text-red-700">{createTeamError}</p>
+                  )}
+
+                  <div className="mt-4 flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      className="rounded-md border px-4 py-2 text-sm font-medium"
+                      onClick={() => setShowCreateTeam(false)}
+                      disabled={isCreatingTeam}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                      onClick={handleCreateTeam}
+                      disabled={isCreatingTeam || !newTeamName.trim()}
+                    >
+                      {isCreatingTeam ? 'Creating...' : 'Create Team'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium">
