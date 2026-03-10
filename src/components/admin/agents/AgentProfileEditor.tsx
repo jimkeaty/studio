@@ -62,12 +62,15 @@ export default function AgentProfileEditor({
           office: agent.office || '',
           status: agent.status || 'active',
           startDate: agent.startDate || '',
-          agentType: agent.agentType || 'CGL',
+          agentType: agent.agentType || 'independent',
           progressionMetric: 'companyDollar',
           primaryTeamId: agent.primaryTeamId || '',
           teamRole: agent.teamRole || null,
           defaultPlanType: agent.defaultPlanType || 'individual',
           defaultPlanId: agent.defaultPlanId || '',
+          referringAgentId: agent.referringAgentId || '',
+          referringAgentDisplayNameSnapshot:
+            agent.referringAgentDisplayNameSnapshot || '',
           tiers: Array.isArray(agent.tiers) ? agent.tiers : [],
           notes: agent.notes || '',
         });

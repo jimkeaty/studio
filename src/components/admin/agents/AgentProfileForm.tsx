@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { getFirebaseAuth } from '@/lib/firebase';
 
-export type AgentType = 'CGL' | 'SGL' | 'TeamMember' | 'TeamLeader';
+export type AgentType = 'independent' | 'team';
 export type ProgressionMetric = 'companyDollar';
 export type TeamRole = 'leader' | 'member' | null;
 export type PlanAssignmentType = 'individual' | 'teamMember' | 'teamLeader';
@@ -32,6 +33,8 @@ export type AgentProfileFormValues = {
   teamRole: TeamRole;
   defaultPlanType: PlanAssignmentType;
   defaultPlanId: string;
+  referringAgentId: string;
+  referringAgentDisplayNameSnapshot: string;
   tiers: AgentTierFormValue[];
   notes: string;
 };
@@ -42,15 +45,51 @@ type AgentProfileFormProps = {
   submitLabel?: string;
 };
 
-const DEFAULT_CGL_TIERS: AgentTierFormValue[] = [
-  {
-    tierName: 'First Year',
-    fromCompanyDollar: 0,
-    toCompanyDollar: null,
-    agentSplitPercent: 50,
-    companySplitPercent: 50,
-    notes: 'First-year agent',
-  },
+type TeamOption = {
+  teamId: string;
+  teamName: string;
+  teamPlanId?: string;
+  status?: string;
+};
+
+type TeamPlanOption = {
+  teamPlanId: string;
+  teamId: string;
+  planName: string;
+  status?: string;
+};
+
+type MemberPlanOption = {
+  memberPlanId: string;
+  teamId: string;
+  agentId?: string;
+  planName: string;
+  status?: string;
+};
+
+type TeamOption = {
+  teamId: string;
+  teamName: string;
+  teamPlanId?: string;
+  status?: string;
+};
+
+type TeamPlanOption = {
+  teamPlanId: string;
+  teamId: string;
+  planName: string;
+  status?: string;
+};
+
+type MemberPlanOption = {
+  memberPlanId: string;
+  teamId: string;
+  agentId?: string;
+  planName: string;
+  status?: string;
+};
+
+const DEFAULT_INDEPENDENT_TIERS: AgentTierFormValue[] = [
   {
     tierName: 'Tier 1',
     fromCompanyDollar: 0,
@@ -93,28 +132,6 @@ const DEFAULT_CGL_TIERS: AgentTierFormValue[] = [
   },
 ];
 
-const DEFAULT_SGL_TIERS: AgentTierFormValue[] = [
-  {
-    tierName: 'Tier 1',
-    fromCompanyDollar: 0,
-    toCompanyDollar: 240000,
-    agentSplitPercent: 70,
-    companySplitPercent: 30,
-    notes: '',
-  },
-  {
-    tierName: 'Tier 2',
-    fromCompanyDollar: 240000,
-    toCompanyDollar: null,
-    agentSplitPercent: 90,
-    companySplitPercent: 10,
-    notes: '',
-  },
-];
-
-const DEFAULT_TEAM_MEMBER_TIERS: AgentTierFormValue[] = [];
-const DEFAULT_TEAM_LEADER_TIERS: AgentTierFormValue[] = [];
-
 const DEFAULT_VALUES: AgentProfileFormValues = {
   firstName: '',
   lastName: '',
@@ -123,13 +140,15 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   office: '',
   status: 'active',
   startDate: '',
-  agentType: 'CGL',
+  agentType: 'independent',
   progressionMetric: 'companyDollar',
   primaryTeamId: '',
   teamRole: null,
   defaultPlanType: 'individual',
   defaultPlanId: '',
-  tiers: DEFAULT_CGL_TIERS,
+  referringAgentId: '',
+  referringAgentDisplayNameSnapshot: '',
+  tiers: DEFAULT_INDEPENDENT_TIERS,
   notes: '',
 };
 
@@ -141,33 +160,28 @@ function cloneTiers(tiers: AgentTierFormValue[]) {
 }
 
 function getDefaultTiers(agentType: AgentType): AgentTierFormValue[] {
-  switch (agentType) {
-    case 'CGL':
-      return cloneTiers(DEFAULT_CGL_TIERS);
-    case 'SGL':
-      return cloneTiers(DEFAULT_SGL_TIERS);
-    case 'TeamMember':
-      return cloneTiers(DEFAULT_TEAM_MEMBER_TIERS);
-    case 'TeamLeader':
-      return cloneTiers(DEFAULT_TEAM_LEADER_TIERS);
-    default:
-      return cloneTiers(DEFAULT_CGL_TIERS);
+  if (agentType === 'independent') {
+    return cloneTiers(DEFAULT_INDEPENDENT_TIERS);
   }
+
+  return [];
 }
 
-function isIndividualAgentType(agentType: AgentType) {
-  return agentType === 'CGL' || agentType === 'SGL';
+function isIndependentAgentType(agentType: AgentType) {
+  return agentType === 'independent';
 }
 
 function getDefaultTeamRole(agentType: AgentType): TeamRole {
-  if (agentType === 'TeamLeader') return 'leader';
-  if (agentType === 'TeamMember') return 'member';
+  if (agentType === 'team') return 'member';
   return null;
 }
 
-function getDefaultPlanType(agentType: AgentType): PlanAssignmentType {
-  if (agentType === 'TeamLeader') return 'teamLeader';
-  if (agentType === 'TeamMember') return 'teamMember';
+function getDefaultPlanType(
+  agentType: AgentType,
+  teamRole: TeamRole
+): PlanAssignmentType {
+  if (agentType === 'team' && teamRole === 'leader') return 'teamLeader';
+  if (agentType === 'team' && teamRole === 'member') return 'teamMember';
   return 'individual';
 }
 
@@ -213,6 +227,10 @@ export default function AgentProfileForm({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [teamPlans, setTeamPlans] = useState<TeamPlanOption[]>([]);
+  const [memberPlans, setMemberPlans] = useState<MemberPlanOption[]>([]);
+  const [isLoadingTeamOptions, setIsLoadingTeamOptions] = useState(false);
 
   useEffect(() => {
     if (!initialValues) return;
@@ -224,13 +242,104 @@ export default function AgentProfileForm({
       tiers:
         initialValues.tiers && initialValues.tiers.length > 0
           ? cloneTiers(initialValues.tiers)
-          : getDefaultTiers((initialValues.agentType as AgentType) || 'CGL'),
+          : getDefaultTiers((initialValues.agentType as AgentType) || 'independent'),
     });
   }, [initialValues]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const auth = getFirebaseAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!isMounted) return;
+
+      if (!currentUser) {
+        setTeams([]);
+        setTeamPlans([]);
+        setMemberPlans([]);
+        setIsLoadingTeamOptions(false);
+        return;
+      }
+
+      try {
+        setIsLoadingTeamOptions(true);
+
+        const token = await currentUser.getIdToken();
+
+        const [teamsRes, teamPlansRes, memberPlansRes] = await Promise.all([
+          fetch('/api/admin/teams', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch('/api/admin/team-plans', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch('/api/admin/member-plans', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        const [teamsJson, teamPlansJson, memberPlansJson] = await Promise.all([
+          teamsRes.json(),
+          teamPlansRes.json(),
+          memberPlansRes.json(),
+        ]);
+
+        if (!isMounted) return;
+
+        setTeams(
+          Array.isArray(teamsJson?.teams)
+            ? teamsJson.teams.filter((team) => team.status !== 'inactive')
+            : []
+        );
+
+        setTeamPlans(
+          Array.isArray(teamPlansJson?.teamPlans)
+            ? teamPlansJson.teamPlans.filter((plan) => plan.status !== 'inactive')
+            : []
+        );
+
+        setMemberPlans(
+          Array.isArray(memberPlansJson?.memberPlans)
+            ? memberPlansJson.memberPlans.filter((plan) => plan.status !== 'inactive')
+            : []
+        );
+      } catch (err) {
+        console.error('[AgentProfileForm] Failed to load team options', err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingTeamOptions(false);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   const anniversaryDisplay = useMemo(() => {
     return formatAnniversary(values.startDate);
   }, [values.startDate]);
+
+  const availableTeams = useMemo(() => {
+    return [...teams].sort((a, b) => a.teamName.localeCompare(b.teamName));
+  }, [teams]);
+
+  const availableLeaderPlans = useMemo(() => {
+    if (!values.primaryTeamId) return [];
+    return teamPlans
+      .filter((plan) => plan.teamId === values.primaryTeamId)
+      .sort((a, b) => a.planName.localeCompare(b.planName));
+  }, [teamPlans, values.primaryTeamId]);
+
+  const availableMemberPlans = useMemo(() => {
+    if (!values.primaryTeamId) return [];
+    return memberPlans
+      .filter((plan) => plan.teamId === values.primaryTeamId)
+      .sort((a, b) => a.planName.localeCompare(b.planName));
+  }, [memberPlans, values.primaryTeamId]);
+
 
   function updateField<K extends keyof AgentProfileFormValues>(
     field: K,
@@ -243,15 +352,36 @@ export default function AgentProfileForm({
   }
 
   function updateAgentType(nextType: AgentType) {
+    setValues((prev) => {
+      const nextTeamRole = getDefaultTeamRole(nextType);
+
+      return {
+        ...prev,
+        agentType: nextType,
+        progressionMetric: 'companyDollar',
+        teamRole: nextTeamRole,
+        defaultPlanType: getDefaultPlanType(nextType, nextTeamRole),
+        defaultPlanId: nextType === 'independent' ? '' : prev.defaultPlanId,
+        primaryTeamId: nextType === 'independent' ? '' : prev.primaryTeamId,
+        tiers: getDefaultTiers(nextType),
+      };
+    });
+  }
+
+  function updateTeamRole(nextRole: TeamRole) {
     setValues((prev) => ({
       ...prev,
-      agentType: nextType,
-      progressionMetric: 'companyDollar',
-      teamRole: getDefaultTeamRole(nextType),
-      defaultPlanType: getDefaultPlanType(nextType),
-      defaultPlanId: isIndividualAgentType(nextType) ? '' : prev.defaultPlanId,
-      primaryTeamId: isIndividualAgentType(nextType) ? '' : prev.primaryTeamId,
-      tiers: getDefaultTiers(nextType),
+      teamRole: nextRole,
+      defaultPlanType: getDefaultPlanType(prev.agentType, nextRole),
+      defaultPlanId: '',
+    }));
+  }
+
+  function updatePrimaryTeamId(nextTeamId: string) {
+    setValues((prev) => ({
+      ...prev,
+      primaryTeamId: nextTeamId,
+      defaultPlanId: '',
     }));
   }
 
@@ -296,7 +426,7 @@ export default function AgentProfileForm({
       ...prev,
       progressionMetric: 'companyDollar',
       teamRole: getDefaultTeamRole(prev.agentType),
-      defaultPlanType: getDefaultPlanType(prev.agentType),
+      defaultPlanType: getDefaultPlanType(prev.agentType, prev.teamRole),
       tiers: getDefaultTiers(prev.agentType),
     }));
   }
@@ -327,11 +457,14 @@ export default function AgentProfileForm({
         startDate: values.startDate,
         agentType: values.agentType,
         progressionMetric: 'companyDollar',
-        primaryTeamId: values.primaryTeamId || null,
-        teamRole: values.teamRole,
+        primaryTeamId: values.agentType === 'team' ? values.primaryTeamId || null : null,
+        teamRole: values.agentType === 'team' ? values.teamRole : null,
         defaultPlanType: values.defaultPlanType,
-        defaultPlanId: values.defaultPlanId || null,
-        tiers: isIndividualAgentType(values.agentType)
+        defaultPlanId: values.agentType === 'team' ? values.defaultPlanId || null : null,
+        referringAgentId: values.referringAgentId || null,
+        referringAgentDisplayNameSnapshot:
+          values.referringAgentDisplayNameSnapshot || null,
+        tiers: isIndependentAgentType(values.agentType)
           ? values.tiers.map((tier) => ({
               tierName: tier.tierName,
               fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
@@ -512,74 +645,110 @@ export default function AgentProfileForm({
               value={values.agentType}
               onChange={(e) => updateAgentType(e.target.value as AgentType)}
             >
-              <option value="CGL">CGL</option>
-              <option value="SGL">SGL</option>
-              <option value="TeamMember">Team Member</option>
-              <option value="TeamLeader">Team Leader</option>
+              <option value="independent">Independent</option>
+              <option value="team">Team</option>
             </select>
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">
-              Progression Metric
-            </label>
-            <input
-              className="w-full rounded-md border bg-gray-50 px-3 py-2"
-              value="Company Dollar In"
-              readOnly
-            />
-          </div>
+
         </div>
 
-        {!isIndividualAgentType(values.agentType) && (
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Primary Team ID</label>
-              <input
-                className="w-full rounded-md border px-3 py-2"
-                value={values.primaryTeamId}
-                onChange={(e) => updateField('primaryTeamId', e.target.value)}
-                placeholder="Enter team ID"
-              />
-            </div>
+        {!isIndependentAgentType(values.agentType) && (
+          <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 p-4">
+            <h3 className="text-sm font-semibold text-blue-900">
+              Team Compensation Setup
+            </h3>
+            <p className="mt-1 text-sm text-blue-800">
+              Team agents use the assigned team, role, and plan structure. Inline
+              individual tiers do not apply here.
+            </p>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                {values.agentType === 'TeamLeader' ? 'Leader Plan ID' : 'Member Plan ID'}
-              </label>
-              <input
-                className="w-full rounded-md border px-3 py-2"
-                value={values.defaultPlanId}
-                onChange={(e) => updateField('defaultPlanId', e.target.value)}
-                placeholder={
-                  values.agentType === 'TeamLeader'
-                    ? 'Enter leader plan ID'
-                    : 'Enter member plan ID'
-                }
-              />
-            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Team</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={values.primaryTeamId}
+                  onChange={(e) => updatePrimaryTeamId(e.target.value)}
+                  disabled={isLoadingTeamOptions}
+                >
+                  <option value="">
+                    {isLoadingTeamOptions ? 'Loading teams...' : 'Select a team'}
+                  </option>
+                  {availableTeams.map((team) => (
+                    <option key={team.teamId} value={team.teamId}>
+                      {team.teamName}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">Resolved Team Role</label>
-              <input
-                className="w-full rounded-md border bg-gray-50 px-3 py-2"
-                value={values.teamRole || ''}
-                readOnly
-              />
-            </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Team Role</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={values.teamRole || 'member'}
+                  onChange={(e) => updateTeamRole(e.target.value as TeamRole)}
+                >
+                  <option value="leader">Leader</option>
+                  <option value="member">Member</option>
+                </select>
+              </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">Resolved Plan Type</label>
-              <input
-                className="w-full rounded-md border bg-gray-50 px-3 py-2"
-                value={values.defaultPlanType}
-                readOnly
-              />
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium">
+                  {values.teamRole === 'leader' ? 'Leader Plan' : 'Member Plan'}
+                </label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={values.defaultPlanId}
+                  onChange={(e) => updateField('defaultPlanId', e.target.value)}
+                  disabled={
+                    !values.primaryTeamId ||
+                    isLoadingTeamOptions ||
+                    (values.teamRole === 'leader'
+                      ? availableLeaderPlans.length === 0
+                      : availableMemberPlans.length === 0)
+                  }
+                >
+                  <option value="">
+                    {!values.primaryTeamId
+                      ? 'Select a team first'
+                      : values.teamRole === 'leader'
+                        ? availableLeaderPlans.length === 0
+                          ? 'No leader plans found'
+                          : 'Select a leader plan'
+                        : availableMemberPlans.length === 0
+                          ? 'No member plans found'
+                          : 'Select a member plan'}
+                  </option>
+                  {(values.teamRole === 'leader'
+                    ? availableLeaderPlans.map((plan) => (
+                        <option key={plan.teamPlanId} value={plan.teamPlanId}>
+                          {plan.planName}
+                        </option>
+                      ))
+                    : availableMemberPlans.map((plan) => (
+                        <option key={plan.memberPlanId} value={plan.memberPlanId}>
+                          {plan.planName}
+                        </option>
+                      )))}
+                </select>
+
+                {values.primaryTeamId &&
+                  values.teamRole === 'member' &&
+                  availableMemberPlans.length === 0 && (
+                    <p className="mt-2 text-sm text-amber-700">
+                      No member plans were found for this team yet. Create the member
+                      plan first or assign it later.
+                    </p>
+                  )}
+              </div>
             </div>
           </div>
         )}
 
-        {isIndividualAgentType(values.agentType) && (
+        {isIndependentAgentType(values.agentType) && (
         <>
         <div className="mt-6 overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
@@ -686,6 +855,36 @@ export default function AgentProfileForm({
       </section>
 
       <section className="rounded-lg border bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold">Relationships</h2>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Referring Agent ID</label>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={values.referringAgentId}
+              onChange={(e) => updateField('referringAgentId', e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Referring Agent Name Snapshot
+            </label>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={values.referringAgentDisplayNameSnapshot}
+              onChange={(e) =>
+                updateField('referringAgentDisplayNameSnapshot', e.target.value)
+              }
+              placeholder="Optional"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Notes</h2>
 
         <div className="mt-4">
@@ -711,14 +910,14 @@ export default function AgentProfileForm({
         </div>
       )}
 
-      {!isIndividualAgentType(values.agentType) &&
+      {!isIndependentAgentType(values.agentType) &&
         (!values.primaryTeamId || !values.defaultPlanId) && (
           <p className="text-sm text-amber-700">
-            Team-based agents require both a Primary Team ID and a Plan ID before saving.
+            Team agents require both a Team and a Plan selection before saving.
           </p>
         )}
 
-      {isIndividualAgentType(values.agentType) && values.tiers.length === 0 && (
+      {isIndependentAgentType(values.agentType) && values.tiers.length === 0 && (
         <p className="text-sm text-amber-700">
           Add at least one tier before saving this profile.
         </p>
@@ -738,8 +937,8 @@ export default function AgentProfileForm({
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           disabled={
             isSaving ||
-            (isIndividualAgentType(values.agentType) && values.tiers.length === 0) ||
-            (!isIndividualAgentType(values.agentType) &&
+            (isIndependentAgentType(values.agentType) && values.tiers.length === 0) ||
+            (!isIndependentAgentType(values.agentType) &&
               (!values.primaryTeamId || !values.defaultPlanId))
           }
         >

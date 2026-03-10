@@ -80,39 +80,42 @@ function normalizeInput(body: AgentProfileInput) {
   if (!body.status) throw new Error('Status is required');
   if (!body.agentType) throw new Error('Agent type is required');
 
-  const isIndividualAgent =
-    body.agentType === 'CGL' || body.agentType === 'SGL';
-  const isTeamAgent =
-    body.agentType === 'TeamMember' || body.agentType === 'TeamLeader';
+  const isIndependent = body.agentType === 'independent';
+  const isTeamAgent = body.agentType === 'team';
 
-  if (isIndividualAgent && (!Array.isArray(body.tiers) || body.tiers.length === 0)) {
-    throw new Error('At least one tier is required for CGL and SGL agents');
+  if (isIndependent && (!Array.isArray(body.tiers) || body.tiers.length === 0)) {
+    throw new Error('At least one tier is required for independent agents');
   }
 
   if (isTeamAgent && !body.primaryTeamId?.trim()) {
-    throw new Error('Primary team is required for team-based agents');
+    throw new Error('Primary team is required for team agents');
   }
 
-  const teamRole =
-    body.agentType === 'TeamLeader'
-      ? 'leader'
-      : body.agentType === 'TeamMember'
-      ? 'member'
-      : null;
+  if (isTeamAgent && !body.teamRole) {
+    throw new Error('Team role is required for team agents');
+  }
+
+  if (isTeamAgent && body.teamRole !== 'leader' && body.teamRole !== 'member') {
+    throw new Error('Invalid team role');
+  }
 
   const defaultPlanType =
-    body.agentType === 'TeamLeader'
+    isIndependent
+      ? 'individual'
+      : body.teamRole === 'leader'
       ? 'teamLeader'
-      : body.agentType === 'TeamMember'
-      ? 'teamMember'
-      : 'individual';
+      : 'teamMember';
 
   const defaultPlanId =
     isTeamAgent ? body.defaultPlanId?.trim() || null : null;
 
   if (isTeamAgent && !defaultPlanId) {
-    throw new Error('Default plan is required for team-based agents');
+    throw new Error('Assigned plan is required for team agents');
   }
+
+  const referringAgentId = body.referringAgentId?.trim() || null;
+  const referringAgentDisplayNameSnapshot =
+    body.referringAgentDisplayNameSnapshot?.trim() || null;
 
   return {
     firstName: body.firstName.trim(),
@@ -127,11 +130,14 @@ function normalizeInput(body: AgentProfileInput) {
     progressionMetric: 'companyDollar' as const,
 
     primaryTeamId: isTeamAgent ? body.primaryTeamId?.trim() || null : null,
-    teamRole,
+    teamRole: isTeamAgent ? body.teamRole || null : null,
     defaultPlanType,
     defaultPlanId,
 
-    tiers: isIndividualAgent ? (body.tiers || []).map(normalizeTier) : [],
+    referringAgentId,
+    referringAgentDisplayNameSnapshot,
+
+    tiers: isIndependent ? (body.tiers || []).map(normalizeTier) : [],
     notes: body.notes?.trim() || null,
   };
 }
@@ -208,6 +214,8 @@ export async function POST(req: NextRequest) {
       teamRole: normalized.teamRole,
       defaultPlanType: normalized.defaultPlanType,
       defaultPlanId: normalized.defaultPlanId,
+      referringAgentId: normalized.referringAgentId,
+      referringAgentDisplayNameSnapshot: normalized.referringAgentDisplayNameSnapshot,
       tiers: normalized.tiers,
       notes: normalized.notes,
       createdAt: now,

@@ -11,6 +11,8 @@ type AgentRow = {
   office: string | null;
   status: string;
   agentType: string;
+  teamRole?: string | null;
+  primaryTeamId?: string | null;
   anniversaryMonth?: number;
   anniversaryDay?: number;
 };
@@ -25,19 +27,18 @@ function formatAnniversary(month?: number, day?: number) {
   });
 }
 
-function formatAgentType(agentType?: string) {
-  switch (agentType) {
-    case 'TeamMember':
-      return 'Team Member';
-    case 'TeamLeader':
-      return 'Team Leader';
-    case 'CGL':
-      return 'CGL';
-    case 'SGL':
-      return 'SGL';
-    default:
-      return agentType || '—';
+function formatAgentType(agentType?: string, teamRole?: string | null) {
+  if (agentType === 'independent') {
+    return 'Independent';
   }
+
+  if (agentType === 'team') {
+    if (teamRole === 'leader') return 'Team Leader';
+    if (teamRole === 'member') return 'Team Member';
+    return 'Team';
+  }
+
+  return agentType || '—';
 }
 
 export default function AgentsList() {
@@ -100,7 +101,7 @@ export default function AgentsList() {
         <div>
           <h1 className="text-2xl font-semibold">Agents</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Manage agent profiles, commission setup, and anniversary details.
+            Manage agent profiles, team assignments, and commission setup.
           </p>
         </div>
 
@@ -130,6 +131,7 @@ export default function AgentsList() {
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Office</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Agent Type</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700">Team</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Anniversary</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Action</th>
                 </tr>
@@ -137,7 +139,7 @@ export default function AgentsList() {
               <tbody>
                 {agents.length === 0 ? (
                   <tr className="border-t">
-                    <td className="px-4 py-6 text-gray-600" colSpan={6}>
+                    <td className="px-4 py-6 text-gray-600" colSpan={7}>
                       No agent profiles found yet.
                     </td>
                   </tr>
@@ -149,7 +151,10 @@ export default function AgentsList() {
                       <td className="px-4 py-3 capitalize">
                         {(agent.status || '—').replace('_', ' ')}
                       </td>
-                      <td className="px-4 py-3">{formatAgentType(agent.agentType)}</td>
+                      <td className="px-4 py-3">
+                        {formatAgentType(agent.agentType, agent.teamRole)}
+                      </td>
+                      <td className="px-4 py-3">{agent.primaryTeamId || '—'}</td>
                       <td className="px-4 py-3">
                         {formatAnniversary(agent.anniversaryMonth, agent.anniversaryDay)}
                       </td>

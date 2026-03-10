@@ -135,7 +135,7 @@ export async function resolveTransactionCalculation(
   const commission = asMoney(input.commission);
   const profile = await getAgentProfile(input.agentId);
 
-  if (profile.agentType === 'CGL' || profile.agentType === 'SGL') {
+  if (profile.agentType === 'independent') {
     const tier = getActiveIndividualTier(profile.tiers || [], commission);
     if (!tier) {
       throw new Error(`No active individual tier found for ${profile.agentId}`);
@@ -176,12 +176,16 @@ export async function resolveTransactionCalculation(
     };
   }
 
-  if (profile.agentType !== 'TeamMember' && profile.agentType !== 'TeamLeader') {
+  if (profile.agentType !== 'team') {
     throw new Error(`Unsupported agent type for ${profile.agentId}`);
   }
 
   if (!profile.primaryTeamId) {
     throw new Error(`Primary team missing for ${profile.agentId}`);
+  }
+
+  if (!profile.teamRole) {
+    throw new Error(`Team role missing for ${profile.agentId}`);
   }
 
   const team = await getTeam(profile.primaryTeamId);
@@ -199,7 +203,7 @@ export async function resolveTransactionCalculation(
   const companyRetained = asMoney(commission * (Number(leaderBand.companyPercent || 0) / 100));
   const leaderStructureGross = asMoney(commission * (leaderStructurePercent / 100));
 
-  if (profile.agentType === 'TeamLeader') {
+  if (profile.teamRole === 'leader') {
     return {
       calculationModel: 'teamLeader',
       agentType: profile.agentType,
@@ -227,6 +231,10 @@ export async function resolveTransactionCalculation(
         progressionCompanyDollarCredit: commission,
       },
     };
+  }
+
+  if (profile.teamRole !== 'member') {
+    throw new Error(`Invalid team role for ${profile.agentId}`);
   }
 
   const membership = await getActiveMembership(team.teamId, profile.agentId, 'member');

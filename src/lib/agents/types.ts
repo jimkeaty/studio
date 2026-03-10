@@ -1,6 +1,6 @@
 export type AgentProfileStatus = 'active' | 'inactive' | 'on_leave';
 
-export type AgentType = 'CGL' | 'SGL' | 'TeamMember' | 'TeamLeader';
+export type AgentType = 'independent' | 'team';
 
 export type ProgressionMetric = 'companyDollar';
 
@@ -37,6 +37,9 @@ export type AgentProfile = {
   defaultPlanType: PlanAssignmentType;
   defaultPlanId: string | null;
 
+  referringAgentId: string | null;
+  referringAgentDisplayNameSnapshot: string | null;
+
   tiers: AgentTier[];
   notes: string | null;
   createdAt: string;
@@ -59,6 +62,9 @@ export type AgentProfileInput = {
   teamRole?: TeamRole | null;
   defaultPlanType?: PlanAssignmentType;
   defaultPlanId?: string | null;
+
+  referringAgentId?: string | null;
+  referringAgentDisplayNameSnapshot?: string | null;
 
   tiers?: AgentTier[];
   notes?: string | null;
