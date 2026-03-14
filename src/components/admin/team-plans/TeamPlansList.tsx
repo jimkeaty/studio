@@ -79,11 +79,20 @@ export default function TeamPlansList() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Team Plans</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Manage reusable default commission structures for teams.
-        </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Team Plans</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Manage reusable default commission structures for teams.
+          </p>
+        </div>
+
+        <Link
+          href="/dashboard/admin/team-plans/new"
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+        >
+          New Team Plan
+        </Link>
       </div>
 
       {isLoading ? (

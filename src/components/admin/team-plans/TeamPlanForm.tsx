@@ -30,7 +30,7 @@ export type TeamPlanFormValues = {
 };
 
 type TeamPlanFormProps = {
-  teamPlanId: string;
+  teamPlanId?: string;
   initialValues?: Partial<TeamPlanFormValues>;
   submitLabel?: string;
 };
@@ -87,7 +87,7 @@ function createEmptyMemberBand(): MemberDefaultBandFormValue {
 export default function TeamPlanForm({
   teamPlanId,
   initialValues,
-  submitLabel = 'Update Team Plan',
+  submitLabel = teamPlanId ? 'Update Team Plan' : 'Create Team Plan',
 }: TeamPlanFormProps) {
   const router = useRouter();
 
@@ -239,8 +239,12 @@ export default function TeamPlanForm({
         notes: values.notes.trim() || null,
       };
 
-      const response = await fetch(`/api/admin/team-plans/${teamPlanId}`, {
-        method: 'PATCH',
+      const isEditMode = Boolean(teamPlanId);
+
+      const response = await fetch(
+        isEditMode ? `/api/admin/team-plans/${teamPlanId}` : '/api/admin/team-plans',
+        {
+          method: isEditMode ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -251,10 +255,20 @@ export default function TeamPlanForm({
       const result = await response.json();
 
       if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || 'Failed to update team plan.');
+        throw new Error(
+          result?.error || (isEditMode ? 'Failed to update team plan.' : 'Failed to create team plan.')
+        );
       }
 
-      setSuccessMessage('Team plan updated successfully.');
+      setSuccessMessage(
+        isEditMode ? 'Team plan updated successfully.' : 'Team plan created successfully.'
+      );
+
+      if (!isEditMode && result?.teamPlan?.teamPlanId) {
+        router.push(`/dashboard/admin/team-plans/${result.teamPlan.teamPlanId}`);
+        return;
+      }
+
       router.refresh();
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to update team plan.');
