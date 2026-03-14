@@ -1282,12 +1282,13 @@ export default function AgentProfileForm({
         </div>
       )}
 
-      {!isIndependentAgentType(values.agentType) &&
-        (!values.primaryTeamId || !values.defaultPlanId) && (
-          <p className="text-sm text-amber-700">
-            Team agents require a team selection. Leaders also require a leader plan before saving.
-          </p>
-        )}
+      {!isIndependentAgentType(values.agentType) && !teamSetupIsValid && (
+        <p className="text-sm text-amber-700">
+          {requiresLeaderPlanSelection
+            ? 'Team leaders require a team selection and leader plan before saving.'
+            : 'Team members require a team selection before saving.'}
+        </p>
+      )}
 
       {isIndependentAgentType(values.agentType) && values.tiers.length === 0 && (
         <p className="text-sm text-amber-700">
@@ -1310,8 +1311,7 @@ export default function AgentProfileForm({
           disabled={
             isSaving ||
             (isIndependentAgentType(values.agentType) && values.tiers.length === 0) ||
-            (!isIndependentAgentType(values.agentType) &&
-              (!values.primaryTeamId || !values.defaultPlanId))
+            (!isIndependentAgentType(values.agentType) && !teamSetupIsValid)
           }
         >
           {isSaving ? 'Saving...' : submitLabel}
