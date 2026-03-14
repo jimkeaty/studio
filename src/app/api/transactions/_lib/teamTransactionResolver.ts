@@ -238,17 +238,26 @@ export async function resolveTransactionCalculation(
   }
 
   const membership = await getActiveMembership(team.teamId, profile.agentId, 'member');
-  const memberPlanId = membership.memberPlanId || profile.defaultPlanId;
+  const memberPlanId = membership.memberPlanId || profile.defaultPlanId || null;
 
-  if (!memberPlanId) {
-    throw new Error(`Member plan missing for ${profile.agentId}`);
-  }
+  let resolvedMemberPlanId: string | null = memberPlanId;
+  let memberBand: MemberPlanBand | null = null;
 
-  const memberPlan = await getMemberPlan(memberPlanId);
-  const memberBand = getActiveMemberBand(memberPlan.payoutBands || [], commission);
+  if (memberPlanId) {
+    const memberPlan = await getMemberPlan(memberPlanId);
+    memberBand = getActiveMemberBand(memberPlan.payoutBands || [], commission);
 
-  if (!memberBand) {
-    throw new Error(`No active member payout band found for ${memberPlan.memberPlanId}`);
+    if (!memberBand) {
+      throw new Error(`No active member payout band found for ${memberPlan.memberPlanId}`);
+    }
+  } else {
+    memberBand = getActiveMemberBand(teamPlan.memberDefaultBands || [], commission);
+
+    if (!memberBand) {
+      throw new Error(`No active member default band found for ${teamPlan.teamPlanId}`);
+    }
+
+    resolvedMemberPlanId = null;
   }
 
   const memberPercentOfLeaderSide = Number(memberBand.memberPercent || 0);
@@ -261,7 +270,7 @@ export async function resolveTransactionCalculation(
     splitSnapshot: {
       primaryTeamId: team.teamId,
       teamPlanId: teamPlan.teamPlanId,
-      memberPlanId: memberPlan.memberPlanId,
+      memberPlanId: resolvedMemberPlanId,
       grossCommission: commission,
       agentSplitPercent: null,
       companySplitPercent: null,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import type {
+  MemberPlanBand,
   TeamPlan,
   TeamPlanInput,
   TeamThresholdBand,
@@ -97,6 +98,38 @@ function normalizeLeaderStructureBand(
   };
 }
 
+function normalizeMemberDefaultBand(
+  band: MemberPlanBand,
+  index: number
+): MemberPlanBand {
+  const fromCompanyDollar = Number(band.fromCompanyDollar);
+  const toCompanyDollar =
+    band.toCompanyDollar === null ||
+    band.toCompanyDollar === undefined ||
+    band.toCompanyDollar === ''
+      ? null
+      : Number(band.toCompanyDollar);
+  const memberPercent = Number(band.memberPercent);
+
+  if (!Number.isFinite(fromCompanyDollar) || fromCompanyDollar < 0) {
+    throw new Error(`Invalid fromCompanyDollar in member default band ${index + 1}`);
+  }
+
+  if (toCompanyDollar !== null && (!Number.isFinite(toCompanyDollar) || toCompanyDollar < 0)) {
+    throw new Error(`Invalid toCompanyDollar in member default band ${index + 1}`);
+  }
+
+  if (!Number.isFinite(memberPercent) || memberPercent < 0 || memberPercent > 100) {
+    throw new Error(`Invalid memberPercent in member default band ${index + 1}`);
+  }
+
+  return {
+    fromCompanyDollar,
+    toCompanyDollar,
+    memberPercent,
+  };
+}
+
 function normalizeInput(body: TeamPlanInput) {
   if (!body.teamId?.trim()) throw new Error('Team id is required');
   if (!body.planName?.trim()) throw new Error('Plan name is required');
@@ -118,6 +151,10 @@ function normalizeInput(body: TeamPlanInput) {
 
   if (!Array.isArray(body.leaderStructureBands) || body.leaderStructureBands.length === 0) {
     throw new Error('Leader structure bands are required');
+  }
+
+  if (!Array.isArray(body.memberDefaultBands) || body.memberDefaultBands.length === 0) {
+    throw new Error('Member default bands are required');
   }
 
   const tierCreditRules = body.tierCreditRules || {
@@ -142,6 +179,7 @@ function normalizeInput(body: TeamPlanInput) {
     thresholdMarkers: normalizeThresholdMarkers(body.thresholdMarkers),
     structureModel,
     leaderStructureBands: body.leaderStructureBands.map(normalizeLeaderStructureBand),
+    memberDefaultBands: body.memberDefaultBands.map(normalizeMemberDefaultBand),
     tierCreditRules: {
       memberGetsFullCompanyDollar: Boolean(tierCreditRules.memberGetsFullCompanyDollar),
       leaderGetsFullCompanyDollar: Boolean(tierCreditRules.leaderGetsFullCompanyDollar),
@@ -225,6 +263,7 @@ export async function POST(req: NextRequest) {
       thresholdMarkers: normalized.thresholdMarkers,
       structureModel: normalized.structureModel,
       leaderStructureBands: normalized.leaderStructureBands,
+      memberDefaultBands: normalized.memberDefaultBands,
       tierCreditRules: normalized.tierCreditRules,
       anniversaryCycleRules: normalized.anniversaryCycleRules,
       createdAt: now,

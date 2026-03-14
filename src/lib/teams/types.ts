@@ -78,6 +78,7 @@ export type TeamPlan = {
   thresholdMarkers: number[];
   structureModel: TeamStructureModel;
   leaderStructureBands: TeamThresholdBand[];
+  memberDefaultBands: MemberPlanBand[];
   tierCreditRules: TeamTierCreditRules;
   anniversaryCycleRules: TeamAnniversaryCycleRules;
   createdAt: string;
@@ -93,6 +94,7 @@ export type TeamPlanInput = {
   thresholdMarkers: number[];
   structureModel?: TeamStructureModel;
   leaderStructureBands: TeamThresholdBand[];
+  memberDefaultBands: MemberPlanBand[];
   tierCreditRules?: TeamTierCreditRules;
   anniversaryCycleRules?: TeamAnniversaryCycleRules;
   notes?: string | null;
