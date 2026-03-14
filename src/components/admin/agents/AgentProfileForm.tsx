@@ -369,12 +369,27 @@ export default function AgentProfileForm({
     return [...teams].sort((a, b) => a.teamName.localeCompare(b.teamName));
   }, [teams]);
 
+  const selectedTeam = useMemo(() => {
+    if (!values.primaryTeamId) return null;
+    return teams.find((team) => team.teamId === values.primaryTeamId) || null;
+  }, [teams, values.primaryTeamId]);
+
   const availableLeaderPlans = useMemo(() => {
     if (!values.primaryTeamId) return [];
+
+    if (selectedTeam?.teamPlanId) {
+      const linkedPlan = teamPlans.find(
+        (plan) => plan.teamPlanId === selectedTeam.teamPlanId
+      );
+      if (linkedPlan) {
+        return [linkedPlan];
+      }
+    }
+
     return teamPlans
       .filter((plan) => plan.teamId === values.primaryTeamId)
       .sort((a, b) => a.planName.localeCompare(b.planName));
-  }, [teamPlans, values.primaryTeamId]);
+  }, [teamPlans, values.primaryTeamId, selectedTeam]);
 
   const availableMemberPlans = useMemo(() => {
     if (!values.primaryTeamId) return [];
