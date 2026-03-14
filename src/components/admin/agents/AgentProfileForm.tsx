@@ -398,6 +398,20 @@ export default function AgentProfileForm({
       .sort((a, b) => a.planName.localeCompare(b.planName));
   }, [memberPlans, values.primaryTeamId]);
 
+  const requiresLeaderPlanSelection =
+    values.agentType === 'team' && values.teamRole === 'leader';
+
+  const teamSetupIsValid =
+    values.agentType !== 'team' ||
+    (
+      Boolean(values.primaryTeamId) &&
+      Boolean(values.teamRole) &&
+      (
+        !requiresLeaderPlanSelection ||
+        Boolean(values.defaultPlanId)
+      )
+    );
+
 
   function updateField<K extends keyof AgentProfileFormValues>(
     field: K,
@@ -1271,7 +1285,7 @@ export default function AgentProfileForm({
       {!isIndependentAgentType(values.agentType) &&
         (!values.primaryTeamId || !values.defaultPlanId) && (
           <p className="text-sm text-amber-700">
-            Team agents require both a Team and a Plan selection before saving.
+            Team agents require a team selection. Leaders also require a leader plan before saving.
           </p>
         )}
 
@@ -1286,7 +1300,7 @@ export default function AgentProfileForm({
           type="button"
           className="rounded-md border px-4 py-2 text-sm font-medium"
           onClick={() => router.push('/dashboard/admin/agents')}
-          disabled={isSaving}
+          disabled={isSaving || !teamSetupIsValid}
         >
           Cancel
         </button>
