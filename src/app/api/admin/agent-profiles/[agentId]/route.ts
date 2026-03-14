@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { deriveAnniversary } from '@/lib/agents/deriveAnniversary';
-import type { AgentProfileInput, AgentTier } from '@/lib/agents/types';
+import type { AgentProfileInput, AgentTier, TeamMemberCompMode, TeamMemberOverrideBand } from '@/lib/agents/types';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -64,6 +64,38 @@ function normalizeTier(tier: AgentTier, index: number): AgentTier {
   };
 }
 
+function normalizeTeamMemberOverrideBand(
+  tier: TeamMemberOverrideBand,
+  index: number
+): TeamMemberOverrideBand {
+  const tierName = String(tier.tierName || `Tier ${index + 1}`).trim();
+  const fromCompanyDollar = Number(tier.fromCompanyDollar);
+  const toCompanyDollar =
+    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || tier.toCompanyDollar === ''
+      ? null
+      : Number(tier.toCompanyDollar);
+  const memberPercent = Number(tier.memberPercent);
+  const notes = tier.notes?.trim() || null;
+
+  if (!Number.isFinite(fromCompanyDollar) || fromCompanyDollar < 0) {
+    throw new Error(`Invalid fromCompanyDollar in ${tierName}`);
+  }
+  if (toCompanyDollar !== null && (!Number.isFinite(toCompanyDollar) || toCompanyDollar < 0)) {
+    throw new Error(`Invalid toCompanyDollar in ${tierName}`);
+  }
+  if (!Number.isFinite(memberPercent) || memberPercent < 0 || memberPercent > 100) {
+    throw new Error(`Invalid memberPercent in ${tierName}`);
+  }
+
+  return {
+    tierName,
+    fromCompanyDollar,
+    toCompanyDollar,
+    memberPercent,
+    notes,
+  };
+}
+
 function normalizeInput(body: AgentProfileInput) {
   if (!body.firstName?.trim()) throw new Error('First name is required');
   if (!body.lastName?.trim()) throw new Error('Last name is required');
@@ -101,8 +133,20 @@ function normalizeInput(body: AgentProfileInput) {
   const defaultPlanId =
     isTeamAgent ? body.defaultPlanId?.trim() || null : null;
 
-  if (isTeamAgent && !defaultPlanId) {
-    throw new Error('Assigned plan is required for team agents');
+  const teamMemberCompMode: TeamMemberCompMode =
+    isTeamAgent && body.teamRole === 'member'
+      ? body.teamMemberCompMode === 'custom'
+        ? 'custom'
+        : 'teamDefault'
+      : 'teamDefault';
+
+  const teamMemberOverrideBands =
+    isTeamAgent && body.teamRole === 'member' && teamMemberCompMode === 'custom'
+      ? (body.teamMemberOverrideBands || []).map(normalizeTeamMemberOverrideBand)
+      : [];
+
+  if (isTeamAgent && body.teamRole === 'member' && teamMemberCompMode === 'custom' && teamMemberOverrideBands.length === 0) {
+    throw new Error('At least one custom team member tier is required');
   }
 
   const referringAgentId = body.referringAgentId?.trim() || null;
@@ -125,6 +169,8 @@ function normalizeInput(body: AgentProfileInput) {
     teamRole: isTeamAgent ? body.teamRole || null : null,
     defaultPlanType,
     defaultPlanId,
+    teamMemberCompMode,
+    teamMemberOverrideBands,
 
     referringAgentId,
     referringAgentDisplayNameSnapshot,
@@ -203,6 +249,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       teamRole: normalized.teamRole,
       defaultPlanType: normalized.defaultPlanType,
       defaultPlanId: normalized.defaultPlanId,
+      teamMemberCompMode: normalized.teamMemberCompMode,
+      teamMemberOverrideBands: normalized.teamMemberOverrideBands,
       referringAgentId: normalized.referringAgentId,
       referringAgentDisplayNameSnapshot: normalized.referringAgentDisplayNameSnapshot,
       tiers: normalized.tiers,

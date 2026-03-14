@@ -68,6 +68,10 @@ export default function AgentProfileEditor({
           teamRole: agent.teamRole || null,
           defaultPlanType: agent.defaultPlanType || 'individual',
           defaultPlanId: agent.defaultPlanId || '',
+          teamMemberCompMode: agent.teamMemberCompMode || 'teamDefault',
+          teamMemberOverrideBands: Array.isArray(agent.teamMemberOverrideBands)
+            ? agent.teamMemberOverrideBands
+            : [],
           referringAgentId: agent.referringAgentId || '',
           referringAgentDisplayNameSnapshot:
             agent.referringAgentDisplayNameSnapshot || '',

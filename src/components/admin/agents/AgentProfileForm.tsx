@@ -9,6 +9,7 @@ export type AgentType = 'independent' | 'team';
 export type ProgressionMetric = 'companyDollar';
 export type TeamRole = 'leader' | 'member' | null;
 export type PlanAssignmentType = 'individual' | 'teamMember' | 'teamLeader';
+export type TeamMemberCompMode = 'teamDefault' | 'custom';
 
 export type AgentTierFormValue = {
   tierName: string;
@@ -16,6 +17,14 @@ export type AgentTierFormValue = {
   toCompanyDollar: number | null;
   agentSplitPercent: number;
   companySplitPercent: number;
+  notes: string;
+};
+
+export type TeamMemberTierFormValue = {
+  tierName: string;
+  fromCompanyDollar: number;
+  toCompanyDollar: number | null;
+  memberPercent: number;
   notes: string;
 };
 
@@ -33,6 +42,8 @@ export type AgentProfileFormValues = {
   teamRole: TeamRole;
   defaultPlanType: PlanAssignmentType;
   defaultPlanId: string;
+  teamMemberCompMode: TeamMemberCompMode;
+  teamMemberOverrideBands: TeamMemberTierFormValue[];
   referringAgentId: string;
   referringAgentDisplayNameSnapshot: string;
   tiers: AgentTierFormValue[];
@@ -146,6 +157,8 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   teamRole: null,
   defaultPlanType: 'individual',
   defaultPlanId: '',
+  teamMemberCompMode: 'teamDefault',
+  teamMemberOverrideBands: [],
   referringAgentId: '',
   referringAgentDisplayNameSnapshot: '',
   tiers: DEFAULT_INDEPENDENT_TIERS,
@@ -153,6 +166,13 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
 };
 
 function cloneTiers(tiers: AgentTierFormValue[]) {
+  return tiers.map((tier) => ({
+    ...tier,
+    notes: tier.notes || '',
+  }));
+}
+
+function cloneTeamMemberTiers(tiers: TeamMemberTierFormValue[]) {
   return tiers.map((tier) => ({
     ...tier,
     notes: tier.notes || '',
@@ -207,6 +227,16 @@ function createEmptyTier(nextIndex: number): AgentTierFormValue {
   };
 }
 
+function createEmptyTeamMemberTier(nextIndex: number): TeamMemberTierFormValue {
+  return {
+    tierName: `Tier ${nextIndex}`,
+    fromCompanyDollar: 0,
+    toCompanyDollar: null,
+    memberPercent: 0,
+    notes: '',
+  };
+}
+
 async function fetchTeamOptions(token: string) {
   const [teamsRes, teamPlansRes, memberPlansRes] = await Promise.all([
     fetch('/api/admin/teams', {
@@ -254,6 +284,11 @@ export default function AgentProfileForm({
       initialValues?.tiers && initialValues.tiers.length > 0
         ? cloneTiers(initialValues.tiers)
         : cloneTiers(DEFAULT_VALUES.tiers),
+    teamMemberOverrideBands:
+      initialValues?.teamMemberOverrideBands &&
+      initialValues.teamMemberOverrideBands.length > 0
+        ? cloneTeamMemberTiers(initialValues.teamMemberOverrideBands)
+        : [],
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -452,6 +487,41 @@ export default function AgentProfileForm({
     }
   }
 
+  function updateTeamMemberTier(
+    index: number,
+    field: keyof TeamMemberTierFormValue,
+    value: string | number | null
+  ) {
+    setValues((current) => {
+      const next = cloneTeamMemberTiers(current.teamMemberOverrideBands);
+      next[index] = {
+        ...next[index],
+        [field]: value as never,
+      };
+      return {
+        ...current,
+        teamMemberOverrideBands: next,
+      };
+    });
+  }
+
+  function addTeamMemberTier() {
+    setValues((current) => ({
+      ...current,
+      teamMemberOverrideBands: [
+        ...current.teamMemberOverrideBands,
+        createEmptyTeamMemberTier(current.teamMemberOverrideBands.length + 1),
+      ],
+    }));
+  }
+
+  function removeTeamMemberTier(index: number) {
+    setValues((current) => ({
+      ...current,
+      teamMemberOverrideBands: current.teamMemberOverrideBands.filter((_, i) => i !== index),
+    }));
+  }
+
   function updateTier(
     index: number,
     field: keyof AgentTierFormValue,
@@ -527,7 +597,29 @@ export default function AgentProfileForm({
         primaryTeamId: values.agentType === 'team' ? values.primaryTeamId || null : null,
         teamRole: values.agentType === 'team' ? values.teamRole : null,
         defaultPlanType: values.defaultPlanType,
-        defaultPlanId: values.agentType === 'team' ? values.defaultPlanId || null : null,
+        defaultPlanId:
+          values.agentType === 'team' && values.teamRole === 'leader'
+            ? values.defaultPlanId || null
+            : null,
+        teamMemberCompMode:
+          values.agentType === 'team' && values.teamRole === 'member'
+            ? values.teamMemberCompMode
+            : 'teamDefault',
+        teamMemberOverrideBands:
+          values.agentType === 'team' &&
+          values.teamRole === 'member' &&
+          values.teamMemberCompMode === 'custom'
+            ? values.teamMemberOverrideBands.map((tier) => ({
+                tierName: tier.tierName,
+                fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
+                toCompanyDollar:
+                  tier.toCompanyDollar === null || tier.toCompanyDollar === ''
+                    ? null
+                    : Number(tier.toCompanyDollar),
+                memberPercent: Number(tier.memberPercent || 0),
+                notes: tier.notes || null,
+              }))
+            : [],
         referringAgentId: values.referringAgentId || null,
         referringAgentDisplayNameSnapshot:
           values.referringAgentDisplayNameSnapshot || null,
@@ -837,53 +929,163 @@ export default function AgentProfileForm({
               )}
 
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium">
-                  {values.teamRole === 'leader' ? 'Leader Plan' : 'Member Plan'}
-                </label>
-                <select
-                  className="w-full rounded-md border px-3 py-2"
-                  value={values.defaultPlanId}
-                  onChange={(e) => updateField('defaultPlanId', e.target.value)}
-                  disabled={
-                    !values.primaryTeamId ||
-                    isLoadingTeamOptions ||
-                    (values.teamRole === 'leader'
-                      ? availableLeaderPlans.length === 0
-                      : availableMemberPlans.length === 0)
-                  }
-                >
-                  <option value="">
-                    {!values.primaryTeamId
-                      ? 'Select a team first'
-                      : values.teamRole === 'leader'
-                        ? availableLeaderPlans.length === 0
-                          ? 'No leader plans found'
-                          : 'Select a leader plan'
-                        : availableMemberPlans.length === 0
-                          ? 'No member plans found'
-                          : 'Select a member plan'}
-                  </option>
-                  {(values.teamRole === 'leader'
-                    ? availableLeaderPlans.map((plan) => (
+                {values.teamRole === 'leader' ? (
+                  <>
+                    <label className="mb-1 block text-sm font-medium">Leader Plan</label>
+                    <select
+                      className="w-full rounded-md border px-3 py-2"
+                      value={values.defaultPlanId}
+                      onChange={(e) => updateField('defaultPlanId', e.target.value)}
+                      disabled={
+                        !values.primaryTeamId ||
+                        isLoadingTeamOptions ||
+                        availableLeaderPlans.length === 0
+                      }
+                    >
+                      <option value="">
+                        {!values.primaryTeamId
+                          ? 'Select a team first'
+                          : availableLeaderPlans.length === 0
+                            ? 'No leader plans found'
+                            : 'Select a leader plan'}
+                      </option>
+                      {availableLeaderPlans.map((plan) => (
                         <option key={plan.teamPlanId} value={plan.teamPlanId}>
                           {plan.planName}
                         </option>
-                      ))
-                    : availableMemberPlans.map((plan) => (
-                        <option key={plan.memberPlanId} value={plan.memberPlanId}>
-                          {plan.planName}
-                        </option>
-                      )))}
-                </select>
-
-                {values.primaryTeamId &&
-                  values.teamRole === 'member' &&
-                  availableMemberPlans.length === 0 && (
-                    <p className="mt-2 text-sm text-amber-700">
-                      No member plans were found for this team yet. Create the member
-                      plan first or assign it later.
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <div className="rounded-md border border-gray-200 bg-white p-4">
+                    <h4 className="text-sm font-semibold">Team Member Compensation</h4>
+                    <p className="mt-1 text-sm text-gray-600">
+                      Use the team default payout ladder, or create a custom payout ladder for this agent.
                     </p>
-                  )}
+
+                    <div className="mt-4 space-y-3">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          name="teamMemberCompMode"
+                          checked={values.teamMemberCompMode === 'teamDefault'}
+                          onChange={() => updateField('teamMemberCompMode', 'teamDefault')}
+                        />
+                        <span>Use Team Default</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          name="teamMemberCompMode"
+                          checked={values.teamMemberCompMode === 'custom'}
+                          onChange={() => {
+                            updateField('teamMemberCompMode', 'custom');
+                            if (values.teamMemberOverrideBands.length === 0) {
+                              setValues((current) => ({
+                                ...current,
+                                teamMemberOverrideBands: [createEmptyTeamMemberTier(1)],
+                              }));
+                            }
+                          }}
+                        />
+                        <span>Use Custom Member Tiers</span>
+                      </label>
+                    </div>
+
+                    {values.teamMemberCompMode === 'teamDefault' ? (
+                      <p className="mt-4 text-sm text-green-700">
+                        This agent will use the selected team’s default member payout ladder.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-sm font-semibold">Custom Member Tiers</h5>
+                          <button
+                            type="button"
+                            className="rounded-md border px-3 py-2 text-sm font-medium"
+                            onClick={addTeamMemberTier}
+                          >
+                            Add Custom Tier
+                          </button>
+                        </div>
+
+                        {values.teamMemberOverrideBands.map((tier, index) => (
+                          <div key={index} className="grid gap-4 rounded-lg border p-4 md:grid-cols-6">
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-gray-600">Tier Name</label>
+                              <input
+                                className="w-full rounded-md border px-3 py-2 text-sm"
+                                value={tier.tierName}
+                                onChange={(e) => updateTeamMemberTier(index, 'tierName', e.target.value)}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-gray-600">From</label>
+                              <input
+                                type="number"
+                                className="w-full rounded-md border px-3 py-2 text-sm"
+                                value={tier.fromCompanyDollar}
+                                onChange={(e) =>
+                                  updateTeamMemberTier(index, 'fromCompanyDollar', Number(e.target.value || 0))
+                                }
+                              />
+                            </div>
+
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-gray-600">To</label>
+                              <input
+                                type="number"
+                                className="w-full rounded-md border px-3 py-2 text-sm"
+                                value={tier.toCompanyDollar ?? ''}
+                                onChange={(e) =>
+                                  updateTeamMemberTier(
+                                    index,
+                                    'toCompanyDollar',
+                                    e.target.value === '' ? null : Number(e.target.value)
+                                  )
+                                }
+                              />
+                            </div>
+
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-gray-600">Member %</label>
+                              <input
+                                type="number"
+                                className="w-full rounded-md border px-3 py-2 text-sm"
+                                value={tier.memberPercent}
+                                onChange={(e) =>
+                                  updateTeamMemberTier(index, 'memberPercent', Number(e.target.value || 0))
+                                }
+                              />
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                              <input
+                                className="w-full rounded-md border px-3 py-2 text-sm"
+                                value={tier.notes}
+                                onChange={(e) => updateTeamMemberTier(index, 'notes', e.target.value)}
+                              />
+                            </div>
+
+                            <div className="md:col-span-6 flex justify-end">
+                              <button
+                                type="button"
+                                className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700"
+                                onClick={() => removeTeamMemberTier(index)}
+                                disabled={values.teamMemberOverrideBands.length === 1}
+                              >
+                                Remove Tier
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

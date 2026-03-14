@@ -243,7 +243,19 @@ export async function resolveTransactionCalculation(
   let resolvedMemberPlanId: string | null = memberPlanId;
   let memberBand: MemberPlanBand | null = null;
 
-  if (memberPlanId) {
+  if (
+    profile.teamMemberCompMode === 'custom' &&
+    Array.isArray(profile.teamMemberOverrideBands) &&
+    profile.teamMemberOverrideBands.length > 0
+  ) {
+    memberBand = getActiveMemberBand(profile.teamMemberOverrideBands || [], commission);
+
+    if (!memberBand) {
+      throw new Error(`No active custom team member tier found for ${profile.agentId}`);
+    }
+
+    resolvedMemberPlanId = null;
+  } else if (memberPlanId) {
     const memberPlan = await getMemberPlan(memberPlanId);
     memberBand = getActiveMemberBand(memberPlan.payoutBands || [], commission);
 

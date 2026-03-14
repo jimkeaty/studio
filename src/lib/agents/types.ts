@@ -8,12 +8,22 @@ export type TeamRole = 'leader' | 'member';
 
 export type PlanAssignmentType = 'individual' | 'teamMember' | 'teamLeader';
 
+export type TeamMemberCompMode = 'teamDefault' | 'custom';
+
 export type AgentTier = {
   tierName: string;
   fromCompanyDollar: number;
   toCompanyDollar: number | null;
   agentSplitPercent: number;
   companySplitPercent: number;
+  notes?: string | null;
+};
+
+export type TeamMemberOverrideBand = {
+  tierName: string;
+  fromCompanyDollar: number;
+  toCompanyDollar: number | null;
+  memberPercent: number;
   notes?: string | null;
 };
 
@@ -36,6 +46,8 @@ export type AgentProfile = {
   teamRole: TeamRole | null;
   defaultPlanType: PlanAssignmentType;
   defaultPlanId: string | null;
+  teamMemberCompMode: TeamMemberCompMode;
+  teamMemberOverrideBands: TeamMemberOverrideBand[];
 
   referringAgentId: string | null;
   referringAgentDisplayNameSnapshot: string | null;
@@ -62,6 +74,8 @@ export type AgentProfileInput = {
   teamRole?: TeamRole | null;
   defaultPlanType?: PlanAssignmentType;
   defaultPlanId?: string | null;
+  teamMemberCompMode?: TeamMemberCompMode;
+  teamMemberOverrideBands?: TeamMemberOverrideBand[];
 
   referringAgentId?: string | null;
   referringAgentDisplayNameSnapshot?: string | null;
