@@ -49,3 +49,4 @@ backups/
 
 # --- Secrets / keys (DO NOT COMMIT) ---
 imports/keys/
+src/lib/buildStamp.ts
