@@ -13,7 +13,21 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Building, Edit, LayoutGrid, Settings, Target, Users, TrendingUp, Newspaper, ClipboardPen } from 'lucide-react';
+import {
+  BarChart3,
+  Building,
+  ClipboardPen,
+  LayoutGrid,
+  Newspaper,
+  Settings,
+  Target,
+  TrendingUp,
+  Users,
+  UserPlus,
+  FolderKanban,
+  GitBranchPlus,
+  Receipt,
+} from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 
 const agentMenuItems = [
@@ -23,16 +37,20 @@ const agentMenuItems = [
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
 ];
 
-const brokerMenuItems = [{ href: '/dashboard/broker', label: 'Broker Command', icon: Users }];
-
 const adminMenuItems = [
-    { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
-    { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
+  { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
+  { href: '/dashboard/admin/agents', label: 'Agents', icon: Users },
+  { href: '/dashboard/admin/agents/new', label: 'New Agent', icon: UserPlus },
+  { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
+  { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
+  { href: '/dashboard/admin/transactions/new', label: 'Manual Transactions', icon: Receipt },
+  { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
+  { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
 ];
 
 const tvModeItems = [
-    { href: '/leaderboard', label: 'Leaderboard TV Mode', icon: BarChart3 },
-    { href: '/new-activity', label: 'New Activity TV Mode', icon: Newspaper },
+  { href: '/leaderboard', label: 'Leaderboard TV Mode', icon: BarChart3 },
+  { href: '/new-activity', label: 'New Activity TV Mode', icon: Newspaper },
 ];
 
 export function SidebarNav() {
@@ -48,6 +66,7 @@ export function SidebarNav() {
           </div>
         </div>
       </SidebarHeader>
+
       <SidebarContent className="p-2">
         <SidebarMenu>
           {agentMenuItems.map((item) => (
@@ -65,13 +84,20 @@ export function SidebarNav() {
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+
         <SidebarSeparator className="my-2" />
+
         <SidebarMenu>
-          {brokerMenuItems.map((item) => (
+          <p className="px-2 text-xs font-semibold text-muted-foreground/80">Admin</p>
+          {adminMenuItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <Link href={item.href}>
                 <SidebarMenuButton
-                  isActive={pathname === item.href}
+                  isActive={
+                    item.href === '/dashboard/broker'
+                      ? pathname === item.href
+                      : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  }
                   tooltip={item.label}
                   className="justify-start"
                 >
@@ -82,42 +108,27 @@ export function SidebarNav() {
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+
         <SidebarSeparator className="my-2" />
+
         <SidebarMenu>
-            <p className="px-2 text-xs font-semibold text-muted-foreground/80">Admin</p>
-          {adminMenuItems.map((item) => (
-            <SidebarMenuItem key={item.href}>
-                <Link href={item.href}>
-                <SidebarMenuButton
-                    isActive={pathname.startsWith(item.href)}
-                    tooltip={item.label}
-                    className="justify-start"
-                >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                </SidebarMenuButton>
-                </Link>
-            </SidebarMenuItem>
-            ))}
-        </SidebarMenu>
-         <SidebarSeparator className="my-2" />
-        <SidebarMenu>
-             <p className="px-2 text-xs font-semibold text-muted-foreground/80">TV Modes</p>
+          <p className="px-2 text-xs font-semibold text-muted-foreground/80">TV Modes</p>
           {tvModeItems.map((item) => (
             <SidebarMenuItem key={item.href}>
-                <Link href={item.href} target="_blank">
+              <Link href={item.href} target="_blank">
                 <SidebarMenuButton
-                    tooltip={item.label}
-                    className="justify-start"
+                  tooltip={item.label}
+                  className="justify-start"
                 >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
                 </SidebarMenuButton>
-                </Link>
+              </Link>
             </SidebarMenuItem>
-            ))}
+          ))}
         </SidebarMenu>
       </SidebarContent>
+
       <SidebarFooter className="p-2">
         <Card className="bg-accent/50 dark:bg-accent/20 border-0">
           <CardTitle className="p-3 pb-0 text-base font-semibold">Need help?</CardTitle>
