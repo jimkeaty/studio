@@ -33,6 +33,8 @@ import { Separator } from "@/components/ui/separator";
 
 const planFormSchema = z.object({
   annualIncomeGoal: z.coerce.number().min(0, "Goal must be positive."),
+  planStartDate: z.string().optional(),
+  resetStartDate: z.string().optional(),
   avgCommission: z.coerce.number().min(0, "Commission must be positive."),
   workingDaysPerMonth: z.coerce.number().int().min(1, "Must be at least 1.").max(31, "Cannot exceed 31."),
   weeksOff: z.coerce.number().int().min(0, "Cannot be negative.").max(52, "Cannot exceed 52."),
@@ -191,6 +193,8 @@ export default function BusinessPlanPage() {
     resolver: zodResolver(planFormSchema),
     defaultValues: {
       annualIncomeGoal: 100000,
+      planStartDate: "",
+      resetStartDate: "",
       avgCommission: defaultAssumptions.avgCommission,
       workingDaysPerMonth: defaultAssumptions.workingDaysPerMonth,
       weeksOff: defaultAssumptions.weeksOff,
@@ -253,6 +257,8 @@ export default function BusinessPlanPage() {
           if (plan?.assumptions?.conversionRates) {
             form.reset({
               annualIncomeGoal: plan.annualIncomeGoal ?? 100000,
+              planStartDate: plan.planStartDate ?? "",
+              resetStartDate: plan.resetStartDate ?? "",
               avgCommission: plan.assumptions.avgCommission ?? defaultAssumptions.avgCommission,
               workingDaysPerMonth: plan.assumptions.workingDaysPerMonth ?? defaultAssumptions.workingDaysPerMonth,
               weeksOff: plan.assumptions.weeksOff ?? defaultAssumptions.weeksOff,
@@ -318,6 +324,8 @@ export default function BusinessPlanPage() {
         userId: user.uid,
         year: parseInt(year, 10),
         annualIncomeGoal: data.annualIncomeGoal,
+        planStartDate: data.planStartDate || undefined,
+        resetStartDate: data.resetStartDate || undefined,
         assumptions,
         calculatedTargets: finalCalculatedPlan,
         updatedAt: new Date().toISOString(),
@@ -395,6 +403,40 @@ export default function BusinessPlanPage() {
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="planStartDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Plan Start Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="resetStartDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Reset Start Date (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              Use Plan Start Date for a new agent or the beginning of this year’s plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year.
+            </p>
 
             <Separator />
 

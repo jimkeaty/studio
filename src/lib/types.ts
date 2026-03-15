@@ -1,9 +1,3 @@
-
-
-
-
-
-
 export type UserRole = 'agent' | 'manager' | 'broker' | 'admin';
 
 export interface User {
@@ -39,6 +33,13 @@ export interface BusinessPlan {
   userId: string;
   year: number;
   annualIncomeGoal: number;
+
+  // New fields for prorated calendar-year planning.
+  // effective start date will be derived later from:
+  // resetStartDate ?? planStartDate ?? Jan 1 of the plan year
+  planStartDate?: string; // YYYY-MM-DD
+  resetStartDate?: string; // YYYY-MM-DD
+
   assumptions: PlanAssumptions;
   calculatedTargets: {
     monthlyNetIncome: number;
@@ -73,7 +74,6 @@ export interface Transaction {
   closingDate: string; // ISO string
 }
 
-
 interface ConversionMetric {
   actual: number | null; // percentage, null if not calculable
   plan: number; // percentage
@@ -83,7 +83,7 @@ interface ConversionMetric {
 // periodically or on-demand.
 export interface AgentDashboardData {
   userId: string;
-  
+
   leadIndicatorGrade: 'A' | 'B' | 'C' | 'D' | 'F';
   leadIndicatorPerformance: number; // 0-100+
   isLeadIndicatorGracePeriod: boolean;
@@ -110,10 +110,21 @@ export interface AgentDashboardData {
   netEarned: number;
   netPending: number;
 
-  monthlyIncome: { month: string; closed: number; pending: number; goal: number; }[];
+  monthlyIncome: { month: string; closed: number; pending: number; goal: number }[];
   totalClosedIncomeForYear: number;
   totalPendingIncomeForYear: number;
   totalIncomeWithPipelineForYear: number;
+
+  // Proration / pacing fields for the upgraded dashboard.
+  effectiveStartDate?: string; // YYYY-MM-DD
+  annualIncomeGoal?: number;
+  projectedNetIncome?: number;
+  incomeDeltaToGoal?: number;
+
+  engagementGoalToDate?: number;
+  engagementDelta?: number;
+  catchUpWindowDays?: number;
+  catchUpDailyRequired?: number;
 
   // The forecast section would be powered by the GenAI flow.
   // The Cloud Function would call the AI model and store the result here.
@@ -121,7 +132,7 @@ export interface AgentDashboardData {
     projectedClosings: number;
     paceBasedNetIncome: number;
   };
-  
+
   conversions: {
     callToEngagement: ConversionMetric;
     engagementToAppointmentSet: ConversionMetric;
@@ -218,50 +229,4 @@ export interface AgentYearRollup {
     listings: number;
     all: number;
   };
-  locked: boolean;
-  [key: string]: any;
 }
-
-export interface DailyActivity {
-  id: string; // {agentId}_{YYYY-MM-DD}
-  agentId: string;
-  date: string; // YYYY-MM-DD
-  callsCount: number;
-  engagementsCount: number;
-  appointmentsSetCount: number;
-  appointmentsHeldCount: number;
-  contractsWrittenCount: number;
-  notes?: string;
-  updatedAt: any; // Firestore Timestamp
-  updatedByUid: string;
-}
-
-export interface AppointmentLog {
-  id: string; // Firestore auto-ID
-  agentId: string;
-  date: string; // YYYY-MM-DD, the day it was counted
-  category: "buyer" | "seller";
-  status: "set" | "held";
-  contactName: string;
-  contactPhone?: string;
-  contactEmail?: string;
-  scheduledAt?: any; // Firestore Timestamp
-  heldAt?: any; // Firestore Timestamp
-  notes?: string;
-  createdAt: any; // Firestore Timestamp
-  createdByUid: string;
-}
-
-export interface YtdValueMetrics {
-  year: number;
-  closedNetCommission: number;
-  engagements: number;
-  appointmentsHeld: number;
-  valuePerEngagement: number | null;
-  valuePerAppointmentHeld: number | null;
-  targetValuePerEngagement: number | null;
-  targetValuePerAppointmentHeld: number | null;
-}
-
-export * from './types/incentives';
-export * from './types/brokerCommandMetrics';

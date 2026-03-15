@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/firebase';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
 import { KpiCard } from '@/components/dashboard/kpi-card';
@@ -9,7 +8,16 @@ import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle, DollarSign, Target, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  DollarSign,
+  Target,
+  TrendingUp,
+  Gauge,
+  ArrowUpRight,
+  ArrowDownRight,
+} from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { AgentIncomeByMonthCard } from '@/components/dashboard/agent/AgentIncomeByMonthCard';
 import TopAgents2025 from './TopAgents2025';
@@ -34,7 +42,45 @@ const DashboardSkeleton = () => (
   </div>
 );
 
-const StatCard = ({ title, value, icon: Icon, description }: { title: string; value: string; icon: React.ElementType; description?: string }) => (
+function formatCurrency(value: number) {
+  return value.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+  });
+}
+
+function formatNumber(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? rounded.toLocaleString() : rounded.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function gradeTone(grade: string) {
+  switch (grade) {
+    case 'A':
+      return 'text-green-600';
+    case 'B':
+      return 'text-primary';
+    case 'C':
+      return 'text-yellow-600';
+    case 'D':
+      return 'text-orange-600';
+    default:
+      return 'text-red-600';
+  }
+}
+
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  description,
+}: {
+  title: string;
+  value: string;
+  icon: React.ElementType;
+  description?: string;
+}) => (
   <Card>
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
       <CardTitle className="text-sm font-medium">{title}</CardTitle>
@@ -43,6 +89,31 @@ const StatCard = ({ title, value, icon: Icon, description }: { title: string; va
     <CardContent>
       <div className="text-2xl font-bold">{value}</div>
       {description && <p className="text-xs text-muted-foreground">{description}</p>}
+    </CardContent>
+  </Card>
+);
+
+const SummaryCard = ({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  accentClassName,
+}: {
+  title: string;
+  value: string;
+  subtitle?: string;
+  icon: React.ElementType;
+  accentClassName?: string;
+}) => (
+  <Card>
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      <Icon className="h-4 w-4 text-muted-foreground" />
+    </CardHeader>
+    <CardContent>
+      <div className={`text-3xl font-bold ${accentClassName ?? ''}`}>{value}</div>
+      {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
     </CardContent>
   </Card>
 );
@@ -57,8 +128,7 @@ export default function AgentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Per requirements, the dashboard is locked to 2025 for now.
-  const year = 2025;
+  const year = new Date().getFullYear();
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -73,9 +143,8 @@ export default function AgentDashboardPage() {
 
         if (!res.ok) {
           const errorData = await res.json();
-          // Check for specific allowedYears error from API
           if (res.status === 400 && errorData.allowedYears) {
-             throw new Error(`Data for year ${year} is not available. Allowed years: ${errorData.allowedYears.join(', ')}`);
+            throw new Error(`Data for year ${year} is not available. Allowed years: ${errorData.allowedYears.join(', ')}`);
           }
           throw new Error(errorData.error || 'Failed to load dashboard data');
         }
@@ -96,7 +165,6 @@ export default function AgentDashboardPage() {
     if (!userLoading && user) {
       loadDashboard();
     } else if (!userLoading && !user) {
-      // If not logged in, the root page will handle the redirect.
       setLoading(false);
     }
   }, [user, userLoading, year]);
@@ -130,6 +198,16 @@ export default function AgentDashboardPage() {
   const { dashboard, plan, ytdMetrics } = data;
   const kpis = Object.entries(dashboard.kpis || {});
 
+  const effectiveStartLabel = useMemo(() => {
+    if (!dashboard.effectiveStartDate) return 'Jan 1';
+    const d = new Date(`${dashboard.effectiveStartDate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dashboard.effectiveStartDate;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }, [dashboard.effectiveStartDate]);
+
+  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
+  const engagementDelta = dashboard.engagementDelta ?? 0;
+
   return (
     <div className="space-y-8">
       <div>
@@ -137,30 +215,73 @@ export default function AgentDashboardPage() {
         <p className="text-muted-foreground">Your performance summary for {year}.</p>
       </div>
 
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <SummaryCard
+          title="Income Grade vs Goal"
+          value={dashboard.incomeGrade}
+          subtitle={`${formatCurrency(dashboard.netEarned)} earned against ${formatCurrency(dashboard.expectedYTDIncomeGoal)} pace goal`}
+          icon={Gauge}
+          accentClassName={gradeTone(dashboard.incomeGrade)}
+        />
+        <SummaryCard
+          title="Projected Grade with Pending"
+          value={dashboard.pipelineAdjustedIncome.grade}
+          subtitle={`${formatCurrency(dashboard.ytdTotalPotential)} total potential if pending closes`}
+          icon={TrendingUp}
+          accentClassName={gradeTone(dashboard.pipelineAdjustedIncome.grade)}
+        />
+        <SummaryCard
+          title="Effective Start Date"
+          value={effectiveStartLabel}
+          subtitle="Prorated pacing begins from this date through Dec 31"
+          icon={CalendarDays}
+        />
+        <SummaryCard
+          title="Engagements YTD vs Goal"
+          value={`${formatNumber(dashboard.kpis.engagements.actual)} / ${formatNumber(dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target)}`}
+          subtitle={`${dashboard.leadIndicatorPerformance}% of goal-to-date`}
+          icon={Target}
+          accentClassName={gradeTone(dashboard.leadIndicatorGrade)}
+        />
+        <SummaryCard
+          title="Engagement Delta"
+          value={engagementDelta >= 0 ? `+${formatNumber(engagementDelta)}` : formatNumber(engagementDelta)}
+          subtitle={engagementDelta >= 0 ? 'Ahead of engagement goal-to-date' : 'Behind engagement goal-to-date'}
+          icon={engagementDelta >= 0 ? ArrowUpRight : ArrowDownRight}
+          accentClassName={engagementDelta >= 0 ? 'text-green-600' : 'text-red-600'}
+        />
+        <SummaryCard
+          title="Catch-Up Daily Target"
+          value={formatNumber(dashboard.catchUpDailyRequired ?? 0)}
+          subtitle={`Based on a ${dashboard.catchUpWindowDays ?? 20}-workday catch-up window`}
+          icon={Target}
+        />
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Net Earned (YTD)"
-          value={dashboard.netEarned.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          value={formatCurrency(dashboard.netEarned)}
           icon={DollarSign}
-          description="Total commission earned"
+          description={incomeDelta >= 0 ? `Ahead of pace by ${formatCurrency(incomeDelta)}` : `Behind pace by ${formatCurrency(Math.abs(incomeDelta))}`}
         />
         <StatCard
           title="Net Pending"
-          value={dashboard.netPending.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          value={formatCurrency(dashboard.netPending)}
           icon={TrendingUp}
-          description="Commission in pipeline"
+          description="Expected net commission in pipeline"
         />
         <StatCard
           title="YTD Income Goal"
-          value={dashboard.expectedYTDIncomeGoal.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          value={formatCurrency(dashboard.expectedYTDIncomeGoal)}
           icon={Target}
-          description="Workday-paced goal"
+          description="Prorated workday-paced goal"
         />
         <StatCard
           title="YTD Total Potential"
-          value={dashboard.ytdTotalPotential.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+          value={formatCurrency(dashboard.ytdTotalPotential)}
           icon={DollarSign}
-          description="Earned + Pending"
+          description="Closed + pending net commission"
         />
       </div>
 
@@ -177,7 +298,7 @@ export default function AgentDashboardPage() {
           />
         ))}
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AgentIncomeByMonthCard year={year} dashboard={dashboard} plan={plan} />
         <RecruitingIncentiveTracker />
@@ -186,7 +307,6 @@ export default function AgentDashboardPage() {
       <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
 
       <TopAgents2025 year={year} />
-
     </div>
   );
 }
