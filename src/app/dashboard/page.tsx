@@ -215,6 +215,32 @@ export default function AgentDashboardPage() {
         <p className="text-muted-foreground">Your performance summary for {year}.</p>
       </div>
 
+      <div className="grid gap-6 md:grid-cols-3">
+        <SummaryCard
+          title="Income Grade"
+          value={dashboard.incomeGrade}
+          subtitle="Based on earned income vs pace goal"
+          icon={DollarSign}
+          accentClassName={gradeTone(dashboard.incomeGrade)}
+        />
+
+        <SummaryCard
+          title="Pipeline Projection"
+          value={dashboard.pipelineAdjustedIncome.grade}
+          subtitle="If pending transactions close"
+          icon={TrendingUp}
+          accentClassName={gradeTone(dashboard.pipelineAdjustedIncome.grade)}
+        />
+
+        <SummaryCard
+          title="Lead Indicators"
+          value={dashboard.leadIndicatorGrade}
+          subtitle={`${dashboard.leadIndicatorPerformance}% of engagement goal`}
+          icon={Target}
+          accentClassName={gradeTone(dashboard.leadIndicatorGrade)}
+        />
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         <SummaryCard
           title="Income Grade vs Goal"
