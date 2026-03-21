@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
 import { KpiCard } from '@/components/dashboard/kpi-card';
@@ -198,12 +198,13 @@ export default function AgentDashboardPage() {
   const { dashboard, plan, ytdMetrics } = data;
   const kpis = Object.entries(dashboard.kpis || {});
 
-  const effectiveStartLabel = useMemo(() => {
-    if (!dashboard.effectiveStartDate) return 'Jan 1';
-    const d = new Date(`${dashboard.effectiveStartDate}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return dashboard.effectiveStartDate;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  }, [dashboard.effectiveStartDate]);
+  const effectiveStartLabel = !dashboard.effectiveStartDate
+    ? 'Jan 1'
+    : (() => {
+        const d = new Date(`${dashboard.effectiveStartDate}T00:00:00`);
+        if (Number.isNaN(d.getTime())) return dashboard.effectiveStartDate;
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      })();
 
   const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
   const engagementDelta = dashboard.engagementDelta ?? 0;
