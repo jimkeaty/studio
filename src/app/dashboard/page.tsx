@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
-import type { AgentDashboardData, BusinessPlan, YtdValueMetrics } from '@/lib/types';
+import type { AgentDashboardData, BusinessPlan, YtdValueMetrics, Transaction, Opportunity } from '@/lib/types';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -17,10 +17,16 @@ import {
   Gauge,
   ArrowUpRight,
   ArrowDownRight,
+  MapPin,
+  FileCheck2,
+  Clock,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { AgentIncomeByMonthCard } from '@/components/dashboard/agent/AgentIncomeByMonthCard';
-import TopAgents2025 from './TopAgents2025';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { differenceInDays, parseISO, format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 const DashboardSkeleton = () => (
   <div className="space-y-8">
@@ -118,6 +124,33 @@ const SummaryCard = ({
   </Card>
 );
 
+const formatCurrencyLocal = (n: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
+
+const getTimelineBucket = (dateStr?: string | null): string => {
+  if (!dateStr) return '—';
+  try {
+    const days = differenceInDays(parseISO(dateStr), new Date());
+    if (days < 0) return 'Past';
+    if (days < 30) return 'Under 30 days';
+    if (days < 60) return '30–60 days';
+    if (days < 90) return '60–90 days';
+    return '90+ days';
+  } catch { return '—'; }
+};
+
+const formatDate = (dateStr?: string | null) => {
+  if (!dateStr) return '—';
+  try { return format(parseISO(dateStr), 'MMM d, yyyy'); } catch { return dateStr; }
+};
+
+const txTypeLabel: Record<string, string> = {
+  residential_sale: 'Residential',
+  rental: 'Rental',
+  commercial_lease: 'Commercial Lease',
+  commercial_sale: 'Commercial Sale',
+};
+
 export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const [data, setData] = useState<{
@@ -127,6 +160,8 @@ export default function AgentDashboardPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
 
   const year = new Date().getFullYear();
 
@@ -167,6 +202,28 @@ export default function AgentDashboardPage() {
     } else if (!userLoading && !user) {
       setLoading(false);
     }
+  }, [user, userLoading, year]);
+
+  // Load pipeline data (pending/closed transactions + opportunities)
+  useEffect(() => {
+    const loadPipeline = async () => {
+      if (!user) return;
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/agent/pipeline?year=${year}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.ok) {
+          setTransactions(data.transactions ?? []);
+          setOpportunities(data.opportunities ?? []);
+        }
+      } catch (err) {
+        console.error('[pipeline]', err);
+      }
+    };
+    if (!userLoading && user) loadPipeline();
   }, [user, userLoading, year]);
 
   if (loading || userLoading) {
@@ -326,14 +383,173 @@ export default function AgentDashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AgentIncomeByMonthCard year={year} dashboard={dashboard} plan={plan} />
-        <RecruitingIncentiveTracker />
-      </div>
+      <AgentIncomeByMonthCard year={year} dashboard={dashboard} plan={plan} />
 
       <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
 
-      <TopAgents2025 year={year} />
+      {/* SECTION 5 — APPOINTMENTS & ACTIVE OPPORTUNITIES */}
+      {(() => {
+        const activeOpps = opportunities
+          .filter(o => o.isActive)
+          .sort((a, b) => (a.appointmentDate ?? '') < (b.appointmentDate ?? '') ? -1 : 1);
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5" /> Appointments &amp; Active Opportunities</CardTitle>
+              <CardDescription>Your current pipeline — sorted by appointment date.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {activeOpps.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No active opportunities. They will appear here once added.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Appt Date</TableHead>
+                      <TableHead>Price Range</TableHead>
+                      <TableHead>Stage</TableHead>
+                      <TableHead>Timeline</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeOpps.map((opp) => (
+                      <TableRow key={opp.id}>
+                        <TableCell className="font-medium">{opp.contactName}</TableCell>
+                        <TableCell>{formatDate(opp.appointmentDate)}</TableCell>
+                        <TableCell>
+                          {opp.priceRangeLow && opp.priceRangeHigh
+                            ? `${formatCurrencyLocal(opp.priceRangeLow)} – ${formatCurrencyLocal(opp.priceRangeHigh)}`
+                            : opp.priceRangeLow ? `${formatCurrencyLocal(opp.priceRangeLow)}+` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={cn(
+                            opp.stage === 'Hot' && 'bg-red-500/80 text-white',
+                            opp.stage === 'Nurture' && 'bg-yellow-500/80 text-white',
+                            opp.stage === 'Watch' && 'bg-blue-500/80 text-white',
+                          )}>{opp.stage}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Clock className="h-3 w-3" />{getTimelineBucket(opp.appointmentDate)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* SECTION 6 — PENDING / UNDER CONTRACT */}
+      {(() => {
+        const pending = transactions.filter(t => t.status === 'pending' || t.status === 'under_contract');
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Pending / Under Contract</CardTitle>
+              <CardDescription>Deals in progress — not yet closed.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pending.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No pending transactions. Deals under contract will appear here.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Address</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Contract Date</TableHead>
+                      <TableHead>Est. Close</TableHead>
+                      <TableHead className="text-right">Deal Value</TableHead>
+                      <TableHead className="text-right">Proj. Net</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pending.map((t) => {
+                      const projNet = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0;
+                      return (
+                        <TableRow key={t.id}>
+                          <TableCell className="font-medium">{t.address}</TableCell>
+                          <TableCell>{t.clientName ?? '—'}</TableCell>
+                          <TableCell>{formatDate(t.contractDate)}</TableCell>
+                          <TableCell>
+                            <span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>
+                            {(t.closedDate || t.closingDate) && (
+                              <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell>
+                          <TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* SECTION 7 — CLOSED TRANSACTIONS THIS YEAR */}
+      {(() => {
+        const closed = transactions
+          .filter(t => t.status === 'closed' && (t.year === year || (t.closedDate ?? t.closingDate ?? '').startsWith(String(year))))
+          .sort((a, b) => ((b.closedDate ?? b.closingDate ?? '') > (a.closedDate ?? a.closingDate ?? '') ? 1 : -1));
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><FileCheck2 className="h-5 w-5" /> Closed Transactions — {year}</CardTitle>
+              <CardDescription>All transactions you closed this calendar year.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {closed.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No closed transactions for {year}.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Address</TableHead>
+                      <TableHead>Closed Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right">Deal Value</TableHead>
+                      <TableHead className="text-right">Gross Comm.</TableHead>
+                      <TableHead className="text-right">Net to Agent</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {closed.map((t) => {
+                      const net = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0;
+                      const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
+                      return (
+                        <TableRow key={t.id}>
+                          <TableCell className="font-medium">{t.address}</TableCell>
+                          <TableCell>{formatDate(t.closedDate ?? t.closingDate)}</TableCell>
+                          <TableCell>
+                            {t.transactionType ? (
+                              <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge>
+                            ) : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell>
+                          <TableCell className="text-right">{gross ? formatCurrencyLocal(gross) : '—'}</TableCell>
+                          <TableCell className="text-right font-semibold">{net ? formatCurrencyLocal(net) : '—'}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* SECTION 8 — RECRUITING INCENTIVE TRACKER (moved to bottom per spec) */}
+      <RecruitingIncentiveTracker />
     </div>
   );
 }

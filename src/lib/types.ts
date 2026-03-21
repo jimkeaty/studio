@@ -66,12 +66,65 @@ export interface DailyLog {
 
 export interface Transaction {
   id: string;
-  userId: string;
-  clientName: string;
+  // Primary fields (matches API output)
+  agentId?: string;
+  agentDisplayName?: string;
   address: string;
-  status: 'pending' | 'closed';
-  netCommission: number;
-  closingDate: string; // ISO string
+  status: 'pending' | 'closed' | 'under_contract' | 'cancelled';
+  transactionType?: 'residential_sale' | 'rental' | 'commercial_lease' | 'commercial_sale';
+  dealValue?: number;
+  commission?: number;
+  brokerProfit?: number;
+  contractDate?: string | null;
+  closedDate?: string | null;
+  year?: number;
+  source?: 'manual' | 'import' | 'ghl';
+  clientName?: string | null;
+  notes?: string | null;
+  splitSnapshot?: {
+    grossCommission: number;
+    agentNetCommission: number | null;
+    companyRetained: number;
+    agentSplitPercent?: number | null;
+    companySplitPercent?: number | null;
+    memberPaid?: number | null;
+    leaderRetainedAfterMember?: number | null;
+  };
+  creditSnapshot?: {
+    leaderboardAgentId: string;
+    leaderboardAgentDisplayName: string;
+    progressionCompanyDollarCredit: number;
+  };
+  createdAt?: any;
+  updatedAt?: any;
+  // Legacy fields
+  userId?: string;
+  netCommission?: number;
+  closingDate?: string;
+}
+
+export interface Opportunity {
+  id: string;
+  agentId: string;
+  contactName: string;
+  appointmentDate?: string; // YYYY-MM-DD
+  priceRangeLow?: number;
+  priceRangeHigh?: number;
+  isActive: boolean;
+  stage: 'Hot' | 'Nurture' | 'Watch';
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface YtdValueMetrics {
+  closedNetCommission: number;
+  engagements: number;
+  appointmentsHeld: number;
+  valuePerEngagement: number | null;
+  targetValuePerEngagement: number | null;
+  valuePerAppointmentHeld: number | null;
+  targetValuePerAppointmentHeld: number | null;
 }
 
 interface ConversionMetric {

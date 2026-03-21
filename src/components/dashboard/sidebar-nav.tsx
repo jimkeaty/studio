@@ -43,7 +43,8 @@ const adminMenuItems = [
   { href: '/dashboard/admin/agents/new', label: 'New Agent', icon: UserPlus },
   { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
   { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
-  { href: '/dashboard/admin/transactions/new', label: 'Manual Transactions', icon: Receipt },
+  { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
+  { href: '/dashboard/admin/transactions/new', label: 'Add Transaction', icon: Receipt },
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
   { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
 ];
