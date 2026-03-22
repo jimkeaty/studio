@@ -188,15 +188,12 @@ function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
   return { headers, rows };
 }
 
-/** Map parsed CSV row (normalized-header-keyed) → API row (key-keyed) */
-function mapRowToApiPayload(row: ParsedRow): Record<string, string> {
+/** Map parsed CSV row using user-confirmed column mapping */
+function mapRowToApiPayload(row: ParsedRow, colMap: Record<string, string>): Record<string, string> {
   const payload: Record<string, string> = {};
-  // Row keys are already normalized headers. Match against HEADER_TO_KEY_NORMALIZED.
-  for (const rowKey of Object.keys(row)) {
-    if (rowKey.startsWith('__')) continue;
-    const apiKey = HEADER_TO_KEY_NORMALIZED[rowKey];
+  for (const [csvHeader, apiKey] of Object.entries(colMap)) {
     if (apiKey) {
-      payload[apiKey] = row[rowKey] ?? '';
+      payload[apiKey] = row[csvHeader] ?? '';
     }
   }
   return payload;
@@ -274,7 +271,7 @@ const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
-type Step = 'upload' | 'preview' | 'result';
+type Step = 'upload' | 'mapping' | 'preview' | 'result';
 
 export default function BulkImportPage() {
   const { user, loading: userLoading } = useUser();
@@ -288,6 +285,7 @@ export default function BulkImportPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [columnMap, setColumnMap] = useState<Record<string, string>>({});
   const [deleteScope, setDeleteScope] = useState<string>('imported');
   const [deleteYear, setDeleteYear] = useState<string>(String(new Date().getFullYear()));
   const [deleteMonth, setDeleteMonth] = useState<string>('');
@@ -355,7 +353,17 @@ export default function BulkImportPage() {
 
       setCsvHeaders(headers);
       setParsedRows(rows);
-      setStep('preview');
+
+      // Auto-detect column mapping from headers
+      const autoMap: Record<string, string> = {};
+      for (const h of headers) {
+        const apiKey = HEADER_TO_KEY_NORMALIZED[h];
+        if (apiKey && !Object.values(autoMap).includes(apiKey)) {
+          autoMap[h] = apiKey;
+        }
+      }
+      setColumnMap(autoMap);
+      setStep('mapping');
     };
     reader.readAsText(file);
   };
@@ -385,7 +393,7 @@ export default function BulkImportPage() {
 
       const validRows = parsedRows
         .filter((r) => r.__errors.length === 0)
-        .map(mapRowToApiPayload);
+        .map((r) => mapRowToApiPayload(r, columnMap));
 
       if (validRows.length === 0) {
         setPageError('No valid rows to import. Fix validation errors first.');
@@ -429,6 +437,7 @@ export default function BulkImportPage() {
     setImportResult(null);
     setPageError(null);
     setImportProgress(0);
+    setColumnMap({});
     setStep('upload');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -530,7 +539,7 @@ export default function BulkImportPage() {
 
       {/* Step indicator */}
       <div className="flex items-center gap-2 text-sm">
-        {(['upload', 'preview', 'result'] as Step[]).map((s, i) => (
+        {(['upload', 'mapping', 'preview', 'result'] as Step[]).map((s, i) => (
           <div key={s} className="flex items-center gap-2">
             {i > 0 && <div className="h-px w-6 bg-border" />}
             <span
@@ -541,7 +550,7 @@ export default function BulkImportPage() {
                   : 'bg-muted text-muted-foreground'
               )}
             >
-              {i + 1}. {s.charAt(0).toUpperCase() + s.slice(1)}
+              {i + 1}. {{ upload: 'Upload', mapping: 'Map Columns', preview: 'Preview', result: 'Result' }[s]}
             </span>
           </div>
         ))}
@@ -639,6 +648,164 @@ export default function BulkImportPage() {
               </CardContent>
             )}
           </Card>
+        </div>
+      )}
+
+      {/* ── STEP 2: MAP COLUMNS ──────────────────────────────────────────── */}
+      {step === 'mapping' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Map Your CSV Columns</CardTitle>
+              <CardDescription>
+                We auto-detected most columns. Review the mapping below and fix any that look wrong.
+                The &quot;Sample Data&quot; column shows the first row so you can verify.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-8">#</TableHead>
+                      <TableHead>Your CSV Column</TableHead>
+                      <TableHead>Sample Data (Row 1)</TableHead>
+                      <TableHead>Maps To</TableHead>
+                      <TableHead className="text-center w-20">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {csvHeaders.map((h, i) => {
+                      const mapped = columnMap[h] || '';
+                      const sampleVal = parsedRows[0]?.[h] ?? '';
+                      const isRequired = ['agentName', 'address', 'status'].includes(mapped);
+                      return (
+                        <TableRow key={h} className={!mapped ? 'bg-yellow-50 dark:bg-yellow-950/10' : ''}>
+                          <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
+                          <TableCell className="font-mono text-xs font-medium">{h}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+                            {sampleVal || <span className="italic text-red-400">empty</span>}
+                          </TableCell>
+                          <TableCell>
+                            <select
+                              className="w-full border rounded-md px-2 py-1 text-sm bg-background"
+                              value={mapped}
+                              onChange={(e) => {
+                                setColumnMap((prev) => {
+                                  const next = { ...prev };
+                                  // Remove old mapping if this apiKey was already assigned
+                                  if (e.target.value) {
+                                    for (const [k, v] of Object.entries(next)) {
+                                      if (v === e.target.value) delete next[k];
+                                    }
+                                  }
+                                  if (e.target.value) {
+                                    next[h] = e.target.value;
+                                  } else {
+                                    delete next[h];
+                                  }
+                                  return next;
+                                });
+                              }}
+                            >
+                              <option value="">— skip this column —</option>
+                              <option value="agentName">Agent Name *</option>
+                              <option value="closingType">Type of Closing</option>
+                              <option value="status">Status *</option>
+                              <option value="dealType">Deal Type</option>
+                              <option value="address">Address *</option>
+                              <option value="clientName">Client Name</option>
+                              <option value="dealSource">Source</option>
+                              <option value="listingDate">Listing Date</option>
+                              <option value="underContractDate">Under Contract Date</option>
+                              <option value="projCloseDate">Proj Close Date</option>
+                              <option value="expDate">Exp Date</option>
+                              <option value="closedDate">Closed Date</option>
+                              <option value="listPrice">List Price</option>
+                              <option value="salePrice">Sale Price</option>
+                              <option value="commissionPct">Commission %</option>
+                              <option value="gci">GCI</option>
+                              <option value="transactionFee">Transaction Fee</option>
+                              <option value="brokerPct">Broker %</option>
+                              <option value="brokerGci">Broker GCI</option>
+                              <option value="agentPct">Agent %</option>
+                              <option value="agentDollar">Agent $ (Primary GCI)</option>
+                              <option value="mortgageCompany">Mortgage Company</option>
+                              <option value="titleCompany">Title Company</option>
+                            </select>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {mapped ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500 inline" />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">skip</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Missing required fields warning */}
+              {(() => {
+                const mappedValues = new Set(Object.values(columnMap));
+                const missing = [
+                  { key: 'agentName', label: 'Agent Name' },
+                  { key: 'address', label: 'Address' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'closedDate', label: 'Closed Date' },
+                ].filter((f) => !mappedValues.has(f.key));
+                if (missing.length === 0) return null;
+                return (
+                  <Alert variant="destructive" className="mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Missing Required Columns</AlertTitle>
+                    <AlertDescription>
+                      {missing.map((m) => m.label).join(', ')} — assign these using the dropdowns above.
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => {
+                // Re-validate rows using the column mapping
+                const mappedValues = new Set(Object.values(columnMap));
+                if (!mappedValues.has('agentName') || !mappedValues.has('address') || !mappedValues.has('status')) {
+                  setPageError('Please map the required columns: Agent Name, Address, and Status.');
+                  return;
+                }
+                setPageError(null);
+
+                // Re-run validation on rows using the mapping
+                const updatedRows = parsedRows.map((row) => {
+                  const errors: string[] = [];
+                  // Find which CSV column maps to each required field
+                  for (const [csvCol, apiKey] of Object.entries(columnMap)) {
+                    if (['agentName', 'address', 'status'].includes(apiKey)) {
+                      if (!row[csvCol]?.trim()) {
+                        errors.push(`"${apiKey}" is required`);
+                      }
+                    }
+                  }
+                  return { ...row, __errors: errors };
+                });
+                setParsedRows(updatedRows);
+                setStep('preview');
+              }}
+              disabled={!Object.values(columnMap).includes('agentName') || !Object.values(columnMap).includes('status') || !Object.values(columnMap).includes('address')}
+            >
+              Continue to Preview
+            </Button>
+            <Button variant="outline" onClick={reset}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Start Over
+            </Button>
+          </div>
         </div>
       )}
 
@@ -781,7 +948,7 @@ export default function BulkImportPage() {
                 <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
                   {invalidRows.slice(0, 10).map((r) => (
                     <li key={r.__rowNum}>
-                      Row {r.__rowNum} ({r['Agent Name'] || 'no agent'} — {r['Address'] || 'no address'}): {r.__errors.join('; ')}
+                      Row {r.__rowNum} ({r['agent name'] || 'no agent'} — {r['address'] || 'no address'}): {r.__errors.join('; ')}
                     </li>
                   ))}
                   {invalidRows.length > 10 && (
@@ -832,8 +999,19 @@ export default function BulkImportPage() {
                           )}
                         </TableCell>
                         {csvHeaders.map((h) => (
-                          <TableCell key={h} className="whitespace-nowrap max-w-[180px] truncate">
-                            {row[h] ?? ''}
+                          <TableCell key={h} className="whitespace-nowrap max-w-[180px] p-0">
+                            <input
+                              type="text"
+                              className="w-full px-2 py-1 text-xs bg-transparent border-0 outline-none focus:bg-blue-50 dark:focus:bg-blue-950/20 focus:ring-1 focus:ring-blue-300"
+                              value={row[h] ?? ''}
+                              onChange={(e) => {
+                                setParsedRows((prev) =>
+                                  prev.map((r) =>
+                                    r.__rowNum === row.__rowNum ? { ...r, [h]: e.target.value } : r
+                                  )
+                                );
+                              }}
+                            />
                           </TableCell>
                         ))}
                       </TableRow>
