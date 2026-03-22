@@ -38,9 +38,9 @@ const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 /** Exact CSV column headers in order */
 const CSV_HEADERS = [
   'Agent Name',
-  'Type of Closing',
-  'Status',
   'Deal Type',
+  'Status',
+  'Type of Closing',
   'Address',
   'Client Name',
   'Source',
@@ -73,10 +73,12 @@ function normalizeHeader(h: string): string {
  */
 const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   'agent name': 'agentName',
-  'type of closing': 'closingType',
-  'closing type': 'closingType',
+  'type of closing': 'dealType',
+  'type of closings': 'dealType',
+  'closing type': 'dealType',
+  'property type': 'dealType',
   'status': 'status',
-  'deal type': 'dealType',
+  'deal type': 'closingType',
   'address': 'address',
   'client name': 'clientName',
   'source': 'dealSource',
@@ -203,9 +205,9 @@ function mapRowToApiPayload(row: ParsedRow, colMap: Record<string, string>): Rec
 function downloadTemplate() {
   const exampleRow = [
     'Jane Smith',
-    'buyer',
-    'closed',
-    'residential sale',
+    'Buyer',
+    'Closed',
+    'Residential',
     '123 Main St, Lafayette LA 70508',
     'John Doe',
     'Boomtown',
@@ -244,9 +246,9 @@ function downloadTemplate() {
 // ─────────────────────────────────────────────────────────────────────────────
 const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
   { header: 'Agent Name', hint: 'Must match agent profile name exactly (e.g. "Jane Smith")', required: true },
-  { header: 'Type of Closing', hint: 'buyer · listing · referral' },
-  { header: 'Status', hint: 'closed · pending · under contract · canceled · expired', required: true },
-  { header: 'Deal Type', hint: 'residential sale · residential lease · land · commercial sale · commercial lease' },
+  { header: 'Deal Type', hint: 'Buyer · Listing · Lease · Referral (which side of the deal)' },
+  { header: 'Status', hint: 'Active · Pending · Closed · Canceled · Expired', required: true },
+  { header: 'Type of Closing', hint: 'Residential · Land · Commercial (property type)' },
   { header: 'Address', hint: 'Full property address', required: true },
   { header: 'Client Name', hint: 'Buyer or seller name (optional)' },
   { header: 'Source', hint: 'Boomtown · referral · sphere · sign call · Company Gen · Social · Open House · FSBO · Expired' },
@@ -710,9 +712,9 @@ export default function BulkImportPage() {
                             >
                               <option value="">— skip this column —</option>
                               <option value="agentName">Agent Name *</option>
-                              <option value="closingType">Type of Closing</option>
+                              <option value="closingType">Deal Type (Buyer/Listing/Lease/Referral)</option>
                               <option value="status">Status *</option>
-                              <option value="dealType">Deal Type</option>
+                              <option value="dealType">Type of Closing (Residential/Land/Commercial)</option>
                               <option value="address">Address *</option>
                               <option value="clientName">Client Name</option>
                               <option value="dealSource">Source</option>

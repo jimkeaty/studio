@@ -75,6 +75,8 @@ function toYearFromDates(...dates: (string | null)[]): number {
 }
 
 function normalizeClosingType(v: string): string | null {
+  // "Deal Type" in user's spreadsheet = closingType in the app
+  // Values: Buyer, Listing, Lease, Referral
   const s = v.toLowerCase().trim();
   if (s === 'buyer' || s === 'buy') return 'buyer';
   if (s === 'listing' || s === 'seller' || s === 'list') return 'listing';
@@ -96,12 +98,15 @@ function normalizeStatus(v: string): string | null {
 }
 
 function normalizeDealType(v: string): string | null {
+  // "Type of Closing" in user's spreadsheet = dealType in the app
+  // Values: Residential, Land, Commercial
   const s = v.toLowerCase().trim();
+  if (s === 'residential' || s === 'res') return 'residential_sale';
   if (s.includes('residential') && s.includes('lease')) return 'rental';
   if (s.includes('residential') || s.includes('res sale') || s === 'residential sale') return 'residential_sale';
   if (s.includes('commercial') && s.includes('lease')) return 'commercial_lease';
   if (s.includes('commercial') && s.includes('sale')) return 'commercial_sale';
-  if (s.includes('commercial')) return 'commercial_sale';
+  if (s.includes('commercial') || s === 'comm') return 'commercial_sale';
   if (s === 'land') return 'land';
   if (s.includes('rental') || s.includes('rent') || s.includes('lease')) return 'rental';
   return null;
