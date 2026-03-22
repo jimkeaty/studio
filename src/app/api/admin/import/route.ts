@@ -67,13 +67,13 @@ function normalizeStatus(v: string): string | null {
 
 function normalizeDealType(v: string): string | null {
   const s = v.toLowerCase().trim();
-  if (s.includes('residential') && s.includes('lease')) return 'residential_lease';
+  if (s.includes('residential') && s.includes('lease')) return 'rental';
   if (s.includes('residential') || s.includes('res sale') || s === 'residential sale') return 'residential_sale';
   if (s.includes('commercial') && s.includes('lease')) return 'commercial_lease';
   if (s.includes('commercial') && s.includes('sale')) return 'commercial_sale';
   if (s.includes('commercial')) return 'commercial_sale';
   if (s === 'land') return 'land';
-  if (s.includes('rental') || s.includes('rent')) return 'residential_lease';
+  if (s.includes('rental') || s.includes('rent') || s.includes('lease')) return 'rental';
   return null;
 }
 
@@ -327,6 +327,7 @@ export async function POST(req: NextRequest) {
           dealValue: salePrice > 0 ? salePrice : listPrice > 0 ? listPrice : null,
           commissionPercent: commissionPct > 0 ? commissionPct : null,
           transactionFee: transactionFee > 0 ? transactionFee : null,
+          brokerProfit: companyRetained,
 
           // Closing parties
           mortgageCompany,
