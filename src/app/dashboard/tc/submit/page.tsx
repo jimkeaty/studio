@@ -147,17 +147,6 @@ export default function TcSubmitPage() {
     );
   }
 
-  if (user.uid === '1kJsXTU1JjZXMidmoIPXgXxizll1') {
-    return (
-      <Alert>
-        <AlertTitle>Agents Only</AlertTitle>
-        <AlertDescription>
-          TC forms are submitted by agents. To review submitted forms, go to the{' '}
-          <Link href="/dashboard/admin/tc" className="underline font-medium">TC Queue</Link>.
-        </AlertDescription>
-      </Alert>
-    );
-  }
 
   // ── Success screen ───────────────────────────────────────────────────────
   if (submitted) {

@@ -70,9 +70,7 @@ export function SidebarNav() {
   const { user } = useUser();
   const isAdmin = user?.uid === ADMIN_UID;
 
-  const visibleAgentItems = isAdmin
-    ? agentMenuItems // admin sees the standard nav without TC submit
-    : [...agentMenuItems, ...agentOnlyItems]; // agents see TC submit appended
+  const visibleAgentItems = [...agentMenuItems, ...agentOnlyItems];
 
   return (
     <Sidebar className="border-r">
