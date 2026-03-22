@@ -29,11 +29,38 @@ function toOptStr(v: any): string | null {
 function toDate(v: any): string | null {
   const s = String(v ?? '').trim();
   if (!s) return null;
-  // Try to parse common date formats and return YYYY-MM-DD
+
+  // 1. Excel serial date number (e.g. 46066 = 2026-03-15)
+  const asNum = Number(s);
+  if (Number.isFinite(asNum) && asNum > 30000 && asNum < 100000) {
+    // Excel epoch is Jan 0 1900 (with the Lotus 1-2-3 leap year bug)
+    const excelEpoch = new Date(1899, 11, 30); // Dec 30, 1899
+    const d = new Date(excelEpoch.getTime() + asNum * 86400000);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
+  // 2. M/D/YYYY or MM/DD/YYYY (US format — most common from Excel)
+  const usDate = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (usDate) {
+    const [, mm, dd, yyyy] = usDate;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
+  // 3. YYYY-MM-DD or YYYY/MM/DD (ISO format)
+  const isoDate = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (isoDate) {
+    const [, yyyy, mm, dd] = isoDate;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
+  // 4. Fallback: let JavaScript try to parse it (handles "Mar 15, 2026", etc.)
   const d = new Date(s);
   if (!isNaN(d.getTime())) {
     return d.toISOString().slice(0, 10);
   }
+
   return null;
 }
 
