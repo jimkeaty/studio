@@ -25,6 +25,7 @@ import {
   ArrowLeft,
   XCircle,
   Info,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -251,6 +252,12 @@ export default function BulkImportPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [deleteScope, setDeleteScope] = useState<string>('imported');
+  const [deleteYear, setDeleteYear] = useState<string>(String(new Date().getFullYear()));
+  const [deleteMonth, setDeleteMonth] = useState<string>('');
+  const [deleting, setDeleting] = useState(false);
+  const [showDeletePanel, setShowDeletePanel] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -410,6 +417,49 @@ export default function BulkImportPage() {
     }
   };
 
+  // ── Bulk delete transactions ────────────────────────────────────────────
+  const deleteScopeLabel = (() => {
+    if (deleteScope === 'imported') return 'All imported transactions' + (deleteMonth ? ` for month ${deleteMonth}` : '');
+    if (deleteScope === 'year') return `All transactions for ${deleteYear}` + (deleteMonth ? ` month ${deleteMonth}` : '');
+    if (deleteScope === 'source_and_year') return `Imported transactions for ${deleteYear}` + (deleteMonth ? ` month ${deleteMonth}` : '');
+    if (deleteScope === 'all') return 'ALL transactions (entire database)';
+    return '';
+  })();
+
+  const handleBulkDelete = async () => {
+    if (!user) return;
+    if (deleteConfirmText !== 'DELETE') return;
+    setDeleting(true);
+    setPageError(null);
+    try {
+      const token = await user.getIdToken();
+      const payload: Record<string, any> = { scope: deleteScope };
+      if (deleteScope === 'year' || deleteScope === 'source_and_year') {
+        payload.year = Number(deleteYear);
+      }
+      if (deleteMonth) {
+        payload.month = Number(deleteMonth);
+      }
+      const res = await fetch('/api/admin/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Delete failed');
+      alert(`Deleted ${data.deleted} transaction${data.deleted !== 1 ? 's' : ''}.`);
+      setShowDeletePanel(false);
+      setDeleteConfirmText('');
+    } catch (err: any) {
+      setPageError(err.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const invalidRows = parsedRows.filter((r) => r.__errors.length > 0);
   const validRows = parsedRows.filter((r) => r.__errors.length === 0);
 
@@ -554,6 +604,98 @@ export default function BulkImportPage() {
             )}
           </Card>
         </div>
+      )}
+
+      {/* ── DANGER ZONE: Bulk Delete ──────────────────────────────────────── */}
+      {step === 'upload' && (
+        <Card className="border-red-500/20">
+          <CardHeader className="cursor-pointer" onClick={() => setShowDeletePanel((v) => !v)}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-red-500" />
+                <CardTitle className="text-base">Danger Zone: Bulk Delete Transactions</CardTitle>
+              </div>
+              <span className="text-sm text-muted-foreground">{showDeletePanel ? 'Hide' : 'Show'}</span>
+            </div>
+            <CardDescription>Remove transactions in bulk by source, year, or month.</CardDescription>
+          </CardHeader>
+          {showDeletePanel && (
+            <CardContent className="space-y-4">
+              {/* Scope */}
+              <div>
+                <label className="block text-sm font-medium mb-1">What to delete</label>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                  value={deleteScope}
+                  onChange={(e) => setDeleteScope(e.target.value)}
+                >
+                  <option value="imported">All imported transactions (bulk imports only)</option>
+                  <option value="source_and_year">Imported transactions for a specific year</option>
+                  <option value="year">All transactions for a specific year</option>
+                  <option value="all">ALL transactions (entire database)</option>
+                </select>
+              </div>
+
+              {/* Year picker — shown when scope needs a year */}
+              {(deleteScope === 'year' || deleteScope === 'source_and_year') && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Year</label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                    value={deleteYear}
+                    onChange={(e) => setDeleteYear(e.target.value)}
+                  >
+                    {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Month picker — optional, shown for all scopes except 'all' */}
+              {deleteScope !== 'all' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Month (optional)</label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                    value={deleteMonth}
+                    onChange={(e) => setDeleteMonth(e.target.value)}
+                  >
+                    <option value="">All months</option>
+                    {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                      <option key={i + 1} value={String(i + 1)}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Summary + confirm */}
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>This action cannot be undone</AlertTitle>
+                <AlertDescription>
+                  <p className="mb-2">You are about to delete: <strong>{deleteScopeLabel}</strong></p>
+                  <p className="text-sm mb-3">Type <strong>DELETE</strong> to confirm:</p>
+                  <input
+                    type="text"
+                    className="w-full border rounded-md px-3 py-2 text-sm bg-background mb-3"
+                    placeholder="Type DELETE to confirm"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  />
+                  <Button
+                    variant="destructive"
+                    disabled={deleteConfirmText !== 'DELETE' || deleting}
+                    onClick={handleBulkDelete}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {deleting ? 'Deleting...' : 'Permanently Delete'}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          )}
+        </Card>
       )}
 
       {/* ── STEP 2: PREVIEW ───────────────────────────────────────────────── */}
