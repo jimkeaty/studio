@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useUser } from '@/firebase';
 import {
   Sidebar,
   SidebarContent,
@@ -32,12 +33,18 @@ import {
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 
+const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+
+// Shown to agents only (non-admin)
+const agentOnlyItems = [
+  { href: '/dashboard/tc/submit', label: 'Submit TC Form', icon: ClipboardList },
+];
+
 const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
-  { href: '/dashboard/tc/submit', label: 'Submit TC Form', icon: ClipboardList },
 ];
 
 const adminMenuItems = [
@@ -60,6 +67,12 @@ const tvModeItems = [
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const { user } = useUser();
+  const isAdmin = user?.uid === ADMIN_UID;
+
+  const visibleAgentItems = isAdmin
+    ? agentMenuItems // admin sees the standard nav without TC submit
+    : [...agentMenuItems, ...agentOnlyItems]; // agents see TC submit appended
 
   return (
     <Sidebar className="border-r">
@@ -74,7 +87,7 @@ export function SidebarNav() {
 
       <SidebarContent className="p-2">
         <SidebarMenu>
-          {agentMenuItems.map((item) => (
+          {visibleAgentItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <Link href={item.href}>
                 <SidebarMenuButton
