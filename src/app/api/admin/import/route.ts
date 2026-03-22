@@ -162,6 +162,7 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const imported: string[] = [];
     const failed: { row: number; error: string; data: any }[] = [];
+    const autoCreatedAgents: { name: string; agentId: string }[] = [];
 
     // ── Process rows in Firestore batches (max 500 ops each) ─────────────────
     let batch = adminDb.batch();
@@ -185,9 +186,47 @@ export async function POST(req: NextRequest) {
         const agentNameRaw = String(row.agentName ?? '').trim();
         if (!agentNameRaw) throw new Error('Agent Name is required');
 
-        const agent = nameToAgent.get(agentNameRaw.toLowerCase());
+        let agent = nameToAgent.get(agentNameRaw.toLowerCase());
+
+        // Auto-create agent profile if not found
         if (!agent) {
-          throw new Error(`Agent not found: "${agentNameRaw}". Ensure the agent profile exists.`);
+          const parts = agentNameRaw.split(/\s+/);
+          const firstName = parts[0] || agentNameRaw;
+          const lastName = parts.slice(1).join(' ') || '';
+          const profileRef = adminDb.collection('agentProfiles').doc();
+          const newAgentId = profileRef.id;
+          const newDisplayName = agentNameRaw;
+
+          const newProfile: Record<string, any> = {
+            agentId: newAgentId,
+            displayName: newDisplayName,
+            firstName,
+            lastName,
+            email: null,
+            phone: null,
+            role: 'agent',
+            teamId: null,
+            createdAt: now,
+            updatedAt: now,
+            source: 'bulk_import',
+          };
+
+          // Write the profile immediately (outside the batch so it's
+          // available for subsequent rows with the same name)
+          await profileRef.set(newProfile);
+          autoCreatedAgents.push({ name: newDisplayName, agentId: newAgentId });
+
+          agent = { agentId: newAgentId, displayName: newDisplayName };
+
+          // Add to lookup map so subsequent rows with the same name reuse this profile
+          nameToAgent.set(newDisplayName.toLowerCase(), agent);
+          const fn = firstName.toLowerCase();
+          const ln = lastName.toLowerCase();
+          if (fn && ln) {
+            nameToAgent.set(`${fn} ${ln}`, agent);
+            nameToAgent.set(`${ln}, ${fn}`, agent);
+            nameToAgent.set(`${ln} ${fn}`, agent);
+          }
         }
 
         // ── Field parsing ───────────────────────────────────────────────────
@@ -326,6 +365,7 @@ export async function POST(req: NextRequest) {
       failed: failed.length,
       errors: failed,
       ids: imported,
+      autoCreatedAgents: autoCreatedAgents.length > 0 ? autoCreatedAgents : undefined,
     });
   } catch (err: any) {
     console.error('[api/admin/import POST]', err);

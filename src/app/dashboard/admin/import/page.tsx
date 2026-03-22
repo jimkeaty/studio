@@ -97,6 +97,7 @@ type ImportResult = {
   imported: number;
   failed: number;
   errors: { row: number; error: string }[];
+  autoCreatedAgents?: { name: string; agentId: string }[];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -707,6 +708,26 @@ export default function BulkImportPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Auto-created agents */}
+          {importResult.autoCreatedAgents && importResult.autoCreatedAgents.length > 0 && (
+            <Alert className="border-blue-500/40">
+              <Info className="h-4 w-4" />
+              <AlertTitle>
+                {importResult.autoCreatedAgents.length} New Agent Profile{importResult.autoCreatedAgents.length !== 1 ? 's' : ''} Created
+              </AlertTitle>
+              <AlertDescription>
+                <p className="text-sm mb-2">
+                  The following agents were not found and were automatically created. You can update their details in the Agents section.
+                </p>
+                <ul className="list-disc list-inside mt-1 space-y-1 text-sm">
+                  {importResult.autoCreatedAgents.map((a, i) => (
+                    <li key={i}>{a.name}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Failed rows (server-side failures) */}
           {importResult.errors && importResult.errors.length > 0 && (
