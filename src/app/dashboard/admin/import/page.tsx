@@ -253,36 +253,8 @@ export default function BulkImportPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Auth guards ──────────────────────────────────────────────────────────
-  if (userLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-12 w-1/3" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Alert>
-        <AlertTitle>Authentication Required</AlertTitle>
-        <AlertDescription>Please sign in to access this page.</AlertDescription>
-      </Alert>
-    );
-  }
-
-  if (user.uid !== ADMIN_UID) {
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>Access Denied</AlertTitle>
-        <AlertDescription>This page is restricted to administrators.</AlertDescription>
-      </Alert>
-    );
-  }
-
-  // ── File handler ─────────────────────────────────────────────────────────
-  const handleFile = (file: File) => {
+  // ── Handlers (must be hooks — defined before any early returns) ──────────
+  const handleFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
       setPageError('Please upload a .csv file.');
       return;
@@ -314,20 +286,50 @@ export default function BulkImportPage() {
       setStep('preview');
     };
     reader.readAsText(file);
-  };
+  }, []);
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
-  };
+  }, [handleFile]);
 
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
+  }, [handleFile]);
+
+  const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
   }, []);
 
-  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
+  // ── Auth guards (must come AFTER all hooks) ───────────────────────────────
+  if (userLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-12 w-1/3" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Alert>
+        <AlertTitle>Authentication Required</AlertTitle>
+        <AlertDescription>Please sign in to access this page.</AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (user.uid !== ADMIN_UID) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Access Denied</AlertTitle>
+        <AlertDescription>This page is restricted to administrators.</AlertDescription>
+      </Alert>
+    );
+  }
 
   // ── Import handler ───────────────────────────────────────────────────────
   const handleImport = async () => {
