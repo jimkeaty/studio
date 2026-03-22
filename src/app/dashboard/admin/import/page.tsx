@@ -62,34 +62,63 @@ const CSV_HEADERS = [
   'Title Company',
 ] as const;
 
-/** Maps CSV header → API row key */
-const HEADER_TO_KEY: Record<string, string> = {
-  'Agent Name': 'agentName',
-  'Type of Closing': 'closingType',
-  'Status': 'status',
-  'Deal Type': 'dealType',
-  'Address': 'address',
-  'Client Name': 'clientName',
-  'Source': 'dealSource',
-  'Listing Date': 'listingDate',
-  'Under Contract Date': 'underContractDate',
-  'Proj Close Date': 'projCloseDate',
-  'Exp Date': 'expDate',
-  'Closed Date': 'closedDate',
-  'List Price / Buyer Rep Price': 'listPrice',
-  'Sale Price': 'salePrice',
-  'Commission %': 'commissionPct',
-  'GCI': 'gci',
-  'Transaction Fee': 'transactionFee',
-  'Broker %': 'brokerPct',
-  'Broker GCI': 'brokerGci',
-  'Agent % / % to Member': 'agentPct',
-  'Agent $ (Primary GCI)': 'agentDollar',
-  'Mortgage Company': 'mortgageCompany',
-  'Title Company': 'titleCompany',
+/** Normalize a header: lowercase, collapse whitespace, trim */
+function normalizeHeader(h: string): string {
+  return h.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Maps normalized CSV header → API row key.
+ * Includes common aliases so user CSVs work without exact header names.
+ */
+const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
+  'agent name': 'agentName',
+  'type of closing': 'closingType',
+  'closing type': 'closingType',
+  'status': 'status',
+  'deal type': 'dealType',
+  'address': 'address',
+  'client name': 'clientName',
+  'source': 'dealSource',
+  'deal source': 'dealSource',
+  'listing date': 'listingDate',
+  'under contract date': 'underContractDate',
+  'under contr date': 'underContractDate',
+  'contract date': 'underContractDate',
+  'proj close date': 'projCloseDate',
+  'projected close date': 'projCloseDate',
+  'exp date': 'expDate',
+  'expiration date': 'expDate',
+  'closed date': 'closedDate',
+  'close date': 'closedDate',
+  'closing date': 'closedDate',
+  'list price / buyer rep price': 'listPrice',
+  'list price- buyer rep price': 'listPrice',
+  'list price-buyer rep price': 'listPrice',
+  'list price': 'listPrice',
+  'buyer rep price': 'listPrice',
+  'sale price': 'salePrice',
+  'sales price': 'salePrice',
+  'commission %': 'commissionPct',
+  'commission percent': 'commissionPct',
+  'gci': 'gci',
+  'gross commission': 'gci',
+  'transaction fee': 'transactionFee',
+  'broker %': 'brokerPct',
+  'broker percent': 'brokerPct',
+  'broker gci': 'brokerGci',
+  'agent % / % to member': 'agentPct',
+  'agent %': 'agentPct',
+  'agent percent': 'agentPct',
+  'agent $ (primary gci)': 'agentDollar',
+  'agent $': 'agentDollar',
+  'agent dollar': 'agentDollar',
+  'primary gci': 'agentDollar',
+  'mortgage company': 'mortgageCompany',
+  'title company': 'titleCompany',
 };
 
-const REQUIRED_COLUMNS = ['Agent Name', 'Address', 'Status'];
+const REQUIRED_COLUMNS_NORMALIZED = ['agent name', 'address', 'status'];
 
 type ParsedRow = Record<string, string> & { __rowNum: number; __errors: string[] };
 
@@ -133,7 +162,9 @@ function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
   if (lines.length === 0) return { headers: [], rows: [] };
 
-  const headers = parseCsvLine(lines[0]).map((h) => h.trim());
+  // Normalize headers: trim, collapse whitespace, lowercase for matching
+  const rawHeaders = parseCsvLine(lines[0]).map((h) => h.trim());
+  const headers = rawHeaders.map(normalizeHeader);
   const rows: ParsedRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -144,8 +175,8 @@ function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
       row[h] = values[idx] ?? '';
     });
 
-    // Validate required columns
-    for (const req of REQUIRED_COLUMNS) {
+    // Validate required columns (using normalized keys)
+    for (const req of REQUIRED_COLUMNS_NORMALIZED) {
       if (!row[req]?.trim()) {
         row.__errors.push(`"${req}" is required`);
       }
@@ -157,11 +188,16 @@ function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
   return { headers, rows };
 }
 
-/** Map parsed CSV row (header-keyed) → API row (key-keyed) */
+/** Map parsed CSV row (normalized-header-keyed) → API row (key-keyed) */
 function mapRowToApiPayload(row: ParsedRow): Record<string, string> {
   const payload: Record<string, string> = {};
-  for (const [header, key] of Object.entries(HEADER_TO_KEY)) {
-    payload[key] = row[header] ?? '';
+  // Row keys are already normalized headers. Match against HEADER_TO_KEY_NORMALIZED.
+  for (const rowKey of Object.keys(row)) {
+    if (rowKey.startsWith('__')) continue;
+    const apiKey = HEADER_TO_KEY_NORMALIZED[rowKey];
+    if (apiKey) {
+      payload[apiKey] = row[rowKey] ?? '';
+    }
   }
   return payload;
 }
@@ -303,8 +339,8 @@ export default function BulkImportPage() {
       const text = e.target?.result as string;
       const { headers, rows } = parseCSV(text);
 
-      // Check for missing required columns
-      const missingCols = REQUIRED_COLUMNS.filter((c) => !headers.includes(c));
+      // Check for missing required columns (headers are already normalized)
+      const missingCols = REQUIRED_COLUMNS_NORMALIZED.filter((c) => !headers.includes(c));
       if (missingCols.length > 0) {
         setPageError(
           `Missing required columns: ${missingCols.join(', ')}. Make sure you are using the correct template.`
@@ -771,7 +807,7 @@ export default function BulkImportPage() {
                     <TableRow>
                       <TableHead className="sticky left-0 bg-background z-10 w-8">#</TableHead>
                       <TableHead className="sticky left-8 bg-background z-10">Status</TableHead>
-                      {CSV_HEADERS.map((h) => (
+                      {csvHeaders.map((h) => (
                         <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
                       ))}
                     </TableRow>
@@ -795,7 +831,7 @@ export default function BulkImportPage() {
                             </div>
                           )}
                         </TableCell>
-                        {CSV_HEADERS.map((h) => (
+                        {csvHeaders.map((h) => (
                           <TableCell key={h} className="whitespace-nowrap max-w-[180px] truncate">
                             {row[h] ?? ''}
                           </TableCell>
