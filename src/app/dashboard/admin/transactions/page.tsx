@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, FileCheck2, Clock, AlertTriangle, DollarSign } from 'lucide-react';
+import { Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -95,9 +95,14 @@ export default function AdminTransactionLedgerPage() {
           <h1 className="text-3xl font-bold tracking-tight">Transaction Ledger</h1>
           <p className="text-muted-foreground">All transactions feeding agent dashboards.</p>
         </div>
-        <Link href="/dashboard/admin/transactions/new">
-          <Button><Plus className="mr-2 h-4 w-4" /> Add Transaction</Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/admin/import">
+            <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Bulk Import</Button>
+          </Link>
+          <Link href="/dashboard/admin/transactions/new">
+            <Button><Plus className="mr-2 h-4 w-4" /> Add Transaction</Button>
+          </Link>
+        </div>
       </div>
 
       {pageError && (
