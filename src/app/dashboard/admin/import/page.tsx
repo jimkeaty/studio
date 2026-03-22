@@ -390,6 +390,26 @@ export default function BulkImportPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // ── Repair previously imported data (one-time fix) ──────────────────────
+  const repairImportedData = async () => {
+    if (!user) return;
+    setPageError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/fix-imports', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Repair failed');
+      }
+      alert(`Done! Repaired ${data.patched} of ${data.total} imported transactions.`);
+    } catch (err: any) {
+      setPageError(err.message || 'Repair failed');
+    }
+  };
+
   const invalidRows = parsedRows.filter((r) => r.__errors.length > 0);
   const validRows = parsedRows.filter((r) => r.__errors.length === 0);
 
@@ -412,9 +432,14 @@ export default function BulkImportPage() {
             <Badge variant="secondary" className="text-xs">import</Badge> and will not trigger recalculations.
           </p>
         </div>
-        <Button variant="outline" onClick={downloadTemplate}>
-          <Download className="mr-2 h-4 w-4" /> Download Template
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={downloadTemplate}>
+            <Download className="mr-2 h-4 w-4" /> Download Template
+          </Button>
+          <Button variant="outline" onClick={repairImportedData}>
+            <CheckCircle2 className="mr-2 h-4 w-4" /> Repair Imported Data
+          </Button>
+        </div>
       </div>
 
       {/* Step indicator */}
