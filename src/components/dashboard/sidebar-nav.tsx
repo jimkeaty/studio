@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import {
   BarChart3,
   Building,
+  ClipboardList,
   ClipboardPen,
   LayoutGrid,
   Newspaper,
@@ -27,6 +28,7 @@ import {
   FolderKanban,
   GitBranchPlus,
   Receipt,
+  Upload,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 
@@ -35,16 +37,18 @@ const agentMenuItems = [
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
+  { href: '/dashboard/tc/submit', label: 'Submit TC Form', icon: ClipboardList },
 ];
 
 const adminMenuItems = [
   { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
+  { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
   { href: '/dashboard/admin/agents', label: 'Agents', icon: Users },
   { href: '/dashboard/admin/agents/new', label: 'New Agent', icon: UserPlus },
   { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
   { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
   { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
-  { href: '/dashboard/admin/transactions/new', label: 'Add Transaction', icon: Receipt },
+  { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
   { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
 ];
