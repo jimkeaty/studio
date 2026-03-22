@@ -225,7 +225,7 @@ const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
   { header: 'Commission %', hint: 'e.g. 3 for 3%' },
   { header: 'GCI', hint: 'Gross Commission Income ($)' },
   { header: 'Transaction Fee', hint: 'Flat transaction fee charged ($)' },
-  { header: 'Broker %', hint: 'Broker's split percentage (e.g. 30 for 30%)' },
+  { header: 'Broker %', hint: "Broker's split percentage (e.g. 30 for 30%)" },
   { header: 'Broker GCI', hint: 'Dollar amount retained by broker ($)' },
   { header: 'Agent % / % to Member', hint: 'Agent split percentage (e.g. 70 for 70%)' },
   { header: 'Agent $ (Primary GCI)', hint: '⭐ Agent net commission — overrides recalculation for historical records ($)' },
