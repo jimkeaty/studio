@@ -77,13 +77,33 @@ const schema = z.object({
   projectedCloseDate: z.string().optional().or(z.literal('')),
   closedDate: z.string().optional().or(z.literal('')),
 
-  // Parties
+  // Client contact info
+  clientEmail: z.string().email().optional().or(z.literal('')),
+  clientPhone: z.string().optional(),
+  clientNewAddress: z.string().optional(),
+
+  // Second client (co-buyer, spouse, etc.)
+  client2Name: z.string().optional(),
+  client2Email: z.string().email().optional().or(z.literal('')),
+  client2Phone: z.string().optional(),
+
+  // Parties — Other Agent
+  otherAgentName: z.string().optional(),
+  otherAgentEmail: z.string().email().optional().or(z.literal('')),
+  otherAgentPhone: z.string().optional(),
+  otherBrokerage: z.string().optional(),
+
+  // Parties — Mortgage/Lender
   mortgageCompany: z.string().optional(),
   loanOfficer: z.string().optional(),
+  loanOfficerEmail: z.string().email().optional().or(z.literal('')),
+  loanOfficerPhone: z.string().optional(),
+
+  // Parties — Title
   titleCompany: z.string().optional(),
   titleOfficer: z.string().optional(),
-  otherAgentName: z.string().optional(),
-  otherBrokerage: z.string().optional(),
+  titleOfficerEmail: z.string().email().optional().or(z.literal('')),
+  titleOfficerPhone: z.string().optional(),
 
   notes: z.string().optional(),
 });
@@ -269,12 +289,26 @@ export default function AddTransactionPage() {
           surveyDeadline: values.surveyDeadline || null,
           projectedCloseDate: values.projectedCloseDate || null,
           closedDate: values.closedDate || null,
+          // Client contact
+          clientEmail: values.clientEmail || null,
+          clientPhone: values.clientPhone || null,
+          clientNewAddress: values.clientNewAddress || null,
+          client2Name: values.client2Name || null,
+          client2Email: values.client2Email || null,
+          client2Phone: values.client2Phone || null,
+          // Parties
+          otherAgentName: values.otherAgentName || null,
+          otherAgentEmail: values.otherAgentEmail || null,
+          otherAgentPhone: values.otherAgentPhone || null,
+          otherBrokerage: values.otherBrokerage || null,
           mortgageCompany: values.mortgageCompany || null,
           loanOfficer: values.loanOfficer || null,
+          loanOfficerEmail: values.loanOfficerEmail || null,
+          loanOfficerPhone: values.loanOfficerPhone || null,
           titleCompany: values.titleCompany || null,
           titleOfficer: values.titleOfficer || null,
-          otherAgentName: values.otherAgentName || null,
-          otherBrokerage: values.otherBrokerage || null,
+          titleOfficerEmail: values.titleOfficerEmail || null,
+          titleOfficerPhone: values.titleOfficerPhone || null,
           notes: values.notes || null,
           // Override splitSnapshot if agentDollar provided
           ...(agentDollar > 0 ? {
@@ -538,26 +572,84 @@ export default function AddTransactionPage() {
             </div>
           </Section>
 
-          {/* ── Section 4: Transaction Parties ───────────────────────────── */}
-          <Section title="Transaction Parties">
+          {/* ── Section 4: Client Contact Info ─────────────────────────── */}
+          <Section title="Client Contact Info" description="Used for post-closing workflows: thank you calls, texts, and mailers.">
+            <Grid2>
+              <FormField control={form.control} name="clientEmail" render={({ field }) => (
+                <FormItem><FormLabel>Client Email</FormLabel><FormControl><Input type="email" placeholder="client@email.com" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="clientPhone" render={({ field }) => (
+                <FormItem><FormLabel>Client Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-1234" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid2>
+            <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
+              <FormItem><FormLabel>Client New Address</FormLabel><FormControl><Input placeholder="Where the client is moving to (for mailers)" {...field} /></FormControl></FormItem>
+            )} />
+            <Separator className="my-2" />
+            <p className="text-sm font-medium text-muted-foreground">Second Contact (co-buyer, spouse, etc.)</p>
+            <Grid3>
+              <FormField control={form.control} name="client2Name" render={({ field }) => (
+                <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="client2Email" render={({ field }) => (
+                <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="client2Phone" render={({ field }) => (
+                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </Section>
+
+          {/* ── Section 5: Other Agent ────────────────────────────────────── */}
+          <Section title="Cooperating Agent">
+            <Grid2>
+              <FormField control={form.control} name="otherAgentName" render={({ field }) => (
+                <FormItem><FormLabel>Agent Name</FormLabel><FormControl><Input placeholder="Other agent on this deal" {...field} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="otherBrokerage" render={({ field }) => (
+                <FormItem><FormLabel>Brokerage</FormLabel><FormControl><Input placeholder="Their brokerage" {...field} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="otherAgentEmail" render={({ field }) => (
+                <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="agent@brokerage.com" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="otherAgentPhone" render={({ field }) => (
+                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-5678" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid2>
+          </Section>
+
+          {/* ── Section 6: Mortgage / Lender ──────────────────────────────── */}
+          <Section title="Mortgage / Lender">
             <Grid2>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
-                <FormItem><FormLabel>Mortgage Company / Lender</FormLabel><FormControl><Input placeholder="First Federal Bank" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl><Input placeholder="First Federal Bank" {...field} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="loanOfficer" render={({ field }) => (
-                <FormItem><FormLabel>Loan Officer</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Loan Officer Name</FormLabel><FormControl><Input placeholder="John Smith" {...field} /></FormControl></FormItem>
               )} />
+              <FormField control={form.control} name="loanOfficerEmail" render={({ field }) => (
+                <FormItem><FormLabel>Loan Officer Email</FormLabel><FormControl><Input type="email" placeholder="lo@bank.com" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="loanOfficerPhone" render={({ field }) => (
+                <FormItem><FormLabel>Loan Officer Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-9012" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid2>
+          </Section>
+
+          {/* ── Section 7: Title Company ──────────────────────────────────── */}
+          <Section title="Title Company">
+            <Grid2>
               <FormField control={form.control} name="titleCompany" render={({ field }) => (
                 <FormItem><FormLabel>Title Company</FormLabel><FormControl><Input placeholder="Acadian Title" {...field} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="titleOfficer" render={({ field }) => (
-                <FormItem><FormLabel>Title Officer</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Title Officer Name</FormLabel><FormControl><Input placeholder="Jane Doe" {...field} /></FormControl></FormItem>
               )} />
-              <FormField control={form.control} name="otherAgentName" render={({ field }) => (
-                <FormItem><FormLabel>Other Agent Name</FormLabel><FormControl><Input placeholder="Cooperating agent" {...field} /></FormControl></FormItem>
+              <FormField control={form.control} name="titleOfficerEmail" render={({ field }) => (
+                <FormItem><FormLabel>Title Officer Email</FormLabel><FormControl><Input type="email" placeholder="closer@title.com" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
-              <FormField control={form.control} name="otherBrokerage" render={({ field }) => (
-                <FormItem><FormLabel>Other Brokerage</FormLabel><FormControl><Input placeholder="Cooperating brokerage" {...field} /></FormControl></FormItem>
+              <FormField control={form.control} name="titleOfficerPhone" render={({ field }) => (
+                <FormItem><FormLabel>Title Officer Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-3456" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
           </Section>

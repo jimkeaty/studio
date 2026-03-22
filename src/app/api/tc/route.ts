@@ -103,14 +103,28 @@ export async function POST(req: NextRequest) {
       projectedCloseDate: toStr(body.projectedCloseDate),
       closedDate: toStr(body.closedDate),
 
+      // Client contact
+      clientEmail: toStr(body.clientEmail),
+      clientPhone: toStr(body.clientPhone),
+      clientNewAddress: toStr(body.clientNewAddress),
+      client2Name: toStr(body.client2Name),
+      client2Email: toStr(body.client2Email),
+      client2Phone: toStr(body.client2Phone),
+
       // Parties
       dealSource: VALID_SOURCES.has(toStr(body.dealSource) || '') ? toStr(body.dealSource) : toStr(body.dealSource),
+      otherAgentName: toStr(body.otherAgentName),
+      otherAgentEmail: toStr(body.otherAgentEmail),
+      otherAgentPhone: toStr(body.otherAgentPhone),
+      otherBrokerage: toStr(body.otherBrokerage),
       mortgageCompany: toStr(body.mortgageCompany),
       loanOfficer: toStr(body.loanOfficer),
+      loanOfficerEmail: toStr(body.loanOfficerEmail),
+      loanOfficerPhone: toStr(body.loanOfficerPhone),
       titleCompany: toStr(body.titleCompany),
       titleOfficer: toStr(body.titleOfficer),
-      otherAgentName: toStr(body.otherAgentName),
-      otherBrokerage: toStr(body.otherBrokerage),
+      titleOfficerEmail: toStr(body.titleOfficerEmail),
+      titleOfficerPhone: toStr(body.titleOfficerPhone),
 
       notes: toStr(body.notes),
 
