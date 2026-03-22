@@ -21,6 +21,7 @@ import {
   ClipboardPen,
   LayoutGrid,
   Newspaper,
+  Plus,
   Settings,
   Target,
   TrendingUp,
@@ -35,16 +36,13 @@ import { Card, CardDescription, CardTitle } from '../ui/card';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
-// Shown to agents only (non-admin)
-const agentOnlyItems = [
-  { href: '/dashboard/tc/submit', label: 'Submit TC Form', icon: ClipboardList },
-];
-
+// Shown to all users (agent + admin)
 const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
+  { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
 ];
 
 const adminMenuItems = [
@@ -70,7 +68,7 @@ export function SidebarNav() {
   const { user } = useUser();
   const isAdmin = user?.uid === ADMIN_UID;
 
-  const visibleAgentItems = [...agentMenuItems, ...agentOnlyItems];
+  const visibleAgentItems = agentMenuItems;
 
   return (
     <Sidebar className="border-r">

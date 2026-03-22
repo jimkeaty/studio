@@ -99,7 +99,7 @@ export default function AdminTransactionLedgerPage() {
           <Link href="/dashboard/admin/import">
             <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Bulk Import</Button>
           </Link>
-          <Link href="/dashboard/admin/transactions/new">
+          <Link href="/dashboard/transactions/new">
             <Button><Plus className="mr-2 h-4 w-4" /> Add Transaction</Button>
           </Link>
         </div>
