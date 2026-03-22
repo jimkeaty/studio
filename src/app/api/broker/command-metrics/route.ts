@@ -2,267 +2,234 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import type admin from 'firebase-admin';
-import {
-  startOfYear,
-  endOfYear,
-  startOfMonth,
-  endOfMonth,
-  subYears,
-  eachMonthOfInterval,
-  format,
-} from 'date-fns';
+import { format } from 'date-fns';
 import type {
   BrokerCommandMetrics,
-  PeriodMetrics,
+  BrokerCommandOverview,
+  MonthlyData,
   CategoryMetrics,
   Metric,
-  Period,
 } from '@/lib/types/brokerCommandMetrics';
 
-// --- Firebase Admin Initialization ---
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
-// --- Type Definitions (from original service) ---
+// ── Transaction shape in Firestore ──────────────────────────────────────────
 interface Transaction {
   agentId: string;
-  status: 'closed' | 'pending' | 'under_contract';
+  status: string;
   closedDate?: admin.firestore.Timestamp | string;
   contractDate?: admin.firestore.Timestamp | string;
   brokerProfit: number;
   dealValue: number;
-  transactionType: 'residential_sale' | 'rental' | 'commercial_lease' | 'commercial_sale';
+  commission?: number;
+  transactionType: string;
+  transactionFee?: number;
   year: number;
-}
-
-interface AgentProfile {
-  status: 'active';
-  hireDate: admin.firestore.Timestamp | string;
-}
-
-// --- Data Aggregation Logic (moved from service) ---
-
-const getInitialCategoryMetrics = (): CategoryMetrics => ({
-  residential_sale: { count: 0, netRevenue: 0 },
-  rental: { count: 0, netRevenue: 0 },
-  commercial_lease: { count: 0, netRevenue: 0 },
-  commercial_sale: { count: 0, netRevenue: 0 },
-  unknown: { count: 0, netRevenue: 0 },
-});
-
-async function getActiveAgentCount(atDate: Date): Promise<number> {
-  const agentsQuery = adminDb.collection('users').where('status', '==', 'active');
-  const agentsSnap = await agentsQuery.get();
-  let count = 0;
-  agentsSnap.forEach(doc => {
-    const agent = doc.data() as AgentProfile;
-    
-    let hireDate: Date | null = null;
-    if (agent.hireDate) {
-        if (typeof (agent.hireDate as any).toDate === 'function') {
-            hireDate = (agent.hireDate as admin.firestore.Timestamp).toDate();
-        } else if (typeof agent.hireDate === 'string') {
-            const parsed = new Date(agent.hireDate);
-            if (!isNaN(parsed.getTime())) {
-                hireDate = parsed;
-            }
-        }
-    }
-
-    if (hireDate && hireDate <= atDate) {
-      count++;
-    }
-  });
-  return count;
-}
-
-async function getMetricsForPeriod(
-  period: Period,
-  activeAgentCount: number,
-): Promise<PeriodMetrics> {
-  let startDate: Date, endDate: Date;
-
-  if (period.type === 'year') {
-    startDate = startOfYear(new Date(period.year, 0, 1));
-    endDate = endOfYear(new Date(period.year, 0, 1));
-  } else {
-    startDate = startOfMonth(new Date(period.year, period.month! - 1, 1));
-    endDate = endOfMonth(new Date(period.year, period.month! - 1, 1));
-  }
-
-  const transactionsQuery = adminDb.collection('transactions').where('year', '==', period.year);
-  const transactionsSnap = await transactionsQuery.get();
-  const transactions = transactionsSnap.docs.map(d => d.data() as Transaction);
-
-  const metrics: PeriodMetrics = {
-    period,
-    startDate,
-    endDate,
-    netRevenue: { closed: 0, pending: 0, goal: null },
-    volume: { closed: 0, pending: 0 },
-    transactions: { closed: 0, pending: 0 },
-    categoryBreakdown: { closed: getInitialCategoryMetrics(), pending: getInitialCategoryMetrics() },
-    activeAgents: { count: activeAgentCount, dealsPerAgent: 0 }
+  splitSnapshot?: {
+    grossCommission?: number;
+    companyRetained?: number;
+    primaryTeamId?: string | null;
   };
-
-  for (const t of transactions) {
-    const type = t.transactionType || 'unknown';
-    if (t.status === 'closed' && t.closedDate) {
-        let closedDate: Date | null = null;
-        if (t.closedDate && typeof (t.closedDate as any).toDate === 'function') {
-            closedDate = (t.closedDate as admin.firestore.Timestamp).toDate();
-        } else if (typeof t.closedDate === 'string') {
-            const parsed = new Date(t.closedDate);
-            if (!isNaN(parsed.getTime())) {
-                closedDate = parsed;
-            }
-        }
-        
-        if (closedDate && closedDate >= startDate && closedDate <= endDate) {
-            metrics.netRevenue.closed += t.brokerProfit || 0;
-            metrics.volume.closed += t.dealValue || 0;
-            metrics.transactions.closed++;
-            metrics.categoryBreakdown.closed[type as keyof CategoryMetrics].count++;
-            metrics.categoryBreakdown.closed[type as keyof CategoryMetrics].netRevenue += t.brokerProfit || 0;
-        }
-    } else if ((t.status === 'pending' || t.status === 'under_contract') && t.contractDate) {
-        let contractDate: Date | null = null;
-        if (t.contractDate && typeof (t.contractDate as any).toDate === 'function') {
-            contractDate = (t.contractDate as admin.firestore.Timestamp).toDate();
-        } else if (typeof t.contractDate === 'string') {
-            const parsed = new Date(t.contractDate);
-            if (!isNaN(parsed.getTime())) {
-                contractDate = parsed;
-            }
-        }
-
-        if (contractDate && contractDate >= startDate && contractDate <= endDate) {
-            metrics.netRevenue.pending += t.brokerProfit || 0;
-            metrics.volume.pending += t.dealValue || 0;
-            metrics.transactions.pending++;
-            metrics.categoryBreakdown.pending[type as keyof CategoryMetrics].count++;
-            metrics.categoryBreakdown.pending[type as keyof CategoryMetrics].netRevenue += t.brokerProfit || 0;
-        }
-    }
-  }
-
-  if (activeAgentCount > 0) {
-    metrics.activeAgents.dealsPerAgent = metrics.transactions.closed / activeAgentCount;
-  }
-
-  return metrics;
 }
 
-// --- API Route Handler ---
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): Date | null {
+  if (!raw) return null;
+  if (typeof (raw as any).toDate === 'function') {
+    return (raw as admin.firestore.Timestamp).toDate();
+  }
+  if (typeof raw === 'string') {
+    const parsed = new Date(raw);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function emptyCategory(): Metric {
+  return { count: 0, netRevenue: 0 };
+}
+
+function emptyCategoryMetrics(): CategoryMetrics {
+  return {
+    residential_sale: emptyCategory(),
+    rental: emptyCategory(),
+    commercial_lease: emptyCategory(),
+    commercial_sale: emptyCategory(),
+    land: emptyCategory(),
+    unknown: emptyCategory(),
+  };
+}
+
+function emptyMonth(monthNum: number): MonthlyData {
+  return {
+    month: monthNum,
+    label: format(new Date(2000, monthNum - 1), 'MMM'),
+    totalGCI: 0,
+    grossMargin: 0,
+    grossMarginPct: 0,
+    transactionFees: 0,
+    closedVolume: 0,
+    pendingVolume: 0,
+    closedCount: 0,
+    pendingCount: 0,
+    grossMarginGoal: null,
+    volumeGoal: null,
+    salesCountGoal: null,
+  };
+}
+
+// ── Main handler ────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   try {
-    // 1. Authenticate and Authorize
+    // 1. Auth
     const authHeader = req.headers.get('Authorization');
-
-    if (process.env.NODE_ENV === 'development') {
-        console.log("[API/broker/command-metrics] Received request.");
-        console.log("[API/broker/command-metrics] Auth header exists:", !!authHeader);
-    }
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized: Missing token' }, { status: 401 });
     }
-    const idToken = authHeader.split('Bearer ')[1];
-    
-    if (process.env.NODE_ENV === 'development') {
-        console.log("[API/broker/command-metrics] Extracted token details:", {
-            tokenLength: idToken.length,
-            tokenPrefix: idToken.slice(0, 20) + "...",
-        });
-    }
-
-    const decodedToken = await adminAuth.verifyIdToken(idToken);
-
-    if (decodedToken.uid !== ADMIN_UID) {
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    if (decoded.uid !== ADMIN_UID) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // 2. Get Query Params
+    // 2. Parse params — only year is required now
     const { searchParams } = new URL(req.url);
-    const type = searchParams.get('type') as Period['type'] | null;
-    const year = searchParams.get('year') ? parseInt(searchParams.get('year')!, 10) : null;
-    const month = searchParams.get('month') ? parseInt(searchParams.get('month')!, 10) : null;
+    const yearParam = searchParams.get('year');
+    const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
-    if (!type || !year || (type === 'month' && !month)) {
-      return NextResponse.json({ error: 'Bad Request: Missing query parameters' }, { status: 400 });
+    // 3. Fetch all transactions for this year
+    const txSnap = await adminDb.collection('transactions').where('year', '==', year).get();
+    const transactions = txSnap.docs.map(d => d.data() as Transaction);
+
+    // 4. Fetch goals for this year
+    const goalsSnap = await adminDb
+      .collection('brokerCommandGoals')
+      .where('year', '==', year)
+      .where('segment', '==', 'TOTAL')
+      .get();
+    const goalsMap = new Map<number, { grossMarginGoal: number | null; volumeGoal: number | null; salesCountGoal: number | null }>();
+    goalsSnap.docs.forEach(d => {
+      const g = d.data();
+      goalsMap.set(g.month, {
+        grossMarginGoal: g.grossMarginGoal ?? null,
+        volumeGoal: g.volumeGoal ?? null,
+        salesCountGoal: g.salesCountGoal ?? null,
+      });
+    });
+
+    // 5. Initialize 12-month buckets
+    const months: MonthlyData[] = [];
+    for (let m = 1; m <= 12; m++) {
+      const md = emptyMonth(m);
+      const goals = goalsMap.get(m);
+      if (goals) {
+        md.grossMarginGoal = goals.grossMarginGoal;
+        md.volumeGoal = goals.volumeGoal;
+        md.salesCountGoal = goals.salesCountGoal;
+      }
+      months.push(md);
     }
 
-    const period: Period = type === 'year' ? { type: 'year', year } : { type: 'month', year, month: month! };
-
-    // 3. Perform Data Aggregation
-    const currentPeriodEndDate = period.type === 'year' ? endOfYear(new Date(period.year, 0, 1)) : endOfMonth(new Date(period.year, period.month! - 1));
-    const activeAgentCount = await getActiveAgentCount(currentPeriodEndDate);
-    const currentPeriodMetrics = await getMetricsForPeriod(period, activeAgentCount);
-    
-    let comparisonPeriodMetrics: PeriodMetrics | undefined = undefined;
-    if (period.type === 'month') {
-        const comparisonPeriod: Period = { ...period, year: period.year - 1 };
-        const comparisonActiveAgentCount = await getActiveAgentCount(subYears(currentPeriodEndDate, 1));
-        comparisonPeriodMetrics = await getMetricsForPeriod(comparisonPeriod, comparisonActiveAgentCount);
-    }
-
-    const trendEndDate = period.type === 'month' ? startOfMonth(new Date(period.year, period.month! - 1)) : new Date();
-    const trendStartDate = subYears(trendEndDate, 1);
-    const monthsInterval = eachMonthOfInterval({ start: trendStartDate, end: trendEndDate });
-    
-    const monthlyTrend = await Promise.all(
-        monthsInterval.map(async (monthDate) => {
-            const trendYear = monthDate.getFullYear();
-            const trendMonth = monthDate.getMonth();
-            const agentCount = await getActiveAgentCount(endOfMonth(monthDate));
-            const transQuery = adminDb.collection('transactions').where('year', '==', trendYear).where('status', '==', 'closed');
-            const transSnap = await transQuery.get();
-            let closedDeals = 0;
-            transSnap.forEach(doc => {
-                const t = doc.data() as Transaction;
-                
-                let closedDate: Date | null = null;
-                if (t.closedDate && typeof (t.closedDate as any).toDate === 'function') {
-                    closedDate = (t.closedDate as admin.firestore.Timestamp).toDate();
-                } else if (typeof t.closedDate === 'string') {
-                    const parsed = new Date(t.closedDate);
-                    if (!isNaN(parsed.getTime())) {
-                        closedDate = parsed;
-                    }
-                }
-
-                if (closedDate && closedDate.getMonth() === trendMonth) {
-                    closedDeals++;
-                }
-            });
-            return {
-                month: format(monthDate, 'MMM yy'),
-                activeAgents: agentCount,
-                closedDeals: closedDeals,
-                dealsPerAgent: agentCount > 0 ? closedDeals / agentCount : 0,
-            };
-        })
-    );
-
-    const result: BrokerCommandMetrics = {
-        currentPeriodMetrics,
-        comparisonPeriodMetrics,
-        monthlyTrend,
+    // Yearly totals
+    const totals = {
+      totalGCI: 0,
+      grossMargin: 0,
+      grossMarginPct: 0,
+      transactionFees: 0,
+      closedVolume: 0,
+      pendingVolume: 0,
+      closedCount: 0,
+      pendingCount: 0,
     };
 
-    // 4. Return Data
-    return NextResponse.json(result);
+    const categoryBreakdown = {
+      closed: emptyCategoryMetrics(),
+      pending: emptyCategoryMetrics(),
+    };
 
-  } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-        console.error('[API/broker/command-metrics] Token verification or processing error:', {
-            code: error.code,
-            message: error.message
-        });
+    // 6. Process each transaction
+    for (const t of transactions) {
+      const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
+      const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
+      const dealValue = t.dealValue ?? 0;
+      const txFee = t.transactionFee ?? 0;
+      const rawType = (t.transactionType || 'unknown').toLowerCase();
+      const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
+
+      if (t.status === 'closed') {
+        const closedDate = parseDate(t.closedDate);
+        if (!closedDate) continue;
+
+        // Check this transaction belongs to the requested year
+        const txMonth = closedDate.getMonth(); // 0-based
+        if (closedDate.getFullYear() !== year) continue;
+
+        const md = months[txMonth]; // 0-based index
+
+        // Monthly
+        md.totalGCI += gci;
+        md.grossMargin += companyRetained;
+        md.transactionFees += txFee;
+        md.closedVolume += dealValue;
+        md.closedCount += 1;
+
+        // Yearly totals
+        totals.totalGCI += gci;
+        totals.grossMargin += companyRetained;
+        totals.transactionFees += txFee;
+        totals.closedVolume += dealValue;
+        totals.closedCount += 1;
+
+        // Category
+        categoryBreakdown.closed[catKey].count += 1;
+        categoryBreakdown.closed[catKey].netRevenue += companyRetained;
+
+      } else if (t.status === 'pending' || t.status === 'under_contract') {
+        const contractDate = parseDate(t.contractDate);
+        const txMonth = contractDate ? contractDate.getMonth() : null;
+
+        // Pending totals always count for the year
+        totals.pendingVolume += dealValue;
+        totals.pendingCount += 1;
+
+        // Monthly (use contract month if available)
+        if (txMonth !== null && contractDate && contractDate.getFullYear() === year) {
+          months[txMonth].pendingVolume += dealValue;
+          months[txMonth].pendingCount += 1;
+        }
+
+        // Category
+        categoryBreakdown.pending[catKey].count += 1;
+        categoryBreakdown.pending[catKey].netRevenue += companyRetained;
+      }
     }
-    
-    if (error.code && error.code.startsWith('auth/')) {
-        return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+
+    // 7. Calculate gross margin % for each month and for yearly totals
+    for (const md of months) {
+      md.grossMarginPct = md.totalGCI > 0
+        ? Math.round((md.grossMargin / md.totalGCI) * 10000) / 100
+        : 0;
+    }
+    totals.grossMarginPct = totals.totalGCI > 0
+      ? Math.round((totals.grossMargin / totals.totalGCI) * 10000) / 100
+      : 0;
+
+    // 8. Build response
+    const overview: BrokerCommandOverview = {
+      year,
+      totals,
+      months,
+      categoryBreakdown,
+    };
+
+    const result: BrokerCommandMetrics = { overview };
+
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error('[API/broker/command-metrics]', error);
+    if (error.code?.startsWith('auth/')) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

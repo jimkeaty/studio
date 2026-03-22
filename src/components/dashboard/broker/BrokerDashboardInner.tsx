@@ -1,304 +1,494 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, Users, TrendingUp, Target, AlertCircle, Home, Building as BuildingIcon, FileText } from 'lucide-react';
-import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Card, CardContent, CardHeader, CardTitle, CardDescription,
+} from '@/components/ui/card';
+import {
+  DollarSign, TrendingUp, Target, AlertCircle, Percent, Clock,
+  ChevronDown, ChevronUp, Save,
+} from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Cell,
+} from 'recharts';
+import {
+  ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
+  ChartLegendContent, ChartConfig,
+} from '@/components/ui/chart';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { useUser } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import type { BrokerCommandMetrics, Period } from '@/lib/types/brokerCommandMetrics';
-// import { RecruitingAdminConsole } from '@/components/dashboard/broker/RecruitingAdminConsole';
-import { format } from 'date-fns';
-import { AdminAgentLinker } from '@/components/dashboard/broker/AdminAgentLinker';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import type { BrokerCommandMetrics, MonthlyData } from '@/lib/types/brokerCommandMetrics';
 
+// ── Formatters ──────────────────────────────────────────────────────────────
 
 const formatCurrency = (amount: number | null | undefined, compact = false) => {
-    if (amount === null || amount === undefined) return "—";
-    const options: Intl.NumberFormatOptions = { style: 'currency', currency: 'USD' };
-    if (compact) {
-        if (Math.abs(amount) >= 1e6) return `$${(amount / 1e6).toFixed(1)}M`;
-        if (Math.abs(amount) >= 1e3) return `$${(amount / 1e3).toFixed(0)}k`;
-    }
-    options.minimumFractionDigits = 0;
-    options.maximumFractionDigits = 0;
-    return new Intl.NumberFormat('en-US', options).format(amount);
+  if (amount === null || amount === undefined) return '—';
+  if (compact) {
+    if (Math.abs(amount) >= 1e6) return `$${(amount / 1e6).toFixed(1)}M`;
+    if (Math.abs(amount) >= 1e3) return `$${(amount / 1e3).toFixed(0)}k`;
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
 };
-const formatNumber = (num: number | null | undefined) => num?.toLocaleString() ?? '—';
 
-const chartConfig = {
-    closed: { label: "Closed", color: "hsl(var(--chart-1))" },
-    pending: { label: "Pending", color: "hsl(var(--chart-2))" },
-    goal: { label: "Goal", color: "hsl(var(--chart-3))" },
-    current: { label: "This Period", color: "hsl(var(--chart-1))" },
-    previous: { label: "Last Period", color: "hsl(var(--chart-4))" },
-    activeAgents: { label: "Active Agents", color: "hsl(var(--chart-5))" },
-    dealsPerAgent: { label: "Deals per Agent", color: "hsl(var(--chart-2))" }
-} satisfies ChartConfig;
+const formatNumber = (num: number | null | undefined) =>
+  num != null ? num.toLocaleString() : '—';
+
+// ── Chart configs ───────────────────────────────────────────────────────────
+
+const marginChartConfig: ChartConfig = {
+  grossMargin: { label: 'Gross Margin', color: 'hsl(var(--chart-1))' },
+  grossMarginGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
+};
+
+const volumeChartConfig: ChartConfig = {
+  closedVolume: { label: 'Closed Volume', color: 'hsl(var(--chart-2))' },
+  pendingVolume: { label: 'Pending Volume', color: 'hsl(var(--chart-4))' },
+};
+
+const salesChartConfig: ChartConfig = {
+  closedCount: { label: 'Closed Sales', color: 'hsl(var(--chart-1))' },
+  pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
+  salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
+};
+
+// ── Skeleton ────────────────────────────────────────────────────────────────
 
 const BrokerDashboardSkeleton = () => (
-    <div className="space-y-8">
-
-        <Skeleton className="h-12 w-1/2" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => <Card key={i}><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>)}
-        </div>
-        <Card><CardContent className="p-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
-        <Card><CardContent className="p-6"><Skeleton className="h-48 w-full" /></CardContent></Card>
+  <div className="space-y-8">
+    <Skeleton className="h-12 w-1/2" />
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {[...Array(4)].map((_, i) => (
+        <Card key={i}>
+          <CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent>
+        </Card>
+      ))}
     </div>
+    <Card><CardContent className="p-6"><Skeleton className="h-72 w-full" /></CardContent></Card>
+  </div>
 );
 
-const CategoryBreakdownCard = ({ title, icon: Icon, closed, pending }: { title: string, icon: React.ElementType, closed: any, pending: any }) => (
-    <Card>
-        <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium flex items-center gap-2"><Icon className="h-5 w-5" />{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-            <div className="space-y-1">
-                <p className="font-semibold">Closed</p>
-                <div className="flex justify-between text-sm"><span>Count:</span> <span>{formatNumber(closed.count)}</span></div>
-                <div className="flex justify-between text-sm"><span>Net Revenue:</span> <span>{formatCurrency(closed.netRevenue)}</span></div>
-            </div>
-             <div className="space-y-1 mt-4">
-                <p className="font-semibold">Pending</p>
-                <div className="flex justify-between text-sm"><span>Count:</span> <span>{formatNumber(pending.count)}</span></div>
-                <div className="flex justify-between text-sm"><span>Net Revenue:</span> <span>{formatCurrency(pending.netRevenue)}</span></div>
-            </div>
-        </CardContent>
+// ── KPI Card ────────────────────────────────────────────────────────────────
+
+function KPICard({
+  title, value, subtitle, icon: Icon, highlight,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  icon: React.ElementType;
+  highlight?: boolean;
+}) {
+  return (
+    <Card className={highlight ? 'border-primary/50 bg-primary/5' : ''}>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+      </CardContent>
     </Card>
-);
+  );
+}
+
+// ── Goals Editor ────────────────────────────────────────────────────────────
+
+function GoalsEditor({
+  months, year, onSaved,
+}: {
+  months: MonthlyData[];
+  year: number;
+  onSaved: () => void;
+}) {
+  const { user } = useUser();
+  const [goals, setGoals] = useState<Record<number, { margin: string; volume: string; sales: string }>>({});
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const map: typeof goals = {};
+    for (const m of months) {
+      map[m.month] = {
+        margin: m.grossMarginGoal != null ? String(m.grossMarginGoal) : '',
+        volume: m.volumeGoal != null ? String(m.volumeGoal) : '',
+        sales: m.salesCountGoal != null ? String(m.salesCountGoal) : '',
+      };
+    }
+    setGoals(map);
+  }, [months]);
+
+  const update = (month: number, field: 'margin' | 'volume' | 'sales', val: string) => {
+    setGoals(prev => ({ ...prev, [month]: { ...prev[month], [field]: val } }));
+  };
+
+  const save = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      for (let m = 1; m <= 12; m++) {
+        const g = goals[m];
+        if (!g) continue;
+        const marginVal = g.margin ? parseFloat(g.margin) : null;
+        const volumeVal = g.volume ? parseFloat(g.volume) : null;
+        const salesVal = g.sales ? parseInt(g.sales, 10) : null;
+
+        await fetch('/api/broker/goals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            year,
+            month: m,
+            segment: 'TOTAL',
+            grossMarginGoal: marginVal,
+            volumeGoal: volumeVal,
+            salesCountGoal: salesVal,
+          }),
+        });
+      }
+      onSaved();
+    } catch (err) {
+      console.error('Failed to save goals:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CardHeader className="pb-3">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="flex w-full justify-between p-0 h-auto hover:bg-transparent">
+              <CardTitle className="text-lg">Monthly Goals</CardTitle>
+              {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            </Button>
+          </CollapsibleTrigger>
+          <CardDescription>Set gross margin, volume, and sales count goals for each month.</CardDescription>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 pr-4 font-medium">Month</th>
+                    <th className="text-left py-2 px-2 font-medium">Gross Margin Goal ($)</th>
+                    <th className="text-left py-2 px-2 font-medium">Volume Goal ($)</th>
+                    <th className="text-left py-2 px-2 font-medium">Sales Count Goal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
+                    const g = goals[m] || { margin: '', volume: '', sales: '' };
+                    const label = months.find(md => md.month === m)?.label || `M${m}`;
+                    return (
+                      <tr key={m} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-medium">{label}</td>
+                        <td className="py-2 px-2">
+                          <Input
+                            type="number"
+                            value={g.margin}
+                            onChange={e => update(m, 'margin', e.target.value)}
+                            placeholder="0"
+                            className="h-8 w-32"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <Input
+                            type="number"
+                            value={g.volume}
+                            onChange={e => update(m, 'volume', e.target.value)}
+                            placeholder="0"
+                            className="h-8 w-32"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <Input
+                            type="number"
+                            value={g.sales}
+                            onChange={e => update(m, 'sales', e.target.value)}
+                            placeholder="0"
+                            className="h-8 w-28"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button onClick={save} disabled={saving}>
+                <Save className="mr-2 h-4 w-4" />
+                {saving ? 'Saving...' : 'Save Goals'}
+              </Button>
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
+// ── Main Dashboard Component ────────────────────────────────────────────────
 
 export function BrokerDashboardInner() {
-    const { user } = useUser();
-    const [periodType, setPeriodType] = useState<Period['type']>('year');
-    const [year, setYear] = useState<number>(new Date().getFullYear());
-    const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
-    const [data, setData] = useState<BrokerCommandMetrics | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    
-    useEffect(() => {
-        if (process.env.NODE_ENV === 'development') {
-            console.log("Broker Command running in API-only mode (no client Firestore reads).");
-        }
+  const { user } = useUser();
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [data, setData] = useState<BrokerCommandMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-        if (!user) return; // Wait for user to be available
-
-        setLoading(true);
-        setError(null);
-        
-        const fetchData = async () => {
-            try {
-                const token = await user.getIdToken(true);
-                const params = new URLSearchParams({
-                    type: periodType,
-                    year: String(year),
-                });
-                if (periodType === 'month') {
-                    params.append('month', String(month));
-                }
-
-                const url = `/api/broker/command-metrics?${params.toString()}`;
-
-                if (process.env.NODE_ENV === 'development') {
-                    console.log("[BrokerDashboardInner] Preparing to fetch API:", {
-                        uid: user.uid,
-                        token_type: typeof token,
-                        token_length: token.length,
-                        token_prefix: token.slice(0, 20) + "...",
-                        url: url
-                    });
-                }
-
-                const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `Request failed with status ${response.status}`);
-                }
-
-                const metrics: BrokerCommandMetrics = await response.json();
-                setData(metrics);
-            } catch (e: any) {
-                 console.error("[BrokerCommand] Failed to fetch broker metrics:", e);
-                if (e.message?.includes('Forbidden') || e.message?.includes('permission-denied') ) {
-                    setError("You do not have sufficient permissions to view broker command data.");
-                } else if (e.message?.includes('Invalid token')) {
-                    setError(`Authorization Error: ${e.message}. Please try signing out and back in.`);
-                }
-                else {
-                    setError(e.message || "An error occurred while fetching dashboard data.");
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [user, periodType, year, month]);
-
-    const { current, comparison } = useMemo(() => ({
-        current: data?.currentPeriodMetrics,
-        comparison: data?.comparisonPeriodMetrics,
-    }), [data]);
-
-    const forecast = (current?.netRevenue.closed ?? 0) + (current?.netRevenue.pending ?? 0);
-    const goal = current?.netRevenue.goal;
-    const gradeNow = goal && goal > 0 ? ((current?.netRevenue.closed ?? 0) / goal) * 100 : null;
-    const gradePipeline = goal && goal > 0 ? (forecast / goal) * 100 : null;
-
-    const mainChartData = (year !== null && month !== null && current) ? [{
-        name: periodType === 'year' ? String(year) : format(new Date(year, month-1), 'MMM yyyy'),
-        closed: current.netRevenue.closed ?? 0,
-        pending: current.netRevenue.pending ?? 0,
-        goal: current.netRevenue.goal,
-    }] : [];
-    
-    const yoyChartData = (periodType === 'month' && current && comparison) ? [{
-        name: 'Net Revenue',
-        current: current.netRevenue.closed,
-        previous: comparison.netRevenue.closed,
-    }] : [];
-
-    if (loading) {
-        return <BrokerDashboardSkeleton />;
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken(true);
+      const res = await fetch(
+        `/api/broker/command-metrics?year=${year}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || `Request failed (${res.status})`);
+      }
+      const metrics: BrokerCommandMetrics = await res.json();
+      setData(metrics);
+    } catch (e: any) {
+      console.error('[BrokerCommand] fetch error:', e);
+      setError(e.message || 'An error occurred');
+    } finally {
+      setLoading(false);
     }
-    
-    if (error) {
-        return (
-            <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-            </Alert>
-        );
-    }
+  }, [user, year]);
 
-    if (!data || !current) {
-        return <BrokerDashboardSkeleton />;
-    }
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
+  // ── Guards ──────────────────────────────────────────────────────────────
+  if (loading) return <BrokerDashboardSkeleton />;
+
+  if (error) {
     return (
-        <div className="space-y-8">
-            <AdminAgentLinker className="mb-6" />
-
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Broker Command Center</h1>
-                    <p className="text-muted-foreground">Aggregated view of your brokerage&apos;s performance.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Tabs value={periodType} onValueChange={(v) => setPeriodType(v as Period['type'])} className="w-auto">
-                        <TabsList><TabsTrigger value="year">Year</TabsTrigger><TabsTrigger value="month">Month</TabsTrigger></TabsList>
-                    </Tabs>
-                    <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-                        <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>{[...Array(5)].map((_, i) => { const y = new Date().getFullYear() - i; return <SelectItem key={y} value={String(y)}>{y}</SelectItem>})}</SelectContent>
-                    </Select>
-                    {periodType === 'month' && (
-                        <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-                            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>{[...Array(12)].map((_, i) => <SelectItem key={i+1} value={String(i+1)}>{format(new Date(2000, i), 'MMMM')}</SelectItem>)}</SelectContent>
-                        </Select>
-                    )}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Actual Net Revenue</CardTitle><DollarSign className="h-4 w-4 text-muted-foreground absolute top-6 right-6" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(current.netRevenue.closed)}</div><p className="text-xs text-muted-foreground">From {current.transactions.closed} closings</p></CardContent></Card>
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Pending Net Revenue</CardTitle><DollarSign className="h-4 w-4 text-muted-foreground absolute top-6 right-6" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(current.netRevenue.pending)}</div><p className="text-xs text-muted-foreground">From {current.transactions.pending} pending deals</p></CardContent></Card>
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Forecast Net Revenue</CardTitle><Target className="h-4 w-4 text-muted-foreground absolute top-6 right-6" /></CardHeader><CardContent><div className="text-2xl font-bold text-primary">{formatCurrency(forecast)}</div><p className="text-xs text-muted-foreground">Closed + Pending</p></CardContent></Card>
-                <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Grade (vs Goal)</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground absolute top-6 right-6" /></CardHeader><CardContent><div className="text-2xl font-bold">{gradeNow ? `${gradeNow.toFixed(0)}%` : '—'}</div><p className="text-xs text-muted-foreground">{gradePipeline ? `Pipeline: ${gradePipeline.toFixed(0)}%` : 'Goal not set'}</p></CardContent></Card>
-            </div>
-            
-            <Card>
-                <CardHeader>
-                    <CardTitle>Net Revenue</CardTitle>
-                    <CardDescription>
-                        {periodType === 'month' ? `Metrics for ${format(new Date(year, month - 1), 'MMMM yyyy')}` : `Metrics for ${year}`}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ChartContainer config={chartConfig} className="h-[120px] w-full">
-                        <BarChart data={mainChartData} layout="vertical" margin={{ left: 20 }}>
-                            <CartesianGrid horizontal={false} />
-                            <YAxis type="category" dataKey="name" hide />
-                            <XAxis type="number" tickFormatter={(val) => formatCurrency(val, true)} />
-                            <ChartTooltip cursor={{ fill: 'hsl(var(--muted))' }} content={<ChartTooltipContent />} />
-                            <Bar dataKey="closed" stackId="a" fill="var(--color-closed)" radius={[4, 0, 0, 4]}>
-                                <LabelList dataKey="closed" position="insideLeft" offset={8} className="fill-white font-semibold" formatter={(val: number) => formatCurrency(val, true)} />
-                            </Bar>
-                            <Bar dataKey="pending" stackId="a" fill="var(--color-pending)" radius={[0, 4, 4, 0]}>
-                                <LabelList dataKey="pending" position="right" offset={8} className="fill-foreground font-semibold" formatter={(val: number) => val > 0 ? `+${formatCurrency(val, true)}` : ''} />
-                            </Bar>
-                             {goal && <Line dataKey="goal" stroke="var(--color-goal)" strokeWidth={2} dot={false} strokeDasharray="3 4" />}
-                        </BarChart>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {periodType === 'month' && yoyChartData.length > 0 && comparison && (
-                     <Card>
-                        <CardHeader><CardTitle>YoY Monthly Net Revenue</CardTitle><CardDescription>Closed net revenue this month vs. same month last year.</CardDescription></CardHeader>
-                        <CardContent>
-                            <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                                <BarChart data={yoyChartData} >
-                                    <CartesianGrid vertical={false} />
-                                    <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                                    <YAxis tickFormatter={(val) => formatCurrency(val, true)} />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <ChartLegend content={<ChartLegendContent />} />
-                                    <Bar dataKey="previous" fill="var(--color-previous)" radius={4}>
-                                        <LabelList position="top" formatter={(val: number) => formatCurrency(val, true)} />
-                                    </Bar>
-                                    <Bar dataKey="current" fill="var(--color-current)" radius={4}>
-                                        <LabelList position="top" formatter={(val: number) => formatCurrency(val, true)} />
-                                    </Bar>
-                                </BarChart>
-                            </ChartContainer>
-                        </CardContent>
-                    </Card>
-                )}
-                <Card>
-                     <CardHeader><CardTitle>Monthly Agent Productivity</CardTitle><CardDescription>Deals per active agent over the last 12 months.</CardDescription></CardHeader>
-                     <CardContent>
-                         <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                             <BarChart data={data.monthlyTrend}>
-                                 <CartesianGrid vertical={false} />
-                                 <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
-                                 <YAxis yAxisId="left" orientation="left" stroke="var(--color-activeAgents)" tickFormatter={formatNumber} />
-                                 <YAxis yAxisId="right" orientation="right" stroke="var(--color-dealsPerAgent)" tickFormatter={(val) => val.toFixed(1)} />
-                                 <ChartTooltip content={<ChartTooltipContent />} />
-                                 <ChartLegend content={<ChartLegendContent />} />
-                                 <Bar yAxisId="left" dataKey="activeAgents" fill="var(--color-activeAgents)" name="Active Agents" radius={4} />
-                                 <Line yAxisId="right" dataKey="dealsPerAgent" type="monotone" stroke="var(--color-dealsPerAgent)" name="Deals per Agent" strokeWidth={2} dot={false} />
-                             </BarChart>
-                         </ChartContainer>
-                     </CardContent>
-                 </Card>
-            </div>
-            
-            <div>
-                 <h2 className="text-2xl font-bold tracking-tight mb-4">Category Breakdown</h2>
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <CategoryBreakdownCard title="Residential Sale" icon={Home} closed={current.categoryBreakdown.closed.residential_sale} pending={current.categoryBreakdown.pending.residential_sale} />
-                    <CategoryBreakdownCard title="Rental" icon={BuildingIcon} closed={current.categoryBreakdown.closed.rental} pending={current.categoryBreakdown.pending.rental} />
-                    <CategoryBreakdownCard title="Commercial Lease" icon={FileText} closed={current.categoryBreakdown.closed.commercial_lease} pending={current.categoryBreakdown.pending.commercial_lease} />
-                    <CategoryBreakdownCard title="Commercial Sale" icon={BuildingIcon} closed={current.categoryBreakdown.closed.commercial_sale} pending={current.categoryBreakdown.pending.commercial_sale} />
-                 </div>
-            </div>
-            {/*
-                TODO: The RecruitingAdminConsole must be migrated to a secure Admin API route.
-                It has been removed for now to prevent client-side permission errors.
-            */}
-        </div>
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
     );
+  }
+
+  if (!data?.overview) return <BrokerDashboardSkeleton />;
+
+  const { totals, months, categoryBreakdown } = data.overview;
+
+  // Yearly goal totals (sum of monthly goals)
+  const yearlyGrossMarginGoal = months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
+  const gradeVsGoal = yearlyGrossMarginGoal
+    ? Math.round((totals.grossMargin / yearlyGrossMarginGoal) * 100)
+    : null;
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Broker Command Center</h1>
+          <p className="text-muted-foreground">
+            Aggregated brokerage performance — all teams, all transaction types.
+          </p>
+        </div>
+        <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+          <SelectTrigger className="w-[120px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[...Array(5)].map((_, i) => {
+              const y = new Date().getFullYear() - i;
+              return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <KPICard
+          title="Total Commission Income"
+          value={formatCurrency(totals.totalGCI)}
+          subtitle={`From ${formatNumber(totals.closedCount)} closed transactions + ${formatCurrency(totals.transactionFees)} in fees`}
+          icon={DollarSign}
+        />
+        <KPICard
+          title="Actual Gross Margin"
+          value={formatCurrency(totals.grossMargin)}
+          subtitle="Company retained after paying agents"
+          icon={TrendingUp}
+          highlight
+        />
+        <KPICard
+          title="Gross Margin %"
+          value={totals.grossMarginPct > 0 ? `${totals.grossMarginPct.toFixed(1)}%` : '—'}
+          subtitle={gradeVsGoal ? `${gradeVsGoal}% of yearly goal` : 'Set monthly goals below'}
+          icon={Percent}
+        />
+        <KPICard
+          title="Total Pending Volume"
+          value={formatCurrency(totals.pendingVolume)}
+          subtitle={`${formatNumber(totals.pendingCount)} deals in pipeline`}
+          icon={Clock}
+        />
+      </div>
+
+      {/* ── CHART 1: Gross Margin vs Goal ──────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Gross Margin vs Goal</CardTitle>
+          <CardDescription>
+            Company retained revenue after agent payouts — {year}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={marginChartConfig} className="h-[350px] w-full">
+            <BarChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={val => formatCurrency(val, true)} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value, name) => [formatCurrency(Number(value)), name === 'grossMargin' ? 'Gross Margin' : 'Goal']}
+                  />
+                }
+              />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="grossMargin" fill="var(--color-grossMargin)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.5} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      {/* ── CHART 2: Total $ Volume ────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Dollar Volume</CardTitle>
+          <CardDescription>
+            Closed and pending deal value — {year}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
+            <BarChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={val => formatCurrency(val, true)} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value, name) => [
+                      formatCurrency(Number(value)),
+                      name === 'closedVolume' ? 'Closed' : 'Pending',
+                    ]}
+                  />
+                }
+              />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.6} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      {/* ── CHART 3: Number of Sales ───────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Number of Sales</CardTitle>
+          <CardDescription>
+            Closed and pending transaction counts — {year}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
+            <BarChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis allowDecimals={false} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value, name) => [
+                      formatNumber(Number(value)),
+                      name === 'closedCount' ? 'Closed' : name === 'pendingCount' ? 'Pending' : 'Goal',
+                    ]}
+                  />
+                }
+              />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.6} />
+              <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.4} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      {/* ── Category Breakdown ─────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Category Breakdown — {year}</CardTitle>
+          <CardDescription>Closed vs pending by transaction type</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {([
+              ['Residential Sale', 'residential_sale'],
+              ['Commercial Sale', 'commercial_sale'],
+              ['Commercial Lease', 'commercial_lease'],
+              ['Land', 'land'],
+              ['Rental / Lease', 'rental'],
+            ] as const).map(([label, key]) => {
+              const c = categoryBreakdown.closed[key];
+              const p = categoryBreakdown.pending[key];
+              if (c.count === 0 && p.count === 0) return null;
+              return (
+                <div key={key} className="border rounded-lg p-4 space-y-2">
+                  <h4 className="font-semibold">{label}</h4>
+                  <div className="grid grid-cols-2 text-sm gap-1">
+                    <span className="text-muted-foreground">Closed:</span>
+                    <span className="font-medium">{c.count} ({formatCurrency(c.netRevenue)})</span>
+                    <span className="text-muted-foreground">Pending:</span>
+                    <span className="font-medium">{p.count} ({formatCurrency(p.netRevenue)})</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Goals Editor ───────────────────────────────────────────────────── */}
+      <GoalsEditor months={months} year={year} onSaved={fetchData} />
+    </div>
+  );
 }
