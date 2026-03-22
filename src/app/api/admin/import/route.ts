@@ -79,16 +79,19 @@ function normalizeClosingType(v: string): string | null {
   if (s === 'buyer' || s === 'buy') return 'buyer';
   if (s === 'listing' || s === 'seller' || s === 'list') return 'listing';
   if (s === 'referral' || s === 'ref') return 'referral';
+  if (s === 'lease' || s === 'rental') return 'lease';
   return null;
 }
 
 function normalizeStatus(v: string): string | null {
   const s = v.toLowerCase().trim();
-  if (s === 'closed' || s === 'close') return 'closed';
+  if (s === 'closed' || s === 'close' || s === 'sold') return 'closed';
   if (s === 'pending') return 'pending';
+  if (s === 'active') return 'pending';
   if (s === 'under contract' || s === 'under_contract' || s === 'contract') return 'under_contract';
   if (s === 'canceled' || s === 'cancelled' || s === 'cancel') return 'cancelled';
   if (s === 'expired' || s === 'expire') return 'expired';
+  if (s === 'withdrawn' || s === 'withdrawn/canceled') return 'cancelled';
   return null;
 }
 
