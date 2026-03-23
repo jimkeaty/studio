@@ -60,12 +60,15 @@ const marginChartConfig: ChartConfig = {
 const volumeChartConfig: ChartConfig = {
   closedVolume: { label: 'Closed Volume', color: 'hsl(var(--chart-2))' },
   pendingVolume: { label: 'Pending Volume', color: 'hsl(var(--chart-4))' },
+  volumeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
+  compareVolume: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
 };
 
 const salesChartConfig: ChartConfig = {
   closedCount: { label: 'Closed Sales', color: 'hsl(var(--chart-1))' },
   pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
+  compareCount: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
 };
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
@@ -877,68 +880,195 @@ export function BrokerDashboardInner() {
         </CardContent>
       </Card>
 
-      {/* ── CHART 2: Total $ Volume ────────────────────────────────────────── */}
+      {/* ── CHART 2: Total $ Volume + Goal + YoY ─────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Dollar Volume</CardTitle>
-          <CardDescription>
-            Closed and pending deal value — {year}
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle>Monthly Dollar Volume</CardTitle>
+              <CardDescription>
+                Closed and pending deal value — {year}
+                {compareYear ? ` compared to ${compareYear}` : ''}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
+              <Select
+                value={compareYear ? String(compareYear) : 'none'}
+                onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {(data.availableYears ?? []).map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
-            <BarChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+          <ChartContainer config={volumeChartConfig} className="h-[350px] w-full">
+            <BarChart
+              data={months.map((m, i) => ({
+                ...m,
+                compareVolume: data.comparisonData?.months?.[i]?.closedVolume ?? null,
+              }))}
+              margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
+            >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => formatCurrency(val, true)} />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    formatter={(value, name) => [
-                      formatCurrency(Number(value)),
-                      name === 'closedVolume' ? 'Closed' : 'Pending',
-                    ]}
+                    formatter={(value, name) => {
+                      const labels: Record<string, string> = {
+                        closedVolume: `${year} Closed`,
+                        pendingVolume: `${year} Pending`,
+                        volumeGoal: `${year} Goal`,
+                        compareVolume: `${compareYear ?? ''} Volume`,
+                      };
+                      return [formatCurrency(Number(value)), labels[name as string] ?? name];
+                    }}
                   />
                 }
               />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.6} />
+              <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
+              {compareYear && (
+                <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />
+              )}
+              <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
+              <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
+          {compareYear && data.comparisonData && (
+            <div className="mt-4 grid grid-cols-3 gap-4 text-sm border-t pt-4">
+              {(() => {
+                const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
+                const diff = totals.closedVolume - compVolume;
+                const pctChange = compVolume > 0 ? ((diff / compVolume) * 100) : 0;
+                return (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Volume Change</span>
+                      <p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">{year} Volume</span>
+                      <p className="font-semibold">{formatCurrency(totals.closedVolume, true)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">{compareYear} Volume</span>
+                      <p className="font-semibold">{formatCurrency(compVolume, true)}</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* ── CHART 3: Number of Sales ───────────────────────────────────────── */}
+      {/* ── CHART 3: Number of Sales + Goal + YoY ─────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Number of Sales</CardTitle>
-          <CardDescription>
-            Closed and pending transaction counts — {year}
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle>Monthly Number of Sales</CardTitle>
+              <CardDescription>
+                Closed and pending transaction counts — {year}
+                {compareYear ? ` compared to ${compareYear}` : ''}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
+              <Select
+                value={compareYear ? String(compareYear) : 'none'}
+                onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {(data.availableYears ?? []).map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
-            <BarChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+          <ChartContainer config={salesChartConfig} className="h-[350px] w-full">
+            <BarChart
+              data={months.map((m, i) => ({
+                ...m,
+                compareCount: data.comparisonData?.months?.[i]?.closedCount ?? null,
+              }))}
+              margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
+            >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    formatter={(value, name) => [
-                      formatNumber(Number(value)),
-                      name === 'closedCount' ? 'Closed' : name === 'pendingCount' ? 'Pending' : 'Goal',
-                    ]}
+                    formatter={(value, name) => {
+                      const labels: Record<string, string> = {
+                        closedCount: `${year} Closed`,
+                        pendingCount: `${year} Pending`,
+                        salesCountGoal: `${year} Goal`,
+                        compareCount: `${compareYear ?? ''} Sales`,
+                      };
+                      return [formatNumber(Number(value)), labels[name as string] ?? name];
+                    }}
                   />
                 }
               />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.6} />
-              <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.4} />
+              <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
+              {compareYear && (
+                <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />
+              )}
+              <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
+              <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
+          {compareYear && data.comparisonData && (
+            <div className="mt-4 grid grid-cols-3 gap-4 text-sm border-t pt-4">
+              {(() => {
+                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
+                const diff = totals.closedCount - compSales;
+                const pctChange = compSales > 0 ? ((diff / compSales) * 100) : 0;
+                return (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Sales Change</span>
+                      <p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {diff >= 0 ? '+' : ''}{diff} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">{year} Sales</span>
+                      <p className="font-semibold">{formatNumber(totals.closedCount)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">{compareYear} Sales</span>
+                      <p className="font-semibold">{formatNumber(compSales)}</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </CardContent>
       </Card>
 
