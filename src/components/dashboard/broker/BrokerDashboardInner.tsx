@@ -572,6 +572,7 @@ export function BrokerDashboardInner() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [compareYear, setCompareYear] = useState<number | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null); // null = all teams
+  const [selectedType, setSelectedType] = useState<string | null>(null); // null = all types
   const [data, setData] = useState<BrokerCommandMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -585,6 +586,7 @@ export function BrokerDashboardInner() {
       const params = new URLSearchParams({ year: String(year) });
       if (compareYear) params.set('compareYear', String(compareYear));
       if (selectedTeam) params.set('teamId', selectedTeam);
+      if (selectedType) params.set('type', selectedType);
       const res = await fetch(
         `/api/broker/command-metrics?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -601,7 +603,7 @@ export function BrokerDashboardInner() {
     } finally {
       setLoading(false);
     }
-  }, [user, year, compareYear, selectedTeam]);
+  }, [user, year, compareYear, selectedTeam, selectedType]);
 
   useEffect(() => {
     fetchData();
@@ -646,6 +648,9 @@ export function BrokerDashboardInner() {
   const teamName = selectedTeam
     ? (data.teams ?? []).find(t => t.teamId === selectedTeam)?.teamName ?? selectedTeam
     : 'All Teams';
+  const typeLabel = selectedType
+    ? { residential: 'Residential', commercial: 'Commercial', commercial_sale: 'Commercial Sales', commercial_lease: 'Commercial Leases', land: 'Land', rental: 'Rentals' }[selectedType] ?? selectedType
+    : null;
 
   return (
     <div className="space-y-8">
@@ -654,7 +659,8 @@ export function BrokerDashboardInner() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Broker Command Center</h1>
           <p className="text-muted-foreground">
-            {selectedTeam ? `${teamName} performance` : 'Aggregated brokerage performance'} — {year}
+            {selectedTeam ? `${teamName}` : 'All teams'}
+            {typeLabel ? ` · ${typeLabel}` : ''} — {year}
           </p>
         </div>
         <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
@@ -692,6 +698,29 @@ export function BrokerDashboardInner() {
           ))}
         </div>
       )}
+
+      {/* Transaction Type Filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground font-medium mr-1">Filter by Type:</span>
+        {([
+          { value: null, label: 'All Types' },
+          { value: 'residential', label: 'Residential' },
+          { value: 'commercial', label: 'Commercial' },
+          { value: 'commercial_sale', label: 'Commercial Sales' },
+          { value: 'commercial_lease', label: 'Commercial Leases' },
+          { value: 'land', label: 'Land' },
+          { value: 'rental', label: 'Rentals' },
+        ] as const).map(opt => (
+          <Button
+            key={opt.value ?? 'all'}
+            variant={selectedType === opt.value ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSelectedType(opt.value)}
+          >
+            {opt.label}
+          </Button>
+        ))}
+      </div>
 
       {/* ── Consolidated KPI Section ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

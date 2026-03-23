@@ -100,6 +100,7 @@ export async function GET(req: NextRequest) {
     const compareYearParam = searchParams.get('compareYear');
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
     const teamIdParam = searchParams.get('teamId'); // null = all teams
+    const typeFilter = searchParams.get('type'); // null = all types, e.g. "commercial_sale", "rental", "land", "residential_sale"
 
     // 3. Fetch teams list + agent profiles for team filtering
     const [teamsSnap, agentProfilesSnap] = await Promise.all([
@@ -120,12 +121,29 @@ export async function GET(req: NextRequest) {
       : null;
 
     // Helper to filter transactions by team
-    const filterByTeam = (txList: Transaction[]): Transaction[] => {
-      if (!teamAgentIds) return txList; // no team filter
-      return txList.filter(t =>
-        teamAgentIds.has(t.agentId) ||
-        t.splitSnapshot?.primaryTeamId === teamIdParam
-      );
+    // Map user-friendly type filter values to transaction types
+    const typeFilterSet: Set<string> | null = typeFilter
+      ? typeFilter === 'commercial'
+        ? new Set(['commercial_sale', 'commercial_lease'])
+        : typeFilter === 'residential'
+        ? new Set(['residential_sale'])
+        : new Set([typeFilter]) // "rental", "land", "commercial_sale", "commercial_lease"
+      : null;
+
+    const filterTransactions = (txList: Transaction[]): Transaction[] => {
+      let result = txList;
+      // Team filter
+      if (teamAgentIds) {
+        result = result.filter(t =>
+          teamAgentIds.has(t.agentId) ||
+          t.splitSnapshot?.primaryTeamId === teamIdParam
+        );
+      }
+      // Type filter
+      if (typeFilterSet) {
+        result = result.filter(t => typeFilterSet.has(t.transactionType || ''));
+      }
+      return result;
     };
 
     // 3b. Fetch transactions for this year, previous year (seasonality), and optional comparison year
@@ -145,8 +163,8 @@ export async function GET(req: NextRequest) {
     const allPrevTransactions = snapResults[1].docs.map(d => d.data() as Transaction);
 
     // Apply team filter
-    const transactions = filterByTeam(allTransactions);
-    const prevTransactions = filterByTeam(allPrevTransactions);
+    const transactions = filterTransactions(allTransactions);
+    const prevTransactions = filterTransactions(allPrevTransactions);
 
     const allCompareRaw = compareYear
       ? compareYear === prevYear
@@ -155,7 +173,7 @@ export async function GET(req: NextRequest) {
         ? allTransactions
         : (snapResults[2]?.docs.map(d => d.data() as Transaction) ?? [])
       : [];
-    const compareTransactions = filterByTeam(allCompareRaw);
+    const compareTransactions = filterTransactions(allCompareRaw);
 
     // Available years from all transaction data
     const allYearsSnap = await adminDb.collection('transactions')
