@@ -38,6 +38,7 @@ const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 /** Exact CSV column headers in order */
 const CSV_HEADERS = [
   'Agent Name',
+  'Team',
   'Deal Type',
   'Status',
   'Type of Closing',
@@ -118,6 +119,10 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   'primary gci': 'agentDollar',
   'mortgage company': 'mortgageCompany',
   'title company': 'titleCompany',
+  'team': 'team',
+  'team name': 'team',
+  'agent team': 'team',
+  'agent type': 'team',
 };
 
 const REQUIRED_COLUMNS_NORMALIZED = ['agent name', 'address', 'status'];
@@ -205,6 +210,7 @@ function mapRowToApiPayload(row: ParsedRow, colMap: Record<string, string>): Rec
 function downloadTemplate() {
   const exampleRow = [
     'Jane Smith',
+    'CGL',
     'Buyer',
     'Closed',
     'Residential',
@@ -246,6 +252,7 @@ function downloadTemplate() {
 // ─────────────────────────────────────────────────────────────────────────────
 const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
   { header: 'Agent Name', hint: 'Must match agent profile name exactly (e.g. "Jane Smith")', required: true },
+  { header: 'Team', hint: 'Team name: CGL · SGL · Charles Ditch Team · Independent (assigns agent to team)' },
   { header: 'Deal Type', hint: 'Buyer · Listing · Lease · Referral (which side of the deal)' },
   { header: 'Status', hint: 'Active · Pending · Closed · Canceled · Expired', required: true },
   { header: 'Type of Closing', hint: 'Residential · Land · Commercial (property type)' },

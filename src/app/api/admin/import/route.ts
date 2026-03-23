@@ -128,6 +128,7 @@ function normalizeDealSource(v: string): string | null {
 
 export interface ImportRow {
   agentName: string;
+  team: string;
   closingType: string;
   status: string;
   dealType: string;
@@ -174,25 +175,52 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Load all agent profiles for name → id lookup ──────────────────────────
-    const profilesSnap = await adminDb.collection('agentProfiles').get();
-    const nameToAgent = new Map<string, { agentId: string; displayName: string }>();
+    const [profilesSnap, teamsSnap] = await Promise.all([
+      adminDb.collection('agentProfiles').get(),
+      adminDb.collection('teams').get(),
+    ]);
+
+    const nameToAgent = new Map<string, { agentId: string; displayName: string; docRef: FirebaseFirestore.DocumentReference }>();
 
     for (const doc of profilesSnap.docs) {
       const d = doc.data();
       const agentId = String(d.agentId || doc.id).trim();
       const displayName = String(d.displayName || d.firstName + ' ' + d.lastName || '').trim();
       if (agentId && displayName) {
-        nameToAgent.set(displayName.toLowerCase(), { agentId, displayName });
-        // Also index first+last separately for fuzzy matching
+        const entry = { agentId, displayName, docRef: doc.ref };
+        nameToAgent.set(displayName.toLowerCase(), entry);
         const firstName = String(d.firstName || '').trim().toLowerCase();
         const lastName = String(d.lastName || '').trim().toLowerCase();
         if (firstName && lastName) {
-          nameToAgent.set(`${firstName} ${lastName}`, { agentId, displayName });
-          nameToAgent.set(`${lastName}, ${firstName}`, { agentId, displayName });
-          nameToAgent.set(`${lastName} ${firstName}`, { agentId, displayName });
+          nameToAgent.set(`${firstName} ${lastName}`, entry);
+          nameToAgent.set(`${lastName}, ${firstName}`, entry);
+          nameToAgent.set(`${lastName} ${firstName}`, entry);
         }
       }
     }
+
+    // ── Load teams for name → teamId lookup ─────────────────────────────────
+    const teamNameToId = new Map<string, string>();
+    for (const doc of teamsSnap.docs) {
+      const d = doc.data();
+      const teamId = String(d.teamId || doc.id).trim();
+      const teamName = String(d.teamName || '').trim();
+      if (teamId && teamName) {
+        teamNameToId.set(teamName.toLowerCase(), teamId);
+        // Also index common abbreviations
+        const abbr = teamName.toLowerCase()
+          .replace(/\s+team$/i, '')  // "Charles Ditch Team" → "charles ditch"
+          .trim();
+        if (abbr !== teamName.toLowerCase()) {
+          teamNameToId.set(abbr, teamId);
+        }
+      }
+    }
+    // Hardcode common abbreviations
+    if (!teamNameToId.has('cgl')) teamNameToId.set('cgl', teamNameToId.get('cgl team') || teamNameToId.get('cgl') || '');
+    if (!teamNameToId.has('sgl')) teamNameToId.set('sgl', teamNameToId.get('sgl team') || teamNameToId.get('sgl') || '');
+    // Remove empty entries
+    for (const [k, v] of teamNameToId) { if (!v) teamNameToId.delete(k); }
 
     const now = new Date();
     const imported: string[] = [];
@@ -223,6 +251,12 @@ export async function POST(req: NextRequest) {
 
         let agent = nameToAgent.get(agentNameRaw.toLowerCase());
 
+        // ── Team resolution ──────────────────────────────────────────────────
+        const teamRaw = String(row.team ?? '').trim();
+        const resolvedTeamId = teamRaw
+          ? teamNameToId.get(teamRaw.toLowerCase()) || null
+          : null;
+
         // Auto-create agent profile if not found
         if (!agent) {
           const parts = agentNameRaw.split(/\s+/);
@@ -240,20 +274,19 @@ export async function POST(req: NextRequest) {
             email: null,
             phone: null,
             role: 'agent',
-            teamId: null,
+            agentType: resolvedTeamId ? 'team' : 'independent',
+            primaryTeamId: resolvedTeamId,
+            teamRole: resolvedTeamId ? 'member' : null,
             createdAt: now,
             updatedAt: now,
             source: 'bulk_import',
           };
 
-          // Write the profile immediately (outside the batch so it's
-          // available for subsequent rows with the same name)
           await profileRef.set(newProfile);
           autoCreatedAgents.push({ name: newDisplayName, agentId: newAgentId });
 
-          agent = { agentId: newAgentId, displayName: newDisplayName };
+          agent = { agentId: newAgentId, displayName: newDisplayName, docRef: profileRef };
 
-          // Add to lookup map so subsequent rows with the same name reuse this profile
           nameToAgent.set(newDisplayName.toLowerCase(), agent);
           const fn = firstName.toLowerCase();
           const ln = lastName.toLowerCase();
@@ -262,6 +295,14 @@ export async function POST(req: NextRequest) {
             nameToAgent.set(`${ln}, ${fn}`, agent);
             nameToAgent.set(`${ln} ${fn}`, agent);
           }
+        } else if (resolvedTeamId && agent.docRef) {
+          // Agent exists but team provided — update their profile if not already set
+          await agent.docRef.update({
+            primaryTeamId: resolvedTeamId,
+            agentType: 'team',
+            teamRole: 'member',
+            updatedAt: now,
+          });
         }
 
         // ── Field parsing ───────────────────────────────────────────────────
@@ -313,7 +354,7 @@ export async function POST(req: NextRequest) {
             : 0;
 
         const splitSnapshot = {
-          primaryTeamId: null,
+          primaryTeamId: resolvedTeamId,
           teamPlanId: null,
           memberPlanId: null,
           grossCommission,
@@ -333,7 +374,7 @@ export async function POST(req: NextRequest) {
           leaderboardAgentDisplayName: agent.displayName,
           progressionMemberAgentId: null,
           progressionLeaderAgentId: null,
-          progressionTeamId: null,
+          progressionTeamId: resolvedTeamId,
           progressionCompanyDollarCredit: companyRetained,
         };
 
