@@ -144,11 +144,17 @@ export type ComparisonData = {
   months: ComparisonMonth[];
 };
 
+export type TeamInfo = {
+  teamId: string;
+  teamName: string;
+};
+
 export type BrokerCommandMetrics = {
   overview: BrokerCommandOverview;
   prevYearStats?: PrevYearStats;
   availableYears?: number[];       // years with transaction data (for comparison dropdown)
   comparisonData?: ComparisonData | null;  // monthly data for the selected comparison year
+  teams?: TeamInfo[];              // available teams for team tabs
   // Legacy fields (kept for backward compatibility)
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;

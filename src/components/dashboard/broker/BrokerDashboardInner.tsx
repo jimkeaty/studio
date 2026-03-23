@@ -115,12 +115,13 @@ function KPICard({
 // ── Goals Editor with Smart Auto-Calculations + Editable Seasonality ────────
 
 function GoalsEditor({
-  months, year, prevYearStats, onSaved,
+  months, year, prevYearStats, onSaved, segment = 'TOTAL',
 }: {
   months: MonthlyData[];
   year: number;
   prevYearStats?: PrevYearStats;
   onSaved: () => void;
+  segment?: string;
 }) {
   const { user } = useUser();
   const [goals, setGoals] = useState<Record<number, { margin: string; volume: string; sales: string }>>({});
@@ -285,7 +286,7 @@ function GoalsEditor({
             body: JSON.stringify({
               year,
               month: m,
-              segment: 'TOTAL',
+              segment,
               grossMarginGoal: g.margin ? parseFloat(g.margin) : null,
               volumeGoal: g.volume ? parseFloat(g.volume) : null,
               salesCountGoal: g.sales ? parseInt(g.sales, 10) : null,
@@ -570,6 +571,7 @@ export function BrokerDashboardInner() {
   const { user } = useUser();
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [compareYear, setCompareYear] = useState<number | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null); // null = all teams
   const [data, setData] = useState<BrokerCommandMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -582,6 +584,7 @@ export function BrokerDashboardInner() {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(year) });
       if (compareYear) params.set('compareYear', String(compareYear));
+      if (selectedTeam) params.set('teamId', selectedTeam);
       const res = await fetch(
         `/api/broker/command-metrics?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -598,7 +601,7 @@ export function BrokerDashboardInner() {
     } finally {
       setLoading(false);
     }
-  }, [user, year, compareYear]);
+  }, [user, year, compareYear, selectedTeam]);
 
   useEffect(() => {
     fetchData();
@@ -640,6 +643,10 @@ export function BrokerDashboardInner() {
   const gradeSales = yearlySalesGoal
     ? Math.round((totals.closedCount / yearlySalesGoal) * 100) : null;
 
+  const teamName = selectedTeam
+    ? (data.teams ?? []).find(t => t.teamId === selectedTeam)?.teamName ?? selectedTeam
+    : 'All Teams';
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -647,7 +654,7 @@ export function BrokerDashboardInner() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Broker Command Center</h1>
           <p className="text-muted-foreground">
-            Aggregated brokerage performance — all teams, all transaction types.
+            {selectedTeam ? `${teamName} performance` : 'Aggregated brokerage performance'} — {year}
           </p>
         </div>
         <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
@@ -662,6 +669,29 @@ export function BrokerDashboardInner() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Team Tabs */}
+      {(data.teams ?? []).length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={selectedTeam === null ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSelectedTeam(null)}
+          >
+            All Teams
+          </Button>
+          {(data.teams ?? []).map(team => (
+            <Button
+              key={team.teamId}
+              variant={selectedTeam === team.teamId ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedTeam(team.teamId)}
+            >
+              {team.teamName}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {/* ── Consolidated KPI Section ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1107,7 +1137,7 @@ export function BrokerDashboardInner() {
       </Card>
 
       {/* ── Goals Editor ───────────────────────────────────────────────────── */}
-      <GoalsEditor months={months} year={year} prevYearStats={data.prevYearStats} onSaved={fetchData} />
+      <GoalsEditor months={months} year={year} prevYearStats={data.prevYearStats} onSaved={fetchData} segment={selectedTeam || 'TOTAL'} />
     </div>
   );
 }

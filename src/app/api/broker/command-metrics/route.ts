@@ -99,14 +99,41 @@ export async function GET(req: NextRequest) {
     const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
     const compareYearParam = searchParams.get('compareYear');
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
+    const teamIdParam = searchParams.get('teamId'); // null = all teams
 
-    // 3. Fetch transactions for this year, previous year (seasonality), and optional comparison year
+    // 3. Fetch teams list + agent profiles for team filtering
+    const [teamsSnap, agentProfilesSnap] = await Promise.all([
+      adminDb.collection('teams').where('status', '==', 'active').get(),
+      teamIdParam
+        ? adminDb.collection('agentProfiles').where('primaryTeamId', '==', teamIdParam).get()
+        : Promise.resolve(null),
+    ]);
+
+    const teams = teamsSnap.docs.map(d => ({
+      teamId: d.data().teamId as string,
+      teamName: d.data().teamName as string,
+    }));
+
+    // Build set of agentIds belonging to the selected team
+    const teamAgentIds: Set<string> | null = agentProfilesSnap
+      ? new Set(agentProfilesSnap.docs.map(d => d.data().agentId as string))
+      : null;
+
+    // Helper to filter transactions by team
+    const filterByTeam = (txList: Transaction[]): Transaction[] => {
+      if (!teamAgentIds) return txList; // no team filter
+      return txList.filter(t =>
+        teamAgentIds.has(t.agentId) ||
+        t.splitSnapshot?.primaryTeamId === teamIdParam
+      );
+    };
+
+    // 3b. Fetch transactions for this year, previous year (seasonality), and optional comparison year
     const prevYear = year - 1;
     const fetchPromises: Promise<FirebaseFirestore.QuerySnapshot>[] = [
       adminDb.collection('transactions').where('year', '==', year).get(),
       adminDb.collection('transactions').where('year', '==', prevYear).get(),
     ];
-    // Only fetch comparison year if it's different from prevYear
     if (compareYear && compareYear !== prevYear && compareYear !== year) {
       fetchPromises.push(
         adminDb.collection('transactions').where('year', '==', compareYear).get()
@@ -114,18 +141,23 @@ export async function GET(req: NextRequest) {
     }
 
     const snapResults = await Promise.all(fetchPromises);
-    const transactions = snapResults[0].docs.map(d => d.data() as Transaction);
-    const prevTransactions = snapResults[1].docs.map(d => d.data() as Transaction);
-    // Comparison year transactions: use dedicated fetch, or reuse prevYear if same
-    const compareTransactions = compareYear
+    const allTransactions = snapResults[0].docs.map(d => d.data() as Transaction);
+    const allPrevTransactions = snapResults[1].docs.map(d => d.data() as Transaction);
+
+    // Apply team filter
+    const transactions = filterByTeam(allTransactions);
+    const prevTransactions = filterByTeam(allPrevTransactions);
+
+    const allCompareRaw = compareYear
       ? compareYear === prevYear
-        ? prevTransactions
+        ? allPrevTransactions
         : compareYear === year
-        ? transactions
+        ? allTransactions
         : (snapResults[2]?.docs.map(d => d.data() as Transaction) ?? [])
       : [];
+    const compareTransactions = filterByTeam(allCompareRaw);
 
-    // Also fetch the list of all years that have transaction data
+    // Available years from all transaction data
     const allYearsSnap = await adminDb.collection('transactions')
       .where('status', '==', 'closed')
       .select('year')
@@ -134,11 +166,12 @@ export async function GET(req: NextRequest) {
       .filter(y => y !== year)
       .sort((a, b) => b - a);
 
-    // 4. Fetch goals for this year
+    // 4. Fetch goals for this year (segment = teamId or 'TOTAL')
+    const goalSegment = teamIdParam || 'TOTAL';
     const goalsSnap = await adminDb
       .collection('brokerCommandGoals')
       .where('year', '==', year)
-      .where('segment', '==', 'TOTAL')
+      .where('segment', '==', goalSegment)
       .get();
     const goalsMap = new Map<number, { grossMarginGoal: number | null; volumeGoal: number | null; salesCountGoal: number | null }>();
     goalsSnap.docs.forEach(d => {
@@ -347,6 +380,7 @@ export async function GET(req: NextRequest) {
       prevYearStats,
       availableYears,
       comparisonData,
+      teams,
     };
 
     return NextResponse.json(result);
