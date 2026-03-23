@@ -618,11 +618,24 @@ export function BrokerDashboardInner() {
 
   const { totals, months, categoryBreakdown } = data.overview;
 
+  // ── Computed averages ─────────────────────────────────────────────────
+  const avgSalePrice = totals.closedCount > 0
+    ? Math.round(totals.closedVolume / totals.closedCount) : 0;
+  const avgCommissionPct = totals.closedVolume > 0
+    ? Math.round((totals.totalGCI / totals.closedVolume) * 10000) / 100 : 0;
+  const avgMarginPerDeal = totals.closedCount > 0
+    ? Math.round(totals.grossMargin / totals.closedCount) : 0;
+
   // Yearly goal totals (sum of monthly goals)
   const yearlyGrossMarginGoal = months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
-  const gradeVsGoal = yearlyGrossMarginGoal
-    ? Math.round((totals.grossMargin / yearlyGrossMarginGoal) * 100)
-    : null;
+  const yearlyVolumeGoal = months.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) || null;
+  const yearlySalesGoal = months.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) || null;
+  const gradeMargin = yearlyGrossMarginGoal
+    ? Math.round((totals.grossMargin / yearlyGrossMarginGoal) * 100) : null;
+  const gradeVolume = yearlyVolumeGoal
+    ? Math.round((totals.closedVolume / yearlyVolumeGoal) * 100) : null;
+  const gradeSales = yearlySalesGoal
+    ? Math.round((totals.closedCount / yearlySalesGoal) * 100) : null;
 
   return (
     <div className="space-y-8">
@@ -647,33 +660,124 @@ export function BrokerDashboardInner() {
         </Select>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard
-          title="Total Commission Income"
-          value={formatCurrency(totals.totalGCI)}
-          subtitle={`From ${formatNumber(totals.closedCount)} closed transactions + ${formatCurrency(totals.transactionFees)} in fees`}
-          icon={DollarSign}
-        />
-        <KPICard
-          title="Actual Gross Margin"
-          value={formatCurrency(totals.grossMargin)}
-          subtitle="Company retained after paying agents"
-          icon={TrendingUp}
-          highlight
-        />
-        <KPICard
-          title="Gross Margin %"
-          value={totals.grossMarginPct > 0 ? `${totals.grossMarginPct.toFixed(1)}%` : '—'}
-          subtitle={gradeVsGoal ? `${gradeVsGoal}% of yearly goal` : 'Set monthly goals below'}
-          icon={Percent}
-        />
-        <KPICard
-          title="Total Pending Volume"
-          value={formatCurrency(totals.pendingVolume)}
-          subtitle={`${formatNumber(totals.pendingCount)} deals in pipeline`}
-          icon={Clock}
-        />
+      {/* ── Consolidated KPI Section ─────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Revenue & Margin Block */}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <DollarSign className="h-4 w-4" /> Revenue & Gross Margin
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Total Commission (GCI)</span>
+              <span className="text-xl font-bold">{formatCurrency(totals.totalGCI)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Gross Margin (Retained)</span>
+              <span className="text-xl font-bold text-primary">{formatCurrency(totals.grossMargin)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Gross Margin %</span>
+              <span className="text-lg font-semibold">{totals.grossMarginPct > 0 ? `${totals.grossMarginPct.toFixed(1)}%` : '—'}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Transaction Fees</span>
+              <span className="font-medium">{formatCurrency(totals.transactionFees)}</span>
+            </div>
+            {gradeMargin && (
+              <div className="border-t pt-2 flex justify-between items-center">
+                <span className="text-muted-foreground text-xs">Grade vs Goal</span>
+                <span className={`text-sm font-bold ${gradeMargin >= 100 ? 'text-green-600' : gradeMargin >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
+                  {gradeMargin}%
+                  <span className="text-muted-foreground font-normal text-xs ml-1">
+                    ({formatCurrency(totals.grossMargin, true)} / {formatCurrency(yearlyGrossMarginGoal!, true)})
+                  </span>
+                </span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sales & Volume Block */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" /> Sales & Volume
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Closed Sales</span>
+              <span className="text-xl font-bold">{formatNumber(totals.closedCount)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Closed Volume</span>
+              <span className="text-xl font-bold">{formatCurrency(totals.closedVolume, true)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Pending</span>
+              <span className="font-medium">
+                {formatNumber(totals.pendingCount)} deals · {formatCurrency(totals.pendingVolume, true)}
+              </span>
+            </div>
+            {(gradeVolume || gradeSales) && (
+              <div className="border-t pt-2 space-y-1">
+                {gradeVolume && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-xs">Volume Grade</span>
+                    <span className={`text-sm font-bold ${gradeVolume >= 100 ? 'text-green-600' : gradeVolume >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {gradeVolume}%
+                    </span>
+                  </div>
+                )}
+                {gradeSales && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-xs">Sales Grade</span>
+                    <span className={`text-sm font-bold ${gradeSales >= 100 ? 'text-green-600' : gradeSales >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {gradeSales}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Averages Block */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Target className="h-4 w-4" /> Per-Deal Averages
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Avg Sale Price</span>
+              <span className="text-xl font-bold">{formatCurrency(avgSalePrice)}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Avg Commission %</span>
+              <span className="text-lg font-semibold">{avgCommissionPct > 0 ? `${avgCommissionPct.toFixed(2)}%` : '—'}</span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-sm">Avg Gross Margin / Deal</span>
+              <span className="text-lg font-semibold">{formatCurrency(avgMarginPerDeal)}</span>
+            </div>
+            {data.prevYearStats && totals.closedCount > 0 && (
+              <div className="border-t pt-2 space-y-1 text-xs">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>vs {data.prevYearStats.year}:</span>
+                  <span>
+                    {formatCurrency(data.prevYearStats.avgSalePrice)} avg price ·{' '}
+                    {data.prevYearStats.avgCommissionPct.toFixed(2)}% comm
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── CHART 1: Gross Margin vs Goal + YoY Comparison ─────────────────── */}
