@@ -101,8 +101,35 @@ export type PeriodMetrics = {
   };
 };
 
+// ── Previous Year Seasonality ───────────────────────────────────────────────
+
+export type SeasonalityMonth = {
+  month: number;
+  label: string;
+  volumePct: number;     // % of yearly volume this month represented
+  salesPct: number;      // % of yearly sales this month represented
+  closedVolume: number;
+  closedCount: number;
+  totalGCI: number;
+  grossMargin: number;
+};
+
+export type PrevYearStats = {
+  year: number;
+  totalVolume: number;
+  totalSales: number;
+  totalGCI: number;
+  totalGrossMargin: number;
+  avgSalePrice: number;
+  avgGCI: number;
+  avgGrossMargin: number;
+  avgMarginPct: number;
+  seasonality: SeasonalityMonth[];
+};
+
 export type BrokerCommandMetrics = {
   overview: BrokerCommandOverview;
+  prevYearStats?: PrevYearStats;
   // Legacy fields (kept for backward compatibility)
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;

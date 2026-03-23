@@ -98,9 +98,14 @@ export async function GET(req: NextRequest) {
     const yearParam = searchParams.get('year');
     const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
-    // 3. Fetch all transactions for this year
-    const txSnap = await adminDb.collection('transactions').where('year', '==', year).get();
+    // 3. Fetch transactions for this year AND previous year (for seasonality)
+    const prevYear = year - 1;
+    const [txSnap, prevTxSnap] = await Promise.all([
+      adminDb.collection('transactions').where('year', '==', year).get(),
+      adminDb.collection('transactions').where('year', '==', prevYear).get(),
+    ]);
     const transactions = txSnap.docs.map(d => d.data() as Transaction);
+    const prevTransactions = prevTxSnap.docs.map(d => d.data() as Transaction);
 
     // 4. Fetch goals for this year
     const goalsSnap = await adminDb
@@ -215,7 +220,62 @@ export async function GET(req: NextRequest) {
       ? Math.round((totals.grossMargin / totals.totalGCI) * 10000) / 100
       : 0;
 
-    // 8. Build response
+    // 8. Build previous year seasonality + averages
+    const prevMonthly = Array.from({ length: 12 }, () => ({
+      closedVolume: 0, closedCount: 0, totalGCI: 0, grossMargin: 0,
+    }));
+    let prevTotalVolume = 0;
+    let prevTotalCount = 0;
+    let prevTotalGCI = 0;
+    let prevTotalMargin = 0;
+
+    for (const t of prevTransactions) {
+      if (t.status !== 'closed') continue;
+      const closedDate = parseDate(t.closedDate);
+      if (!closedDate || closedDate.getFullYear() !== prevYear) continue;
+
+      const m = closedDate.getMonth();
+      const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
+      const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
+      const vol = t.dealValue ?? 0;
+
+      prevMonthly[m].closedVolume += vol;
+      prevMonthly[m].closedCount += 1;
+      prevMonthly[m].totalGCI += gci;
+      prevMonthly[m].grossMargin += margin;
+
+      prevTotalVolume += vol;
+      prevTotalCount += 1;
+      prevTotalGCI += gci;
+      prevTotalMargin += margin;
+    }
+
+    // Seasonality: what % of the year each month represented
+    const seasonality = prevMonthly.map((pm, i) => ({
+      month: i + 1,
+      label: format(new Date(2000, i), 'MMM'),
+      volumePct: prevTotalVolume > 0 ? Math.round((pm.closedVolume / prevTotalVolume) * 10000) / 100 : 8.33,
+      salesPct: prevTotalCount > 0 ? Math.round((pm.closedCount / prevTotalCount) * 10000) / 100 : 8.33,
+      closedVolume: pm.closedVolume,
+      closedCount: pm.closedCount,
+      totalGCI: pm.totalGCI,
+      grossMargin: pm.grossMargin,
+    }));
+
+    const prevYearStats = {
+      year: prevYear,
+      totalVolume: prevTotalVolume,
+      totalSales: prevTotalCount,
+      totalGCI: prevTotalGCI,
+      totalGrossMargin: prevTotalMargin,
+      avgSalePrice: prevTotalCount > 0 ? Math.round(prevTotalVolume / prevTotalCount) : 0,
+      avgGCI: prevTotalCount > 0 ? Math.round(prevTotalGCI / prevTotalCount) : 0,
+      avgGrossMargin: prevTotalCount > 0 ? Math.round(prevTotalMargin / prevTotalCount) : 0,
+      avgMarginPct: prevTotalGCI > 0 ? Math.round((prevTotalMargin / prevTotalGCI) * 10000) / 100 : 0,
+      seasonality,
+    };
+
+    // 9. Build response
     const overview: BrokerCommandOverview = {
       year,
       totals,
@@ -223,7 +283,7 @@ export async function GET(req: NextRequest) {
       categoryBreakdown,
     };
 
-    const result: BrokerCommandMetrics = { overview };
+    const result: BrokerCommandMetrics = { overview, prevYearStats };
 
     return NextResponse.json(result);
   } catch (error: any) {
