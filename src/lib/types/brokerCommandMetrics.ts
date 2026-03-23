@@ -124,6 +124,7 @@ export type PrevYearStats = {
   avgGCI: number;
   avgGrossMargin: number;
   avgMarginPct: number;
+  avgCommissionPct: number;  // avg GCI as % of sale price (e.g. 2.7%)
   seasonality: SeasonalityMonth[];
 };
 

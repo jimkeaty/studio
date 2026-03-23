@@ -108,7 +108,7 @@ function KPICard({
   );
 }
 
-// ── Goals Editor with Yearly Goal + Seasonality Auto-Distribution ───────────
+// ── Goals Editor with Smart Auto-Calculations + Editable Seasonality ────────
 
 function GoalsEditor({
   months, year, prevYearStats, onSaved,
@@ -123,10 +123,17 @@ function GoalsEditor({
   const [yearlyVolume, setYearlyVolume] = useState('');
   const [yearlySales, setYearlySales] = useState('');
   const [yearlyMargin, setYearlyMargin] = useState('');
+  // Editable seasonality weights (% of year for each month)
+  const [seasonWeights, setSeasonWeights] = useState<Record<number, { salesPct: string; volumePct: string }>>({});
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
 
-  // Initialize from current goals
+  const hasPrevData = prevYearStats && prevYearStats.totalSales > 0;
+  const avgSalePrice = prevYearStats?.avgSalePrice ?? 0;
+  const avgCommPct = prevYearStats?.avgCommissionPct ?? 0;
+  const avgMarginPct = prevYearStats?.avgMarginPct ?? 0;
+
+  // Initialize from current goals + prev year seasonality
   useEffect(() => {
     const map: typeof goals = {};
     let totalMargin = 0;
@@ -146,34 +153,116 @@ function GoalsEditor({
     if (totalVolume > 0) setYearlyVolume(String(Math.round(totalVolume)));
     if (totalSales > 0) setYearlySales(String(Math.round(totalSales)));
     if (totalMargin > 0) setYearlyMargin(String(Math.round(totalMargin)));
-  }, [months]);
+
+    // Initialize seasonality weights
+    const sw: typeof seasonWeights = {};
+    for (let m = 1; m <= 12; m++) {
+      const s = prevYearStats?.seasonality?.[m - 1];
+      sw[m] = {
+        salesPct: String(s?.salesPct ?? 8.33),
+        volumePct: String(s?.volumePct ?? 8.33),
+      };
+    }
+    setSeasonWeights(sw);
+  }, [months, prevYearStats]);
 
   const update = (month: number, field: 'margin' | 'volume' | 'sales', val: string) => {
     setGoals(prev => ({ ...prev, [month]: { ...prev[month], [field]: val } }));
   };
 
-  // Auto-distribute yearly goal across months using previous year seasonality
+  const updateSeasonWeight = (month: number, field: 'salesPct' | 'volumePct', val: string) => {
+    setSeasonWeights(prev => ({ ...prev, [month]: { ...prev[month], [field]: val } }));
+  };
+
+  // ── Auto-calculate derived fields when volume changes ───────────────────
+  // Volume → auto-calc sales (volume / avgSalePrice) and margin
+  const handleVolumeChange = (val: string) => {
+    setYearlyVolume(val);
+    const vol = parseFloat(val) || 0;
+    if (vol > 0 && avgSalePrice > 0) {
+      const calcSales = Math.round(vol / avgSalePrice);
+      setYearlySales(String(calcSales));
+    }
+    if (vol > 0 && avgCommPct > 0 && avgMarginPct > 0) {
+      // volume × avgCommission% = total GCI → × avgMarginPct% = gross margin
+      const totalGCI = vol * (avgCommPct / 100);
+      const calcMargin = Math.round(totalGCI * (avgMarginPct / 100));
+      setYearlyMargin(String(calcMargin));
+    }
+  };
+
+  // Sales → auto-calc volume (sales × avgSalePrice) and margin
+  const handleSalesChange = (val: string) => {
+    setYearlySales(val);
+    const sales = parseInt(val, 10) || 0;
+    if (sales > 0 && avgSalePrice > 0) {
+      const calcVol = Math.round(sales * avgSalePrice);
+      setYearlyVolume(String(calcVol));
+      if (avgCommPct > 0 && avgMarginPct > 0) {
+        const totalGCI = calcVol * (avgCommPct / 100);
+        const calcMargin = Math.round(totalGCI * (avgMarginPct / 100));
+        setYearlyMargin(String(calcMargin));
+      }
+    }
+  };
+
+  // Margin → back-calculate volume and sales from margin
+  const handleMarginChange = (val: string) => {
+    setYearlyMargin(val);
+    const margin = parseFloat(val) || 0;
+    if (margin > 0 && avgMarginPct > 0 && avgCommPct > 0) {
+      // margin = volume × commPct × marginPct
+      // volume = margin / (commPct × marginPct)
+      const calcVol = Math.round(margin / ((avgCommPct / 100) * (avgMarginPct / 100)));
+      setYearlyVolume(String(calcVol));
+      if (avgSalePrice > 0) {
+        setYearlySales(String(Math.round(calcVol / avgSalePrice)));
+      }
+    }
+  };
+
+  // Auto-distribute yearly goal across months using seasonality weights
   const distribute = () => {
     const vol = parseFloat(yearlyVolume) || 0;
     const sales = parseInt(yearlySales, 10) || 0;
     const margin = parseFloat(yearlyMargin) || 0;
-    const seasonality = prevYearStats?.seasonality;
 
     const newGoals: typeof goals = {};
     for (let m = 1; m <= 12; m++) {
-      // Use previous year seasonality % if available, otherwise even split (8.33%)
-      const volPct = seasonality?.[m - 1]?.volumePct ?? 8.33;
-      const salesPct = seasonality?.[m - 1]?.salesPct ?? 8.33;
-      // Use sales seasonality for margin distribution (correlated with deal count)
-      const marginPct = salesPct;
+      const sw = seasonWeights[m];
+      const volPct = parseFloat(sw?.volumePct) || 8.33;
+      const salesPct = parseFloat(sw?.salesPct) || 8.33;
 
       newGoals[m] = {
-        margin: margin > 0 ? String(Math.round(margin * (marginPct / 100))) : '',
         volume: vol > 0 ? String(Math.round(vol * (volPct / 100))) : '',
         sales: sales > 0 ? String(Math.round(sales * (salesPct / 100))) : '',
+        margin: margin > 0 ? String(Math.round(margin * (salesPct / 100))) : '',
       };
     }
     setGoals(newGoals);
+  };
+
+  // Reset seasonality to even split
+  const resetSeasonality = () => {
+    const sw: typeof seasonWeights = {};
+    for (let m = 1; m <= 12; m++) {
+      sw[m] = { salesPct: '8.33', volumePct: '8.33' };
+    }
+    setSeasonWeights(sw);
+  };
+
+  // Reset seasonality to previous year
+  const resetSeasonalityToPrev = () => {
+    if (!prevYearStats) return;
+    const sw: typeof seasonWeights = {};
+    for (let m = 1; m <= 12; m++) {
+      const s = prevYearStats.seasonality[m - 1];
+      sw[m] = {
+        salesPct: String(s?.salesPct ?? 8.33),
+        volumePct: String(s?.volumePct ?? 8.33),
+      };
+    }
+    setSeasonWeights(sw);
   };
 
   const save = async () => {
@@ -209,7 +298,9 @@ function GoalsEditor({
     }
   };
 
-  const hasPrevData = prevYearStats && prevYearStats.totalSales > 0;
+  // Seasonality totals for validation
+  const totalSalesPct = Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.salesPct) || 0), 0);
+  const totalVolPct = Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.volumePct) || 0), 0);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -224,7 +315,7 @@ function GoalsEditor({
             </Button>
           </CollapsibleTrigger>
           <CardDescription>
-            Enter yearly goals and auto-distribute using {hasPrevData ? `${prevYearStats.year}` : 'previous year'} seasonality, or manually set each month.
+            Enter a yearly goal — sales count, volume, and margin auto-calculate from {hasPrevData ? `${prevYearStats.year}` : 'previous year'} averages.
           </CardDescription>
         </CardHeader>
         <CollapsibleContent>
@@ -236,7 +327,7 @@ function GoalsEditor({
                   {prevYearStats.year} Reference Data
                   <Badge variant="secondary" className="text-xs">Previous Year</Badge>
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Total Volume</span>
                     <p className="font-semibold">{formatCurrency(prevYearStats.totalVolume, true)}</p>
@@ -250,6 +341,10 @@ function GoalsEditor({
                     <p className="font-semibold">{formatCurrency(prevYearStats.avgSalePrice)}</p>
                   </div>
                   <div>
+                    <span className="text-muted-foreground">Avg Commission %</span>
+                    <p className="font-semibold">{avgCommPct.toFixed(2)}%</p>
+                  </div>
+                  <div>
                     <span className="text-muted-foreground">Avg Gross Margin</span>
                     <p className="font-semibold">{formatCurrency(prevYearStats.avgGrossMargin)}/deal ({prevYearStats.avgMarginPct}%)</p>
                   </div>
@@ -257,9 +352,16 @@ function GoalsEditor({
               </div>
             )}
 
-            {/* Yearly Goal Inputs */}
+            {/* Yearly Goal Inputs — Auto-Calculate */}
             <div className="border rounded-lg p-4 space-y-4">
-              <h4 className="font-semibold text-sm">Yearly Goals for {year}</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-sm">Yearly Goals for {year}</h4>
+                {hasPrevData && (
+                  <span className="text-xs text-muted-foreground">
+                    Enter any field — others auto-calculate using {prevYearStats.year} averages
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="yearly-volume" className="text-xs">Total Volume Goal ($)</Label>
@@ -267,43 +369,117 @@ function GoalsEditor({
                     id="yearly-volume"
                     type="number"
                     value={yearlyVolume}
-                    onChange={e => setYearlyVolume(e.target.value)}
+                    onChange={e => handleVolumeChange(e.target.value)}
                     placeholder={hasPrevData ? `Last year: ${formatCurrency(prevYearStats.totalVolume, true)}` : 'e.g. 50000000'}
                   />
+                  {hasPrevData && yearlyVolume && (
+                    <p className="text-xs text-muted-foreground">
+                      {((parseFloat(yearlyVolume) / prevYearStats.totalVolume) * 100).toFixed(0)}% of last year
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="yearly-sales" className="text-xs">Total Sales Goal (#)</Label>
+                  <Label htmlFor="yearly-sales" className="text-xs">
+                    Total Sales Goal (#)
+                    {avgSalePrice > 0 && <span className="text-muted-foreground ml-1">@ {formatCurrency(avgSalePrice)} avg</span>}
+                  </Label>
                   <Input
                     id="yearly-sales"
                     type="number"
                     value={yearlySales}
-                    onChange={e => setYearlySales(e.target.value)}
+                    onChange={e => handleSalesChange(e.target.value)}
                     placeholder={hasPrevData ? `Last year: ${prevYearStats.totalSales}` : 'e.g. 200'}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="yearly-margin" className="text-xs">Total Gross Margin Goal ($)</Label>
+                  <Label htmlFor="yearly-margin" className="text-xs">
+                    Total Gross Margin Goal ($)
+                    {avgMarginPct > 0 && <span className="text-muted-foreground ml-1">@ {avgMarginPct}% margin</span>}
+                  </Label>
                   <Input
                     id="yearly-margin"
                     type="number"
                     value={yearlyMargin}
-                    onChange={e => setYearlyMargin(e.target.value)}
+                    onChange={e => handleMarginChange(e.target.value)}
                     placeholder={hasPrevData ? `Last year: ${formatCurrency(prevYearStats.totalGrossMargin, true)}` : 'e.g. 500000'}
                   />
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={distribute} disabled={!yearlyVolume && !yearlySales && !yearlyMargin}>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="default" onClick={distribute} disabled={!yearlyVolume && !yearlySales && !yearlyMargin}>
                   <Target className="mr-2 h-4 w-4" />
-                  {hasPrevData ? `Auto-Distribute Using ${prevYearStats.year} Seasonality` : 'Distribute Evenly Across Months'}
+                  Distribute Across Months
                 </Button>
-                {hasPrevData && (
-                  <span className="text-xs text-muted-foreground">
-                    Uses each month&apos;s % of last year&apos;s total to weight goals
-                  </span>
-                )}
               </div>
             </div>
+
+            {/* Editable Seasonality Weights */}
+            <Collapsible>
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="p-0 h-auto hover:bg-transparent">
+                      <h4 className="font-semibold text-sm flex items-center gap-1">
+                        Seasonality Weights
+                        <ChevronDown className="h-4 w-4" />
+                      </h4>
+                    </Button>
+                  </CollapsibleTrigger>
+                  <div className="flex gap-2">
+                    {hasPrevData && (
+                      <Button variant="outline" size="sm" onClick={resetSeasonalityToPrev}>
+                        Use {prevYearStats.year} Data
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={resetSeasonality}>
+                      Even Split
+                    </Button>
+                  </div>
+                </div>
+                <CollapsibleContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-3">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
+                      const sw = seasonWeights[m] || { salesPct: '8.33', volumePct: '8.33' };
+                      const label = months.find(md => md.month === m)?.label || `M${m}`;
+                      return (
+                        <div key={m} className="border rounded p-2 space-y-1">
+                          <span className="font-medium text-xs">{label}</span>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={sw.salesPct}
+                              onChange={e => updateSeasonWeight(m, 'salesPct', e.target.value)}
+                              className="h-7 text-xs w-16"
+                            />
+                            <span className="text-xs text-muted-foreground">% sales</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={sw.volumePct}
+                              onChange={e => updateSeasonWeight(m, 'volumePct', e.target.value)}
+                              className="h-7 text-xs w-16"
+                            />
+                            <span className="text-xs text-muted-foreground">% vol</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-4 mt-2 text-xs">
+                    <span className={totalSalesPct < 99 || totalSalesPct > 101 ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+                      Sales total: {totalSalesPct.toFixed(1)}%
+                    </span>
+                    <span className={totalVolPct < 99 || totalVolPct > 101 ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+                      Volume total: {totalVolPct.toFixed(1)}%
+                    </span>
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
 
             {/* Monthly Breakdown Table */}
             <div className="overflow-x-auto">
@@ -311,7 +487,6 @@ function GoalsEditor({
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 pr-2 font-medium">Month</th>
-                    {hasPrevData && <th className="text-left py-2 px-2 font-medium text-muted-foreground">Seasonality %</th>}
                     <th className="text-left py-2 px-2 font-medium">Volume Goal ($)</th>
                     <th className="text-left py-2 px-2 font-medium">Sales Goal (#)</th>
                     <th className="text-left py-2 px-2 font-medium">Margin Goal ($)</th>
@@ -321,15 +496,9 @@ function GoalsEditor({
                   {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
                     const g = goals[m] || { margin: '', volume: '', sales: '' };
                     const label = months.find(md => md.month === m)?.label || `M${m}`;
-                    const season = prevYearStats?.seasonality?.[m - 1];
                     return (
                       <tr key={m} className="border-b last:border-0">
                         <td className="py-2 pr-2 font-medium">{label}</td>
-                        {hasPrevData && (
-                          <td className="py-2 px-2 text-muted-foreground">
-                            {season?.salesPct.toFixed(1)}% sales / {season?.volumePct.toFixed(1)}% vol
-                          </td>
-                        )}
                         <td className="py-2 px-2">
                           <Input
                             type="number"
@@ -364,7 +533,6 @@ function GoalsEditor({
                 <tfoot>
                   <tr className="border-t-2 font-semibold">
                     <td className="py-2 pr-2">Total</td>
-                    {hasPrevData && <td className="py-2 px-2">100%</td>}
                     <td className="py-2 px-2">
                       {formatCurrency(Object.values(goals).reduce((s, g) => s + (parseFloat(g.volume) || 0), 0), true)}
                     </td>

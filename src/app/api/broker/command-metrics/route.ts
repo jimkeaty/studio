@@ -272,6 +272,7 @@ export async function GET(req: NextRequest) {
       avgGCI: prevTotalCount > 0 ? Math.round(prevTotalGCI / prevTotalCount) : 0,
       avgGrossMargin: prevTotalCount > 0 ? Math.round(prevTotalMargin / prevTotalCount) : 0,
       avgMarginPct: prevTotalGCI > 0 ? Math.round((prevTotalMargin / prevTotalGCI) * 10000) / 100 : 0,
+      avgCommissionPct: prevTotalVolume > 0 ? Math.round((prevTotalGCI / prevTotalVolume) * 100000) / 1000 : 0,
       seasonality,
     };
 
