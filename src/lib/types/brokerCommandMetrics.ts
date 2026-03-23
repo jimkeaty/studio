@@ -128,9 +128,27 @@ export type PrevYearStats = {
   seasonality: SeasonalityMonth[];
 };
 
+// ── Comparison Year Data ────────────────────────────────────────────────────
+
+export type ComparisonMonth = {
+  month: number;
+  label: string;
+  grossMargin: number;
+  closedVolume: number;
+  closedCount: number;
+  totalGCI: number;
+};
+
+export type ComparisonData = {
+  year: number;
+  months: ComparisonMonth[];
+};
+
 export type BrokerCommandMetrics = {
   overview: BrokerCommandOverview;
   prevYearStats?: PrevYearStats;
+  availableYears?: number[];       // years with transaction data (for comparison dropdown)
+  comparisonData?: ComparisonData | null;  // monthly data for the selected comparison year
   // Legacy fields (kept for backward compatibility)
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;

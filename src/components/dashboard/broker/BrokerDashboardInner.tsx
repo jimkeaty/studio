@@ -54,6 +54,7 @@ const formatNumber = (num: number | null | undefined) =>
 const marginChartConfig: ChartConfig = {
   grossMargin: { label: 'Gross Margin', color: 'hsl(var(--chart-1))' },
   grossMarginGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
+  compareMargin: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
 };
 
 const volumeChartConfig: ChartConfig = {
@@ -565,6 +566,7 @@ function GoalsEditor({
 export function BrokerDashboardInner() {
   const { user } = useUser();
   const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [compareYear, setCompareYear] = useState<number | null>(null);
   const [data, setData] = useState<BrokerCommandMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -575,8 +577,10 @@ export function BrokerDashboardInner() {
     setError(null);
     try {
       const token = await user.getIdToken(true);
+      const params = new URLSearchParams({ year: String(year) });
+      if (compareYear) params.set('compareYear', String(compareYear));
       const res = await fetch(
-        `/api/broker/command-metrics?year=${year}`,
+        `/api/broker/command-metrics?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) {
@@ -591,7 +595,7 @@ export function BrokerDashboardInner() {
     } finally {
       setLoading(false);
     }
-  }, [user, year]);
+  }, [user, year, compareYear]);
 
   useEffect(() => {
     fetchData();
@@ -672,32 +676,100 @@ export function BrokerDashboardInner() {
         />
       </div>
 
-      {/* ── CHART 1: Gross Margin vs Goal ──────────────────────────────────── */}
+      {/* ── CHART 1: Gross Margin vs Goal + YoY Comparison ─────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Gross Margin vs Goal</CardTitle>
-          <CardDescription>
-            Company retained revenue after agent payouts — {year}
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle>Monthly Gross Margin vs Goal</CardTitle>
+              <CardDescription>
+                Company retained revenue after agent payouts — {year}
+                {compareYear ? ` compared to ${compareYear}` : ''}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
+              <Select
+                value={compareYear ? String(compareYear) : 'none'}
+                onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {(data.availableYears ?? []).map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={marginChartConfig} className="h-[350px] w-full">
-            <BarChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart
+              data={months.map((m, i) => ({
+                ...m,
+                compareMargin: data.comparisonData?.months?.[i]?.grossMargin ?? null,
+              }))}
+              margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
+            >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => formatCurrency(val, true)} />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    formatter={(value, name) => [formatCurrency(Number(value)), name === 'grossMargin' ? 'Gross Margin' : 'Goal']}
+                    formatter={(value, name) => {
+                      const labels: Record<string, string> = {
+                        grossMargin: `${year} Gross Margin`,
+                        grossMarginGoal: `${year} Goal`,
+                        compareMargin: `${compareYear ?? ''} Gross Margin`,
+                      };
+                      return [formatCurrency(Number(value)), labels[name as string] ?? name];
+                    }}
                   />
                 }
               />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="grossMargin" fill="var(--color-grossMargin)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.5} />
+              <Bar dataKey="grossMargin" fill="var(--color-grossMargin)" radius={[4, 4, 0, 0]} name={`${year}`} />
+              {compareYear && (
+                <Bar dataKey="compareMargin" fill="var(--color-compareMargin)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />
+              )}
+              <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
+          {/* YoY Summary when comparing */}
+          {compareYear && data.comparisonData && (
+            <div className="mt-4 grid grid-cols-3 gap-4 text-sm border-t pt-4">
+              {(() => {
+                const compTotal = data.comparisonData.months.reduce((s, m) => s + m.grossMargin, 0);
+                const diff = totals.grossMargin - compTotal;
+                const pctChange = compTotal > 0 ? ((diff / compTotal) * 100) : 0;
+                const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
+                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
+                return (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Margin Change</span>
+                      <p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">{compareYear} Total Volume</span>
+                      <p className="font-semibold">{formatCurrency(compVolume, true)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">{compareYear} Total Sales</span>
+                      <p className="font-semibold">{formatNumber(compSales)}</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </CardContent>
       </Card>
 

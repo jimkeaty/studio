@@ -93,19 +93,46 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // 2. Parse params — only year is required now
+    // 2. Parse params
     const { searchParams } = new URL(req.url);
     const yearParam = searchParams.get('year');
     const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
+    const compareYearParam = searchParams.get('compareYear');
+    const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
 
-    // 3. Fetch transactions for this year AND previous year (for seasonality)
+    // 3. Fetch transactions for this year, previous year (seasonality), and optional comparison year
     const prevYear = year - 1;
-    const [txSnap, prevTxSnap] = await Promise.all([
+    const fetchPromises: Promise<FirebaseFirestore.QuerySnapshot>[] = [
       adminDb.collection('transactions').where('year', '==', year).get(),
       adminDb.collection('transactions').where('year', '==', prevYear).get(),
-    ]);
-    const transactions = txSnap.docs.map(d => d.data() as Transaction);
-    const prevTransactions = prevTxSnap.docs.map(d => d.data() as Transaction);
+    ];
+    // Only fetch comparison year if it's different from prevYear
+    if (compareYear && compareYear !== prevYear && compareYear !== year) {
+      fetchPromises.push(
+        adminDb.collection('transactions').where('year', '==', compareYear).get()
+      );
+    }
+
+    const snapResults = await Promise.all(fetchPromises);
+    const transactions = snapResults[0].docs.map(d => d.data() as Transaction);
+    const prevTransactions = snapResults[1].docs.map(d => d.data() as Transaction);
+    // Comparison year transactions: use dedicated fetch, or reuse prevYear if same
+    const compareTransactions = compareYear
+      ? compareYear === prevYear
+        ? prevTransactions
+        : compareYear === year
+        ? transactions
+        : (snapResults[2]?.docs.map(d => d.data() as Transaction) ?? [])
+      : [];
+
+    // Also fetch the list of all years that have transaction data
+    const allYearsSnap = await adminDb.collection('transactions')
+      .where('status', '==', 'closed')
+      .select('year')
+      .get();
+    const availableYears = [...new Set(allYearsSnap.docs.map(d => d.data().year as number))]
+      .filter(y => y !== year)
+      .sort((a, b) => b - a);
 
     // 4. Fetch goals for this year
     const goalsSnap = await adminDb
@@ -276,7 +303,38 @@ export async function GET(req: NextRequest) {
       seasonality,
     };
 
-    // 9. Build response
+    // 9. Build comparison year monthly data (if requested)
+    let comparisonData: { year: number; months: { month: number; label: string; grossMargin: number; closedVolume: number; closedCount: number; totalGCI: number }[] } | null = null;
+
+    if (compareYear && compareTransactions.length > 0) {
+      const compMonths = Array.from({ length: 12 }, (_, i) => ({
+        month: i + 1,
+        label: format(new Date(2000, i), 'MMM'),
+        grossMargin: 0,
+        closedVolume: 0,
+        closedCount: 0,
+        totalGCI: 0,
+      }));
+
+      for (const t of compareTransactions) {
+        if (t.status !== 'closed') continue;
+        const closedDate = parseDate(t.closedDate);
+        if (!closedDate || closedDate.getFullYear() !== compareYear) continue;
+        const m = closedDate.getMonth();
+        const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
+        const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
+        const vol = t.dealValue ?? 0;
+
+        compMonths[m].grossMargin += margin;
+        compMonths[m].closedVolume += vol;
+        compMonths[m].closedCount += 1;
+        compMonths[m].totalGCI += gci;
+      }
+
+      comparisonData = { year: compareYear, months: compMonths };
+    }
+
+    // 10. Build response
     const overview: BrokerCommandOverview = {
       year,
       totals,
@@ -284,7 +342,12 @@ export async function GET(req: NextRequest) {
       categoryBreakdown,
     };
 
-    const result: BrokerCommandMetrics = { overview, prevYearStats };
+    const result: BrokerCommandMetrics = {
+      overview,
+      prevYearStats,
+      availableYears,
+      comparisonData,
+    };
 
     return NextResponse.json(result);
   } catch (error: any) {
