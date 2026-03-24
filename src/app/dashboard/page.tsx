@@ -410,6 +410,183 @@ function ActivityTrackerCard({ dashboard }: { dashboard: AgentDashboardData }) {
   );
 }
 
+// ── Key Numbers Card (with year comparison) ────────────────────────────────
+
+function KeyNumbersCard({ dashboard, year }: { dashboard: AgentDashboardData; year: number }) {
+  const [compareYear, setCompareYear] = useState<number | null>(null);
+  const prev = dashboard.prevYearComparison;
+  const availableYears = dashboard.availableComparisonYears ?? [];
+
+  // Show comparison to selected year (or default prev year)
+  const showCompare = prev && (compareYear === null || compareYear === prev.year);
+  const compLabel = prev ? String(prev.year) : '';
+
+  const stats = dashboard.stats;
+  const appointmentsHeld = dashboard.kpis.appointmentsHeld.actual;
+
+  // Helper to render a stat row with optional comparison
+  const StatRow = ({ label, current, previous, isCurrency = true, suffix = '' }: {
+    label: string; current: number; previous?: number; isCurrency?: boolean; suffix?: string;
+  }) => {
+    const fmt = isCurrency ? formatCurrency : (v: number) => formatNumber(v) + suffix;
+    const delta = previous && previous > 0 ? ((current - previous) / previous) * 100 : null;
+    return (
+      <div className="flex items-center justify-between py-2 border-b last:border-0">
+        <span className="text-sm text-muted-foreground">{label}</span>
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-sm">{fmt(current)}</span>
+          {showCompare && previous != null && previous > 0 && delta != null && (
+            <span className={cn(
+              'text-xs font-medium flex items-center gap-0.5',
+              delta >= 0 ? 'text-green-600' : 'text-red-600',
+            )}>
+              {delta >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+              {Math.abs(delta).toFixed(0)}%
+              <span className="text-muted-foreground ml-1">vs {compLabel}</span>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-semibold">Key Numbers</CardTitle>
+          <Select
+            value={compareYear != null ? String(compareYear) : 'default'}
+            onValueChange={v => setCompareYear(v === 'default' ? null : Number(v))}
+          >
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <SelectValue placeholder="Compare to..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">{prev ? `vs ${prev.year}` : 'No comparison'}</SelectItem>
+              {availableYears.map(y => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-0">
+        <StatRow
+          label="Avg Sale Price"
+          current={stats.avgSalesPrice}
+          previous={showCompare ? prev?.avgSalesPrice : undefined}
+        />
+        <StatRow
+          label="Avg Commission %"
+          current={stats.avgCommissionPct}
+          previous={showCompare ? prev?.avgCommissionPct : undefined}
+          isCurrency={false}
+          suffix="%"
+        />
+        <StatRow
+          label="$ per Engagement"
+          current={stats.engagementValue}
+          previous={showCompare ? prev?.engagementValue : undefined}
+        />
+        <StatRow
+          label="$ per Appointment"
+          current={stats.appointmentValue}
+          previous={showCompare ? prev?.appointmentValue : undefined}
+        />
+        <StatRow
+          label="Avg Net per Deal"
+          current={stats.avgCommission}
+          previous={prev && prev.closedDeals > 0 ? prev.netEarned / prev.closedDeals : undefined}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Deals & Volume Grade Card ───────────────────────────────────────────────
+
+function DealsVolumeCard({ dashboard }: { dashboard: AgentDashboardData }) {
+  const vm = dashboard.volumeMetrics;
+  if (!vm) return null;
+
+  const GradeRow = ({ label, actual, goal, grade, performance, subtitle }: {
+    label: string; actual: string; goal: string | null; grade: string;
+    performance: number; subtitle?: string;
+  }) => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">{label}</span>
+        <div className={cn(
+          'flex items-center justify-center h-8 w-8 rounded-lg text-sm font-extrabold',
+          gradeBg(grade), gradeTone(grade),
+        )}>
+          {grade}
+        </div>
+      </div>
+      <div className="flex items-baseline justify-between">
+        <span className="text-lg font-bold">{actual}</span>
+        {goal && <span className="text-sm text-muted-foreground">/ {goal} goal</span>}
+      </div>
+      <div className="w-full bg-muted rounded-full h-1.5">
+        <div
+          className={cn(
+            'h-1.5 rounded-full transition-all',
+            performance >= 100 ? 'bg-green-500' :
+            performance >= 70 ? 'bg-yellow-500' : 'bg-red-500',
+          )}
+          style={{ width: `${Math.min(performance, 100)}%` }}
+        />
+      </div>
+      {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+    </div>
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold">Deals & Volume</CardTitle>
+        <CardDescription>Closed performance vs goals</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <GradeRow
+          label="Deals Closed"
+          actual={`${vm.closedDeals} closed`}
+          goal={vm.dealsGoal != null ? `${vm.dealsGoal}` : null}
+          grade={vm.dealsGrade}
+          performance={vm.dealsPerformance}
+          subtitle={`+ ${vm.pendingDeals} pending`}
+        />
+
+        <GradeRow
+          label="$ Volume Sold"
+          actual={formatCurrency(vm.closedVolume)}
+          goal={vm.volumeGoal != null ? formatCurrency(vm.volumeGoal) : null}
+          grade={vm.volumeGrade}
+          performance={vm.volumePerformance}
+          subtitle={`${formatCurrency(vm.pendingVolume)} pending`}
+        />
+
+        <div className="border-t pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Projected Volume (w/ Pending)</span>
+            <div className={cn(
+              'flex items-center justify-center h-8 w-8 rounded-lg text-sm font-extrabold',
+              gradeBg(vm.projectedVolumeGrade), gradeTone(vm.projectedVolumeGrade),
+            )}>
+              {vm.projectedVolumeGrade}
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="text-lg font-bold">{formatCurrency(vm.totalVolume)}</span>
+            <span className="text-xs text-muted-foreground">{vm.projectedVolumePerformance}% of YTD goal</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Overview Tab Content ────────────────────────────────────────────────────
 
 function OverviewContent({
@@ -444,6 +621,9 @@ function OverviewContent({
 
   return (
     <div className="space-y-8">
+      {/* ── ROW 0: Key Numbers (no grade, comparison year) ──────────────────── */}
+      <KeyNumbersCard dashboard={dashboard} year={year} />
+
       {/* ── ROW 1: Three Hero Cards ────────────────────────────────────────── */}
       <div className="grid gap-6 md:grid-cols-3">
         <HeroCard
@@ -475,50 +655,40 @@ function OverviewContent({
         />
       </div>
 
-      {/* ── ROW 2: Activity Tracker + Quick Stats ──────────────────────────── */}
+      {/* ── ROW 2: Deals & Volume + Activity Tracker + Quick Stats ──────────── */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <DealsVolumeCard dashboard={dashboard} />
+
         <ActivityTrackerCard dashboard={dashboard} />
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Effective Start Date</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{effectiveStartLabel}</div>
-            <p className="text-xs text-muted-foreground mt-1">Prorated pacing begins from this date through Dec 31</p>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Annual Goal</p>
-                <p className="font-semibold">{formatCurrency(dashboard.annualIncomeGoal ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Projected Net</p>
-                <p className="font-semibold">{formatCurrency(dashboard.projectedNetIncome ?? 0)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Income Snapshot</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pacing & Goals</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Effective Start</span>
+              <span className="font-semibold text-sm">{effectiveStartLabel}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Annual Income Goal</span>
+              <span className="font-semibold text-sm">{formatCurrency(dashboard.annualIncomeGoal ?? 0)}</span>
+            </div>
+            <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Net Earned</span>
-              <span className="font-semibold">{formatCurrency(dashboard.netEarned)}</span>
+              <span className="font-semibold text-sm">{formatCurrency(dashboard.netEarned)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Net Pending</span>
-              <span className="font-semibold">{formatCurrency(dashboard.netPending)}</span>
+              <span className="font-semibold text-sm">{formatCurrency(dashboard.netPending)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Total Potential</span>
-              <span className="font-bold text-primary">{formatCurrency(dashboard.ytdTotalPotential)}</span>
+              <span className="font-bold text-sm text-primary">{formatCurrency(dashboard.ytdTotalPotential)}</span>
             </div>
             <div className="border-t pt-2 flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Pace Delta</span>
-              <span className={cn('font-semibold', incomeDelta >= 0 ? 'text-green-600' : 'text-red-600')}>
+              <span className={cn('font-semibold text-sm', incomeDelta >= 0 ? 'text-green-600' : 'text-red-600')}>
                 {incomeDelta >= 0 ? '+' : ''}{formatCurrency(incomeDelta)}
               </span>
             </div>

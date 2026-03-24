@@ -202,7 +202,41 @@ export interface AgentDashboardData {
     renterClosings: number;
     avgCommission: number;
     engagementValue: number;
+    appointmentValue: number;
+    avgCommissionPct: number;
+    pendingVolume: number;
   };
+
+  // Volume & deals grading
+  volumeMetrics?: {
+    closedVolume: number;
+    pendingVolume: number;
+    totalVolume: number;
+    volumeGoal: number | null;
+    volumeGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+    volumePerformance: number;
+    projectedVolumeGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+    projectedVolumePerformance: number;
+    closedDeals: number;
+    pendingDeals: number;
+    dealsGoal: number | null;
+    dealsGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+    dealsPerformance: number;
+  };
+
+  // Previous year comparison
+  prevYearComparison?: {
+    year: number;
+    avgSalesPrice: number;
+    avgCommissionPct: number;
+    engagementValue: number;
+    appointmentValue: number;
+    netEarned: number;
+    closedVolume: number;
+    closedDeals: number;
+  } | null;
+
+  availableComparisonYears?: number[];
 }
 
 export type LeaderboardMetricKey = 'closed' | 'pending' | 'total';

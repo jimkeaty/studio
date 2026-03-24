@@ -198,11 +198,16 @@ export async function GET(req: NextRequest) {
 
     let closedUnits = 0;
     let pendingUnits = 0;
+    let closedVolume = 0;
+    let pendingVolume = 0;
+    let totalGCI = 0;
 
     for (const doc of txSnap.docs) {
       const t = doc.data() || {};
       const status = String(t.status || "").trim();
       const net = getTransactionNet(t);
+      const dealValue = asNumber(t.dealValue);
+      const gci = asNumber(t.splitSnapshot?.grossCommission || t.commission);
 
       if (status === "closed") {
         const d = getTransactionDateForEarned(t);
@@ -219,6 +224,8 @@ export async function GET(req: NextRequest) {
         ) {
           netEarned += net;
           closedUnits += 1;
+          closedVolume += dealValue;
+          totalGCI += gci;
         }
       } else if (status === "pending" || status === "under_contract") {
         const d = getTransactionDateForPending(t);
@@ -235,6 +242,7 @@ export async function GET(req: NextRequest) {
         ) {
           netPending += net;
           pendingUnits += 1;
+          pendingVolume += dealValue;
         }
       }
     }
@@ -389,15 +397,134 @@ export async function GET(req: NextRequest) {
       },
 
       stats: {
-        ytdVolume: 0,
-        avgSalesPrice: 0,
+        ytdVolume: Number(closedVolume.toFixed(2)),
+        avgSalesPrice: closedUnits > 0 ? Number((closedVolume / closedUnits).toFixed(2)) : 0,
         buyerClosings: 0,
         sellerClosings: 0,
         renterClosings: 0,
         avgCommission: closedUnits > 0 ? Number((netEarned / closedUnits).toFixed(2)) : 0,
         engagementValue: engagementsActual > 0 ? Number((netEarned / engagementsActual).toFixed(2)) : 0,
+        appointmentValue: appointmentsHeldActual > 0 ? Number((netEarned / appointmentsHeldActual).toFixed(2)) : 0,
+        avgCommissionPct: closedVolume > 0 ? Number(((totalGCI / closedVolume) * 100).toFixed(2)) : 0,
+        pendingVolume: Number(pendingVolume.toFixed(2)),
       },
     };
+
+    // ── Fetch agent goals (volume + sales count) ─────────────────────────
+    const goalSegment = `agent_${uid}`;
+    const goalsSnap = await adminDb.collection("brokerCommandGoals")
+      .where("year", "==", yearNum)
+      .where("segment", "==", goalSegment)
+      .get();
+
+    let yearlyVolumeGoal = 0;
+    let yearlySalesGoal = 0;
+    for (const gDoc of goalsSnap.docs) {
+      const g = gDoc.data();
+      yearlyVolumeGoal += asNumber(g.volumeGoal);
+      yearlySalesGoal += asNumber(g.salesCountGoal);
+    }
+
+    // Prorate goals to elapsed workdays
+    const volumeGoalToDate = totalWorkdaysInYear > 0
+      ? Number(((yearlyVolumeGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2))
+      : 0;
+    const salesGoalToDate = totalWorkdaysInYear > 0
+      ? Number(((yearlySalesGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2))
+      : 0;
+
+    const volumePerf = performance(closedVolume, volumeGoalToDate);
+    const projectedVolumePerf = performance(closedVolume + pendingVolume, volumeGoalToDate);
+    const dealsPerf = performance(closedUnits, salesGoalToDate);
+
+    dashboard.volumeMetrics = {
+      closedVolume: Number(closedVolume.toFixed(2)),
+      pendingVolume: Number(pendingVolume.toFixed(2)),
+      totalVolume: Number((closedVolume + pendingVolume).toFixed(2)),
+      volumeGoal: yearlyVolumeGoal > 0 ? yearlyVolumeGoal : null,
+      volumeGrade: gradeFromPerformance(volumePerf),
+      volumePerformance: volumePerf,
+      projectedVolumeGrade: gradeFromPerformance(projectedVolumePerf),
+      projectedVolumePerformance: projectedVolumePerf,
+      closedDeals: closedUnits,
+      pendingDeals: pendingUnits,
+      dealsGoal: yearlySalesGoal > 0 ? yearlySalesGoal : null,
+      dealsGrade: gradeFromPerformance(dealsPerf),
+      dealsPerformance: dealsPerf,
+    };
+
+    // ── Previous year comparison ─────────────────────────────────────────
+    const { searchParams } = new URL(req.url);
+    const compareYearParam = searchParams.get("compareYear");
+    let prevYearComparison: typeof dashboard.prevYearComparison = null;
+
+    const compYear = compareYearParam ? Number(compareYearParam) : yearNum - 1;
+
+    // Always try to load comparison data
+    const prevTxSnap = await adminDb
+      .collection("transactions")
+      .where("agentId", "==", uid)
+      .where("year", "==", compYear)
+      .get();
+
+    if (!prevTxSnap.empty) {
+      let prevNetEarned = 0;
+      let prevClosedVolume = 0;
+      let prevClosedUnits = 0;
+      let prevTotalGCI = 0;
+
+      for (const doc of prevTxSnap.docs) {
+        const t = doc.data() || {};
+        if (String(t.status || "").trim() !== "closed") continue;
+        const d = getTransactionDateForEarned(t);
+        if (!d) continue;
+        prevNetEarned += getTransactionNet(t);
+        prevClosedVolume += asNumber(t.dealValue);
+        prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
+        prevClosedUnits += 1;
+      }
+
+      // Get prev year activity for engagement/appointment values
+      const prevActivitySnap = await adminDb
+        .collection("daily_activity")
+        .where("agentId", "==", uid)
+        .where("date", ">=", `${compYear}-01-01`)
+        .where("date", "<=", `${compYear}-12-31`)
+        .get();
+
+      let prevEngagements = 0;
+      let prevAppointmentsHeld = 0;
+      for (const doc of prevActivitySnap.docs) {
+        const a = doc.data() || {};
+        prevEngagements += asNumber(a.engagementsCount);
+        prevAppointmentsHeld += asNumber(a.appointmentsHeldCount);
+      }
+
+      prevYearComparison = {
+        year: compYear,
+        avgSalesPrice: prevClosedUnits > 0 ? Number((prevClosedVolume / prevClosedUnits).toFixed(2)) : 0,
+        avgCommissionPct: prevClosedVolume > 0 ? Number(((prevTotalGCI / prevClosedVolume) * 100).toFixed(2)) : 0,
+        engagementValue: prevEngagements > 0 ? Number((prevNetEarned / prevEngagements).toFixed(2)) : 0,
+        appointmentValue: prevAppointmentsHeld > 0 ? Number((prevNetEarned / prevAppointmentsHeld).toFixed(2)) : 0,
+        netEarned: Number(prevNetEarned.toFixed(2)),
+        closedVolume: Number(prevClosedVolume.toFixed(2)),
+        closedDeals: prevClosedUnits,
+      };
+    }
+
+    dashboard.prevYearComparison = prevYearComparison;
+
+    // Available comparison years
+    const allTxYearsSnap = await adminDb
+      .collection("transactions")
+      .where("agentId", "==", uid)
+      .select("year")
+      .get();
+    const availableYears = [...new Set(allTxYearsSnap.docs.map(d => asNumber(d.data().year)))]
+      .filter(y => y > 0 && y !== yearNum)
+      .sort((a, b) => b - a);
+
+    dashboard.availableComparisonYears = availableYears;
 
     return NextResponse.json({
       ok: true,
