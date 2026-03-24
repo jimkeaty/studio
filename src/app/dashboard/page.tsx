@@ -470,16 +470,51 @@ function OverviewSection({ data, year, transactions, opportunities }: {
       {/* Key Numbers */}
       <KeyNumbersCard dashboard={dashboard} year={year} />
 
-      {/* Hero Cards */}
+      {/* Hero Cards — Row 1: Income */}
       <div className="grid gap-6 md:grid-cols-3">
         <HeroCard title="Net Income YTD" grade={dashboard.incomeGrade} primary={fmtCurrency(dashboard.netEarned)} secondary={incomeDelta >= 0 ? `${Math.abs(incomeDeltaPct)}% ahead of pace (${fmtCurrency(dashboard.expectedYTDIncomeGoal)} goal)` : `${Math.abs(incomeDeltaPct)}% behind pace (${fmtCurrency(dashboard.expectedYTDIncomeGoal)} goal)`} icon={DollarSign} />
         <HeroCard title="Projected with Pending" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)} secondary={`${fmtCurrency(dashboard.netPending)} pending · ${pipelinePct}% of YTD goal if pending close`} icon={TrendingUp} />
         <HeroCard title="Engagements YTD" grade={dashboard.leadIndicatorGrade} primary={`${fmtNum(dashboard.kpis.engagements.actual)} / ${fmtNum(dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target)}`} secondary={`${dashboard.leadIndicatorPerformance}% of engagement goal-to-date`} icon={Target} />
       </div>
 
-      {/* Deals & Volume + Activity Tracker + Pacing */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <DealsVolumeCard dashboard={dashboard} />
+      {/* Hero Cards — Row 2: Deals & Volume (separate blocks) */}
+      {dashboard.volumeMetrics && (() => {
+        const vm = dashboard.volumeMetrics!;
+        return (
+          <div className="grid gap-6 md:grid-cols-3">
+            <HeroCard
+              title="Deals Closed"
+              grade={vm.dealsGrade}
+              primary={`${vm.closedDeals} closed`}
+              secondary={vm.dealsGoal != null
+                ? `${vm.dealsPerformance}% of ${vm.dealsGoal} goal · ${vm.pendingDeals} pending`
+                : `${vm.pendingDeals} pending · No goal set`}
+              icon={BarChart3}
+            />
+            <HeroCard
+              title="$ Volume Sold"
+              grade={vm.volumeGrade}
+              primary={fmtCurrency(vm.closedVolume)}
+              secondary={vm.volumeGoal != null
+                ? `${vm.volumePerformance}% of ${fmtCurrency(vm.volumeGoal)} goal · ${fmtCurrency(vm.pendingVolume)} pending`
+                : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
+              icon={DollarSign}
+            />
+            <HeroCard
+              title="Projected Volume (w/ Pending)"
+              grade={vm.projectedVolumeGrade}
+              primary={fmtCurrency(vm.totalVolume)}
+              secondary={vm.volumeGoal != null
+                ? `${vm.projectedVolumePerformance}% of YTD goal if pending close`
+                : `Closed + pending volume`}
+              icon={TrendingUp}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Activity Tracker + Pacing */}
+      <div className="grid gap-6 md:grid-cols-2">
         <ActivityTrackerCard dashboard={dashboard} />
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pacing & Goals</CardTitle></CardHeader>
@@ -521,34 +556,88 @@ function HeroCard({ title, grade, primary, secondary, icon: Icon }: { title: str
 }
 
 function ActivityTrackerCard({ dashboard }: { dashboard: AgentDashboardData }) {
-  const [metric, setMetric] = useState<'engagements' | 'appointmentsHeld'>('engagements');
   const [catchUpPeriod, setCatchUpPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
-  const kpi = dashboard.kpis[metric];
-  const label = metric === 'engagements' ? 'Engagements' : 'Appointments Held';
+  const [catchUpDays, setCatchUpDays] = useState<number>(dashboard.catchUpWindowDays ?? 20);
+
+  const kpi = dashboard.kpis.engagements;
   const delta = kpi.actual - kpi.target;
   const behindAmount = Math.max(0, kpi.target - kpi.actual);
-  const catchUpWindow = dashboard.catchUpWindowDays ?? 20;
-  let dailyCatchUp: number;
-  if (metric === 'engagements') { dailyCatchUp = dashboard.catchUpDailyRequired ?? 0; }
-  else { const engTarget = dashboard.kpis.engagements.target; const engDaily = engTarget > 0 && dashboard.catchUpDailyRequired ? (dashboard.catchUpDailyRequired - (Math.max(0, engTarget - dashboard.kpis.engagements.actual) / catchUpWindow)) : 0; const estWorkdays = engDaily > 0 ? engTarget / engDaily : (catchUpWindow * 2); const aptDailyBase = estWorkdays > 0 ? kpi.target / estWorkdays : 0; dailyCatchUp = Number((aptDailyBase + behindAmount / catchUpWindow).toFixed(2)); }
+
+  // Recalculate catch-up based on selected window
+  // dailyBase = original daily target (before catch-up spread)
+  const originalWindow = dashboard.catchUpWindowDays ?? 20;
+  const originalCatchUp = dashboard.catchUpDailyRequired ?? 0;
+  const originalBehind = Math.max(0, (dashboard.engagementGoalToDate ?? kpi.target) - kpi.actual);
+  const dailyBase = originalWindow > 0 ? originalCatchUp - (originalBehind / originalWindow) : originalCatchUp;
+  const dailyCatchUp = Number((dailyBase + (behindAmount / Math.max(1, catchUpDays))).toFixed(2));
+
   let catchUpValue: number; let periodLabel: string;
-  switch (catchUpPeriod) { case 'weekly': catchUpValue = Number((dailyCatchUp * 5).toFixed(1)); periodLabel = 'per week'; break; case 'monthly': catchUpValue = Number((dailyCatchUp * 22).toFixed(1)); periodLabel = 'per month'; break; default: catchUpValue = dailyCatchUp; periodLabel = 'per day'; }
+  switch (catchUpPeriod) {
+    case 'weekly': catchUpValue = Number((dailyCatchUp * 5).toFixed(1)); periodLabel = 'per week'; break;
+    case 'monthly': catchUpValue = Number((dailyCatchUp * 22).toFixed(1)); periodLabel = 'per month'; break;
+    default: catchUpValue = dailyCatchUp; periodLabel = 'per day';
+  }
 
   return (
     <Card>
-      <CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="text-sm font-medium text-muted-foreground">Activity Tracker</CardTitle><Select value={metric} onValueChange={v => setMetric(v as typeof metric)}><SelectTrigger className="w-[170px] h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="engagements">Engagements</SelectItem><SelectItem value="appointmentsHeld">Appointments Held</SelectItem></SelectContent></Select></div></CardHeader>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium text-muted-foreground">Engagement Tracker</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-4">
+        {/* Grade + Progress */}
         <div className="flex items-center gap-4">
           <div className={cn('flex items-center justify-center h-14 w-14 rounded-xl text-2xl font-extrabold', gradeBg(kpi.grade), gradeTone(kpi.grade))}>{kpi.grade}</div>
           <div className="flex-1 space-y-1">
-            <div className="flex items-baseline justify-between"><span className="text-lg font-bold">{fmtNum(kpi.actual)}</span><span className="text-sm text-muted-foreground">/ {fmtNum(kpi.target)} goal</span></div>
-            <div className="w-full bg-muted rounded-full h-2"><div className={cn('h-2 rounded-full transition-all', kpi.performance >= 100 ? 'bg-green-500' : kpi.performance >= 70 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${Math.min(kpi.performance, 100)}%` }} /></div>
-            <p className="text-xs text-muted-foreground">{kpi.performance}% of {label.toLowerCase()} goal-to-date</p>
+            <div className="flex items-baseline justify-between">
+              <span className="text-lg font-bold">{fmtNum(kpi.actual)}</span>
+              <span className="text-sm text-muted-foreground">/ {fmtNum(kpi.target)} goal</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2">
+              <div className={cn('h-2 rounded-full transition-all', kpi.performance >= 100 ? 'bg-green-500' : kpi.performance >= 70 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${Math.min(kpi.performance, 100)}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground">{kpi.performance}% of engagement goal-to-date</p>
           </div>
         </div>
+
+        {/* Delta + Catch-Up */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border p-3 space-y-0.5"><p className="text-xs text-muted-foreground font-medium">{label} Delta</p><div className="flex items-center gap-1">{delta >= 0 ? <ArrowUpRight className="h-4 w-4 text-green-600" /> : <ArrowDownRight className="h-4 w-4 text-red-600" />}<span className={cn('text-lg font-bold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>{delta >= 0 ? '+' : ''}{fmtNum(delta)}</span></div><p className="text-xs text-muted-foreground">{delta >= 0 ? 'ahead of goal' : 'behind goal'}</p></div>
-          <div className="rounded-lg border p-3 space-y-0.5"><div className="flex items-center justify-between"><p className="text-xs text-muted-foreground font-medium">Catch-Up Target</p><Select value={catchUpPeriod} onValueChange={v => setCatchUpPeriod(v as typeof catchUpPeriod)}><SelectTrigger className="w-[90px] h-6 text-[10px] px-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="daily">Daily</SelectItem><SelectItem value="weekly">Weekly</SelectItem><SelectItem value="monthly">Monthly</SelectItem></SelectContent></Select></div><span className="text-lg font-bold">{fmtNum(catchUpValue)}</span><p className="text-xs text-muted-foreground">{label.toLowerCase()} {periodLabel}</p></div>
+          <div className="rounded-lg border p-3 space-y-0.5">
+            <p className="text-xs text-muted-foreground font-medium">Engagement Delta</p>
+            <div className="flex items-center gap-1">
+              {delta >= 0 ? <ArrowUpRight className="h-4 w-4 text-green-600" /> : <ArrowDownRight className="h-4 w-4 text-red-600" />}
+              <span className={cn('text-lg font-bold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
+                {delta >= 0 ? '+' : ''}{fmtNum(delta)}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">{delta >= 0 ? 'ahead of goal' : 'behind goal'}</p>
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-0.5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground font-medium">Catch-Up Target</p>
+              <Select value={catchUpPeriod} onValueChange={v => setCatchUpPeriod(v as typeof catchUpPeriod)}>
+                <SelectTrigger className="w-[80px] h-6 text-[10px] px-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <span className="text-lg font-bold">{fmtNum(catchUpValue)}</span>
+            <p className="text-xs text-muted-foreground">engagements {periodLabel}</p>
+            <div className="flex items-center gap-1.5 mt-1 pt-1 border-t">
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">Catch-up window:</span>
+              <Select value={String(catchUpDays)} onValueChange={v => setCatchUpDays(Number(v))}>
+                <SelectTrigger className="w-[70px] h-5 text-[10px] px-1.5"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[5, 10, 14, 20, 30, 45, 60].map(d => (
+                    <SelectItem key={d} value={String(d)}>{d} days</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
