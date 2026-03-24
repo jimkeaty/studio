@@ -47,6 +47,7 @@ export type AgentProfileFormValues = {
   referringAgentId: string;
   referringAgentDisplayNameSnapshot: string;
   tiers: AgentTierFormValue[];
+  gracePeriodEnabled: boolean;
   notes: string;
 };
 
@@ -162,6 +163,7 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   referringAgentId: '',
   referringAgentDisplayNameSnapshot: '',
   tiers: DEFAULT_INDEPENDENT_TIERS,
+  gracePeriodEnabled: false,
   notes: '',
 };
 
@@ -665,6 +667,7 @@ export default function AgentProfileForm({
               notes: tier.notes || null,
             }))
           : [],
+        gracePeriodEnabled: values.gracePeriodEnabled ?? false,
         notes: values.notes || null,
       };
 
@@ -803,6 +806,26 @@ export default function AgentProfileForm({
             <div className="rounded-md border bg-gray-50 px-3 py-2 text-sm">
               {anniversaryDisplay}
             </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+          <input
+            type="checkbox"
+            id="gracePeriodEnabled"
+            checked={values.gracePeriodEnabled}
+            onChange={(e) => updateField('gracePeriodEnabled', e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300"
+          />
+          <div>
+            <label htmlFor="gracePeriodEnabled" className="block text-sm font-medium text-amber-900 cursor-pointer">
+              Enable 90-Day Grace Period
+            </label>
+            <p className="text-xs text-amber-700 mt-0.5">
+              New agents receive an automatic &quot;A&quot; grade on income, deals, and volume metrics
+              for their first 90 days. This gives them time to ramp up before performance grades
+              affect their dashboard. Uncheck this once the agent is established.
+            </p>
           </div>
         </div>
       </section>

@@ -287,6 +287,49 @@ export async function GET(req: NextRequest) {
       (asNumber(plan.calculatedTargets?.engagements?.daily) + behindAmount / catchUpWindowDays).toFixed(2)
     );
 
+    // ── Fetch agent profile for grace period check ────────────────────────
+    let isMetricsGracePeriod = false;
+    try {
+      // Try matching by agentId patterns: uid directly, or by email
+      const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+      if (profileByIdSnap.exists) {
+        const profile = profileByIdSnap.data();
+        if (profile?.gracePeriodEnabled === true) {
+          // Check if agent started within last 90 days
+          const startDate = toDate(profile.startDate);
+          if (startDate) {
+            const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+            isMetricsGracePeriod = daysSinceStart <= 90;
+          } else {
+            isMetricsGracePeriod = true; // gracePeriodEnabled but no start date → assume grace
+          }
+        }
+      } else {
+        // Try finding by email from decoded token
+        const email = decoded.email || '';
+        if (email) {
+          const profileByEmailSnap = await adminDb.collection('agentProfiles')
+            .where('email', '==', email)
+            .limit(1)
+            .get();
+          if (!profileByEmailSnap.empty) {
+            const profile = profileByEmailSnap.docs[0].data();
+            if (profile?.gracePeriodEnabled === true) {
+              const startDate = toDate(profile.startDate);
+              if (startDate) {
+                const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+                isMetricsGracePeriod = daysSinceStart <= 90;
+              } else {
+                isMetricsGracePeriod = true;
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[dashboard] Failed to check grace period:', err);
+    }
+
     const dashboard: AgentDashboardData = {
       userId: uid,
 
@@ -294,14 +337,15 @@ export async function GET(req: NextRequest) {
       leadIndicatorPerformance: performance(engagementsActual, engagementsTarget),
       isLeadIndicatorGracePeriod: elapsedWorkdays < 5,
 
-      incomeGrade: gradeFromPerformance(incomePerformance),
+      incomeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(incomePerformance),
       incomePerformance,
       isIncomeGracePeriod: elapsedWorkdays < 5,
+      isMetricsGracePeriod,
       expectedYTDIncomeGoal,
       ytdTotalPotential,
 
       pipelineAdjustedIncome: {
-        grade: gradeFromPerformance(pipelinePerformance),
+        grade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(pipelinePerformance),
         performance: pipelinePerformance,
       },
 
@@ -442,14 +486,14 @@ export async function GET(req: NextRequest) {
       pendingVolume: Number(pendingVolume.toFixed(2)),
       totalVolume: Number((closedVolume + pendingVolume).toFixed(2)),
       volumeGoal: yearlyVolumeGoal > 0 ? yearlyVolumeGoal : null,
-      volumeGrade: gradeFromPerformance(volumePerf),
+      volumeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(volumePerf),
       volumePerformance: volumePerf,
-      projectedVolumeGrade: gradeFromPerformance(projectedVolumePerf),
+      projectedVolumeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(projectedVolumePerf),
       projectedVolumePerformance: projectedVolumePerf,
       closedDeals: closedUnits,
       pendingDeals: pendingUnits,
       dealsGoal: yearlySalesGoal > 0 ? yearlySalesGoal : null,
-      dealsGrade: gradeFromPerformance(dealsPerf),
+      dealsGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(dealsPerf),
       dealsPerformance: dealsPerf,
     };
 

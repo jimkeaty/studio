@@ -144,6 +144,7 @@ export interface AgentDashboardData {
   incomeGrade: 'A' | 'B' | 'C' | 'D' | 'F';
   incomePerformance: number; // 0-100+
   isIncomeGracePeriod: boolean;
+  isMetricsGracePeriod: boolean; // 90-day admin-set grace period for income/deals/volume
   expectedYTDIncomeGoal: number;
   ytdTotalPotential: number;
 

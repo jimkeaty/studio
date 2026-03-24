@@ -4,8 +4,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@/firebase';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics, Transaction, Opportunity } from '@/lib/types';
 import type { MonthlyData, CategoryMetrics } from '@/lib/types/brokerCommandMetrics';
-import { KpiCard } from '@/components/dashboard/kpi-card';
-import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -27,6 +25,7 @@ import {
   AlertTriangle, CalendarDays, DollarSign, Target, TrendingUp,
   ArrowUpRight, ArrowDownRight, MapPin, FileCheck2, Clock,
   BarChart3, Users, Percent, Save, ChevronDown, ChevronUp,
+  Phone, MessageSquare, CalendarCheck, CalendarCheck2, FileSignature, CheckCircle2,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { Badge } from '@/components/ui/badge';
@@ -193,6 +192,17 @@ function GoalsEditor({ months, year, goalSegment, onSaved }: { months: MonthlyDa
   );
 }
 
+// ── KPI icon map ────────────────────────────────────────────────────────────
+
+const kpiMeta: Record<string, { label: string; icon: React.ElementType; unit: string }> = {
+  calls: { label: 'Calls', icon: Phone, unit: 'calls' },
+  engagements: { label: 'Engagements', icon: MessageSquare, unit: 'engagements' },
+  appointmentsSet: { label: 'Appointments Set', icon: CalendarCheck, unit: 'appts set' },
+  appointmentsHeld: { label: 'Appointments Held', icon: CalendarCheck2, unit: 'appts held' },
+  contractsWritten: { label: 'Contracts Written', icon: FileSignature, unit: 'contracts' },
+  closings: { label: 'Closings', icon: CheckCircle2, unit: 'closings' },
+};
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function AgentDashboardPage() {
@@ -268,6 +278,9 @@ export default function AgentDashboardPage() {
   if (userLoading) return <DashboardSkeleton />;
   if (!user) return <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Sign In Required</AlertTitle><AlertDescription>Please sign in.</AlertDescription></Alert>;
 
+  const dashboard = data?.dashboard;
+  const plan = data?.plan ?? null;
+
   return (
     <div className="space-y-8">
       <div>
@@ -276,102 +289,476 @@ export default function AgentDashboardPage() {
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════
-          PERFORMANCE SECTION — at the very top
+          1. MY PERFORMANCE — metrics at the very top
          ════════════════════════════════════════════════════════════════════ */}
-      <PerformanceSection
-        data={perfData}
-        loading={perfLoading}
+      <MyPerformanceSection
+        perfData={perfData}
+        perfLoading={perfLoading}
+        dashboard={dashboard}
         year={perfYear}
         setYear={setPerfYear}
         view={perfView}
         setView={setPerfView}
-        compareYear={compareYear}
-        setCompareYear={setCompareYear}
-        onGoalsSaved={fetchPerf}
       />
 
       {/* ════════════════════════════════════════════════════════════════════
-          OVERVIEW SECTION — grades, key numbers, pipeline
+          2. PACING & GOALS
+         ════════════════════════════════════════════════════════════════════ */}
+      {!loading && dashboard && <PacingGoalsCard dashboard={dashboard} />}
+
+      {/* ════════════════════════════════════════════════════════════════════
+          3. REPORT CARD — Hero Grade Cards
          ════════════════════════════════════════════════════════════════════ */}
       {loading ? <DashboardSkeleton /> : error ? (
         <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>
-      ) : !data?.dashboard ? (
-        <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>No Data</AlertTitle><AlertDescription>Dashboard data for {year} not found. Check your business plan or contact support.</AlertDescription></Alert>
+      ) : !dashboard ? (
+        <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>No Data</AlertTitle><AlertDescription>Dashboard data for {year} not found.</AlertDescription></Alert>
       ) : (
-        <OverviewSection data={data} year={year} transactions={transactions} opportunities={opportunities} />
+        <>
+          <ReportCardSection dashboard={dashboard} />
+
+          {/* ════════════════════════════════════════════════════════════════
+              4. KPIs — All 6 with uniform activity-tracker style
+             ════════════════════════════════════════════════════════════════ */}
+          <KpiSection dashboard={dashboard} plan={plan} />
+
+          {/* ════════════════════════════════════════════════════════════════
+              5. CHARTS — Monthly Net Income, Volume, Sales
+             ════════════════════════════════════════════════════════════════ */}
+          <ChartsSection
+            perfData={perfData}
+            perfLoading={perfLoading}
+            year={perfYear}
+            compareYear={compareYear}
+            setCompareYear={setCompareYear}
+          />
+
+          {/* ════════════════════════════════════════════════════════════════
+              6. SET MONTHLY GOALS
+             ════════════════════════════════════════════════════════════════ */}
+          {perfData?.overview && (
+            <GoalsEditor
+              months={perfData.overview.months}
+              year={perfYear}
+              goalSegment={perfData.agentView.goalSegment}
+              onSaved={fetchPerf}
+            />
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════
+              7. RECRUITING INCENTIVE TRACKER
+             ════════════════════════════════════════════════════════════════ */}
+          <RecruitingIncentiveTracker />
+
+          {/* ════════════════════════════════════════════════════════════════
+              8. PIPELINE TABLES
+             ════════════════════════════════════════════════════════════════ */}
+          <OpportunitiesTable opportunities={opportunities} />
+          <PendingTable transactions={transactions} />
+          <ClosedTable transactions={transactions} year={year} />
+        </>
       )}
     </div>
   );
 }
 
-// ── Performance Section ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1. MY PERFORMANCE SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
 
-function PerformanceSection({ data, loading, year, setYear, view, setView, compareYear, setCompareYear, onGoalsSaved }: {
-  data: AgentMetricsResponse | null; loading: boolean;
+function MyPerformanceSection({ perfData, perfLoading, dashboard, year, setYear, view, setView }: {
+  perfData: AgentMetricsResponse | null; perfLoading: boolean;
+  dashboard: AgentDashboardData | null;
   year: number; setYear: (y: number) => void;
   view: 'personal' | 'team'; setView: (v: 'personal' | 'team') => void;
-  compareYear: number | null; setCompareYear: (y: number | null) => void;
-  onGoalsSaved: () => void;
 }) {
-  if (loading) return <div className="space-y-4"><Skeleton className="h-10 w-1/3" /><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}</div><Skeleton className="h-80" /></div>;
-  if (!data?.overview) return null;
+  if (perfLoading) return <div className="space-y-4"><Skeleton className="h-10 w-1/3" /><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24" />)}</div></div>;
+  if (!perfData?.overview) return null;
 
-  const { overview, agentView } = data;
-  const { totals, months } = overview;
-  const { monthlyNetIncome, monthlyPendingNetIncome, isTeamLeader, availableTeams } = agentView;
+  const { overview, agentView, prevYearStats } = perfData;
+  const { totals } = overview;
+  const { isTeamLeader, availableTeams } = agentView;
 
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
   const avgCommPct = totals.closedVolume > 0 ? (totals.totalGCI / totals.closedVolume) * 100 : 0;
   const avgNetPerDeal = totals.closedCount > 0 ? totals.netIncome / totals.closedCount : 0;
-  const yearlyIncomeGoal = months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
+  const yearlyIncomeGoal = overview.months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
   const gradeVsGoal = yearlyIncomeGoal ? Math.round((totals.netIncome / yearlyIncomeGoal) * 100) : null;
+
+  // $ per engagement & $ per appointment from overview dashboard data
+  const perEngagement = dashboard?.stats?.engagementValue ?? 0;
+  const perAppointment = dashboard?.stats?.appointmentValue ?? 0;
+  const prevPerEngagement = dashboard?.prevYearComparison?.engagementValue;
+  const prevPerAppointment = dashboard?.prevYearComparison?.appointmentValue;
+  const prevAvgNetPerDeal = (dashboard?.prevYearComparison && dashboard.prevYearComparison.closedDeals > 0)
+    ? dashboard.prevYearComparison.netEarned / dashboard.prevYearComparison.closedDeals : undefined;
+
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-xl font-semibold">{view === 'team' ? agentView.viewLabel : 'My'} Performance</CardTitle>
+            {view === 'team' && <Badge variant="secondary"><Users className="h-3 w-3 mr-1" /> Team</Badge>}
+          </div>
+          <div className="flex items-center gap-2">
+            {isTeamLeader && (
+              <Tabs value={view} onValueChange={v => setView(v as 'personal' | 'team')}>
+                <TabsList><TabsTrigger value="personal"><BarChart3 className="h-4 w-4 mr-1" /> Personal</TabsTrigger><TabsTrigger value="team"><Users className="h-4 w-4 mr-1" /> {availableTeams[0]?.teamName || 'Team'}</TabsTrigger></TabsList>
+              </Tabs>
+            )}
+            <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+              <SelectContent>{[...Array(5)].map((_, i) => { const y = new Date().getFullYear() - i; return <SelectItem key={y} value={String(y)}>{y}</SelectItem>; })}</SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <MetricTile title="Net Income (Closed)" value={fmtCurrencyCompact(totals.netIncome)} subtitle={`${fmtNumNull(totals.closedCount)} closings · ${gradeVsGoal ? `${gradeVsGoal}% of goal` : 'No goal set'}`} icon={DollarSign} highlight />
+          <MetricTile title="Pending Income" value={fmtCurrencyCompact(totals.pendingNetIncome)} subtitle={`${fmtNumNull(totals.pendingCount)} pending deals`} icon={Clock} />
+          <MetricTile title="Closed Volume" value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={`Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
+          <MetricTile title="Avg Sale Price" value={fmtCurrencyCompact(avgSalePrice)} subtitle={prevYearStats ? `vs ${fmtCurrencyCompact(prevYearStats.avgSalePrice)} prev year` : '—'} icon={DollarSign} />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+          <MetricTile title="Total GCI" value={fmtCurrencyCompact(totals.totalGCI)} subtitle={`Avg Commission: ${avgCommPct > 0 ? `${avgCommPct.toFixed(2)}%` : '—'}`} icon={Target} />
+          <MetricTileWithDelta title="$ per Engagement" value={fmtCurrencyCompact(perEngagement)} previous={prevPerEngagement} icon={MessageSquare} />
+          <MetricTileWithDelta title="$ per Appointment" value={fmtCurrencyCompact(perAppointment)} previous={prevPerAppointment} icon={CalendarCheck2} />
+          <MetricTileWithDelta title="Avg Net per Deal" value={fmtCurrencyCompact(avgNetPerDeal)} previous={prevAvgNetPerDeal} icon={DollarSign} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MetricTile({ title, value, subtitle, icon: Icon, highlight }: { title: string; value: string; subtitle: string; icon: React.ElementType; highlight?: boolean }) {
+  return (
+    <div className={cn('rounded-lg border p-4 space-y-1', highlight ? 'border-primary/50 bg-primary/5' : '')}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">{title}</span>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="text-xl font-bold">{value}</div>
+      <p className="text-xs text-muted-foreground">{subtitle}</p>
+    </div>
+  );
+}
+
+function MetricTileWithDelta({ title, value, previous, icon: Icon }: { title: string; value: string; previous?: number; icon: React.ElementType }) {
+  const currentNum = parseFloat(value.replace(/[^0-9.-]/g, ''));
+  const delta = previous && previous > 0 && currentNum > 0 ? ((currentNum - previous) / previous) * 100 : null;
+  return (
+    <div className="rounded-lg border p-4 space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">{title}</span>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="text-xl font-bold">{value}</div>
+      {delta != null ? (
+        <span className={cn('text-xs font-medium flex items-center gap-0.5', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
+          {delta >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+          {Math.abs(delta).toFixed(0)}% vs prev year
+        </span>
+      ) : (
+        <p className="text-xs text-muted-foreground">—</p>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2. PACING & GOALS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PacingGoalsCard({ dashboard }: { dashboard: AgentDashboardData }) {
+  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
+  const effectiveStartLabel = !dashboard.effectiveStartDate ? 'Jan 1' : (() => {
+    const d = new Date(`${dashboard.effectiveStartDate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dashboard.effectiveStartDate;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  })();
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold">Pacing & Goals</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <PacingItem label="Effective Start" value={effectiveStartLabel} />
+          <PacingItem label="Annual Income Goal" value={fmtCurrency(dashboard.annualIncomeGoal ?? 0)} />
+          <PacingItem label="Net Earned" value={fmtCurrency(dashboard.netEarned)} />
+          <PacingItem label="Net Pending" value={fmtCurrency(dashboard.netPending)} />
+          <PacingItem label="Total Potential" value={fmtCurrency(dashboard.ytdTotalPotential)} highlight />
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground font-medium">Pace Delta</p>
+            <p className={cn('text-lg font-bold mt-0.5', incomeDelta >= 0 ? 'text-green-600' : 'text-red-600')}>
+              {incomeDelta >= 0 ? '+' : ''}{fmtCurrency(incomeDelta)}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PacingItem({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-xs text-muted-foreground font-medium">{label}</p>
+      <p className={cn('text-lg font-bold mt-0.5', highlight && 'text-primary')}>{value}</p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3. REPORT CARD — Hero Grade Cards
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function gradeColorScheme(g: string) {
+  switch (g) {
+    case 'A': return { bg: 'bg-gradient-to-br from-green-500/15 to-emerald-500/10', border: 'border-green-500/40', badge: 'bg-green-500 text-white', text: 'text-green-700 dark:text-green-400' };
+    case 'B': return { bg: 'bg-gradient-to-br from-blue-500/15 to-sky-500/10', border: 'border-blue-500/40', badge: 'bg-blue-500 text-white', text: 'text-blue-700 dark:text-blue-400' };
+    case 'C': return { bg: 'bg-gradient-to-br from-yellow-500/15 to-amber-500/10', border: 'border-yellow-500/40', badge: 'bg-yellow-500 text-white', text: 'text-yellow-700 dark:text-yellow-400' };
+    case 'D': return { bg: 'bg-gradient-to-br from-orange-500/15 to-orange-400/10', border: 'border-orange-500/40', badge: 'bg-orange-500 text-white', text: 'text-orange-700 dark:text-orange-400' };
+    default: return { bg: 'bg-gradient-to-br from-red-500/15 to-rose-500/10', border: 'border-red-500/40', badge: 'bg-red-500 text-white', text: 'text-red-700 dark:text-red-400' };
+  }
+}
+
+function HeroCard({ title, grade, primary, secondary, performancePct, icon: Icon, isGracePeriod }: {
+  title: string; grade: string; primary: string; secondary: string;
+  performancePct?: number; icon: React.ElementType; isGracePeriod?: boolean;
+}) {
+  const colors = gradeColorScheme(grade);
+  return (
+    <Card className={cn('relative overflow-hidden border-2 shadow-sm', colors.bg, colors.border)}>
+      <div className="absolute -right-4 -top-4 text-[120px] font-black leading-none opacity-[0.06] pointer-events-none select-none">{grade}</div>
+      <CardHeader className="flex flex-row items-center justify-between pb-1 relative z-10">
+        <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
+        <div className={cn('flex items-center justify-center h-8 w-8 rounded-lg', colors.badge)}><Icon className="h-4 w-4" /></div>
+      </CardHeader>
+      <CardContent className="relative z-10 space-y-2">
+        <div className="flex items-end gap-3">
+          <span className={cn('text-5xl font-black tracking-tighter leading-none', colors.text)}>{grade}</span>
+          <div className="flex flex-col pb-0.5">
+            <span className="text-xl font-bold leading-tight">{primary}</span>
+            {performancePct != null && <span className={cn('text-sm font-semibold', colors.text)}>{performancePct}% of goal</span>}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground leading-snug">{secondary}</p>
+        {isGracePeriod && (
+          <Badge variant="outline" className="text-[10px] border-amber-400/60 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            <Clock className="h-2.5 w-2.5 mr-1" /> 90-Day Grace Period
+          </Badge>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
+  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
+  const incomeDeltaPct = dashboard.expectedYTDIncomeGoal > 0 ? Math.round((incomeDelta / dashboard.expectedYTDIncomeGoal) * 100) : 0;
+  const pipelinePct = dashboard.expectedYTDIncomeGoal > 0 ? Math.round((dashboard.ytdTotalPotential / dashboard.expectedYTDIncomeGoal) * 100) : 0;
+  const vm = dashboard.volumeMetrics;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold">{view === 'team' ? agentView.viewLabel : 'My'} Performance</h2>
-          {view === 'team' && <Badge variant="secondary"><Users className="h-3 w-3 mr-1" /> Team</Badge>}
-        </div>
-        <div className="flex items-center gap-2">
-          {isTeamLeader && (
-            <Tabs value={view} onValueChange={v => setView(v as 'personal' | 'team')}>
-              <TabsList><TabsTrigger value="personal"><BarChart3 className="h-4 w-4 mr-1" /> Personal</TabsTrigger><TabsTrigger value="team"><Users className="h-4 w-4 mr-1" /> {availableTeams[0]?.teamName || 'Team'}</TabsTrigger></TabsList>
-            </Tabs>
-          )}
-          <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-            <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-            <SelectContent>{[...Array(5)].map((_, i) => { const y = new Date().getFullYear() - i; return <SelectItem key={y} value={String(y)}>{y}</SelectItem>; })}</SelectContent>
-          </Select>
-        </div>
+      <h2 className="text-lg font-semibold">Report Card</h2>
+
+      {/* Row 1: Income + Engagements */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <HeroCard
+          title="Net Income YTD" grade={dashboard.incomeGrade} primary={fmtCurrency(dashboard.netEarned)}
+          performancePct={dashboard.expectedYTDIncomeGoal > 0 ? Math.round((dashboard.netEarned / dashboard.expectedYTDIncomeGoal) * 100) : undefined}
+          secondary={incomeDelta >= 0 ? `${Math.abs(incomeDeltaPct)}% ahead of pace · ${fmtCurrency(dashboard.expectedYTDIncomeGoal)} YTD goal` : `${Math.abs(incomeDeltaPct)}% behind pace · ${fmtCurrency(dashboard.expectedYTDIncomeGoal)} YTD goal`}
+          icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
+        />
+        <HeroCard
+          title="Projected with Pending" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)}
+          performancePct={dashboard.expectedYTDIncomeGoal > 0 ? pipelinePct : undefined}
+          secondary={`${fmtCurrency(dashboard.netPending)} pending · closed + pipeline`}
+          icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
+        />
+        <HeroCard
+          title="Engagements YTD" grade={dashboard.leadIndicatorGrade}
+          primary={`${fmtNum(dashboard.kpis.engagements.actual)} / ${fmtNum(dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target)}`}
+          performancePct={Math.round(dashboard.leadIndicatorPerformance)}
+          secondary={`${dashboard.leadIndicatorPerformance}% of engagement goal-to-date`}
+          icon={Target}
+        />
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <PerfKPI title="Net Income (Closed)" value={fmtCurrencyCompact(totals.netIncome)} subtitle={`${fmtNumNull(totals.closedCount)} closings · ${gradeVsGoal ? `${gradeVsGoal}% of goal` : 'No goal set'}`} icon={DollarSign} highlight />
-        <PerfKPI title="Pending Income" value={fmtCurrencyCompact(totals.pendingNetIncome)} subtitle={`${fmtNumNull(totals.pendingCount)} pending deals`} icon={Clock} />
-        <PerfKPI title="Closed Volume" value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={`Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
-        <PerfKPI title="Avg Sale Price" value={fmtCurrencyCompact(avgSalePrice)} subtitle={data.prevYearStats ? `vs ${fmtCurrencyCompact(data.prevYearStats.avgSalePrice)} last year` : '—'} icon={DollarSign} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <PerfKPI title="Total GCI" value={fmtCurrencyCompact(totals.totalGCI)} subtitle={`Avg ${fmtCurrencyCompact(avgNetPerDeal)}/deal net`} icon={Target} />
-        <PerfKPI title="Avg Commission %" value={avgCommPct > 0 ? `${avgCommPct.toFixed(2)}%` : '—'} subtitle={data.prevYearStats ? `vs ${data.prevYearStats.avgCommissionPct.toFixed(2)}% last year` : '—'} icon={Percent} />
-        <PerfKPI title="Total Sales" value={fmtNumNull(totals.closedCount)} subtitle={`+ ${fmtNumNull(totals.pendingCount)} pending`} icon={BarChart3} />
-        <PerfKPI title={view === 'team' ? 'Team Margin %' : 'Your Take-Home %'} value={totals.totalGCI > 0 ? `${(100 - totals.grossMarginPct).toFixed(1)}%` : '—'} subtitle={`of GCI (broker keeps ${totals.grossMarginPct.toFixed(1)}%)`} icon={Percent} />
-      </div>
+      {/* Row 2: Deals & Volume */}
+      {vm && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <HeroCard
+            title="Deals Closed" grade={vm.dealsGrade} primary={`${vm.closedDeals} closed`}
+            performancePct={vm.dealsGoal != null ? Math.round(vm.dealsPerformance) : undefined}
+            secondary={vm.dealsGoal != null ? `Goal: ${vm.dealsGoal} deals · ${vm.pendingDeals} pending` : `${vm.pendingDeals} pending · No goal set`}
+            icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod}
+          />
+          <HeroCard
+            title="$ Volume Sold" grade={vm.volumeGrade} primary={fmtCurrency(vm.closedVolume)}
+            performancePct={vm.volumeGoal != null ? Math.round(vm.volumePerformance) : undefined}
+            secondary={vm.volumeGoal != null ? `Goal: ${fmtCurrency(vm.volumeGoal)} · ${fmtCurrency(vm.pendingVolume)} pending` : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
+            icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
+          />
+          <HeroCard
+            title="Projected Volume (w/ Pending)" grade={vm.projectedVolumeGrade} primary={fmtCurrency(vm.totalVolume)}
+            performancePct={vm.volumeGoal != null ? Math.round(vm.projectedVolumePerformance) : undefined}
+            secondary={vm.volumeGoal != null ? `Closed + pending vs ${fmtCurrency(vm.volumeGoal)} goal` : 'Closed + pending volume'}
+            icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4. KPI SECTION — Uniform Activity-Tracker-Style Cards
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function KpiSection({ dashboard, plan }: { dashboard: AgentDashboardData; plan: BusinessPlan | null }) {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold">KPI Tracker</h2>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {Object.entries(dashboard.kpis).map(([key, kpi]) => {
+          const meta = kpiMeta[key] || { label: key, icon: Target, unit: key };
+          // daily target from plan
+          const dailyTarget = plan?.calculatedTargets?.[key as keyof typeof plan.calculatedTargets];
+          const dailyBase = typeof dailyTarget === 'object' && dailyTarget && 'daily' in dailyTarget ? (dailyTarget as any).daily : 0;
+          return (
+            <KpiTrackerCard
+              key={key}
+              label={meta.label}
+              icon={meta.icon}
+              unit={meta.unit}
+              actual={kpi.actual}
+              target={kpi.target}
+              performance={kpi.performance}
+              grade={kpi.grade}
+              isGracePeriod={dashboard.isLeadIndicatorGracePeriod}
+              dailyBase={dailyBase}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, grade, isGracePeriod, dailyBase }: {
+  label: string; icon: React.ElementType; unit: string;
+  actual: number; target: number; performance: number; grade: string;
+  isGracePeriod: boolean; dailyBase: number;
+}) {
+  const [catchUpDays, setCatchUpDays] = useState(20);
+  const delta = actual - target;
+  const behindAmount = Math.max(0, target - actual);
+  const dailyCatchUp = Number((dailyBase + (behindAmount / Math.max(1, catchUpDays))).toFixed(2));
+  const colors = gradeColorScheme(grade);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={cn('flex items-center justify-center h-8 w-8 rounded-lg', colors.badge)}>
+              <Icon className="h-4 w-4" />
+            </div>
+            <CardTitle className="text-sm font-semibold">{label}</CardTitle>
+          </div>
+          <div className={cn('flex items-center justify-center h-12 w-12 rounded-xl text-xl font-black', gradeBg(grade), gradeTone(grade))}>
+            {isGracePeriod ? 'A' : grade}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Progress bar */}
+        <div className="space-y-1">
+          <div className="flex items-baseline justify-between">
+            <span className="text-lg font-bold">{fmtNum(actual)}</span>
+            <span className="text-sm text-muted-foreground">/ {fmtNum(target)} goal</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2">
+            <div
+              className={cn('h-2 rounded-full transition-all', performance >= 90 ? 'bg-green-500' : performance >= 70 ? 'bg-yellow-500' : performance >= 60 ? 'bg-orange-500' : 'bg-red-500')}
+              style={{ width: `${Math.min(performance, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">{performance}% of goal-to-date</p>
+        </div>
+
+        {/* Delta + Catch-Up */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg border p-2.5 space-y-0.5">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Delta</p>
+            <div className="flex items-center gap-1">
+              {delta >= 0 ? <ArrowUpRight className="h-3.5 w-3.5 text-green-600" /> : <ArrowDownRight className="h-3.5 w-3.5 text-red-600" />}
+              <span className={cn('text-base font-bold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
+                {delta >= 0 ? '+' : ''}{fmtNum(delta)}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">{delta >= 0 ? 'ahead' : 'behind'}</p>
+          </div>
+
+          <div className="rounded-lg border p-2.5 space-y-0.5">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Catch-Up</p>
+            <span className="text-base font-bold">{fmtNum(dailyCatchUp)}</span>
+            <p className="text-[10px] text-muted-foreground">{unit}/day</p>
+            <div className="flex items-center gap-1 mt-0.5 pt-0.5 border-t">
+              <Select value={String(catchUpDays)} onValueChange={v => setCatchUpDays(Number(v))}>
+                <SelectTrigger className="w-[60px] h-4 text-[9px] px-1 border-0 shadow-none"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[5, 10, 14, 20, 30, 45, 60].map(d => (
+                    <SelectItem key={d} value={String(d)}>{d}d window</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Grace period indicator */}
+        {isGracePeriod && (
+          <p className="text-[10px] text-muted-foreground italic">Grace period — establishing baseline</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5. CHARTS SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ChartsSection({ perfData, perfLoading, year, compareYear, setCompareYear }: {
+  perfData: AgentMetricsResponse | null; perfLoading: boolean;
+  year: number; compareYear: number | null; setCompareYear: (y: number | null) => void;
+}) {
+  if (perfLoading || !perfData?.overview) return <Skeleton className="h-80" />;
+
+  const { overview, agentView } = perfData;
+  const { months } = overview;
+  const { monthlyNetIncome, monthlyPendingNetIncome } = agentView;
+
+  return (
+    <div className="space-y-6">
       {/* CHART 1: Monthly Net Income */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} />
+            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
           </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={incomeChartConfig} className="h-[350px] w-full">
-            <BarChart data={months.map((m, i) => ({ label: m.label, netIncome: monthlyNetIncome[i] || 0, pendingNetIncome: monthlyPendingNetIncome[i] || 0, incomeGoal: m.grossMarginGoal, compareIncome: data.comparisonData?.months?.[i]?.netIncome ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({ label: m.label, netIncome: monthlyNetIncome[i] || 0, pendingNetIncome: monthlyPendingNetIncome[i] || 0, incomeGoal: m.grossMarginGoal, compareIncome: perfData.comparisonData?.months?.[i]?.netIncome ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
@@ -391,12 +778,12 @@ function PerformanceSection({ data, loading, year, setYear, view, setView, compa
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} />
+            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
           </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({ ...m, compareVolume: data.comparisonData?.months?.[i]?.closedVolume ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({ ...m, compareVolume: perfData.comparisonData?.months?.[i]?.closedVolume ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
@@ -416,12 +803,12 @@ function PerformanceSection({ data, loading, year, setYear, view, setView, compa
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} />
+            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
           </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({ ...m, compareCount: data.comparisonData?.months?.[i]?.closedCount ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({ ...m, compareCount: perfData.comparisonData?.months?.[i]?.closedCount ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} />
@@ -435,262 +822,13 @@ function PerformanceSection({ data, loading, year, setYear, view, setView, compa
           </ChartContainer>
         </CardContent>
       </Card>
-
-      {/* Goals Editor */}
-      <GoalsEditor months={months} year={year} goalSegment={agentView.goalSegment} onSaved={onGoalsSaved} />
     </div>
   );
 }
 
-function PerfKPI({ title, value, subtitle, icon: Icon, highlight }: { title: string; value: string; subtitle: string; icon: React.ElementType; highlight?: boolean }) {
-  return (
-    <Card className={highlight ? 'border-primary/50 bg-primary/5' : ''}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">{title}</CardTitle><Icon className="h-4 w-4 text-muted-foreground" /></CardHeader>
-      <CardContent><div className="text-2xl font-bold">{value}</div><p className="text-xs text-muted-foreground mt-1">{subtitle}</p></CardContent>
-    </Card>
-  );
-}
-
-// ── Overview Section ────────────────────────────────────────────────────────
-
-function OverviewSection({ data, year, transactions, opportunities }: {
-  data: { dashboard: AgentDashboardData; plan: BusinessPlan | null; ytdMetrics: YtdValueMetrics | null };
-  year: number; transactions: Transaction[]; opportunities: Opportunity[];
-}) {
-  const { dashboard, plan, ytdMetrics } = data;
-  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
-  const incomeDeltaPct = dashboard.expectedYTDIncomeGoal > 0 ? Math.round((incomeDelta / dashboard.expectedYTDIncomeGoal) * 100) : 0;
-  const pipelinePct = dashboard.expectedYTDIncomeGoal > 0 ? Math.round((dashboard.ytdTotalPotential / dashboard.expectedYTDIncomeGoal) * 100) : 0;
-  const filteredKpis = Object.entries(dashboard.kpis || {}).filter(([key]) => key !== 'engagements');
-
-  const effectiveStartLabel = !dashboard.effectiveStartDate ? 'Jan 1' : (() => { const d = new Date(`${dashboard.effectiveStartDate}T00:00:00`); if (Number.isNaN(d.getTime())) return dashboard.effectiveStartDate; return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); })();
-
-  return (
-    <div className="space-y-8">
-      {/* Key Numbers */}
-      <KeyNumbersCard dashboard={dashboard} year={year} />
-
-      {/* Hero Cards — Row 1: Income */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <HeroCard title="Net Income YTD" grade={dashboard.incomeGrade} primary={fmtCurrency(dashboard.netEarned)} secondary={incomeDelta >= 0 ? `${Math.abs(incomeDeltaPct)}% ahead of pace (${fmtCurrency(dashboard.expectedYTDIncomeGoal)} goal)` : `${Math.abs(incomeDeltaPct)}% behind pace (${fmtCurrency(dashboard.expectedYTDIncomeGoal)} goal)`} icon={DollarSign} />
-        <HeroCard title="Projected with Pending" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)} secondary={`${fmtCurrency(dashboard.netPending)} pending · ${pipelinePct}% of YTD goal if pending close`} icon={TrendingUp} />
-        <HeroCard title="Engagements YTD" grade={dashboard.leadIndicatorGrade} primary={`${fmtNum(dashboard.kpis.engagements.actual)} / ${fmtNum(dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target)}`} secondary={`${dashboard.leadIndicatorPerformance}% of engagement goal-to-date`} icon={Target} />
-      </div>
-
-      {/* Hero Cards — Row 2: Deals & Volume (separate blocks) */}
-      {dashboard.volumeMetrics && (() => {
-        const vm = dashboard.volumeMetrics!;
-        return (
-          <div className="grid gap-6 md:grid-cols-3">
-            <HeroCard
-              title="Deals Closed"
-              grade={vm.dealsGrade}
-              primary={`${vm.closedDeals} closed`}
-              secondary={vm.dealsGoal != null
-                ? `${vm.dealsPerformance}% of ${vm.dealsGoal} goal · ${vm.pendingDeals} pending`
-                : `${vm.pendingDeals} pending · No goal set`}
-              icon={BarChart3}
-            />
-            <HeroCard
-              title="$ Volume Sold"
-              grade={vm.volumeGrade}
-              primary={fmtCurrency(vm.closedVolume)}
-              secondary={vm.volumeGoal != null
-                ? `${vm.volumePerformance}% of ${fmtCurrency(vm.volumeGoal)} goal · ${fmtCurrency(vm.pendingVolume)} pending`
-                : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
-              icon={DollarSign}
-            />
-            <HeroCard
-              title="Projected Volume (w/ Pending)"
-              grade={vm.projectedVolumeGrade}
-              primary={fmtCurrency(vm.totalVolume)}
-              secondary={vm.volumeGoal != null
-                ? `${vm.projectedVolumePerformance}% of YTD goal if pending close`
-                : `Closed + pending volume`}
-              icon={TrendingUp}
-            />
-          </div>
-        );
-      })()}
-
-      {/* Activity Tracker + Pacing */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <ActivityTrackerCard dashboard={dashboard} />
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pacing & Goals</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Effective Start</span><span className="font-semibold text-sm">{effectiveStartLabel}</span></div>
-            <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Annual Income Goal</span><span className="font-semibold text-sm">{fmtCurrency(dashboard.annualIncomeGoal ?? 0)}</span></div>
-            <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Net Earned</span><span className="font-semibold text-sm">{fmtCurrency(dashboard.netEarned)}</span></div>
-            <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Net Pending</span><span className="font-semibold text-sm">{fmtCurrency(dashboard.netPending)}</span></div>
-            <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Total Potential</span><span className="font-bold text-sm text-primary">{fmtCurrency(dashboard.ytdTotalPotential)}</span></div>
-            <div className="border-t pt-2 flex justify-between items-center"><span className="text-sm text-muted-foreground">Pace Delta</span><span className={cn('font-semibold text-sm', incomeDelta >= 0 ? 'text-green-600' : 'text-red-600')}>{incomeDelta >= 0 ? '+' : ''}{fmtCurrency(incomeDelta)}</span></div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* KPI Grades */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {filteredKpis.map(([key, kpi]) => (
-          <KpiCard key={key} title={key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')} actual={kpi.actual} target={kpi.target} performance={kpi.performance} grade={kpi.grade} isGracePeriod={dashboard.isLeadIndicatorGracePeriod} />
-        ))}
-      </div>
-
-      {/* YTD Value Metrics */}
-      <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
-
-      {/* Pipeline Tables */}
-      <OpportunitiesTable opportunities={opportunities} />
-      <PendingTable transactions={transactions} />
-      <ClosedTable transactions={transactions} year={year} />
-
-      <RecruitingIncentiveTracker />
-    </div>
-  );
-}
-
-// ── Sub-components ──────────────────────────────────────────────────────────
-
-function HeroCard({ title, grade, primary, secondary, icon: Icon }: { title: string; grade: string; primary: string; secondary: string; icon: React.ElementType }) {
-  return (<Card className={cn('relative overflow-hidden', gradeBg(grade))}><CardHeader className="flex flex-row items-center justify-between pb-1"><CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle><Icon className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent className="space-y-1"><div className="flex items-baseline gap-3"><span className={cn('text-4xl font-extrabold tracking-tight', gradeTone(grade))}>{grade}</span><span className="text-2xl font-bold">{primary}</span></div><p className="text-sm text-muted-foreground">{secondary}</p></CardContent></Card>);
-}
-
-function ActivityTrackerCard({ dashboard }: { dashboard: AgentDashboardData }) {
-  const [catchUpPeriod, setCatchUpPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
-  const [catchUpDays, setCatchUpDays] = useState<number>(dashboard.catchUpWindowDays ?? 20);
-
-  const kpi = dashboard.kpis.engagements;
-  const delta = kpi.actual - kpi.target;
-  const behindAmount = Math.max(0, kpi.target - kpi.actual);
-
-  // Recalculate catch-up based on selected window
-  // dailyBase = original daily target (before catch-up spread)
-  const originalWindow = dashboard.catchUpWindowDays ?? 20;
-  const originalCatchUp = dashboard.catchUpDailyRequired ?? 0;
-  const originalBehind = Math.max(0, (dashboard.engagementGoalToDate ?? kpi.target) - kpi.actual);
-  const dailyBase = originalWindow > 0 ? originalCatchUp - (originalBehind / originalWindow) : originalCatchUp;
-  const dailyCatchUp = Number((dailyBase + (behindAmount / Math.max(1, catchUpDays))).toFixed(2));
-
-  let catchUpValue: number; let periodLabel: string;
-  switch (catchUpPeriod) {
-    case 'weekly': catchUpValue = Number((dailyCatchUp * 5).toFixed(1)); periodLabel = 'per week'; break;
-    case 'monthly': catchUpValue = Number((dailyCatchUp * 22).toFixed(1)); periodLabel = 'per month'; break;
-    default: catchUpValue = dailyCatchUp; periodLabel = 'per day';
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Engagement Tracker</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Grade + Progress */}
-        <div className="flex items-center gap-4">
-          <div className={cn('flex items-center justify-center h-14 w-14 rounded-xl text-2xl font-extrabold', gradeBg(kpi.grade), gradeTone(kpi.grade))}>{kpi.grade}</div>
-          <div className="flex-1 space-y-1">
-            <div className="flex items-baseline justify-between">
-              <span className="text-lg font-bold">{fmtNum(kpi.actual)}</span>
-              <span className="text-sm text-muted-foreground">/ {fmtNum(kpi.target)} goal</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-2">
-              <div className={cn('h-2 rounded-full transition-all', kpi.performance >= 100 ? 'bg-green-500' : kpi.performance >= 70 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${Math.min(kpi.performance, 100)}%` }} />
-            </div>
-            <p className="text-xs text-muted-foreground">{kpi.performance}% of engagement goal-to-date</p>
-          </div>
-        </div>
-
-        {/* Delta + Catch-Up */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border p-3 space-y-0.5">
-            <p className="text-xs text-muted-foreground font-medium">Engagement Delta</p>
-            <div className="flex items-center gap-1">
-              {delta >= 0 ? <ArrowUpRight className="h-4 w-4 text-green-600" /> : <ArrowDownRight className="h-4 w-4 text-red-600" />}
-              <span className={cn('text-lg font-bold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
-                {delta >= 0 ? '+' : ''}{fmtNum(delta)}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">{delta >= 0 ? 'ahead of goal' : 'behind goal'}</p>
-          </div>
-
-          <div className="rounded-lg border p-3 space-y-0.5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground font-medium">Catch-Up Target</p>
-              <Select value={catchUpPeriod} onValueChange={v => setCatchUpPeriod(v as typeof catchUpPeriod)}>
-                <SelectTrigger className="w-[80px] h-6 text-[10px] px-2"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <span className="text-lg font-bold">{fmtNum(catchUpValue)}</span>
-            <p className="text-xs text-muted-foreground">engagements {periodLabel}</p>
-            <div className="flex items-center gap-1.5 mt-1 pt-1 border-t">
-              <span className="text-[10px] text-muted-foreground whitespace-nowrap">Catch-up window:</span>
-              <Select value={String(catchUpDays)} onValueChange={v => setCatchUpDays(Number(v))}>
-                <SelectTrigger className="w-[70px] h-5 text-[10px] px-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[5, 10, 14, 20, 30, 45, 60].map(d => (
-                    <SelectItem key={d} value={String(d)}>{d} days</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function KeyNumbersCard({ dashboard, year }: { dashboard: AgentDashboardData; year: number }) {
-  const [compareYear, setCompareYear] = useState<number | null>(null);
-  const prev = dashboard.prevYearComparison;
-  const availableYears = dashboard.availableComparisonYears ?? [];
-  const showCompare = prev && (compareYear === null || compareYear === prev.year);
-  const compLabel = prev ? String(prev.year) : '';
-  const stats = dashboard.stats;
-
-  const StatRow = ({ label, current, previous, isCurrency = true, suffix = '' }: { label: string; current: number; previous?: number; isCurrency?: boolean; suffix?: string }) => {
-    const fmt = isCurrency ? fmtCurrency : (v: number) => fmtNum(v) + suffix;
-    const d = previous && previous > 0 ? ((current - previous) / previous) * 100 : null;
-    return (<div className="flex items-center justify-between py-2 border-b last:border-0"><span className="text-sm text-muted-foreground">{label}</span><div className="flex items-center gap-3"><span className="font-semibold text-sm">{fmt(current)}</span>{showCompare && previous != null && previous > 0 && d != null && (<span className={cn('text-xs font-medium flex items-center gap-0.5', d >= 0 ? 'text-green-600' : 'text-red-600')}>{d >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}{Math.abs(d).toFixed(0)}%<span className="text-muted-foreground ml-1">vs {compLabel}</span></span>)}</div></div>);
-  };
-
-  return (
-    <Card>
-      <CardHeader className="pb-2"><div className="flex items-center justify-between"><CardTitle className="text-base font-semibold">Key Numbers</CardTitle><Select value={compareYear != null ? String(compareYear) : 'default'} onValueChange={v => setCompareYear(v === 'default' ? null : Number(v))}><SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue placeholder="Compare to..." /></SelectTrigger><SelectContent><SelectItem value="default">{prev ? `vs ${prev.year}` : 'No comparison'}</SelectItem>{availableYears.map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}</SelectContent></Select></div></CardHeader>
-      <CardContent className="space-y-0">
-        <StatRow label="Avg Sale Price" current={stats.avgSalesPrice} previous={showCompare ? prev?.avgSalesPrice : undefined} />
-        <StatRow label="Avg Commission %" current={stats.avgCommissionPct} previous={showCompare ? prev?.avgCommissionPct : undefined} isCurrency={false} suffix="%" />
-        <StatRow label="$ per Engagement" current={stats.engagementValue} previous={showCompare ? prev?.engagementValue : undefined} />
-        <StatRow label="$ per Appointment" current={stats.appointmentValue} previous={showCompare ? prev?.appointmentValue : undefined} />
-        <StatRow label="Avg Net per Deal" current={stats.avgCommission} previous={prev && prev.closedDeals > 0 ? prev.netEarned / prev.closedDeals : undefined} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function DealsVolumeCard({ dashboard }: { dashboard: AgentDashboardData }) {
-  const vm = dashboard.volumeMetrics;
-  if (!vm) return null;
-  const GradeRow = ({ label, actual, goal, grade, performance, subtitle }: { label: string; actual: string; goal: string | null; grade: string; performance: number; subtitle?: string }) => (
-    <div className="space-y-2"><div className="flex items-center justify-between"><span className="text-sm font-medium">{label}</span><div className={cn('flex items-center justify-center h-8 w-8 rounded-lg text-sm font-extrabold', gradeBg(grade), gradeTone(grade))}>{grade}</div></div><div className="flex items-baseline justify-between"><span className="text-lg font-bold">{actual}</span>{goal && <span className="text-sm text-muted-foreground">/ {goal} goal</span>}</div><div className="w-full bg-muted rounded-full h-1.5"><div className={cn('h-1.5 rounded-full transition-all', performance >= 100 ? 'bg-green-500' : performance >= 70 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${Math.min(performance, 100)}%` }} /></div>{subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}</div>
-  );
-  return (
-    <Card>
-      <CardHeader className="pb-3"><CardTitle className="text-base font-semibold">Deals & Volume</CardTitle><CardDescription>Closed performance vs goals</CardDescription></CardHeader>
-      <CardContent className="space-y-5">
-        <GradeRow label="Deals Closed" actual={`${vm.closedDeals} closed`} goal={vm.dealsGoal != null ? `${vm.dealsGoal}` : null} grade={vm.dealsGrade} performance={vm.dealsPerformance} subtitle={`+ ${vm.pendingDeals} pending`} />
-        <GradeRow label="$ Volume Sold" actual={fmtCurrency(vm.closedVolume)} goal={vm.volumeGoal != null ? fmtCurrency(vm.volumeGoal) : null} grade={vm.volumeGrade} performance={vm.volumePerformance} subtitle={`${fmtCurrency(vm.pendingVolume)} pending`} />
-        <div className="border-t pt-3"><div className="flex items-center justify-between"><span className="text-sm font-medium">Projected Volume (w/ Pending)</span><div className={cn('flex items-center justify-center h-8 w-8 rounded-lg text-sm font-extrabold', gradeBg(vm.projectedVolumeGrade), gradeTone(vm.projectedVolumeGrade))}>{vm.projectedVolumeGrade}</div></div><div className="flex items-baseline justify-between mt-1"><span className="text-lg font-bold">{fmtCurrency(vm.totalVolume)}</span><span className="text-xs text-muted-foreground">{vm.projectedVolumePerformance}% of YTD goal</span></div></div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Pipeline Tables ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// PIPELINE TABLES
+// ═══════════════════════════════════════════════════════════════════════════════
 
 function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] }) {
   const activeOpps = opportunities.filter(o => o.isActive).sort((a, b) => (a.appointmentDate ?? '') < (b.appointmentDate ?? '') ? -1 : 1);

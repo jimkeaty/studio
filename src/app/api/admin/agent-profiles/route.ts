@@ -184,6 +184,7 @@ function normalizeInput(body: AgentProfileInput) {
     referringAgentDisplayNameSnapshot,
 
     tiers: isIndependent ? (body.tiers || []).map(normalizeTier) : [],
+    gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
   };
 }

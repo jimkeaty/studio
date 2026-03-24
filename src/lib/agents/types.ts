@@ -53,6 +53,7 @@ export type AgentProfile = {
   referringAgentDisplayNameSnapshot: string | null;
 
   tiers: AgentTier[];
+  gracePeriodEnabled: boolean;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -81,5 +82,6 @@ export type AgentProfileInput = {
   referringAgentDisplayNameSnapshot?: string | null;
 
   tiers?: AgentTier[];
+  gracePeriodEnabled?: boolean;
   notes?: string | null;
 };
