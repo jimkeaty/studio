@@ -1,4 +1,7 @@
-// GET + POST /api/broker/goals — manage monthly broker command goals
+// GET + POST /api/broker/goals — manage monthly goals
+// Admin: can set goals for any segment (TOTAL, team IDs)
+// Agents: can set goals for their own segment (agent_{uid})
+// Team leaders: can set goals for their team segment (teamId)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 
@@ -8,23 +11,55 @@ function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
-async function requireAdmin(req: NextRequest) {
+async function requireAuth(req: NextRequest) {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
-  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  if (decoded.uid !== ADMIN_UID) return null;
-  return decoded;
+  try {
+    return await adminAuth.verifyIdToken(authHeader.slice(7));
+  } catch {
+    return null;
+  }
 }
 
-// GET /api/broker/goals?year=2026
+// Check if user can write to the given segment
+async function canWriteSegment(uid: string, segment: string): Promise<boolean> {
+  // Admin can write anything
+  if (uid === ADMIN_UID) return true;
+
+  // Agents can write their own segment
+  if (segment === `agent_${uid}`) return true;
+
+  // Team leaders can write their team's segment
+  const profileSnap = await adminDb.collection('agentProfiles')
+    .where('agentId', '==', uid).limit(1).get();
+  if (!profileSnap.empty) {
+    const profile = profileSnap.docs[0].data();
+    if (profile.teamRole === 'leader' && profile.primaryTeamId === segment) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// GET /api/broker/goals?year=2026&segment=TOTAL
 export async function GET(req: NextRequest) {
   try {
-    const decoded = await requireAdmin(req);
-    if (!decoded) return jsonError(403, 'Forbidden');
+    const decoded = await requireAuth(req);
+    if (!decoded) return jsonError(401, 'Unauthorized');
 
     const { searchParams } = new URL(req.url);
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()), 10);
     const segment = searchParams.get('segment') || 'TOTAL';
+
+    // Non-admin can only read their own or their team's goals
+    const isAdmin = decoded.uid === ADMIN_UID;
+    if (!isAdmin) {
+      const allowed =
+        segment === `agent_${decoded.uid}` ||
+        await canWriteSegment(decoded.uid, segment);
+      if (!allowed) return jsonError(403, 'Forbidden');
+    }
 
     const snap = await adminDb
       .collection('brokerCommandGoals')
@@ -42,11 +77,10 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/broker/goals — save goals for a month
-// Body: { year, month, segment?, grossMarginGoal?, volumeGoal?, salesCountGoal? }
 export async function POST(req: NextRequest) {
   try {
-    const decoded = await requireAdmin(req);
-    if (!decoded) return jsonError(403, 'Forbidden');
+    const decoded = await requireAuth(req);
+    if (!decoded) return jsonError(401, 'Unauthorized');
 
     const body = await req.json();
     const { year, month, segment = 'TOTAL', grossMarginGoal, volumeGoal, salesCountGoal } = body;
@@ -54,6 +88,10 @@ export async function POST(req: NextRequest) {
     if (!year || !month || month < 1 || month > 12) {
       return jsonError(400, 'year and month (1-12) are required');
     }
+
+    // Check permissions
+    const allowed = await canWriteSegment(decoded.uid, segment);
+    if (!allowed) return jsonError(403, 'You do not have permission to set goals for this segment');
 
     const docId = `${year}-${String(month).padStart(2, '0')}-${segment}`;
     const docRef = adminDb.collection('brokerCommandGoals').doc(docId);
