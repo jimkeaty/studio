@@ -39,7 +39,6 @@ const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 // Shown to all users (agent + admin)
 const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
-  { href: '/dashboard/command', label: 'Performance', icon: BarChart3 },
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },

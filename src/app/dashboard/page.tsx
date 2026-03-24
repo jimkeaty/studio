@@ -8,121 +8,85 @@ import { YtdValueMetricsCard } from '@/components/dashboard/YtdValueMetricsCard'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   AlertTriangle,
   CalendarDays,
   DollarSign,
   Target,
   TrendingUp,
-  Gauge,
   ArrowUpRight,
   ArrowDownRight,
   MapPin,
   FileCheck2,
   Clock,
+  BarChart3,
+  LayoutGrid,
+  Zap,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { AgentIncomeByMonthCard } from '@/components/dashboard/agent/AgentIncomeByMonthCard';
+import { PerformanceTab } from '@/components/dashboard/agent/PerformanceTab';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
+// ── Skeleton ────────────────────────────────────────────────────────────────
+
 const DashboardSkeleton = () => (
   <div className="space-y-8">
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-      <Skeleton className="h-40" />
-      <Skeleton className="h-40" />
-      <Skeleton className="h-40" />
-      <Skeleton className="h-40" />
+    <div className="grid gap-6 md:grid-cols-3">
+      <Skeleton className="h-44" />
+      <Skeleton className="h-44" />
+      <Skeleton className="h-44" />
     </div>
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
-      <Skeleton className="h-32" />
+      <Skeleton className="h-36" />
+      <Skeleton className="h-36" />
+      <Skeleton className="h-36" />
     </div>
     <Skeleton className="h-96" />
   </div>
 );
 
+// ── Formatters ──────────────────────────────────────────────────────────────
+
 function formatCurrency(value: number) {
   return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
+    style: 'currency', currency: 'USD', minimumFractionDigits: 0,
   });
 }
 
 function formatNumber(value: number) {
   const rounded = Math.round(value * 10) / 10;
-  return Number.isInteger(rounded) ? rounded.toLocaleString() : rounded.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return Number.isInteger(rounded)
+    ? rounded.toLocaleString()
+    : rounded.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 function gradeTone(grade: string) {
   switch (grade) {
-    case 'A':
-      return 'text-green-600';
-    case 'B':
-      return 'text-primary';
-    case 'C':
-      return 'text-yellow-600';
-    case 'D':
-      return 'text-orange-600';
-    default:
-      return 'text-red-600';
+    case 'A': return 'text-green-600';
+    case 'B': return 'text-primary';
+    case 'C': return 'text-yellow-600';
+    case 'D': return 'text-orange-600';
+    default: return 'text-red-600';
   }
 }
 
-const StatCard = ({
-  title,
-  value,
-  icon: Icon,
-  description,
-}: {
-  title: string;
-  value: string;
-  icon: React.ElementType;
-  description?: string;
-}) => (
-  <Card>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      <Icon className="h-4 w-4 text-muted-foreground" />
-    </CardHeader>
-    <CardContent>
-      <div className="text-2xl font-bold">{value}</div>
-      {description && <p className="text-xs text-muted-foreground">{description}</p>}
-    </CardContent>
-  </Card>
-);
-
-const SummaryCard = ({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  accentClassName,
-}: {
-  title: string;
-  value: string;
-  subtitle?: string;
-  icon: React.ElementType;
-  accentClassName?: string;
-}) => (
-  <Card>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      <Icon className="h-4 w-4 text-muted-foreground" />
-    </CardHeader>
-    <CardContent>
-      <div className={`text-3xl font-bold ${accentClassName ?? ''}`}>{value}</div>
-      {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
-    </CardContent>
-  </Card>
-);
+function gradeBg(grade: string) {
+  switch (grade) {
+    case 'A': return 'bg-green-500/10 border-green-500/30';
+    case 'B': return 'bg-primary/5 border-primary/30';
+    case 'C': return 'bg-yellow-500/10 border-yellow-500/30';
+    case 'D': return 'bg-orange-500/10 border-orange-500/30';
+    default: return 'bg-red-500/10 border-red-500/30';
+  }
+}
 
 const formatCurrencyLocal = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
@@ -151,6 +115,8 @@ const txTypeLabel: Record<string, string> = {
   commercial_sale: 'Commercial Sale',
 };
 
+// ── Main Page ───────────────────────────────────────────────────────────────
+
 export default function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const [data, setData] = useState<{
@@ -162,6 +128,7 @@ export default function AgentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const year = new Date().getFullYear();
 
@@ -175,7 +142,6 @@ export default function AgentDashboardPage() {
         const res = await fetch(`/api/dashboard?year=${year}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (!res.ok) {
           const errorData = await res.json();
           if (res.status === 400 && errorData.allowedYears) {
@@ -183,11 +149,8 @@ export default function AgentDashboardPage() {
           }
           throw new Error(errorData.error || 'Failed to load dashboard data');
         }
-
         const responseData = await res.json();
-        if (!responseData.ok) {
-          throw new Error(responseData.error || 'API returned an error');
-        }
+        if (!responseData.ok) throw new Error(responseData.error || 'API returned an error');
         setData(responseData);
       } catch (err: any) {
         setError(err.message);
@@ -196,15 +159,10 @@ export default function AgentDashboardPage() {
         setLoading(false);
       }
     };
-
-    if (!userLoading && user) {
-      loadDashboard();
-    } else if (!userLoading && !user) {
-      setLoading(false);
-    }
+    if (!userLoading && user) loadDashboard();
+    else if (!userLoading && !user) setLoading(false);
   }, [user, userLoading, year]);
 
-  // Load pipeline data (pending/closed transactions + opportunities)
   useEffect(() => {
     const loadPipeline = async () => {
       if (!user) return;
@@ -219,41 +177,262 @@ export default function AgentDashboardPage() {
           setTransactions(data.transactions ?? []);
           setOpportunities(data.opportunities ?? []);
         }
-      } catch (err) {
-        console.error('[pipeline]', err);
-      }
+      } catch (err) { console.error('[pipeline]', err); }
     };
     if (!userLoading && user) loadPipeline();
   }, [user, userLoading, year]);
 
-  if (loading || userLoading) {
-    return <DashboardSkeleton />;
-  }
+  if (userLoading) return <DashboardSkeleton />;
 
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Error Loading Dashboard</AlertTitle>
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    );
-  }
-
-  if (!data || !data.dashboard) {
+  if (!user) {
     return (
       <Alert>
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>No Data Available</AlertTitle>
-        <AlertDescription>
-          Dashboard data for {year} could not be found for your account. Please check your business plan setup or contact support.
-        </AlertDescription>
+        <AlertTitle>Sign In Required</AlertTitle>
+        <AlertDescription>Please sign in to view your dashboard.</AlertDescription>
       </Alert>
     );
   }
 
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
+        <p className="text-muted-foreground">Your performance summary for {year}.</p>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="overview">
+            <LayoutGrid className="h-4 w-4 mr-1.5" />Overview
+          </TabsTrigger>
+          <TabsTrigger value="performance">
+            <BarChart3 className="h-4 w-4 mr-1.5" />Performance
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-6">
+          {loading ? (
+            <DashboardSkeleton />
+          ) : error ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error Loading Dashboard</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : !data || !data.dashboard ? (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>No Data Available</AlertTitle>
+              <AlertDescription>
+                Dashboard data for {year} could not be found for your account. Please check your business plan setup or contact support.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <OverviewContent
+              data={data}
+              year={year}
+              transactions={transactions}
+              opportunities={opportunities}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="performance" className="mt-6">
+          <PerformanceTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ── Hero Grade Card ─────────────────────────────────────────────────────────
+
+function HeroCard({
+  title, grade, primary, secondary, icon: Icon,
+}: {
+  title: string; grade: string; primary: string; secondary: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <Card className={cn('relative overflow-hidden', gradeBg(grade))}>
+      <CardHeader className="flex flex-row items-center justify-between pb-1">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent className="space-y-1">
+        <div className="flex items-baseline gap-3">
+          <span className={cn('text-4xl font-extrabold tracking-tight', gradeTone(grade))}>{grade}</span>
+          <span className="text-2xl font-bold">{primary}</span>
+        </div>
+        <p className="text-sm text-muted-foreground">{secondary}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Activity Tracker Card (Engagements / Appointments toggle) ───────────────
+
+function ActivityTrackerCard({ dashboard }: { dashboard: AgentDashboardData }) {
+  const [metric, setMetric] = useState<'engagements' | 'appointmentsHeld'>('engagements');
+  const [catchUpPeriod, setCatchUpPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  const kpi = dashboard.kpis[metric];
+  const label = metric === 'engagements' ? 'Engagements' : 'Appointments Held';
+
+  // Calculate delta & catch-up for the selected metric
+  const delta = kpi.actual - kpi.target;
+  const behindAmount = Math.max(0, kpi.target - kpi.actual);
+
+  // For catch-up: we use the daily target from the KPI + spread the deficit over 20 days
+  const catchUpWindow = dashboard.catchUpWindowDays ?? 20;
+  // Daily target = target / elapsed workdays (approximate from KPI target / goal-to-date ratio)
+  // We'll use the existing catchUpDailyRequired for engagements, and calculate for appointments
+  let dailyCatchUp: number;
+  if (metric === 'engagements') {
+    dailyCatchUp = dashboard.catchUpDailyRequired ?? 0;
+  } else {
+    // For appointments: daily base rate + deficit spread over catch-up window
+    // Estimate daily base from the target: target was accumulated over elapsed workdays
+    // A simple approximation: if target > 0, dailyBase ≈ kpi.target / elapsed_days
+    // But we have catchUpWindowDays. Use similar formula as the API.
+    const elapsed = kpi.target > 0 ? Math.max(1, kpi.target) : 1;
+    // Actually, we can derive daily rate from: target = dailyRate × workdays
+    // We don't know workdays exactly, but we can estimate from engagements:
+    // engTarget / engDaily ≈ workdays, so aptDaily = aptTarget / workdays
+    const engTarget = dashboard.kpis.engagements.target;
+    const engDaily = engTarget > 0 && dashboard.catchUpDailyRequired
+      ? (dashboard.catchUpDailyRequired - (Math.max(0, engTarget - dashboard.kpis.engagements.actual) / catchUpWindow))
+      : 0;
+    const estWorkdays = engDaily > 0 ? engTarget / engDaily : (catchUpWindow * 2); // fallback ~40 days
+    const aptDailyBase = estWorkdays > 0 ? kpi.target / estWorkdays : 0;
+    dailyCatchUp = Number((aptDailyBase + behindAmount / catchUpWindow).toFixed(2));
+  }
+
+  // Convert to selected period
+  let catchUpValue: number;
+  let periodLabel: string;
+  switch (catchUpPeriod) {
+    case 'weekly':
+      catchUpValue = Number((dailyCatchUp * 5).toFixed(1));
+      periodLabel = 'per week';
+      break;
+    case 'monthly':
+      catchUpValue = Number((dailyCatchUp * 22).toFixed(1));
+      periodLabel = 'per month';
+      break;
+    default:
+      catchUpValue = dailyCatchUp;
+      periodLabel = 'per day';
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Activity Tracker</CardTitle>
+          <Select value={metric} onValueChange={v => setMetric(v as typeof metric)}>
+            <SelectTrigger className="w-[170px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="engagements">Engagements</SelectItem>
+              <SelectItem value="appointmentsHeld">Appointments Held</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Grade + Progress */}
+        <div className="flex items-center gap-4">
+          <div className={cn(
+            'flex items-center justify-center h-14 w-14 rounded-xl text-2xl font-extrabold',
+            gradeBg(kpi.grade), gradeTone(kpi.grade),
+          )}>
+            {kpi.grade}
+          </div>
+          <div className="flex-1 space-y-1">
+            <div className="flex items-baseline justify-between">
+              <span className="text-lg font-bold">{formatNumber(kpi.actual)}</span>
+              <span className="text-sm text-muted-foreground">/ {formatNumber(kpi.target)} goal</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2">
+              <div
+                className={cn(
+                  'h-2 rounded-full transition-all',
+                  kpi.performance >= 100 ? 'bg-green-500' :
+                  kpi.performance >= 70 ? 'bg-yellow-500' : 'bg-red-500',
+                )}
+                style={{ width: `${Math.min(kpi.performance, 100)}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{kpi.performance}% of {label.toLowerCase()} goal-to-date</p>
+          </div>
+        </div>
+
+        {/* Delta + Catch-Up */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border p-3 space-y-0.5">
+            <p className="text-xs text-muted-foreground font-medium">{label} Delta</p>
+            <div className="flex items-center gap-1">
+              {delta >= 0
+                ? <ArrowUpRight className="h-4 w-4 text-green-600" />
+                : <ArrowDownRight className="h-4 w-4 text-red-600" />}
+              <span className={cn('text-lg font-bold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
+                {delta >= 0 ? '+' : ''}{formatNumber(delta)}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {delta >= 0 ? 'ahead of goal' : 'behind goal'}
+            </p>
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-0.5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground font-medium">Catch-Up Target</p>
+              <Select value={catchUpPeriod} onValueChange={v => setCatchUpPeriod(v as typeof catchUpPeriod)}>
+                <SelectTrigger className="w-[90px] h-6 text-[10px] px-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <span className="text-lg font-bold">{formatNumber(catchUpValue)}</span>
+            <p className="text-xs text-muted-foreground">{label.toLowerCase()} {periodLabel}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Overview Tab Content ────────────────────────────────────────────────────
+
+function OverviewContent({
+  data, year, transactions, opportunities,
+}: {
+  data: { dashboard: AgentDashboardData; plan: BusinessPlan | null; ytdMetrics: YtdValueMetrics | null };
+  year: number; transactions: Transaction[]; opportunities: Opportunity[];
+}) {
   const { dashboard, plan, ytdMetrics } = data;
-  const kpis = Object.entries(dashboard.kpis || {});
+
+  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
+  const incomeDeltaPct = dashboard.expectedYTDIncomeGoal > 0
+    ? Math.round((incomeDelta / dashboard.expectedYTDIncomeGoal) * 100)
+    : 0;
+
+  const pipelinePct = dashboard.expectedYTDIncomeGoal > 0
+    ? Math.round((dashboard.ytdTotalPotential / dashboard.expectedYTDIncomeGoal) * 100)
+    : 0;
+
+  // Filter out engagements KPI — it's now handled by the ActivityTrackerCard
+  const filteredKpis = Object.entries(dashboard.kpis || {}).filter(
+    ([key]) => key !== 'engagements'
+  );
 
   const effectiveStartLabel = !dashboard.effectiveStartDate
     ? 'Jan 1'
@@ -263,114 +442,93 @@ export default function AgentDashboardPage() {
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       })();
 
-  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
-  const engagementDelta = dashboard.engagementDelta ?? 0;
-
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
-        <p className="text-muted-foreground">Your performance summary for {year}.</p>
-      </div>
-
+      {/* ── ROW 1: Three Hero Cards ────────────────────────────────────────── */}
       <div className="grid gap-6 md:grid-cols-3">
-        <SummaryCard
-          title="Income Grade"
-          value={dashboard.incomeGrade}
-          subtitle="Based on earned income vs pace goal"
+        <HeroCard
+          title="Net Income YTD"
+          grade={dashboard.incomeGrade}
+          primary={formatCurrency(dashboard.netEarned)}
+          secondary={
+            incomeDelta >= 0
+              ? `${Math.abs(incomeDeltaPct)}% ahead of pace (${formatCurrency(dashboard.expectedYTDIncomeGoal)} goal)`
+              : `${Math.abs(incomeDeltaPct)}% behind pace (${formatCurrency(dashboard.expectedYTDIncomeGoal)} goal)`
+          }
           icon={DollarSign}
-          accentClassName={gradeTone(dashboard.incomeGrade)}
         />
 
-        <SummaryCard
-          title="Pipeline Projection"
-          value={dashboard.pipelineAdjustedIncome.grade}
-          subtitle="If pending transactions close"
+        <HeroCard
+          title="Projected with Pending"
+          grade={dashboard.pipelineAdjustedIncome.grade}
+          primary={formatCurrency(dashboard.ytdTotalPotential)}
+          secondary={`${formatCurrency(dashboard.netPending)} pending · ${pipelinePct}% of YTD goal if pending close`}
           icon={TrendingUp}
-          accentClassName={gradeTone(dashboard.pipelineAdjustedIncome.grade)}
         />
 
-        <SummaryCard
-          title="Lead Indicators"
-          value={dashboard.leadIndicatorGrade}
-          subtitle={`${dashboard.leadIndicatorPerformance}% of engagement goal`}
-          icon={Target}
-          accentClassName={gradeTone(dashboard.leadIndicatorGrade)}
-        />
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        <SummaryCard
-          title="Income Grade vs Goal"
-          value={dashboard.incomeGrade}
-          subtitle={`${formatCurrency(dashboard.netEarned)} earned against ${formatCurrency(dashboard.expectedYTDIncomeGoal)} pace goal`}
-          icon={Gauge}
-          accentClassName={gradeTone(dashboard.incomeGrade)}
-        />
-        <SummaryCard
-          title="Projected Grade with Pending"
-          value={dashboard.pipelineAdjustedIncome.grade}
-          subtitle={`${formatCurrency(dashboard.ytdTotalPotential)} total potential if pending closes`}
-          icon={TrendingUp}
-          accentClassName={gradeTone(dashboard.pipelineAdjustedIncome.grade)}
-        />
-        <SummaryCard
-          title="Effective Start Date"
-          value={effectiveStartLabel}
-          subtitle="Prorated pacing begins from this date through Dec 31"
-          icon={CalendarDays}
-        />
-        <SummaryCard
-          title="Engagements YTD vs Goal"
-          value={`${formatNumber(dashboard.kpis.engagements.actual)} / ${formatNumber(dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target)}`}
-          subtitle={`${dashboard.leadIndicatorPerformance}% of goal-to-date`}
-          icon={Target}
-          accentClassName={gradeTone(dashboard.leadIndicatorGrade)}
-        />
-        <SummaryCard
-          title="Engagement Delta"
-          value={engagementDelta >= 0 ? `+${formatNumber(engagementDelta)}` : formatNumber(engagementDelta)}
-          subtitle={engagementDelta >= 0 ? 'Ahead of engagement goal-to-date' : 'Behind engagement goal-to-date'}
-          icon={engagementDelta >= 0 ? ArrowUpRight : ArrowDownRight}
-          accentClassName={engagementDelta >= 0 ? 'text-green-600' : 'text-red-600'}
-        />
-        <SummaryCard
-          title="Catch-Up Daily Target"
-          value={formatNumber(dashboard.catchUpDailyRequired ?? 0)}
-          subtitle={`Based on a ${dashboard.catchUpWindowDays ?? 20}-workday catch-up window`}
+        <HeroCard
+          title="Engagements YTD"
+          grade={dashboard.leadIndicatorGrade}
+          primary={`${formatNumber(dashboard.kpis.engagements.actual)} / ${formatNumber(dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target)}`}
+          secondary={`${dashboard.leadIndicatorPerformance}% of engagement goal-to-date`}
           icon={Target}
         />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Net Earned (YTD)"
-          value={formatCurrency(dashboard.netEarned)}
-          icon={DollarSign}
-          description={incomeDelta >= 0 ? `Ahead of pace by ${formatCurrency(incomeDelta)}` : `Behind pace by ${formatCurrency(Math.abs(incomeDelta))}`}
-        />
-        <StatCard
-          title="Net Pending"
-          value={formatCurrency(dashboard.netPending)}
-          icon={TrendingUp}
-          description="Expected net commission in pipeline"
-        />
-        <StatCard
-          title="YTD Income Goal"
-          value={formatCurrency(dashboard.expectedYTDIncomeGoal)}
-          icon={Target}
-          description="Prorated workday-paced goal"
-        />
-        <StatCard
-          title="YTD Total Potential"
-          value={formatCurrency(dashboard.ytdTotalPotential)}
-          icon={DollarSign}
-          description="Closed + pending net commission"
-        />
-      </div>
-
+      {/* ── ROW 2: Activity Tracker + Quick Stats ──────────────────────────── */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {kpis.map(([key, kpi]) => (
+        <ActivityTrackerCard dashboard={dashboard} />
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Effective Start Date</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{effectiveStartLabel}</div>
+            <p className="text-xs text-muted-foreground mt-1">Prorated pacing begins from this date through Dec 31</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Annual Goal</p>
+                <p className="font-semibold">{formatCurrency(dashboard.annualIncomeGoal ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Projected Net</p>
+                <p className="font-semibold">{formatCurrency(dashboard.projectedNetIncome ?? 0)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Income Snapshot</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Net Earned</span>
+              <span className="font-semibold">{formatCurrency(dashboard.netEarned)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Net Pending</span>
+              <span className="font-semibold">{formatCurrency(dashboard.netPending)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Total Potential</span>
+              <span className="font-bold text-primary">{formatCurrency(dashboard.ytdTotalPotential)}</span>
+            </div>
+            <div className="border-t pt-2 flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Pace Delta</span>
+              <span className={cn('font-semibold', incomeDelta >= 0 ? 'text-green-600' : 'text-red-600')}>
+                {incomeDelta >= 0 ? '+' : ''}{formatCurrency(incomeDelta)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── ROW 3: KPI Grade Cards (minus engagements) ─────────────────────── */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {filteredKpis.map(([key, kpi]) => (
           <KpiCard
             key={key}
             title={key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}
@@ -383,11 +541,13 @@ export default function AgentDashboardPage() {
         ))}
       </div>
 
+      {/* ── Income by Month Chart ──────────────────────────────────────────── */}
       <AgentIncomeByMonthCard year={year} dashboard={dashboard} plan={plan} />
 
+      {/* ── YTD Value Metrics ──────────────────────────────────────────────── */}
       <YtdValueMetricsCard metrics={ytdMetrics} loading={false} error={null} />
 
-      {/* SECTION 5 — APPOINTMENTS & ACTIVE OPPORTUNITIES */}
+      {/* ── Appointments & Active Opportunities ────────────────────────────── */}
       {(() => {
         const activeOpps = opportunities
           .filter(o => o.isActive)
@@ -444,7 +604,7 @@ export default function AgentDashboardPage() {
         );
       })()}
 
-      {/* SECTION 6 — PENDING / UNDER CONTRACT */}
+      {/* ── Pending / Under Contract ───────────────────────────────────────── */}
       {(() => {
         const pending = transactions.filter(t => t.status === 'pending' || t.status === 'under_contract');
         return (
@@ -495,7 +655,7 @@ export default function AgentDashboardPage() {
         );
       })()}
 
-      {/* SECTION 7 — CLOSED TRANSACTIONS THIS YEAR */}
+      {/* ── Closed Transactions ────────────────────────────────────────────── */}
       {(() => {
         const closed = transactions
           .filter(t => t.status === 'closed' && (t.year === year || (t.closedDate ?? t.closingDate ?? '').startsWith(String(year))))
@@ -548,7 +708,7 @@ export default function AgentDashboardPage() {
         );
       })()}
 
-      {/* SECTION 8 — RECRUITING INCENTIVE TRACKER (moved to bottom per spec) */}
+      {/* ── Recruiting Incentive Tracker ────────────────────────────────────── */}
       <RecruitingIncentiveTracker />
     </div>
   );
