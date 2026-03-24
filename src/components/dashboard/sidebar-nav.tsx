@@ -48,6 +48,7 @@ const agentMenuItems = [
 
 const adminMenuItems = [
   { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
+  { href: '/dashboard/admin/recruiting', label: 'Recruiting & Dev', icon: UserPlus },
   { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
   { href: '/dashboard/admin/agents', label: 'Agents', icon: Users },
   { href: '/dashboard/admin/agents/new', label: 'New Agent', icon: UserPlus },
