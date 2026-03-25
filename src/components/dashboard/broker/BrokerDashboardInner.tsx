@@ -367,6 +367,61 @@ function GoalsEditor({
                   </span>
                 )}
               </div>
+
+              {/* Increase Production Selector */}
+              {hasPrevData && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-800">Increase Production Over Last Year</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[5, 10, 15, 20, 25, 30, 40, 50].map(pct => {
+                      const isActive = yearlyVolume && Math.abs(parseFloat(yearlyVolume) - Math.round(prevYearStats.totalVolume * (1 + pct / 100))) < 100;
+                      return (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => {
+                            const newVol = Math.round(prevYearStats.totalVolume * (1 + pct / 100));
+                            handleVolumeChange(String(newVol));
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                            isActive
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                          }`}
+                        >
+                          +{pct}%
+                        </button>
+                      );
+                    })}
+                    <div className="flex items-center gap-1 ml-2">
+                      <Input
+                        type="number"
+                        placeholder="Custom %"
+                        className="w-24 h-8 text-sm"
+                        min={0}
+                        max={500}
+                        onChange={e => {
+                          const pct = parseFloat(e.target.value);
+                          if (pct > 0 && prevYearStats.totalVolume > 0) {
+                            const newVol = Math.round(prevYearStats.totalVolume * (1 + pct / 100));
+                            handleVolumeChange(String(newVol));
+                          }
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  {yearlyVolume && prevYearStats.totalVolume > 0 && (
+                    <p className="text-xs text-blue-600">
+                      {formatCurrency(prevYearStats.totalVolume, true)} → {formatCurrency(parseFloat(yearlyVolume), true)}
+                      {' '}({((parseFloat(yearlyVolume) / prevYearStats.totalVolume - 1) * 100).toFixed(1)}% increase)
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="yearly-volume" className="text-xs">Total Volume Goal ($)</Label>
