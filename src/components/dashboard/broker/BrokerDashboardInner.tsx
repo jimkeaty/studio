@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Cell,
+  LineChart, Line, Legend, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
@@ -107,6 +108,267 @@ function KPICard({
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
         <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Multi-Year Production Comparison ─────────────────────────────────────────
+
+type MultiYearData = {
+  year: number;
+  months: { month: number; label: string; grossMargin: number; volume: number; sales: number; gci: number }[];
+  totals: { grossMargin: number; volume: number; sales: number; gci: number };
+};
+
+const YEAR_COLORS = [
+  '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
+];
+
+const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4'];
+
+function MultiYearComparison({ teamId }: { teamId?: string | null }) {
+  const { user } = useUser();
+  const [allYears, setAllYears] = useState<MultiYearData[]>([]);
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
+  const [metric, setMetric] = useState<'grossMargin' | 'volume' | 'sales'>('grossMargin');
+  const [view, setView] = useState<'month' | 'quarter' | 'year'>('month');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const params = new URLSearchParams();
+        if (teamId) params.set('teamId', teamId);
+        const res = await fetch(`/api/broker/multi-year-compare?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.ok && data.years) {
+          setAllYears(data.years);
+          // Auto-select all years (or last 5 if too many)
+          const yrs = data.years.map((y: MultiYearData) => y.year);
+          setSelectedYears(yrs.length > 5 ? yrs.slice(-5) : yrs);
+        }
+      } catch (err) {
+        console.error('[multi-year]', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user, teamId]);
+
+  const toggleYear = (yr: number) => {
+    setSelectedYears(prev =>
+      prev.includes(yr) ? prev.filter(y => y !== yr) : [...prev, yr]
+    );
+  };
+
+  const metricLabel = metric === 'grossMargin' ? 'Gross Margin' : metric === 'volume' ? 'Dollar Volume' : 'Number of Sales';
+  const metricFormatter = (val: number) =>
+    metric === 'sales' ? val.toLocaleString() : formatCurrency(val, true);
+
+  // Build chart data based on view
+  const chartData = (() => {
+    const filteredYears = allYears.filter(y => selectedYears.includes(y.year));
+
+    if (view === 'month') {
+      // 12 data points, each year is a separate line
+      return Array.from({ length: 12 }, (_, i) => {
+        const point: Record<string, any> = { label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i] };
+        for (const yr of filteredYears) {
+          point[String(yr.year)] = yr.months[i]?.[metric] ?? 0;
+        }
+        return point;
+      });
+    }
+
+    if (view === 'quarter') {
+      return Array.from({ length: 4 }, (_, q) => {
+        const point: Record<string, any> = { label: QUARTER_LABELS[q] };
+        for (const yr of filteredYears) {
+          const qMonths = yr.months.slice(q * 3, q * 3 + 3);
+          point[String(yr.year)] = qMonths.reduce((sum, m) => sum + (m[metric] ?? 0), 0);
+        }
+        return point;
+      });
+    }
+
+    // year view — one data point per year
+    return filteredYears.map(yr => ({
+      label: String(yr.year),
+      value: yr.totals[metric] ?? 0,
+    }));
+  })();
+
+  if (loading) return <Skeleton className="h-[500px] w-full" />;
+  if (allYears.length < 2) return null; // Need at least 2 years for comparison
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart className="h-5 w-5" />
+              Multi-Year Production Comparison
+            </CardTitle>
+            <CardDescription>Compare {metricLabel.toLowerCase()} across years</CardDescription>
+          </div>
+
+          {/* Controls row */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Metric selector */}
+            <Select value={metric} onValueChange={(v: any) => setMetric(v)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="grossMargin">Gross Margin</SelectItem>
+                <SelectItem value="volume">Dollar Volume</SelectItem>
+                <SelectItem value="sales">Number of Sales</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* View toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              {(['month', 'quarter', 'year'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    view === v
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background hover:bg-muted'
+                  }`}
+                >
+                  {v === 'month' ? 'Monthly' : v === 'quarter' ? 'Quarterly' : 'Yearly'}
+                </button>
+              ))}
+            </div>
+
+            {/* Year selectors */}
+            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+              <span className="text-xs text-muted-foreground mr-1">Years:</span>
+              {allYears.map((yr, idx) => (
+                <button
+                  key={yr.year}
+                  type="button"
+                  onClick={() => toggleYear(yr.year)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    selectedYears.includes(yr.year)
+                      ? 'text-white border-transparent'
+                      : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                  style={selectedYears.includes(yr.year) ? { backgroundColor: YEAR_COLORS[idx % YEAR_COLORS.length] } : undefined}
+                >
+                  {yr.year}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setSelectedYears(allYears.map(y => y.year))}
+                className="px-2 py-1 text-xs text-blue-600 hover:underline"
+              >
+                All
+              </button>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Chart */}
+        <ResponsiveContainer width="100%" height={400}>
+          {view === 'year' ? (
+            <BarChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis tickFormatter={metricFormatter} />
+              <Tooltip formatter={(val: number) => [metricFormatter(val), metricLabel]} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} name={metricLabel}>
+                {chartData.map((entry: any, idx: number) => {
+                  const yrIdx = allYears.findIndex(y => String(y.year) === entry.label);
+                  return <Cell key={idx} fill={YEAR_COLORS[yrIdx >= 0 ? yrIdx % YEAR_COLORS.length : idx % YEAR_COLORS.length]} />;
+                })}
+              </Bar>
+            </BarChart>
+          ) : (
+            <LineChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis tickFormatter={metricFormatter} />
+              <Tooltip formatter={(val: number, name: string) => [metricFormatter(val), name]} />
+              <Legend />
+              {allYears
+                .filter(yr => selectedYears.includes(yr.year))
+                .map((yr, idx) => {
+                  const colorIdx = allYears.findIndex(y => y.year === yr.year);
+                  return (
+                    <Line
+                      key={yr.year}
+                      type="monotone"
+                      dataKey={String(yr.year)}
+                      stroke={YEAR_COLORS[colorIdx % YEAR_COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                      name={String(yr.year)}
+                    />
+                  );
+                })}
+            </LineChart>
+          )}
+        </ResponsiveContainer>
+
+        {/* Year totals summary table */}
+        <div className="mt-6 border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">Year</th>
+                <th className="px-4 py-2 text-right font-medium">Gross Margin</th>
+                <th className="px-4 py-2 text-right font-medium">Volume</th>
+                <th className="px-4 py-2 text-right font-medium">Sales</th>
+                <th className="px-4 py-2 text-right font-medium">YoY Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allYears
+                .filter(yr => selectedYears.includes(yr.year))
+                .sort((a, b) => b.year - a.year)
+                .map((yr, idx, arr) => {
+                  const prev = arr[idx + 1];
+                  const metricVal = yr.totals[metric];
+                  const prevVal = prev ? prev.totals[metric] : null;
+                  const change = prevVal && prevVal > 0 ? ((metricVal - prevVal) / prevVal * 100) : null;
+                  const colorIdx = allYears.findIndex(y => y.year === yr.year);
+                  return (
+                    <tr key={yr.year} className="border-t">
+                      <td className="px-4 py-2 font-medium flex items-center gap-2">
+                        <span
+                          className="inline-block w-3 h-3 rounded-full"
+                          style={{ backgroundColor: YEAR_COLORS[colorIdx % YEAR_COLORS.length] }}
+                        />
+                        {yr.year}
+                      </td>
+                      <td className="px-4 py-2 text-right">{formatCurrency(yr.totals.grossMargin, true)}</td>
+                      <td className="px-4 py-2 text-right">{formatCurrency(yr.totals.volume, true)}</td>
+                      <td className="px-4 py-2 text-right">{yr.totals.sales.toLocaleString()}</td>
+                      <td className={`px-4 py-2 text-right font-medium ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                        {change !== null ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1185,6 +1447,9 @@ export function BrokerDashboardInner() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Multi-Year Production Comparison ──────────────────────────────── */}
+      <MultiYearComparison teamId={selectedTeam} />
 
       {/* ── Category Breakdown ─────────────────────────────────────────────── */}
       <Card>
