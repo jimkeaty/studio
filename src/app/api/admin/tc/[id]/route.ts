@@ -1,8 +1,11 @@
 // GET + PATCH /api/admin/tc/[id] — admin reads or updates a single TC intake
+// Supports: approve/reject/in_review/update actions (transactionIntakes)
+// Also supports: checklist workflow, TC assignment, status updates (tcIntakes)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 
+const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
 function extractBearer(req: NextRequest) {
@@ -27,6 +30,21 @@ function toOptStr(v: any): string | null {
 
 type Params = { params: Promise<{ id: string }> };
 
+// ── Helper: check both collections for the intake ─────────────────────────
+async function findIntake(id: string) {
+  // Try transactionIntakes first (existing workflow)
+  const txDoc = await adminDb.collection('transactionIntakes').doc(id).get();
+  if (txDoc.exists) {
+    return { doc: txDoc, collection: 'transactionIntakes' as const };
+  }
+  // Try tcIntakes (new workflow)
+  const tcDoc = await adminDb.collection('tcIntakes').doc(id).get();
+  if (tcDoc.exists) {
+    return { doc: tcDoc, collection: 'tcIntakes' as const };
+  }
+  return null;
+}
+
 // ── GET single intake ───────────────────────────────────────────────────────
 export async function GET(req: NextRequest, { params }: Params) {
   try {
@@ -34,13 +52,37 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden');
+    if (decoded.uid !== ADMIN_UID && decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden');
 
     const { id } = await params;
-    const doc = await adminDb.collection('transactionIntakes').doc(id).get();
-    if (!doc.exists) return jsonError(404, 'Intake not found');
+    const result = await findIntake(id);
+    if (!result) return jsonError(404, 'Intake not found');
 
+    const { doc, collection } = result;
     const data = doc.data()!;
+
+    // Fetch checklist subcollection (works for both collections)
+    let checklist: any[] = [];
+    try {
+      const checklistSnap = await adminDb
+        .collection(collection)
+        .doc(id)
+        .collection('checklist')
+        .orderBy('order', 'asc')
+        .get();
+
+      checklist = checklistSnap.docs.map((d) => {
+        const itemData = d.data();
+        return {
+          id: d.id,
+          ...itemData,
+          completedAt: itemData.completedAt?.toDate?.()?.toISOString() ?? itemData.completedAt,
+        };
+      });
+    } catch {
+      // Checklist subcollection may not exist
+    }
+
     return NextResponse.json({
       ok: true,
       intake: {
@@ -49,7 +91,10 @@ export async function GET(req: NextRequest, { params }: Params) {
         submittedAt: data.submittedAt?.toDate?.()?.toISOString() ?? data.submittedAt,
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? data.updatedAt,
         reviewedAt: data.reviewedAt?.toDate?.()?.toISOString() ?? data.reviewedAt,
+        contractDate: data.contractDate?.toDate?.()?.toISOString() ?? data.contractDate,
+        projectedCloseDate: data.projectedCloseDate?.toDate?.()?.toISOString() ?? data.projectedCloseDate,
       },
+      checklist,
     });
   } catch (err: any) {
     console.error('[GET /api/admin/tc/[id]]', err);
@@ -57,25 +102,66 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 }
 
-// ── PATCH — update, approve, or reject ─────────────────────────────────────
+// ── PATCH — update, approve, reject, checklist, or assign TC ────────────────
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden');
+    if (decoded.uid !== ADMIN_UID && decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden');
 
     const { id } = await params;
     const body = await req.json();
-    const action = String(body.action || '').trim(); // 'update' | 'approve' | 'reject' | 'in_review'
+    const action = String(body.action || '').trim(); // 'update' | 'approve' | 'reject' | 'in_review' | '' (for workflow updates)
 
-    const docRef = adminDb.collection('transactionIntakes').doc(id);
-    const doc = await docRef.get();
-    if (!doc.exists) return jsonError(404, 'Intake not found');
+    const result = await findIntake(id);
+    if (!result) return jsonError(404, 'Intake not found');
 
+    const { doc, collection } = result;
+    const docRef = adminDb.collection(collection).doc(id);
     const intake = doc.data()!;
     const now = new Date();
+
+    // ── Workflow updates (no action specified — checklist, status, TC assignment) ──
+    if (!action) {
+      const updates: Record<string, any> = { updatedAt: now };
+
+      // Update status if provided
+      if (body.status) {
+        const validStatuses = ['submitted', 'in_review', 'approved', 'rejected'];
+        if (!validStatuses.includes(body.status)) {
+          return jsonError(400, `Invalid status: ${body.status}`);
+        }
+        updates.status = body.status;
+        updates.reviewedAt = now;
+        updates.reviewedBy = decoded.email || decoded.uid;
+      }
+
+      // Update assigned TC profile if provided
+      if (body.assignedTcProfileId !== undefined) {
+        updates.assignedTcProfileId = body.assignedTcProfileId;
+      }
+
+      await docRef.update(updates);
+
+      // Update checklist items if provided
+      if (body.checklist && Array.isArray(body.checklist)) {
+        const batch = adminDb.batch();
+        for (const item of body.checklist) {
+          if (!item.itemId) continue;
+          const itemRef = docRef.collection('checklist').doc(item.itemId);
+          batch.update(itemRef, {
+            completed: !!item.completed,
+            completedBy: item.completed ? (item.completedBy || decoded.email || decoded.uid) : null,
+            completedAt: item.completed ? (item.completedAt ? new Date(item.completedAt) : now) : null,
+          });
+        }
+        await batch.commit();
+      }
+
+      return NextResponse.json({ ok: true, status: updates.status || 'updated' });
+    }
 
     // ── REJECT ──────────────────────────────────────────────────────────────
     if (action === 'reject') {
@@ -194,7 +280,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
       // Map deal type → transactionType (for existing schema compatibility)
       const dealType = toOptStr(intake.dealType) || 'residential_sale';
-      // Map extended types back to core types for backward compat
       const txTypeMap: Record<string, string> = {
         residential_sale: 'residential_sale',
         residential_lease: 'rental',

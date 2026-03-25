@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, useCallback } from 'react';
 import { useUser } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -19,6 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -26,10 +27,36 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, AlertTriangle, ExternalLink,
+  ClipboardList, UserCheck, Clock, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+type ChecklistItem = {
+  id: string;
+  order: number;
+  label: string;
+  completed: boolean;
+  completedBy: string | null;
+  completedAt: string | null;
+};
+
+type TcProfile = {
+  id: string;
+  displayName: string;
+  email: string;
+  status: 'active' | 'inactive';
+};
+
+type ActivityEntry = {
+  timestamp: string;
+  action: string;
+  detail: string;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Form schema (mirrors submit form)
@@ -81,9 +108,14 @@ const SOURCES = [
   { value: 'other', label: 'Other' },
 ];
 
-function formatDate(s?: string | null) {
+function formatDateFull(s?: string | null) {
   if (!s) return '—';
   try { return format(parseISO(s), 'MMM d, yyyy h:mm a'); } catch { return s; }
+}
+
+function formatDateShort(s?: string | null) {
+  if (!s) return '—';
+  try { return format(parseISO(s), 'MMM d, yyyy'); } catch { return s; }
 }
 
 function Dl({ label, value }: { label: string; value?: string | null }) {
@@ -135,7 +167,18 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  // TC Workflow state
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+  const [tcProfiles, setTcProfiles] = useState<TcProfile[]>([]);
+  const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
+
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  const getToken = useCallback(async () => {
+    if (!user) return null;
+    return user.getIdToken();
+  }, [user]);
 
   // ── Load intake ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -143,6 +186,8 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
       if (!user) return;
       try {
         const token = await user.getIdToken();
+
+        // Load intake from both APIs (old transactionIntakes and new tcIntakes)
         const res = await fetch(`/api/admin/tc/${id}`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
@@ -181,6 +226,59 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           otherBrokerage: i.otherBrokerage || '',
           notes: i.notes || '',
         });
+
+        // Try to load checklist from the new tcIntakes workflow API
+        try {
+          const wfRes = await fetch(`/api/admin/tc/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const wfData = await wfRes.json();
+          if (wfData.ok && wfData.checklist) {
+            setChecklist(wfData.checklist);
+          }
+        } catch {
+          // Checklist may not exist for old intakes
+        }
+
+        // Build activity log from intake data
+        const log: ActivityEntry[] = [];
+        if (i.submittedAt) {
+          log.push({
+            timestamp: i.submittedAt,
+            action: 'Submitted',
+            detail: `Intake submitted by ${i.agentDisplayName || i.submittedByEmail || 'agent'}`,
+          });
+        }
+        if (i.reviewedAt && i.status === 'in_review') {
+          log.push({
+            timestamp: i.reviewedAt,
+            action: 'In Review',
+            detail: `Marked in review by ${i.reviewedBy || 'admin'}`,
+          });
+        }
+        if (i.reviewedAt && i.status === 'approved') {
+          log.push({
+            timestamp: i.reviewedAt,
+            action: 'Approved',
+            detail: `Approved by ${i.reviewedBy || 'admin'}${i.approvedTransactionId ? ` (TX: ${i.approvedTransactionId})` : ''}`,
+          });
+        }
+        if (i.reviewedAt && i.status === 'rejected') {
+          log.push({
+            timestamp: i.reviewedAt,
+            action: 'Rejected',
+            detail: `Rejected by ${i.reviewedBy || 'admin'}${i.rejectionReason ? `: ${i.rejectionReason}` : ''}`,
+          });
+        }
+        if (i.updatedAt && i.updatedAt !== i.submittedAt) {
+          log.push({
+            timestamp: i.updatedAt,
+            action: 'Updated',
+            detail: 'Intake data updated',
+          });
+        }
+        setActivityLog(log.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+
       } catch (err: any) {
         toast({ title: 'Error', description: err.message, variant: 'destructive' });
       } finally {
@@ -190,6 +288,25 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     if (!userLoading && user) load();
   }, [user, userLoading, id]);
 
+  // ── Load TC profiles ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const loadProfiles = async () => {
+      if (!user) return;
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/admin/tc-profiles', { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (data.ok) {
+          setTcProfiles(data.profiles?.filter((p: TcProfile) => p.status === 'active') || []);
+        }
+      } catch {
+        // Profiles may not exist yet
+      }
+    };
+    if (!userLoading && user) loadProfiles();
+  }, [user, userLoading]);
+
+  // ── Actions ──────────────────────────────────────────────────────────────
   const callAction = async (action: string, extra?: Record<string, any>) => {
     if (!user) return;
     setActing(true);
@@ -242,7 +359,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     try {
       const result = await callAction('approve');
       toast({
-        title: '✅ Transaction Approved!',
+        title: 'Transaction Approved',
         description: `Transaction ID: ${result.transactionId}`,
       });
       setIntake((prev: any) => ({ ...prev, status: 'approved', approvedTransactionId: result.transactionId }));
@@ -266,6 +383,80 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     }
   };
 
+  // ── Assign TC ────────────────────────────────────────────────────────────
+  const assignTc = async (profileId: string | null) => {
+    try {
+      const token = await getToken();
+      await fetch(`/api/admin/tc/${id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedTcProfileId: profileId }),
+      });
+      setIntake((prev: any) => ({ ...prev, assignedTcProfileId: profileId }));
+      toast({ title: 'TC Assigned', description: profileId ? 'TC coordinator assigned to this intake.' : 'TC coordinator unassigned.' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  // ── Toggle checklist item ────────────────────────────────────────────────
+  const toggleChecklistItem = async (item: ChecklistItem) => {
+    const newCompleted = !item.completed;
+    // Optimistic update
+    setChecklist((prev) =>
+      prev.map((ci) =>
+        ci.id === item.id
+          ? {
+              ...ci,
+              completed: newCompleted,
+              completedBy: newCompleted ? (user?.email || user?.uid || null) : null,
+              completedAt: newCompleted ? new Date().toISOString() : null,
+            }
+          : ci
+      )
+    );
+
+    try {
+      const token = await getToken();
+      await fetch(`/api/admin/tc/${id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          checklist: [
+            {
+              itemId: item.id,
+              completed: newCompleted,
+              completedBy: newCompleted ? (user?.email || user?.uid || null) : null,
+              completedAt: newCompleted ? new Date().toISOString() : null,
+            },
+          ],
+        }),
+      });
+    } catch (err: any) {
+      // Revert on error
+      setChecklist((prev) =>
+        prev.map((ci) => (ci.id === item.id ? item : ci))
+      );
+      toast({ title: 'Error', description: 'Failed to update checklist item', variant: 'destructive' });
+    }
+  };
+
+  // ── Status change via workflow API ───────────────────────────────────────
+  const changeStatus = async (newStatus: string) => {
+    try {
+      const token = await getToken();
+      await fetch(`/api/admin/tc/${id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      setIntake((prev: any) => ({ ...prev, status: newStatus }));
+      toast({ title: 'Status Updated', description: `Status changed to ${newStatus.replace('_', ' ')}` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
   // ── Guards ───────────────────────────────────────────────────────────────
   if (userLoading || loading) {
     return <div className="space-y-4"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-96 w-full" /></div>;
@@ -278,6 +469,9 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   }
 
   const isReadOnly = intake.status === 'approved' || intake.status === 'rejected';
+  const assignedTc = tcProfiles.find((p) => p.id === intake.assignedTcProfileId);
+  const checklistCompleted = checklist.filter((c) => c.completed).length;
+  const checklistTotal = checklist.length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -288,12 +482,12 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             <ArrowLeft className="h-3 w-3" /> TC Queue
           </Link>
           <span>/</span>
-          <span className="font-mono text-xs">{id.slice(0, 8)}…</span>
+          <span className="font-mono text-xs">{id.slice(0, 8)}...</span>
         </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{intake.address}</h1>
-            <p className="text-muted-foreground">{intake.agentDisplayName} · {intake.clientName}</p>
+            <p className="text-muted-foreground">{intake.agentDisplayName} -- {intake.clientName}</p>
           </div>
           <div className="flex items-center gap-2">
             <Badge className={cn('text-sm px-3 py-1', STATUS_BADGE[intake.status] || 'bg-muted text-foreground')}>
@@ -307,8 +501,8 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
       <Card>
         <CardContent className="pt-4">
           <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Dl label="Submitted" value={formatDate(intake.submittedAt)} />
-            <Dl label="Last Updated" value={formatDate(intake.updatedAt)} />
+            <Dl label="Submitted" value={formatDateFull(intake.submittedAt)} />
+            <Dl label="Last Updated" value={formatDateFull(intake.updatedAt)} />
             <Dl label="Submitted By" value={intake.submittedByEmail} />
             {intake.approvedTransactionId && (
               <div>
@@ -323,6 +517,88 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           </dl>
         </CardContent>
       </Card>
+
+      {/* Assigned TC Coordinator */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <UserCheck className="h-4 w-4" /> Assigned TC Coordinator
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <Select
+              value={intake.assignedTcProfileId || 'unassigned'}
+              onValueChange={(val) => assignTc(val === 'unassigned' ? null : val)}
+            >
+              <SelectTrigger className="w-[250px]">
+                <SelectValue>
+                  {assignedTc ? assignedTc.displayName : 'Unassigned'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {tcProfiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.displayName} ({p.email})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {assignedTc && (
+              <span className="text-sm text-muted-foreground">{assignedTc.email}</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Status change buttons */}
+      {!isReadOnly && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Status Workflow</CardTitle>
+            <CardDescription>Change intake status through the workflow stages.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              {intake.status === 'submitted' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => changeStatus('in_review')}
+                  disabled={acting}
+                >
+                  <Eye className="mr-2 h-4 w-4" /> Mark In Review
+                </Button>
+              )}
+              {(intake.status === 'submitted' || intake.status === 'in_review') && (
+                <>
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={form.handleSubmit(handleApprove)}
+                    disabled={acting}
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {acting ? 'Processing...' : 'Approve -> Create Transaction'}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setRejectOpen(true)}
+                    disabled={acting}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" /> Reject
+                  </Button>
+                </>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Approving will create a live transaction in the ledger based on the data below. Save any edits first.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Rejection notice */}
       {intake.status === 'rejected' && (
@@ -347,29 +623,64 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         </Alert>
       )}
 
-      {/* ── Action buttons (top, for quick action before reviewing) ──────── */}
-      {!isReadOnly && (
+      {/* ── Workflow Checklist ──────────────────────────────────────────────── */}
+      {checklist.length > 0 && (
         <Card>
-          <CardContent className="pt-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-sm font-medium text-muted-foreground mr-2">Quick Actions:</p>
-              {intake.status === 'submitted' && (
-                <Button variant="outline" size="sm" onClick={handleMarkInReview} disabled={acting}>
-                  <Eye className="mr-2 h-4 w-4" /> Mark In Review
-                </Button>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" /> Workflow Checklist
+            </CardTitle>
+            <CardDescription>
+              {checklistCompleted} of {checklistTotal} items completed
+              {checklistTotal > 0 && (
+                <span className="ml-2 text-xs">
+                  ({Math.round((checklistCompleted / checklistTotal) * 100)}%)
+                </span>
               )}
-              <Button size="sm" onClick={form.handleSubmit(handleApprove)} disabled={acting} className="bg-green-600 hover:bg-green-700 text-white">
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                {acting ? 'Processing…' : 'Approve → Create Transaction'}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => setRejectOpen(true)} disabled={acting}>
-                <XCircle className="mr-2 h-4 w-4" /> Reject
-              </Button>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Progress bar */}
+            {checklistTotal > 0 && (
+              <div className="w-full bg-muted rounded-full h-2 mb-4">
+                <div
+                  className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(checklistCompleted / checklistTotal) * 100}%` }}
+                />
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {checklist.map((item) => (
+                <div
+                  key={item.id}
+                  className={cn(
+                    'flex items-start gap-3 p-3 rounded-md border transition-colors',
+                    item.completed ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-background'
+                  )}
+                >
+                  <Checkbox
+                    checked={item.completed}
+                    onCheckedChange={() => toggleChecklistItem(item)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-sm', item.completed && 'line-through text-muted-foreground')}>
+                      {item.label}
+                    </p>
+                    {item.completed && item.completedBy && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Completed by {item.completedBy}
+                        {item.completedAt && ` on ${formatDateShort(item.completedAt)}`}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    #{item.order}
+                  </span>
+                </div>
+              ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Approving will create a live transaction in the ledger based on the data below.
-              Save any edits first.
-            </p>
           </CardContent>
         </Card>
       )}
@@ -474,7 +785,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 <FormItem>
                   <FormLabel>Actual Close Date</FormLabel>
                   <FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl>
-                  <FormDescription>Setting this marks the transaction as "closed" on approval.</FormDescription>
+                  <FormDescription>Setting this marks the transaction as &quot;closed&quot; on approval.</FormDescription>
                 </FormItem>
               )} />
             </div>
@@ -565,7 +876,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             <div className="flex flex-wrap items-center gap-3 pb-8">
               <Button type="submit" disabled={saving}>
                 <Save className="mr-2 h-4 w-4" />
-                {saving ? 'Saving…' : 'Save Changes'}
+                {saving ? 'Saving...' : 'Save Changes'}
               </Button>
               <Button
                 type="button"
@@ -574,7 +885,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 disabled={acting}
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                {acting ? 'Approving…' : 'Approve → Create Transaction'}
+                {acting ? 'Approving...' : 'Approve -> Create Transaction'}
               </Button>
               <Button type="button" variant="destructive" onClick={() => setRejectOpen(true)} disabled={acting}>
                 <XCircle className="mr-2 h-4 w-4" /> Reject
@@ -583,6 +894,48 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           )}
         </form>
       </Form>
+
+      {/* ── Activity Log ──────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="h-4 w-4" /> Activity Log
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {activityLog.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {activityLog.map((entry, index) => (
+                <div key={index} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className={cn(
+                      'w-2 h-2 rounded-full mt-2',
+                      entry.action === 'Approved' ? 'bg-green-500' :
+                      entry.action === 'Rejected' ? 'bg-red-500' :
+                      entry.action === 'In Review' ? 'bg-yellow-500' :
+                      'bg-blue-500'
+                    )} />
+                    {index < activityLog.length - 1 && (
+                      <div className="w-px flex-1 bg-border mt-1" />
+                    )}
+                  </div>
+                  <div className="pb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{entry.action}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateFull(entry.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{entry.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Reject dialog */}
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>

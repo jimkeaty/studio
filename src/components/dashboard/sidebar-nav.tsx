@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
 import {
   Sidebar,
@@ -21,6 +22,7 @@ import {
   ClipboardPen,
   LayoutGrid,
   Newspaper,
+  Palette,
   Plus,
   Settings,
   Target,
@@ -32,10 +34,20 @@ import {
   GitBranchPlus,
   Receipt,
   Upload,
+  UserCog,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+
+type BrandingData = {
+  companyName: string;
+  tagline: string | null;
+  logoUrl: string | null;
+  animatedLogoUrl: string | null;
+  useAnimatedLogo: boolean;
+  primaryColor: string | null;
+};
 
 // Shown to all users (agent + admin)
 const agentMenuItems = [
@@ -50,6 +62,7 @@ const adminMenuItems = [
   { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
   { href: '/dashboard/admin/recruiting', label: 'Recruiting & Dev', icon: UserPlus },
   { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
+  { href: '/dashboard/admin/tc-profiles', label: 'TC Profiles', icon: UserCog },
   { href: '/dashboard/admin/agents', label: 'Agents', icon: Users },
   { href: '/dashboard/admin/agents/new', label: 'New Agent', icon: UserPlus },
   { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
@@ -59,6 +72,7 @@ const adminMenuItems = [
   { href: '/dashboard/admin/keaty-cup', label: 'Keaty Cup', icon: Trophy },
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
   { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
+  { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
 ];
 
 const tvModeItems = [
@@ -70,16 +84,51 @@ export function SidebarNav() {
   const pathname = usePathname();
   const { user } = useUser();
   const isAdmin = user?.uid === ADMIN_UID;
+  const [branding, setBranding] = useState<BrandingData | null>(null);
 
   const visibleAgentItems = agentMenuItems;
+
+  // Fetch branding settings (public endpoint, no auth needed)
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/branding')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data.ok) setBranding(data.branding);
+      })
+      .catch(() => {}); // Silently fail, fallback to defaults
+    return () => { cancelled = true; };
+  }, []);
+
+  const companyName = branding?.companyName || 'Smart Broker USA';
+  const tagline = branding?.tagline;
+  const activeLogo =
+    branding?.useAnimatedLogo && branding?.animatedLogoUrl
+      ? branding.animatedLogoUrl
+      : branding?.logoUrl;
 
   return (
     <Sidebar className="border-r">
       <SidebarHeader className="border-b">
         <div className="flex h-16 items-center gap-3 px-4">
-          <Building className="h-8 w-8 text-primary" />
+          {activeLogo ? (
+            <img
+              src={activeLogo}
+              alt={companyName}
+              className="h-8 w-8 object-contain rounded"
+            />
+          ) : (
+            <Building className="h-8 w-8 text-primary" />
+          )}
           <div className="flex flex-col">
-            <span className="text-lg font-semibold tracking-tight">Smart Broker USA</span>
+            <span className="text-lg font-semibold tracking-tight leading-tight">
+              {companyName}
+            </span>
+            {tagline && (
+              <span className="text-xs text-muted-foreground leading-tight">
+                {tagline}
+              </span>
+            )}
           </div>
         </div>
       </SidebarHeader>
