@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { scope, year, month } = body;
+    const { scope, year, month, deleteAutoCreatedAgents } = body;
 
     // scope: 'all' | 'imported' | 'year' | 'source_and_year'
     if (!scope) {
@@ -91,7 +91,49 @@ export async function POST(req: NextRequest) {
       await batch.commit();
     }
 
-    return NextResponse.json({ ok: true, deleted, skipped });
+    // ── Optionally delete auto-created agent profiles ──────────────────
+    let agentsDeleted = 0;
+    if (deleteAutoCreatedAgents) {
+      const agentSnap = await adminDb
+        .collection('agentProfiles')
+        .where('source', '==', 'bulk_import')
+        .get();
+
+      if (!agentSnap.empty) {
+        // For each auto-created agent, check if they still have transactions
+        // Only delete agents with zero remaining transactions
+        let agentBatch = adminDb.batch();
+        let agentBatchCount = 0;
+
+        for (const agentDoc of agentSnap.docs) {
+          const agentId = agentDoc.data().agentId || agentDoc.id;
+          const remainingTx = await adminDb
+            .collection('transactions')
+            .where('agentId', '==', agentId)
+            .limit(1)
+            .get();
+
+          if (remainingTx.empty) {
+            // No transactions left — safe to delete this agent
+            agentBatch.delete(agentDoc.ref);
+            agentsDeleted++;
+            agentBatchCount++;
+
+            if (agentBatchCount >= 499) {
+              await agentBatch.commit();
+              agentBatch = adminDb.batch();
+              agentBatchCount = 0;
+            }
+          }
+        }
+
+        if (agentBatchCount > 0) {
+          await agentBatch.commit();
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true, deleted, skipped, agentsDeleted });
   } catch (err: any) {
     console.error('[bulk-delete]', err);
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });

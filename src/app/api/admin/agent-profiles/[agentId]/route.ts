@@ -288,3 +288,152 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     });
   }
 }
+
+export async function DELETE(req: NextRequest, context: RouteContext) {
+  try {
+    await requireAdmin(req);
+    const { agentId } = await context.params;
+
+    const ref = adminDb.collection('agentProfiles').doc(agentId);
+    const existing = await ref.get();
+
+    if (!existing.exists) {
+      return jsonError(404, 'Agent profile not found', { agentId });
+    }
+
+    const agentData = existing.data()!;
+    const displayName = agentData.displayName || agentId;
+
+    // Check for existing transactions
+    const txSnap = await adminDb
+      .collection('transactions')
+      .where('agentId', '==', agentId)
+      .limit(1)
+      .get();
+
+    // Parse query param to force delete even with transactions
+    const url = new URL(req.url);
+    const force = url.searchParams.get('force') === 'true';
+
+    if (!txSnap.empty && !force) {
+      // Count total transactions
+      const txCountSnap = await adminDb
+        .collection('transactions')
+        .where('agentId', '==', agentId)
+        .get();
+
+      return NextResponse.json({
+        ok: false,
+        error: `Cannot delete "${displayName}" — they have ${txCountSnap.size} transaction(s). Use force delete to also remove their transactions, or reassign them first.`,
+        transactionCount: txCountSnap.size,
+        requiresForce: true,
+      }, { status: 409 });
+    }
+
+    // If force delete, remove all related data
+    if (force && !txSnap.empty) {
+      // Delete transactions
+      const allTx = await adminDb
+        .collection('transactions')
+        .where('agentId', '==', agentId)
+        .get();
+
+      let batch = adminDb.batch();
+      let count = 0;
+      for (const doc of allTx.docs) {
+        batch.delete(doc.ref);
+        count++;
+        if (count >= 499) {
+          await batch.commit();
+          batch = adminDb.batch();
+          count = 0;
+        }
+      }
+      if (count > 0) await batch.commit();
+    }
+
+    // Delete activity records
+    const activitySnap = await adminDb
+      .collection('daily_activity')
+      .where('agentId', '==', agentId)
+      .get();
+
+    if (!activitySnap.empty) {
+      let batch = adminDb.batch();
+      let count = 0;
+      for (const doc of activitySnap.docs) {
+        batch.delete(doc.ref);
+        count++;
+        if (count >= 499) {
+          await batch.commit();
+          batch = adminDb.batch();
+          count = 0;
+        }
+      }
+      if (count > 0) await batch.commit();
+    }
+
+    // Delete rollups
+    const rollupsSnap = await adminDb
+      .collection('agentYearRollups')
+      .where('agentId', '==', agentId)
+      .get();
+
+    if (!rollupsSnap.empty) {
+      let batch = adminDb.batch();
+      let count = 0;
+      for (const doc of rollupsSnap.docs) {
+        batch.delete(doc.ref);
+        count++;
+        if (count >= 499) {
+          await batch.commit();
+          batch = adminDb.batch();
+          count = 0;
+        }
+      }
+      if (count > 0) await batch.commit();
+    }
+
+    // Delete goals
+    const goalsSnap = await adminDb
+      .collection('brokerCommandGoals')
+      .where('segment', '==', `agent_${agentId}`)
+      .get();
+
+    if (!goalsSnap.empty) {
+      let batch = adminDb.batch();
+      let count = 0;
+      for (const doc of goalsSnap.docs) {
+        batch.delete(doc.ref);
+        count++;
+        if (count >= 499) {
+          await batch.commit();
+          batch = adminDb.batch();
+          count = 0;
+        }
+      }
+      if (count > 0) await batch.commit();
+    }
+
+    // Finally, delete the agent profile
+    await ref.delete();
+
+    return NextResponse.json({
+      ok: true,
+      deleted: displayName,
+      agentId,
+    });
+  } catch (err: any) {
+    if (err?.message === 'UNAUTHORIZED') {
+      return jsonError(401, 'Unauthorized: Missing token');
+    }
+    if (err?.message === 'FORBIDDEN') {
+      return jsonError(403, 'Forbidden: This action is restricted to administrators.');
+    }
+
+    console.error('[API/admin/agent-profiles/[agentId]][DELETE] Error:', err?.message || err);
+    return jsonError(500, 'Internal Server Error', {
+      message: err?.message || String(err),
+    });
+  }
+}

@@ -57,6 +57,7 @@ export default function AgentsList() {
   const [loadingDuplicates, setLoadingDuplicates] = useState(false);
   const [merging, setMerging] = useState<string | null>(null);
   const [mergeResults, setMergeResults] = useState<string[]>([]);
+  const [deletingAgent, setDeletingAgent] = useState<string | null>(null);
 
   async function getToken() {
     const auth = getFirebaseAuth();
@@ -167,6 +168,48 @@ export default function AgentsList() {
       setErrorMessage(err?.message || 'Merge failed');
     } finally {
       setMerging(null);
+    }
+  }
+
+  async function handleDeleteAgent(agentId: string, displayName: string, force = false) {
+    const msg = force
+      ? `FORCE DELETE "${displayName}"? This will permanently delete the agent AND all their transactions, activity, and goals. This cannot be undone.`
+      : `Delete "${displayName}"? This will remove the agent profile. If they have transactions, you'll be asked to confirm.`;
+
+    if (!confirm(msg)) return;
+
+    setDeletingAgent(agentId);
+    try {
+      const token = await getToken();
+      const url = force
+        ? `/api/admin/agent-profiles/${agentId}?force=true`
+        : `/api/admin/agent-profiles/${agentId}`;
+
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (data.requiresForce) {
+        // Agent has transactions — ask to force delete
+        const forceConfirm = confirm(
+          `${data.error}\n\nDo you want to FORCE DELETE and remove all ${data.transactionCount} transaction(s) as well?`
+        );
+        if (forceConfirm) {
+          await handleDeleteAgent(agentId, displayName, true);
+          return;
+        }
+      } else if (!data.ok) {
+        throw new Error(data.error || 'Delete failed');
+      } else {
+        // Success — remove from list
+        setAgents(prev => prev.filter(a => a.agentId !== agentId));
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Delete failed');
+    } finally {
+      setDeletingAgent(null);
     }
   }
 
@@ -336,12 +379,21 @@ export default function AgentsList() {
                         {formatAnniversary(agent.anniversaryMonth, agent.anniversaryDay)}
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/dashboard/admin/agents/${agent.agentId}`}
-                          className="font-medium text-blue-600 hover:underline"
-                        >
-                          Edit
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/dashboard/admin/agents/${agent.agentId}`}
+                            className="font-medium text-blue-600 hover:underline"
+                          >
+                            Edit
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteAgent(agent.agentId, agent.displayName)}
+                            disabled={deletingAgent === agent.agentId}
+                            className="font-medium text-red-500 hover:text-red-700 hover:underline disabled:opacity-50 text-sm"
+                          >
+                            {deletingAgent === agent.agentId ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

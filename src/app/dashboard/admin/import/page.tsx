@@ -302,6 +302,7 @@ export default function BulkImportPage() {
   const [deleting, setDeleting] = useState(false);
   const [showDeletePanel, setShowDeletePanel] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteAutoCreatedAgents, setDeleteAutoCreatedAgents] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -488,7 +489,7 @@ export default function BulkImportPage() {
     setPageError(null);
     try {
       const token = await user.getIdToken();
-      const payload: Record<string, any> = { scope: deleteScope };
+      const payload: Record<string, any> = { scope: deleteScope, deleteAutoCreatedAgents };
       if (deleteScope === 'year' || deleteScope === 'source_and_year') {
         payload.year = Number(deleteYear);
       }
@@ -505,7 +506,11 @@ export default function BulkImportPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Delete failed');
-      alert(`Deleted ${data.deleted} transaction${data.deleted !== 1 ? 's' : ''}.`);
+      const parts = [`Deleted ${data.deleted} transaction${data.deleted !== 1 ? 's' : ''}`];
+      if (data.agentsDeleted > 0) {
+        parts.push(`${data.agentsDeleted} auto-created agent profile${data.agentsDeleted !== 1 ? 's' : ''} removed`);
+      }
+      alert(parts.join('. ') + '.');
       setShowDeletePanel(false);
       setDeleteConfirmText('');
     } catch (err: any) {
@@ -881,6 +886,24 @@ export default function BulkImportPage() {
                   </select>
                 </div>
               )}
+
+              {/* Also delete auto-created agents */}
+              <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+                <input
+                  type="checkbox"
+                  id="deleteAgents"
+                  checked={deleteAutoCreatedAgents}
+                  onChange={(e) => setDeleteAutoCreatedAgents(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300"
+                />
+                <label htmlFor="deleteAgents" className="text-sm">
+                  <span className="font-medium text-amber-800">Also delete auto-created agent profiles</span>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Removes agent profiles that were auto-created during bulk import, but only if they have no remaining transactions.
+                    This prevents duplicates when you re-upload.
+                  </p>
+                </label>
+              </div>
 
               {/* Summary + confirm */}
               <Alert variant="destructive">
