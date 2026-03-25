@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3 } from 'lucide-react';
+import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown } from 'lucide-react';
 import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ComposedChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,6 +14,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import Link from 'next/link';
 
 const fmt = (n: number | null | undefined, compact = false) => {
   if (n == null) return '—';
@@ -306,6 +309,378 @@ function PlanForm({ plan, year, onSaved }: { plan: any; year: number; onSaved: (
   );
 }
 
+// ── Grade Badge ─────────────────────────────────────────────────────────────
+
+function GradeBadge({ grade, size = 'sm' }: { grade: string; size?: 'sm' | 'lg' }) {
+  const colors: Record<string, string> = {
+    A: 'bg-green-100 text-green-800 border-green-300',
+    B: 'bg-blue-100 text-blue-800 border-blue-300',
+    C: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+    D: 'bg-orange-100 text-orange-800 border-orange-300',
+    F: 'bg-red-100 text-red-800 border-red-300',
+  };
+  const cls = colors[grade] || 'bg-gray-100 text-gray-800 border-gray-300';
+  return (
+    <span className={`inline-flex items-center justify-center font-bold border rounded ${cls} ${size === 'lg' ? 'text-lg px-2.5 py-1' : 'text-xs px-1.5 py-0.5'}`}>
+      {grade}
+    </span>
+  );
+}
+
+// ── Delta Display ───────────────────────────────────────────────────────────
+
+function Delta({ value, isCurrency = false }: { value: number; isCurrency?: boolean }) {
+  if (value === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  const positive = value > 0;
+  const display = isCurrency
+    ? `${positive ? '+' : ''}$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+    : `${positive ? '+' : ''}${value.toLocaleString()}`;
+  return (
+    <span className={`text-xs font-medium flex items-center gap-0.5 ${positive ? 'text-green-600' : 'text-red-600'}`}>
+      {positive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+      {display}
+    </span>
+  );
+}
+
+// ── Agent Performance Roster ────────────────────────────────────────────────
+
+type SortField = 'name' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual';
+type SortDir = 'asc' | 'desc';
+
+const GRADE_ORDER: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 };
+
+function AgentPerformanceRoster({ year }: { year: number }) {
+  const { user } = useUser();
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField>('incomeGrade');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [filterGrade, setFilterGrade] = useState<string>('all');
+  const [filterTeam, setFilterTeam] = useState<string>('all');
+  const [view, setView] = useState<'table' | 'cards'>('table');
+
+  const fetchRoster = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams({ year: String(year) });
+      const res = await fetch(`/api/broker/agent-roster-metrics?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      setData(await res.json());
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  }, [user, year]);
+
+  useEffect(() => { fetchRoster(); }, [fetchRoster]);
+
+  if (loading) return <Card><CardContent className="p-8"><Skeleton className="h-64 w-full" /></CardContent></Card>;
+  if (error) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
+  if (!data?.agents?.length) return <Card><CardContent className="p-8 text-center text-muted-foreground">No active agents found for {year}.</CardContent></Card>;
+
+  const { agents, summary } = data;
+
+  // Get unique teams
+  const teams = [...new Set(agents.map((a: any) => a.teamName).filter(Boolean))].sort() as string[];
+
+  // Filter
+  let filtered = [...agents];
+  if (filterGrade !== 'all') {
+    filtered = filtered.filter((a: any) => a.incomeGrade === filterGrade);
+  }
+  if (filterTeam !== 'all') {
+    filtered = filtered.filter((a: any) => a.teamName === filterTeam);
+  }
+
+  // Sort
+  filtered.sort((a: any, b: any) => {
+    let cmp = 0;
+    switch (sortField) {
+      case 'name': cmp = a.displayName.localeCompare(b.displayName); break;
+      case 'engGrade': cmp = (GRADE_ORDER[a.engagementsGrade] ?? 0) - (GRADE_ORDER[b.engagementsGrade] ?? 0); break;
+      case 'apptGrade': cmp = (GRADE_ORDER[a.appointmentsGrade] ?? 0) - (GRADE_ORDER[b.appointmentsGrade] ?? 0); break;
+      case 'incomeGrade': cmp = (GRADE_ORDER[a.incomeGrade] ?? 0) - (GRADE_ORDER[b.incomeGrade] ?? 0); break;
+      case 'pipelineGrade': cmp = (GRADE_ORDER[a.incomePipelineGrade] ?? 0) - (GRADE_ORDER[b.incomePipelineGrade] ?? 0); break;
+      case 'incomeActual': cmp = a.incomeActual - b.incomeActual; break;
+      case 'engActual': cmp = a.engagementsActual - b.engagementsActual; break;
+      case 'apptActual': cmp = a.appointmentsHeldActual - b.appointmentsHeldActual; break;
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const fmtCurrency = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(0)}k` : `$${n.toFixed(0)}`;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Card className="border-2">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">Total Agents</p>
+            <p className="text-2xl font-bold">{summary.totalAgents}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-green-200 bg-green-50/50">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">On Track (A/B)</p>
+            <p className="text-2xl font-bold text-green-700">{summary.onTrack}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-red-200 bg-red-50/50">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">Struggling (D/F)</p>
+            <p className="text-2xl font-bold text-red-700">{summary.struggling}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-2">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">Avg Engagement %</p>
+            <p className="text-2xl font-bold">{summary.avgEngagementPerf}%</p>
+          </CardContent>
+        </Card>
+        <Card className="border-2">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">Avg Income %</p>
+            <p className="text-2xl font-bold">{summary.avgIncomePerf}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Grade Distribution Bar */}
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground font-medium">Grade Distribution:</span>
+        {(['A', 'B', 'C', 'D', 'F'] as const).map(g => (
+          <button key={g} onClick={() => setFilterGrade(filterGrade === g ? 'all' : g)}
+            className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${filterGrade === g ? 'ring-2 ring-offset-1 ring-blue-500' : 'hover:bg-muted'}`}>
+            <GradeBadge grade={g} />
+            <span className="text-xs font-medium">{summary.gradeDistribution[g] || 0}</span>
+          </button>
+        ))}
+        {filterGrade !== 'all' && (
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFilterGrade('all')}>Clear</Button>
+        )}
+      </div>
+
+      {/* Filters Row */}
+      <div className="flex flex-wrap items-center gap-3">
+        {teams.length > 1 && (
+          <Select value={filterTeam} onValueChange={setFilterTeam}>
+            <SelectTrigger className="w-[180px] h-8 text-xs">
+              <SelectValue placeholder="All Teams" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Teams</SelectItem>
+              {teams.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+        <div className="flex gap-1 ml-auto">
+          <Button variant={view === 'table' ? 'default' : 'outline'} size="sm" className="h-8 text-xs" onClick={() => setView('table')}>Table</Button>
+          <Button variant={view === 'cards' ? 'default' : 'outline'} size="sm" className="h-8 text-xs" onClick={() => setView('cards')}>Cards</Button>
+        </div>
+        <span className="text-xs text-muted-foreground">{filtered.length} agent{filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Table View */}
+      {view === 'table' && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="sticky left-0 bg-muted/50 z-10 cursor-pointer" onClick={() => toggleSort('name')}>
+                      <div className="flex items-center gap-1">Agent <SortIcon field="name" /></div>
+                    </TableHead>
+                    <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('engGrade')}>
+                      <div className="flex items-center justify-center gap-1">Engagements <SortIcon field="engGrade" /></div>
+                    </TableHead>
+                    <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('apptGrade')}>
+                      <div className="flex items-center justify-center gap-1">Appts Held <SortIcon field="apptGrade" /></div>
+                    </TableHead>
+                    <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('incomeGrade')}>
+                      <div className="flex items-center justify-center gap-1">Income <SortIcon field="incomeGrade" /></div>
+                    </TableHead>
+                    <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('pipelineGrade')}>
+                      <div className="flex items-center justify-center gap-1">w/ Pipeline <SortIcon field="pipelineGrade" /></div>
+                    </TableHead>
+                    <TableHead className="text-center">Deals</TableHead>
+                    <TableHead className="text-right">Volume</TableHead>
+                    <TableHead className="w-10"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((a: any) => (
+                    <TableRow key={a.agentId} className={a.isGracePeriod ? 'bg-amber-50/50' : ''}>
+                      {/* Agent Name */}
+                      <TableCell className="sticky left-0 bg-background z-10 font-medium">
+                        <div>
+                          <span className="text-sm">{a.displayName}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {a.teamName && <span className="text-[10px] text-muted-foreground">{a.teamName}</span>}
+                            {a.teamRole === 'leader' && <Badge variant="outline" className="text-[9px] h-4 px-1">Leader</Badge>}
+                            {a.isGracePeriod && <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-amber-100 text-amber-700">90-Day</Badge>}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Engagements */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <GradeBadge grade={a.engagementsGrade} />
+                          <span className="text-xs">{a.engagementsActual} / {a.engagementsGoal}</span>
+                          <Delta value={a.engagementsDelta} />
+                        </div>
+                      </TableCell>
+
+                      {/* Appointments Held */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <GradeBadge grade={a.appointmentsGrade} />
+                          <span className="text-xs">{a.appointmentsHeldActual} / {a.appointmentsHeldGoal}</span>
+                          <Delta value={a.appointmentsDelta} />
+                        </div>
+                      </TableCell>
+
+                      {/* Income (closed only) */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <GradeBadge grade={a.incomeGrade} />
+                          <span className="text-xs">{fmtCurrency(a.incomeActual)} / {fmtCurrency(a.incomeGoal)}</span>
+                          <Delta value={a.incomeDelta} isCurrency />
+                        </div>
+                      </TableCell>
+
+                      {/* Income with pipeline */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <GradeBadge grade={a.incomePipelineGrade} />
+                          <span className="text-xs">{fmtCurrency(a.incomePipelineActual)}</span>
+                          <span className="text-[10px] text-muted-foreground">{a.incomePipelinePerf}%</span>
+                        </div>
+                      </TableCell>
+
+                      {/* Deals */}
+                      <TableCell className="text-center">
+                        <span className="text-sm font-medium">{a.closedDeals}</span>
+                        {a.pendingDeals > 0 && <span className="text-xs text-muted-foreground ml-1">(+{a.pendingDeals}p)</span>}
+                      </TableCell>
+
+                      {/* Volume */}
+                      <TableCell className="text-right">
+                        <span className="text-sm">{fmtCurrency(a.closedVolume)}</span>
+                        {a.pendingVolume > 0 && <p className="text-[10px] text-muted-foreground">+{fmtCurrency(a.pendingVolume)} pending</p>}
+                      </TableCell>
+
+                      {/* View */}
+                      <TableCell>
+                        <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Eye className="h-3.5 w-3.5" /></Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cards View */}
+      {view === 'cards' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((a: any) => (
+            <Card key={a.agentId} className={`overflow-hidden ${a.isGracePeriod ? 'border-amber-300' : (a.incomeGrade === 'F' || a.incomeGrade === 'D') ? 'border-red-300' : (a.incomeGrade === 'A') ? 'border-green-300' : ''}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">{a.displayName}</CardTitle>
+                    <CardDescription className="text-xs">
+                      {a.teamName || 'Independent'}
+                      {a.teamRole === 'leader' && ' · Team Leader'}
+                      {a.isGracePeriod && ' · 🟡 Grace Period'}
+                    </CardDescription>
+                  </div>
+                  <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                    <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Grades Row */}
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground mb-1">Engagements</p>
+                    <GradeBadge grade={a.engagementsGrade} size="lg" />
+                    <p className="text-[10px] mt-0.5">{a.engagementsActual}/{a.engagementsGoal}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground mb-1">Appts</p>
+                    <GradeBadge grade={a.appointmentsGrade} size="lg" />
+                    <p className="text-[10px] mt-0.5">{a.appointmentsHeldActual}/{a.appointmentsHeldGoal}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground mb-1">Income</p>
+                    <GradeBadge grade={a.incomeGrade} size="lg" />
+                    <p className="text-[10px] mt-0.5">{fmtCurrency(a.incomeActual)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground mb-1">w/ Pipeline</p>
+                    <GradeBadge grade={a.incomePipelineGrade} size="lg" />
+                    <p className="text-[10px] mt-0.5">{fmtCurrency(a.incomePipelineActual)}</p>
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Deals</span>
+                    <p className="font-medium">{a.closedDeals} closed{a.pendingDeals > 0 ? ` · ${a.pendingDeals}p` : ''}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Volume</span>
+                    <p className="font-medium">{fmtCurrency(a.closedVolume)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Goal</span>
+                    <p className="font-medium">{a.annualIncomeGoal > 0 ? fmtCurrency(a.annualIncomeGoal) : 'Not set'}</p>
+                  </div>
+                </div>
+
+                {/* Income Delta */}
+                <div className="flex items-center justify-between pt-2 border-t text-xs">
+                  <span className="text-muted-foreground">Income vs Goal</span>
+                  <Delta value={a.incomeDelta} isCurrency />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function RecruitingDashboardPage() {
@@ -359,6 +734,20 @@ export default function RecruitingDashboardPage() {
           </SelectContent>
         </Select>
       </div>
+
+      <Tabs defaultValue="roster" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
+          <TabsTrigger value="recruiting">Recruiting Pipeline</TabsTrigger>
+        </TabsList>
+
+        {/* ── TAB 1: Agent Performance Roster ─────────────────────────────── */}
+        <TabsContent value="roster" className="space-y-6 mt-6">
+          <AgentPerformanceRoster year={year} />
+        </TabsContent>
+
+        {/* ── TAB 2: Recruiting Pipeline (existing content) ───────────────── */}
+        <TabsContent value="recruiting" className="space-y-8 mt-6">
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -513,6 +902,9 @@ export default function RecruitingDashboardPage() {
       {/* ── Plan & Tracking Forms ────────────────────────────────────────── */}
       <PlanForm plan={plan} year={year} onSaved={fetchData} />
       <TrackingForm months={months} year={year} onSaved={fetchData} />
+
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
