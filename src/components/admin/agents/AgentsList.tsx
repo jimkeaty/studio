@@ -381,6 +381,12 @@ export default function AgentsList() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <Link
+                            href={`/dashboard?viewAs=${agent.agentId}&viewAsName=${encodeURIComponent(agent.displayName)}`}
+                            className="font-medium text-green-600 hover:underline"
+                          >
+                            Dashboard
+                          </Link>
+                          <Link
                             href={`/dashboard/admin/agents/${agent.agentId}`}
                             className="font-medium text-blue-600 hover:underline"
                           >

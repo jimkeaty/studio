@@ -131,7 +131,12 @@ export async function GET(req: NextRequest) {
     }
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+
+    // Allow admin to view any agent's dashboard via ?viewAs=agentId
+    const reqParams = new URL(req.url).searchParams;
+    const viewAs = reqParams.get('viewAs');
+    const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
 
     const year = parseYear(req);
     const yearNum = Number(year);
@@ -498,8 +503,7 @@ export async function GET(req: NextRequest) {
     };
 
     // ── Previous year comparison ─────────────────────────────────────────
-    const { searchParams } = new URL(req.url);
-    const compareYearParam = searchParams.get("compareYear");
+    const compareYearParam = reqParams.get("compareYear");
     let prevYearComparison: typeof dashboard.prevYearComparison = null;
 
     const compYear = compareYearParam ? Number(compareYearParam) : yearNum - 1;

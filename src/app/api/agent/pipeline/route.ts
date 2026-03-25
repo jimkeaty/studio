@@ -13,9 +13,12 @@ export async function GET(req: NextRequest) {
     if (!authHeader?.startsWith('Bearer ')) return jsonError(401, 'Missing auth token');
     const token = authHeader.slice('Bearer '.length);
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
     const { searchParams } = new URL(req.url);
+    // Allow admin to view any agent's pipeline via ?viewAs=agentId
+    const viewAs = searchParams.get('viewAs');
+    const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
 
     // Fetch all agent transactions

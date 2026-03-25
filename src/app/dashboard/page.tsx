@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useUser } from '@/firebase';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics, Transaction, Opportunity } from '@/lib/types';
 import type { MonthlyData, CategoryMetrics } from '@/lib/types/brokerCommandMetrics';
@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useSearchParams } from 'next/navigation';
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -205,8 +206,25 @@ const kpiMeta: Record<string, { label: string; icon: React.ElementType; unit: st
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 
-export default function AgentDashboardPage() {
+const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+
+export default function AgentDashboardPageWrapper() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <AgentDashboardPage />
+    </Suspense>
+  );
+}
+
+function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
+  const searchParams = useSearchParams();
+
+  // "View as Agent" impersonation (admin only)
+  const viewAsParam = searchParams.get('viewAs');
+  const viewAsName = searchParams.get('viewAsName');
+  const isAdmin = user?.uid === ADMIN_UID;
+  const viewAs = (isAdmin && viewAsParam) ? viewAsParam : null;
 
   // Overview data
   const [data, setData] = useState<{ dashboard: AgentDashboardData | null; plan: BusinessPlan | null; ytdMetrics: YtdValueMetrics | null } | null>(null);
@@ -231,7 +249,8 @@ export default function AgentDashboardPage() {
       setLoading(true); setError(null);
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/dashboard?year=${year}`, { headers: { Authorization: `Bearer ${token}` } });
+        const dashUrl = viewAs ? `/api/dashboard?year=${year}&viewAs=${viewAs}` : `/api/dashboard?year=${year}`;
+        const res = await fetch(dashUrl, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed to load dashboard'); }
         const d = await res.json();
         if (!d.ok) throw new Error(d.error || 'API error');
@@ -241,7 +260,7 @@ export default function AgentDashboardPage() {
     };
     if (!userLoading && user) load();
     else if (!userLoading && !user) setLoading(false);
-  }, [user, userLoading, year]);
+  }, [user, userLoading, year, viewAs]);
 
   // Load pipeline
   useEffect(() => {
@@ -249,14 +268,15 @@ export default function AgentDashboardPage() {
       if (!user) return;
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/agent/pipeline?year=${year}`, { headers: { Authorization: `Bearer ${token}` } });
+        const pipeUrl = viewAs ? `/api/agent/pipeline?year=${year}&viewAs=${viewAs}` : `/api/agent/pipeline?year=${year}`;
+        const res = await fetch(pipeUrl, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return;
         const d = await res.json();
         if (d.ok) { setTransactions(d.transactions ?? []); setOpportunities(d.opportunities ?? []); }
       } catch (err) { console.error('[pipeline]', err); }
     };
     if (!userLoading && user) load();
-  }, [user, userLoading, year]);
+  }, [user, userLoading, year, viewAs]);
 
   // Load performance data
   const fetchPerf = useCallback(async () => {
@@ -266,12 +286,13 @@ export default function AgentDashboardPage() {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(perfYear), view: perfView });
       if (compareYear) params.set('compareYear', String(compareYear));
+      if (viewAs) params.set('viewAs', viewAs);
       const res = await fetch(`/api/agent/command-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || `Request failed (${res.status})`); }
       setPerfData(await res.json());
     } catch (e: any) { console.error('[perf]', e); }
     finally { setPerfLoading(false); }
-  }, [user, perfYear, perfView, compareYear]);
+  }, [user, perfYear, perfView, compareYear, viewAs]);
 
   useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
@@ -283,9 +304,34 @@ export default function AgentDashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* ── Impersonation Banner ──────────────────────────────────────────── */}
+      {viewAs && (
+        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Users className="h-5 w-5 text-amber-600" />
+            <div>
+              <p className="font-semibold text-amber-800">
+                Viewing as: {viewAsName || viewAs}
+              </p>
+              <p className="text-xs text-amber-600">You are viewing this agent&apos;s dashboard as admin</p>
+            </div>
+          </div>
+          <a
+            href="/dashboard/admin/agents"
+            className="rounded-md bg-amber-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+          >
+            ← Back to Agents
+          </a>
+        </div>
+      )}
+
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
-        <p className="text-muted-foreground">Your performance summary for {year}.</p>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {viewAs && viewAsName ? `${viewAsName}'s Dashboard` : 'Agent Dashboard'}
+        </h1>
+        <p className="text-muted-foreground">
+          {viewAs ? `Performance summary for ${year}.` : `Your performance summary for ${year}.`}
+        </p>
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -294,7 +340,7 @@ export default function AgentDashboardPage() {
       <MyPerformanceSection
         perfData={perfData}
         perfLoading={perfLoading}
-        dashboard={dashboard}
+        dashboard={dashboard ?? null}
         year={perfYear}
         setYear={setPerfYear}
         view={perfView}
