@@ -30,7 +30,7 @@ function toYearFromDates(closedDate: string | null, contractDate: string | null)
   return d.getFullYear()
 }
 
-const ALLOWED_STATUS = new Set(['closed', 'pending', 'under_contract'])
+const ALLOWED_STATUS = new Set(['closed', 'pending', 'under_contract', 'cancelled'])
 const ALLOWED_TYPES = new Set(['residential_sale', 'rental', 'commercial_lease', 'commercial_sale'])
 const ALLOWED_SOURCES = new Set(['manual', 'ghl', 'import'])
 
@@ -76,27 +76,46 @@ export async function POST(req: NextRequest) {
     let calculationModel = body.calculationModel || 'manual'
 
     if (!splitSnapshot) {
-      // No manual override — run the automatic tier-based calculation
-      const calculation = await resolveTransactionCalculation({
-        agentId,
-        agentDisplayName,
-        commission,
-      })
-      splitSnapshot = calculation.splitSnapshot
-      creditSnapshot = calculation.creditSnapshot
-      agentType = calculation.agentType
-      calculationModel = calculation.calculationModel
-    } else {
-      // Manual override provided — build a default creditSnapshot if not supplied
-      if (!creditSnapshot) {
-        creditSnapshot = {
-          leaderboardAgentId: agentId,
-          leaderboardAgentDisplayName: agentDisplayName,
-          progressionMemberAgentId: agentId,
-          progressionLeaderAgentId: null,
-          progressionTeamId: null,
-          progressionCompanyDollarCredit: commission,
+      // No manual override — try the automatic tier-based calculation
+      // If it fails (no tiers configured), fall back to a basic manual split
+      try {
+        const calculation = await resolveTransactionCalculation({
+          agentId,
+          agentDisplayName,
+          commission,
+        })
+        splitSnapshot = calculation.splitSnapshot
+        creditSnapshot = calculation.creditSnapshot
+        agentType = calculation.agentType
+        calculationModel = calculation.calculationModel
+      } catch (calcErr: any) {
+        console.warn('[API/transactions] Calculation failed, using manual fallback:', calcErr?.message)
+        // Fallback: save with basic split (full commission as gross, no agent/company split calculated)
+        splitSnapshot = {
+          primaryTeamId: null, teamPlanId: null, memberPlanId: null,
+          grossCommission: commission,
+          agentSplitPercent: null, companySplitPercent: null,
+          agentNetCommission: 0,
+          leaderStructurePercent: null, leaderStructureGross: null,
+          memberPercentOfLeaderSide: null, memberPaid: null,
+          leaderRetainedAfterMember: null,
+          companyRetained: 0,
         }
+        calculationModel = 'manual_fallback'
+      }
+    } else {
+      // Manual override provided
+    }
+
+    // Always ensure creditSnapshot exists
+    if (!creditSnapshot) {
+      creditSnapshot = {
+        leaderboardAgentId: agentId,
+        leaderboardAgentDisplayName: agentDisplayName,
+        progressionMemberAgentId: agentId,
+        progressionLeaderAgentId: null,
+        progressionTeamId: null,
+        progressionCompanyDollarCredit: commission,
       }
     }
 
