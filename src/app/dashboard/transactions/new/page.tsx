@@ -170,7 +170,7 @@ export default function AddTransactionPage() {
       setAgentsLoading(true);
       try {
         const token = await user.getIdToken();
-        const res = await fetch('/api/admin/agents?year=2025', {
+        const res = await fetch('/api/admin/agents?source=profiles', {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
