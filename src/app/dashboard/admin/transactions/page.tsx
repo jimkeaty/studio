@@ -134,9 +134,15 @@ export default function AdminTransactionLedgerPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to update');
 
-      // Update local state
+      // Update local state with the edited values
+      // Also recalculate year from dates to keep filter in sync
+      const updatedYear = editTx.closedDate
+        ? new Date(editTx.closedDate).getFullYear()
+        : editTx.contractDate
+          ? new Date(editTx.contractDate).getFullYear()
+          : editTx.year;
       setTransactions(prev =>
-        prev.map(t => t.id === editTx.id ? { ...t, ...data.transaction } : t)
+        prev.map(t => t.id === editTx.id ? { ...t, ...editTx, year: updatedYear || t.year } : t)
       );
       setEditOpen(false);
       setEditTx(null);

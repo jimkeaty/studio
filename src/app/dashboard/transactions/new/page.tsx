@@ -49,6 +49,9 @@ const schema = z.object({
   agentId: z.string().min(1, 'Agent is required'),
   agentDisplayName: z.string().min(1),
 
+  // Status — admin can override; defaults to pending/closed based on closedDate
+  status: z.enum(['pending', 'under_contract', 'closed', 'cancelled']).optional(),
+
   // Basics
   closingType: z.enum(['buyer', 'listing', 'referral'], { required_error: 'Type of closing is required' }),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
@@ -269,7 +272,7 @@ export default function AddTransactionPage() {
         const payload = {
           agentId: values.agentId,
           agentDisplayName: values.agentDisplayName,
-          status: values.closedDate ? 'closed' : 'pending',
+          status: values.status || ((values.closedDate && values.closedDate.length >= 8) ? 'closed' : 'pending'),
           transactionType: txTypeMap[values.dealType] || 'residential_sale',
           closingType: values.closingType,
           dealType: values.dealType,
@@ -506,7 +509,7 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Projected Close Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
               )} />
             </Grid3>
-            <div className="max-w-xs">
+            <Grid2>
               <FormField control={form.control} name="closedDate" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Actual Close Date</FormLabel>
@@ -516,7 +519,28 @@ export default function AddTransactionPage() {
                   </FormDescription>
                 </FormItem>
               )} />
-            </div>
+              {isAdmin && (
+                <FormField control={form.control} name="status" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Auto (based on close date)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="under_contract">Under Contract</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Override status manually, or leave blank to auto-detect from close date.</FormDescription>
+                  </FormItem>
+                )} />
+              )}
+            </Grid2>
           </Section>
 
           {/* ── Section 3: Financial ─────────────────────────────────────── */}
