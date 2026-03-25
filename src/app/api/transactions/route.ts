@@ -174,6 +174,56 @@ export async function POST(req: NextRequest) {
       ...(body.titleOfficer ? { titleOfficer: body.titleOfficer } : {}),
       ...(body.titleOfficerEmail ? { titleOfficerEmail: body.titleOfficerEmail } : {}),
       ...(body.titleOfficerPhone ? { titleOfficerPhone: body.titleOfficerPhone } : {}),
+      // TC Working File fields
+      ...(body.tcWorking ? { tcWorking: body.tcWorking } : {}),
+      ...(body.clientType ? { clientType: body.clientType } : {}),
+      // Buyer info
+      ...(body.buyerName ? { buyerName: body.buyerName } : {}),
+      ...(body.buyerEmail ? { buyerEmail: body.buyerEmail } : {}),
+      ...(body.buyerPhone ? { buyerPhone: body.buyerPhone } : {}),
+      ...(body.buyer2Name ? { buyer2Name: body.buyer2Name } : {}),
+      ...(body.buyer2Email ? { buyer2Email: body.buyer2Email } : {}),
+      ...(body.buyer2Phone ? { buyer2Phone: body.buyer2Phone } : {}),
+      // Seller info
+      ...(body.sellerName ? { sellerName: body.sellerName } : {}),
+      ...(body.sellerEmail ? { sellerEmail: body.sellerEmail } : {}),
+      ...(body.sellerPhone ? { sellerPhone: body.sellerPhone } : {}),
+      ...(body.seller2Name ? { seller2Name: body.seller2Name } : {}),
+      ...(body.seller2Email ? { seller2Email: body.seller2Email } : {}),
+      ...(body.seller2Phone ? { seller2Phone: body.seller2Phone } : {}),
+      // Lender office
+      ...(body.lenderOffice ? { lenderOffice: body.lenderOffice } : {}),
+      // Title extras
+      ...(body.titleAttorney ? { titleAttorney: body.titleAttorney } : {}),
+      ...(body.titleOffice ? { titleOffice: body.titleOffice } : {}),
+      // Inspections
+      ...(body.inspectionOrdered ? { inspectionOrdered: body.inspectionOrdered } : {}),
+      ...(body.targetInspectionDate ? { targetInspectionDate: body.targetInspectionDate } : {}),
+      ...(body.inspectionTypes && Array.isArray(body.inspectionTypes) && body.inspectionTypes.length > 0 ? { inspectionTypes: body.inspectionTypes } : {}),
+      ...(body.tcScheduleInspections ? { tcScheduleInspections: body.tcScheduleInspections } : {}),
+      ...(body.tcScheduleInspectionsOther ? { tcScheduleInspectionsOther: body.tcScheduleInspectionsOther } : {}),
+      ...(body.inspectorName ? { inspectorName: body.inspectorName } : {}),
+      // Commission paid by seller
+      ...(body.sellerPayingListingAgent ? { sellerPayingListingAgent: toNumber(body.sellerPayingListingAgent) } : {}),
+      ...(body.sellerPayingListingAgentUnknown !== undefined ? { sellerPayingListingAgentUnknown: !!body.sellerPayingListingAgentUnknown } : {}),
+      ...(body.sellerPayingBuyerAgent ? { sellerPayingBuyerAgent: toNumber(body.sellerPayingBuyerAgent) } : {}),
+      // Buyer closing cost paid by seller
+      ...(body.buyerClosingCostTotal ? { buyerClosingCostTotal: toNumber(body.buyerClosingCostTotal) } : {}),
+      ...(body.buyerClosingCostAgentCommission ? { buyerClosingCostAgentCommission: toNumber(body.buyerClosingCostAgentCommission) } : {}),
+      ...(body.buyerClosingCostTxFee ? { buyerClosingCostTxFee: toNumber(body.buyerClosingCostTxFee) } : {}),
+      ...(body.buyerClosingCostOther ? { buyerClosingCostOther: toNumber(body.buyerClosingCostOther) } : {}),
+      // Additional info
+      ...(body.warrantyAtClosing ? { warrantyAtClosing: body.warrantyAtClosing } : {}),
+      ...(body.warrantyPaidBy ? { warrantyPaidBy: body.warrantyPaidBy } : {}),
+      ...(body.txComplianceFee ? { txComplianceFee: body.txComplianceFee } : {}),
+      ...(body.txComplianceFeeAmount ? { txComplianceFeeAmount: toNumber(body.txComplianceFeeAmount) } : {}),
+      ...(body.txComplianceFeePaidBy ? { txComplianceFeePaidBy: body.txComplianceFeePaidBy } : {}),
+      ...(body.occupancyAgreement ? { occupancyAgreement: body.occupancyAgreement } : {}),
+      ...(body.occupancyDates ? { occupancyDates: body.occupancyDates } : {}),
+      ...(body.shortageInCommission ? { shortageInCommission: body.shortageInCommission } : {}),
+      ...(body.shortageAmount ? { shortageAmount: toNumber(body.shortageAmount) } : {}),
+      ...(body.buyerBringToClosing ? { buyerBringToClosing: toNumber(body.buyerBringToClosing) } : {}),
+      ...(body.additionalComments ? { additionalComments: body.additionalComments } : {}),
 
       createdAt: now,
       updatedAt: now,

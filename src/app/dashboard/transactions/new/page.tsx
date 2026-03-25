@@ -39,6 +39,18 @@ const SOURCES = [
   { value: 'other', label: 'Other' },
 ];
 
+const INSPECTION_TYPE_OPTIONS = [
+  'General Home Inspection',
+  'Roof Inspection',
+  'Termite Inspection',
+  'Radon Inspection',
+  'Sewer Scope Inspection',
+  'HVAC Inspection',
+  'Generator Inspection',
+  'Pool',
+  'Survey',
+];
+
 type AgentOption = { agentId: string; agentName: string };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,7 +65,7 @@ const schema = z.object({
   status: z.enum(['pending', 'under_contract', 'closed', 'cancelled']).optional(),
 
   // Basics
-  closingType: z.enum(['buyer', 'listing', 'referral'], { required_error: 'Type of closing is required' }),
+  closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5, 'Full property address is required'),
   clientName: z.string().min(1, 'Client name is required'),
@@ -80,12 +92,12 @@ const schema = z.object({
   projectedCloseDate: z.string().optional().or(z.literal('')),
   closedDate: z.string().optional().or(z.literal('')),
 
-  // Client contact info
+  // Client contact info (legacy — still used)
   clientEmail: z.string().email().optional().or(z.literal('')),
   clientPhone: z.string().optional(),
   clientNewAddress: z.string().optional(),
 
-  // Second client (co-buyer, spouse, etc.)
+  // Second client (co-buyer, spouse, etc.) — legacy
   client2Name: z.string().optional(),
   client2Email: z.string().email().optional().or(z.literal('')),
   client2Phone: z.string().optional(),
@@ -101,12 +113,71 @@ const schema = z.object({
   loanOfficer: z.string().optional(),
   loanOfficerEmail: z.string().email().optional().or(z.literal('')),
   loanOfficerPhone: z.string().optional(),
+  lenderOffice: z.string().optional(),
 
   // Parties — Title
   titleCompany: z.string().optional(),
   titleOfficer: z.string().optional(),
   titleOfficerEmail: z.string().email().optional().or(z.literal('')),
   titleOfficerPhone: z.string().optional(),
+  titleAttorney: z.string().optional(),
+  titleOffice: z.string().optional(),
+
+  // TC Working File
+  tcWorking: z.enum(['yes', 'no']).optional(),
+
+  // Client Type — for TC working file client info
+  clientType: z.enum(['buyer', 'seller', 'dual']).optional(),
+
+  // Buyer info (when clientType is 'buyer' or 'dual')
+  buyerName: z.string().optional(),
+  buyerEmail: z.string().email().optional().or(z.literal('')),
+  buyerPhone: z.string().optional(),
+  buyer2Name: z.string().optional(),
+  buyer2Email: z.string().email().optional().or(z.literal('')),
+  buyer2Phone: z.string().optional(),
+
+  // Seller info (when clientType is 'seller' or 'dual')
+  sellerName: z.string().optional(),
+  sellerEmail: z.string().email().optional().or(z.literal('')),
+  sellerPhone: z.string().optional(),
+  seller2Name: z.string().optional(),
+  seller2Email: z.string().email().optional().or(z.literal('')),
+  seller2Phone: z.string().optional(),
+
+  // Inspections
+  inspectionOrdered: z.enum(['yes', 'no']).optional(),
+  targetInspectionDate: z.string().optional().or(z.literal('')),
+  inspectionTypes: z.array(z.string()).optional(),
+  tcScheduleInspections: z.enum(['yes', 'no', 'other']).optional(),
+  tcScheduleInspectionsOther: z.string().optional(),
+  inspectorName: z.string().optional(),
+
+  // Commission paid by seller
+  sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
+  sellerPayingListingAgentUnknown: z.boolean().optional(),
+  sellerPayingBuyerAgent: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Buyer closing cost paid by seller
+  buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostAgentCommission: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostTxFee: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostOther: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Additional info
+  warrantyAtClosing: z.enum(['yes', 'no']).optional(),
+  warrantyPaidBy: z.string().optional(),
+  txComplianceFee: z.enum(['yes', 'no']).optional(),
+  txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+  txComplianceFeePaidBy: z.string().optional(),
+  occupancyAgreement: z.enum(['yes', 'no']).optional(),
+  occupancyDates: z.string().optional(),
+  shortageInCommission: z.enum(['yes', 'no']).optional(),
+  shortageAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Additional comments (replaces notes)
+  additionalComments: z.string().optional(),
 
   notes: z.string().optional(),
 });
@@ -163,8 +234,20 @@ export default function AddTransactionPage() {
       clientName: '',
       dealSource: '',
       contractDate: '',
+      inspectionTypes: [],
+      sellerPayingListingAgentUnknown: false,
     },
   });
+
+  // Watched values for conditional rendering
+  const clientType = form.watch('clientType');
+  const inspectionOrdered = form.watch('inspectionOrdered');
+  const warrantyAtClosing = form.watch('warrantyAtClosing');
+  const txComplianceFee = form.watch('txComplianceFee');
+  const shortageInCommission = form.watch('shortageInCommission');
+  const tcScheduleInspections = form.watch('tcScheduleInspections');
+  const occupancyAgreement = form.watch('occupancyAgreement');
+  const inspectionTypes = form.watch('inspectionTypes') || [];
 
   // Admin: load agent list for the dropdown
   useEffect(() => {
@@ -193,6 +276,16 @@ export default function AddTransactionPage() {
     form.setValue('agentId', user.uid);
     form.setValue('agentDisplayName', user.displayName || user.email || user.uid);
   }, [user, isAdmin]);
+
+  // Helper: toggle inspection type checkbox
+  const toggleInspectionType = (type: string) => {
+    const current = form.getValues('inspectionTypes') || [];
+    if (current.includes(type)) {
+      form.setValue('inspectionTypes', current.filter((t: string) => t !== type));
+    } else {
+      form.setValue('inspectionTypes', [...current, type]);
+    }
+  };
 
   if (userLoading) {
     return <div className="space-y-4"><Skeleton className="h-12 w-1/2" /><Skeleton className="h-96 w-full" /></div>;
@@ -224,7 +317,7 @@ export default function AddTransactionPage() {
           )}
         </p>
         <div className="flex justify-center gap-3 flex-wrap">
-          <Button onClick={() => { setSubmitted(false); setResultId(null); form.reset({ agentId: isAdmin ? '' : user.uid, agentDisplayName: isAdmin ? '' : (user.displayName || user.email || ''), closingType: 'buyer', dealType: 'residential_sale', address: '', clientName: '', contractDate: '' }); }}>
+          <Button onClick={() => { setSubmitted(false); setResultId(null); form.reset({ agentId: isAdmin ? '' : user.uid, agentDisplayName: isAdmin ? '' : (user.displayName || user.email || ''), closingType: 'buyer', dealType: 'residential_sale', address: '', clientName: '', contractDate: '', inspectionTypes: [], sellerPayingListingAgentUnknown: false }); }}>
             Add Another
           </Button>
           {isAdmin ? (
@@ -308,11 +401,59 @@ export default function AddTransactionPage() {
           loanOfficer: values.loanOfficer || null,
           loanOfficerEmail: values.loanOfficerEmail || null,
           loanOfficerPhone: values.loanOfficerPhone || null,
+          lenderOffice: values.lenderOffice || null,
           titleCompany: values.titleCompany || null,
           titleOfficer: values.titleOfficer || null,
           titleOfficerEmail: values.titleOfficerEmail || null,
           titleOfficerPhone: values.titleOfficerPhone || null,
+          titleAttorney: values.titleAttorney || null,
+          titleOffice: values.titleOffice || null,
           notes: values.notes || null,
+          // TC Working File fields
+          tcWorking: values.tcWorking || 'no',
+          clientType: values.clientType || null,
+          // Buyer info
+          buyerName: values.buyerName || null,
+          buyerEmail: values.buyerEmail || null,
+          buyerPhone: values.buyerPhone || null,
+          buyer2Name: values.buyer2Name || null,
+          buyer2Email: values.buyer2Email || null,
+          buyer2Phone: values.buyer2Phone || null,
+          // Seller info
+          sellerName: values.sellerName || null,
+          sellerEmail: values.sellerEmail || null,
+          sellerPhone: values.sellerPhone || null,
+          seller2Name: values.seller2Name || null,
+          seller2Email: values.seller2Email || null,
+          seller2Phone: values.seller2Phone || null,
+          // Inspections
+          inspectionOrdered: values.inspectionOrdered || null,
+          targetInspectionDate: values.targetInspectionDate || null,
+          inspectionTypes: values.inspectionTypes || [],
+          tcScheduleInspections: values.tcScheduleInspections || null,
+          tcScheduleInspectionsOther: values.tcScheduleInspectionsOther || null,
+          inspectorName: values.inspectorName || null,
+          // Commission
+          sellerPayingListingAgent: Number(values.sellerPayingListingAgent) || null,
+          sellerPayingListingAgentUnknown: values.sellerPayingListingAgentUnknown || false,
+          sellerPayingBuyerAgent: Number(values.sellerPayingBuyerAgent) || null,
+          // Buyer closing cost
+          buyerClosingCostTotal: Number(values.buyerClosingCostTotal) || null,
+          buyerClosingCostAgentCommission: Number(values.buyerClosingCostAgentCommission) || null,
+          buyerClosingCostTxFee: Number(values.buyerClosingCostTxFee) || null,
+          buyerClosingCostOther: Number(values.buyerClosingCostOther) || null,
+          // Additional
+          warrantyAtClosing: values.warrantyAtClosing || null,
+          warrantyPaidBy: values.warrantyPaidBy || null,
+          txComplianceFee: values.txComplianceFee || null,
+          txComplianceFeeAmount: Number(values.txComplianceFeeAmount) || null,
+          txComplianceFeePaidBy: values.txComplianceFeePaidBy || null,
+          occupancyAgreement: values.occupancyAgreement || null,
+          occupancyDates: values.occupancyDates || null,
+          shortageInCommission: values.shortageInCommission || null,
+          shortageAmount: Number(values.shortageAmount) || null,
+          buyerBringToClosing: Number(values.buyerBringToClosing) || null,
+          additionalComments: values.additionalComments || null,
           // Override splitSnapshot if agentDollar provided
           ...(agentDollar > 0 ? {
             splitSnapshot: {
@@ -401,7 +542,7 @@ export default function AddTransactionPage() {
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder={agentsLoading ? 'Loading agents…' : 'Select an agent'} />
+                        <SelectValue placeholder={agentsLoading ? 'Loading agents...' : 'Select an agent'} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -424,6 +565,7 @@ export default function AddTransactionPage() {
                     <SelectContent>
                       <SelectItem value="buyer">Buyer Representation</SelectItem>
                       <SelectItem value="listing">Listing / Seller Side</SelectItem>
+                      <SelectItem value="dual">Dual Agent</SelectItem>
                       <SelectItem value="referral">Referral</SelectItem>
                     </SelectContent>
                   </Select>
@@ -479,6 +621,23 @@ export default function AddTransactionPage() {
                 </FormItem>
               )} />
             </Grid2>
+          </Section>
+
+          {/* ── TC Working File ───────────────────────────────────────────── */}
+          <Section title="TC Working File">
+            <FormField control={form.control} name="tcWorking" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Send to TC Working File?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>If Yes, this transaction will appear in the TC Queue for processing.</FormDescription>
+              </FormItem>
+            )} />
           </Section>
 
           {/* ── Section 2: Key Dates ─────────────────────────────────────── */}
@@ -596,8 +755,23 @@ export default function AddTransactionPage() {
             </div>
           </Section>
 
-          {/* ── Section 4: Client Contact Info ─────────────────────────── */}
-          <Section title="Client Contact Info" description="Used for post-closing workflows: thank you calls, texts, and mailers.">
+          {/* ── Section 4: Client Info ─────────────────────────────────── */}
+          <Section title="Client Info" description="Select client type to show the appropriate contact fields.">
+            <FormField control={form.control} name="clientType" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Client Type</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select client type..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="buyer">Buyer</SelectItem>
+                    <SelectItem value="seller">Seller</SelectItem>
+                    <SelectItem value="dual">Dual Agent (I&apos;m working both sides)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+
+            {/* Legacy client contact fields */}
             <Grid2>
               <FormField control={form.control} name="clientEmail" render={({ field }) => (
                 <FormItem><FormLabel>Client Email</FormLabel><FormControl><Input type="email" placeholder="client@email.com" {...field} /></FormControl><FormMessage /></FormItem>
@@ -609,19 +783,87 @@ export default function AddTransactionPage() {
             <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
               <FormItem><FormLabel>Client New Address</FormLabel><FormControl><Input placeholder="Where the client is moving to (for mailers)" {...field} /></FormControl></FormItem>
             )} />
-            <Separator className="my-2" />
-            <p className="text-sm font-medium text-muted-foreground">Second Contact (co-buyer, spouse, etc.)</p>
-            <Grid3>
-              <FormField control={form.control} name="client2Name" render={({ field }) => (
-                <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="client2Email" render={({ field }) => (
-                <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="client2Phone" render={({ field }) => (
-                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid3>
+
+            {/* Buyer section */}
+            {(clientType === 'buyer' || clientType === 'dual') && (
+              <>
+                <Separator className="my-2" />
+                <p className="text-sm font-semibold text-primary">Buyer Information</p>
+                <Grid3>
+                  <FormField control={form.control} name="buyerName" render={({ field }) => (
+                    <FormItem><FormLabel>Buyer Name</FormLabel><FormControl><Input placeholder="Primary buyer" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="buyerEmail" render={({ field }) => (
+                    <FormItem><FormLabel>Buyer Email</FormLabel><FormControl><Input type="email" placeholder="buyer@email.com" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="buyerPhone" render={({ field }) => (
+                    <FormItem><FormLabel>Buyer Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-1234" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+                <p className="text-xs text-muted-foreground mt-1">Second Buyer (co-buyer, spouse, etc.)</p>
+                <Grid3>
+                  <FormField control={form.control} name="buyer2Name" render={({ field }) => (
+                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="buyer2Email" render={({ field }) => (
+                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="buyer2Phone" render={({ field }) => (
+                    <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+              </>
+            )}
+
+            {/* Seller section */}
+            {(clientType === 'seller' || clientType === 'dual') && (
+              <>
+                <Separator className="my-2" />
+                <p className="text-sm font-semibold text-primary">Seller Information</p>
+                <Grid3>
+                  <FormField control={form.control} name="sellerName" render={({ field }) => (
+                    <FormItem><FormLabel>Seller Name</FormLabel><FormControl><Input placeholder="Primary seller" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="sellerEmail" render={({ field }) => (
+                    <FormItem><FormLabel>Seller Email</FormLabel><FormControl><Input type="email" placeholder="seller@email.com" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="sellerPhone" render={({ field }) => (
+                    <FormItem><FormLabel>Seller Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-5678" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+                <p className="text-xs text-muted-foreground mt-1">Second Seller (co-seller, spouse, etc.)</p>
+                <Grid3>
+                  <FormField control={form.control} name="seller2Name" render={({ field }) => (
+                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="seller2Email" render={({ field }) => (
+                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="seller2Phone" render={({ field }) => (
+                    <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+              </>
+            )}
+
+            {/* Legacy second contact (shown when no clientType selected) */}
+            {!clientType && (
+              <>
+                <Separator className="my-2" />
+                <p className="text-sm font-medium text-muted-foreground">Second Contact (co-buyer, spouse, etc.)</p>
+                <Grid3>
+                  <FormField control={form.control} name="client2Name" render={({ field }) => (
+                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="client2Email" render={({ field }) => (
+                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="client2Phone" render={({ field }) => (
+                    <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+              </>
+            )}
           </Section>
 
           {/* ── Section 5: Other Agent ────────────────────────────────────── */}
@@ -658,6 +900,11 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Loan Officer Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-9012" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
+            <div className="max-w-xs">
+              <FormField control={form.control} name="lenderOffice" render={({ field }) => (
+                <FormItem><FormLabel>Office #</FormLabel><FormControl><Input placeholder="Office number" {...field} /></FormControl></FormItem>
+              )} />
+            </div>
           </Section>
 
           {/* ── Section 7: Title Company ──────────────────────────────────── */}
@@ -676,15 +923,304 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Title Officer Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-3456" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
+            <Grid2>
+              <FormField control={form.control} name="titleAttorney" render={({ field }) => (
+                <FormItem><FormLabel>Attorney</FormLabel><FormControl><Input placeholder="Attorney name" {...field} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="titleOffice" render={({ field }) => (
+                <FormItem><FormLabel>Office #</FormLabel><FormControl><Input placeholder="Office number" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid2>
           </Section>
 
-          {/* ── Section 5: Notes ─────────────────────────────────────────── */}
+          {/* ── Section 8: Inspections ────────────────────────────────────── */}
+          <Section title="Inspections">
+            <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Has Inspection Been Ordered?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+
+            {inspectionOrdered === 'yes' && (
+              <>
+                <div className="max-w-xs">
+                  <FormField control={form.control} name="targetInspectionDate" render={({ field }) => (
+                    <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium mb-3">Check all that apply:</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {INSPECTION_TYPE_OPTIONS.map((type) => (
+                      <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={inspectionTypes.includes(type)}
+                          onChange={() => toggleInspectionType(type)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        {type}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Do you want TC to help schedule inspections?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+
+                {tcScheduleInspections === 'other' && (
+                  <FormField control={form.control} name="tcScheduleInspectionsOther" render={({ field }) => (
+                    <FormItem><FormLabel>Please specify</FormLabel><FormControl><Input placeholder="Describe what you need..." {...field} /></FormControl></FormItem>
+                  )} />
+                )}
+
+                <div className="max-w-md">
+                  <FormField control={form.control} name="inspectorName" render={({ field }) => (
+                    <FormItem><FormLabel>Inspector Name / Company</FormLabel><FormControl><Input placeholder="Inspector name or company" {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+              </>
+            )}
+          </Section>
+
+          {/* ── Section 9: Commission Paid by Seller ──────────────────────── */}
+          <Section title="Commission Paid by Seller">
+            <div className="space-y-4">
+              <div className="flex items-end gap-4">
+                <div className="flex-1 max-w-xs">
+                  <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Amount seller(s) is paying the listing agent ($)</FormLabel>
+                      <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm pb-2">
+                  <input
+                    type="checkbox"
+                    checked={form.watch('sellerPayingListingAgentUnknown') || false}
+                    onChange={(e) => form.setValue('sellerPayingListingAgentUnknown', e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  Unknown / Confirm with listing agent
+                </label>
+              </div>
+              <div className="max-w-xs">
+                <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount seller(s) is paying the buyer&apos;s agent ($)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+          </Section>
+
+          {/* ── Section 10: Buyer Closing Cost Paid by Seller ─────────────── */}
+          <Section title="Buyer Closing Cost Paid by Seller">
+            <div className="max-w-xs">
+              <FormField control={form.control} name="buyerClosingCostTotal" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Total Buyer&apos;s Closing Cost Paid by Seller ($)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+            <Separator />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Breakdown</p>
+            <Grid3>
+              <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Buyer&apos;s Agent Commission ($)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Transaction Fee ($)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostOther" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>All Other Buyer&apos;s Closing Costs ($)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                </FormItem>
+              )} />
+            </Grid3>
+          </Section>
+
+          {/* ── Section 11: Additional Info ───────────────────────────────── */}
+          <Section title="Additional Info">
+            {/* Warranty */}
+            <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Warranty Paid at Closing?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {warrantyAtClosing === 'yes' && (
+              <div className="max-w-xs">
+                <FormField control={form.control} name="warrantyPaidBy" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Who is paying?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="buyer">Buyer</SelectItem>
+                        <SelectItem value="seller">Seller</SelectItem>
+                        <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Transaction Compliance Fee */}
+            <FormField control={form.control} name="txComplianceFee" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Transaction Compliance Fee?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {txComplianceFee === 'yes' && (
+              <Grid2>
+                <FormField control={form.control} name="txComplianceFeeAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>How much? ($)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="txComplianceFeePaidBy" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Who is paying for it?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="buyer">Buyer</SelectItem>
+                        <SelectItem value="seller">Seller</SelectItem>
+                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+              </Grid2>
+            )}
+
+            <Separator />
+
+            {/* Occupancy Agreement */}
+            <FormField control={form.control} name="occupancyAgreement" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Occupancy Agreement?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {occupancyAgreement === 'yes' && (
+              <FormField control={form.control} name="occupancyDates" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>When does occupancy start &amp; end?</FormLabel>
+                  <FormControl><Input placeholder="e.g. 3/15/2026 - 4/15/2026" {...field} /></FormControl>
+                </FormItem>
+              )} />
+            )}
+
+            <Separator />
+
+            {/* Shortage in Commission */}
+            <FormField control={form.control} name="shortageInCommission" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Shortage in Commission?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {shortageInCommission === 'yes' && (
+              <Grid2>
+                <FormField control={form.control} name="shortageAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>How much? ($)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Buyer will bring to closing ($)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  </FormItem>
+                )} />
+              </Grid2>
+            )}
+          </Section>
+
+          {/* ── Section 12: Additional Comments ──────────────────────────── */}
+          <Section title="Additional Comments">
+            <FormField control={form.control} name="additionalComments" render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Textarea
+                    placeholder="Any additional comments, special conditions, contingencies, HOA info, key location, anything important..."
+                    className="min-h-[100px]"
+                    {...field}
+                  />
+                </FormControl>
+              </FormItem>
+            )} />
+          </Section>
+
+          {/* ── Legacy Notes (hidden, for backward compat) ────────────────── */}
           <Section title="Notes">
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem>
                 <FormControl>
                   <Textarea
-                    placeholder="Special conditions, contingencies, HOA info, key location, anything important…"
+                    placeholder="Special conditions, contingencies, HOA info, key location, anything important..."
                     className="min-h-[100px]"
                     {...field}
                   />
@@ -698,7 +1234,7 @@ export default function AddTransactionPage() {
             <Button type="submit" size="lg" disabled={submitting || (isAdmin && agentsLoading)}>
               <Send className="mr-2 h-4 w-4" />
               {submitting
-                ? 'Submitting…'
+                ? 'Submitting...'
                 : isAdmin
                   ? 'Add to Ledger'
                   : 'Submit for Review'}
