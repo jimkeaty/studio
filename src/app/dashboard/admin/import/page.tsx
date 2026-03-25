@@ -29,36 +29,47 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import * as XLSX from 'xlsx';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
-/** Exact CSV column headers in order */
+/** Exact column headers in order (matches Excel template) */
 const CSV_HEADERS = [
-  'Agent Name',
-  'Team',
-  'Deal Type',
+  'Type',
   'Status',
-  'Type of Closing',
+  'Deal Type',
+  'Agent',
+  'Team',
   'Address',
-  'Client Name',
+  'Client',
   'Source',
-  'Listing Date',
-  'Under Contract Date',
-  'Proj Close Date',
+  'Listing Date/Buyer Rep Date',
+  'Under Contr Date',
+  'Proj Close',
   'Exp Date',
-  'Closed Date',
-  'List Price / Buyer Rep Price',
+  'Close Date',
+  'List Price- Buyer Rep Price',
   'Sale Price',
   'Commission %',
   'GCI',
   'Transaction Fee',
   'Broker %',
   'Broker GCI',
-  'Agent % / % to Member',
-  'Agent $ (Primary GCI)',
+  'Referral',
+  '% to Member',
+  'Primary GCI',
+  'Team Member 1',
+  '% to Member1',
+  'Member GCI 1',
+  'Team Member2',
+  '% to Member 2',
+  'Member GCI 2',
+  'Team Member3',
+  '% to Member 3',
+  'Member GCI 3',
   'Mortgage Company',
   'Title Company',
 ] as const;
@@ -73,31 +84,56 @@ function normalizeHeader(h: string): string {
  * Includes common aliases so user CSVs work without exact header names.
  */
 const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
+  // Agent name
+  'agent': 'agentName',
   'agent name': 'agentName',
-  'type of closing': 'dealType',
-  'type of closings': 'dealType',
-  'closing type': 'dealType',
-  'property type': 'dealType',
+
+  // Type (buyer/listing/referral — closingType in the app)
+  'type': 'closingType',
+  'type of closing': 'closingType',
+  'type of closings': 'closingType',
+  'closing type': 'closingType',
+
+  // Status
   'status': 'status',
-  'deal type': 'closingType',
+
+  // Deal Type (residential/commercial — transactionType in the app)
+  'deal type': 'dealType',
+  'property type': 'dealType',
+
+  // Address
   'address': 'address',
+
+  // Client
+  'client': 'clientName',
   'client name': 'clientName',
+
+  // Source
   'source': 'dealSource',
   'deal source': 'dealSource',
+
+  // Dates
   'listing date': 'listingDate',
-  'under contract date': 'underContractDate',
+  'listing date/buyer rep date': 'listingDate',
+  'listing date / buyer rep date': 'listingDate',
+  'buyer rep date': 'listingDate',
   'under contr date': 'underContractDate',
+  'under contract date': 'underContractDate',
   'contract date': 'underContractDate',
+  'proj close': 'projCloseDate',
   'proj close date': 'projCloseDate',
   'projected close date': 'projCloseDate',
+  'projected close': 'projCloseDate',
   'exp date': 'expDate',
   'expiration date': 'expDate',
-  'closed date': 'closedDate',
   'close date': 'closedDate',
+  'closed date': 'closedDate',
   'closing date': 'closedDate',
-  'list price / buyer rep price': 'listPrice',
+
+  // Financials
   'list price- buyer rep price': 'listPrice',
   'list price-buyer rep price': 'listPrice',
+  'list price / buyer rep price': 'listPrice',
   'list price': 'listPrice',
   'buyer rep price': 'listPrice',
   'sale price': 'salePrice',
@@ -110,24 +146,62 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   'broker %': 'brokerPct',
   'broker percent': 'brokerPct',
   'broker gci': 'brokerGci',
+
+  // Referral
+  'referral': 'referral',
+  'referral %': 'referral',
+  'referral fee': 'referral',
+
+  // Agent split
+  '% to member': 'agentPct',
   'agent % / % to member': 'agentPct',
   'agent %': 'agentPct',
   'agent percent': 'agentPct',
+  'primary gci': 'agentDollar',
   'agent $ (primary gci)': 'agentDollar',
   'agent $': 'agentDollar',
   'agent dollar': 'agentDollar',
-  'primary gci': 'agentDollar',
+
+  // Team members
+  'team member 1': 'teamMember1',
+  'team member1': 'teamMember1',
+  '% to member1': 'teamMember1Pct',
+  '% to member 1': 'teamMember1Pct',
+  'member gci 1': 'teamMember1Gci',
+  'member gci1': 'teamMember1Gci',
+  'team member2': 'teamMember2',
+  'team member 2': 'teamMember2',
+  '% to member 2': 'teamMember2Pct',
+  '% to member2': 'teamMember2Pct',
+  'member gci 2': 'teamMember2Gci',
+  'member gci2': 'teamMember2Gci',
+  'team member3': 'teamMember3',
+  'team member 3': 'teamMember3',
+  '% to member 3': 'teamMember3Pct',
+  '% to member3': 'teamMember3Pct',
+  'member gci 3': 'teamMember3Gci',
+  'member gci3': 'teamMember3Gci',
+
+  // Parties
   'mortgage company': 'mortgageCompany',
   'title company': 'titleCompany',
+
+  // Team
   'team': 'team',
   'team name': 'team',
   'agent team': 'team',
-  'agent type': 'team',
 };
 
-const REQUIRED_COLUMNS_NORMALIZED = ['agent name', 'address', 'status'];
+// Required columns — we check for these OR their aliases
+const REQUIRED_COLUMNS_NORMALIZED = ['agent', 'address', 'status'];
+// Also accept "agent name" as alias for "agent"
+const REQUIRED_ALIASES: Record<string, string[]> = {
+  'agent': ['agent', 'agent name'],
+  'address': ['address'],
+  'status': ['status'],
+};
 
-type ParsedRow = Record<string, string> & { __rowNum: number; __errors: string[] };
+type ParsedRow = Record<string, any> & { __rowNum: number; __errors: string[] };
 
 type ImportResult = {
   ok: boolean;
@@ -183,9 +257,11 @@ function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
       row[h] = values[idx] ?? '';
     });
 
-    // Validate required columns (using normalized keys)
+    // Validate required columns (check all aliases)
     for (const req of REQUIRED_COLUMNS_NORMALIZED) {
-      if (!row[req]?.trim()) {
+      const aliases = REQUIRED_ALIASES[req] || [req];
+      const hasValue = aliases.some(alias => row[alias]?.trim());
+      if (!hasValue) {
         row.__errors.push(`"${req}" is required`);
       }
     }
@@ -207,14 +283,14 @@ function mapRowToApiPayload(row: ParsedRow, colMap: Record<string, string>): Rec
   return payload;
 }
 
-/** Generate a CSV template download */
+/** Generate an XLSX template download */
 function downloadTemplate() {
   const exampleRow = [
-    'Jane Smith',
-    'CGL',
     'Buyer',
     'Closed',
     'Residential',
+    'Jane Smith',
+    'CGL',
     '123 Main St, Lafayette LA 70508',
     'John Doe',
     'Boomtown',
@@ -230,50 +306,68 @@ function downloadTemplate() {
     '395',
     '30',
     '2835',
+    '',
     '70',
     '6615',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
     'First Federal Bank',
     'Acadian Title',
   ];
 
-  const csvContent =
-    CSV_HEADERS.join(',') + '\n' + exampleRow.map((v) => `"${v}"`).join(',') + '\n';
+  const ws = XLSX.utils.aoa_to_sheet([CSV_HEADERS as unknown as string[], exampleRow]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template');
 
-  const blob = new Blob([csvContent], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'smart-broker-import-template.csv';
-  a.click();
-  URL.revokeObjectURL(url);
+  // Auto-size columns
+  ws['!cols'] = CSV_HEADERS.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+
+  XLSX.writeFile(wb, 'smart-broker-import-template.xlsx');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Column Guides
 // ─────────────────────────────────────────────────────────────────────────────
 const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
-  { header: 'Agent Name', hint: 'Must match agent profile name exactly (e.g. "Jane Smith")', required: true },
-  { header: 'Team', hint: 'Team name: CGL · SGL · Charles Ditch Team · Independent (assigns agent to team)' },
-  { header: 'Deal Type', hint: 'Buyer · Listing · Lease · Referral (which side of the deal)' },
+  { header: 'Type', hint: 'Buyer · Listing · Lease · Referral (which side of the deal)' },
   { header: 'Status', hint: 'Active · Pending · Closed · Canceled · Expired', required: true },
-  { header: 'Type of Closing', hint: 'Residential · Land · Commercial (property type)' },
+  { header: 'Deal Type', hint: 'Residential · Land · Commercial (property type)' },
+  { header: 'Agent', hint: 'Agent name — fuzzy matched to existing profiles (e.g. "Jane Smith")', required: true },
+  { header: 'Team', hint: 'Team name: CGL · SGL · Charles Ditch Team · Independent' },
   { header: 'Address', hint: 'Full property address', required: true },
-  { header: 'Client Name', hint: 'Buyer or seller name (optional)' },
+  { header: 'Client', hint: 'Buyer or seller name (optional)' },
   { header: 'Source', hint: 'Boomtown · referral · sphere · sign call · Company Gen · Social · Open House · FSBO · Expired' },
-  { header: 'Listing Date', hint: 'YYYY-MM-DD or MM/DD/YYYY' },
-  { header: 'Under Contract Date', hint: 'YYYY-MM-DD or MM/DD/YYYY' },
-  { header: 'Proj Close Date', hint: 'Projected closing date' },
+  { header: 'Listing Date/Buyer Rep Date', hint: 'YYYY-MM-DD or MM/DD/YYYY or Excel serial date' },
+  { header: 'Under Contr Date', hint: 'Under contract date' },
+  { header: 'Proj Close', hint: 'Projected closing date' },
   { header: 'Exp Date', hint: 'Listing expiration date' },
-  { header: 'Closed Date', hint: 'Actual closing date — used for year attribution' },
-  { header: 'List Price / Buyer Rep Price', hint: 'Original list price or buyer representation price ($)' },
+  { header: 'Close Date', hint: 'Actual closing date — used for year attribution' },
+  { header: 'List Price- Buyer Rep Price', hint: 'Original list price or buyer representation price ($)' },
   { header: 'Sale Price', hint: 'Actual sale/close price ($)' },
   { header: 'Commission %', hint: 'e.g. 3 for 3%' },
   { header: 'GCI', hint: 'Gross Commission Income ($)' },
   { header: 'Transaction Fee', hint: 'Flat transaction fee charged ($)' },
   { header: 'Broker %', hint: "Broker's split percentage (e.g. 30 for 30%)" },
   { header: 'Broker GCI', hint: 'Dollar amount retained by broker ($)' },
-  { header: 'Agent % / % to Member', hint: 'Agent split percentage (e.g. 70 for 70%)' },
-  { header: 'Agent $ (Primary GCI)', hint: '⭐ Agent net commission — overrides recalculation for historical records ($)' },
+  { header: 'Referral', hint: 'Referral fee or referral percentage (optional)' },
+  { header: '% to Member', hint: 'Agent split percentage (e.g. 70 for 70%)' },
+  { header: 'Primary GCI', hint: '⭐ Agent net commission ($)' },
+  { header: 'Team Member 1', hint: 'Team member name for split (optional)' },
+  { header: '% to Member1', hint: 'Team member 1 split percentage' },
+  { header: 'Member GCI 1', hint: 'Team member 1 dollar amount' },
+  { header: 'Team Member2', hint: 'Second team member (optional)' },
+  { header: '% to Member 2', hint: 'Team member 2 split percentage' },
+  { header: 'Member GCI 2', hint: 'Team member 2 dollar amount' },
+  { header: 'Team Member3', hint: 'Third team member (optional)' },
+  { header: '% to Member 3', hint: 'Team member 3 split percentage' },
+  { header: 'Member GCI 3', hint: 'Team member 3 dollar amount' },
   { header: 'Mortgage Company', hint: 'Lender name (optional)' },
   { header: 'Title Company', hint: 'Title/escrow company (optional)' },
 ];
@@ -334,10 +428,52 @@ export default function BulkImportPage() {
     );
   }
 
+  // ── Parse XLSX to same format as CSV ──────────────────────────────────
+  function parseXLSX(data: ArrayBuffer): { headers: string[]; rows: ParsedRow[] } {
+    const wb = XLSX.read(data, { type: 'array' });
+    const sheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const jsonData: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
+
+    if (jsonData.length === 0) return { headers: [], rows: [] };
+
+    const rawHeaders = (jsonData[0] || []).map((h: any) => String(h ?? '').trim());
+    const headers = rawHeaders.map(normalizeHeader);
+    const rows: ParsedRow[] = [];
+
+    for (let i = 1; i < jsonData.length; i++) {
+      const values = jsonData[i] || [];
+      // Skip completely empty rows
+      if (values.every((v: any) => !v && v !== 0)) continue;
+
+      const row: ParsedRow = { __rowNum: i + 1, __errors: [] };
+      headers.forEach((h, idx) => {
+        row[h] = String(values[idx] ?? '').trim();
+      });
+
+      // Validate required columns
+      for (const req of REQUIRED_COLUMNS_NORMALIZED) {
+        const aliases = REQUIRED_ALIASES[req] || [req];
+        const hasValue = aliases.some(alias => row[alias]?.trim());
+        if (!hasValue) {
+          row.__errors.push(`"${req}" is required`);
+        }
+      }
+      rows.push(row);
+    }
+
+    return { headers, rows };
+  }
+
   // ── File handler ─────────────────────────────────────────────────────────
   const handleFile = (file: File) => {
-    if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
-      setPageError('Please upload a .csv file.');
+    const isCSV = file.name.endsWith('.csv') || file.type === 'text/csv';
+    const isXLSX = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') ||
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.type === 'application/vnd.ms-excel';
+
+    if (!isCSV && !isXLSX) {
+      setPageError('Please upload a .csv or .xlsx file.');
       return;
     }
     setPageError(null);
@@ -345,11 +481,25 @@ export default function BulkImportPage() {
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const { headers, rows } = parseCSV(text);
+      let headers: string[];
+      let rows: ParsedRow[];
 
-      // Check for missing required columns (headers are already normalized)
-      const missingCols = REQUIRED_COLUMNS_NORMALIZED.filter((c) => !headers.includes(c));
+      if (isXLSX) {
+        const result = parseXLSX(e.target?.result as ArrayBuffer);
+        headers = result.headers;
+        rows = result.rows;
+      } else {
+        const text = e.target?.result as string;
+        const result = parseCSV(text);
+        headers = result.headers;
+        rows = result.rows;
+      }
+
+      // Check for missing required columns (check aliases)
+      const missingCols = REQUIRED_COLUMNS_NORMALIZED.filter((req) => {
+        const aliases = REQUIRED_ALIASES[req] || [req];
+        return !aliases.some(alias => headers.includes(alias));
+      });
       if (missingCols.length > 0) {
         setPageError(
           `Missing required columns: ${missingCols.join(', ')}. Make sure you are using the correct template.`
@@ -358,7 +508,7 @@ export default function BulkImportPage() {
       }
 
       if (rows.length === 0) {
-        setPageError('The CSV file appears to have no data rows.');
+        setPageError('The file appears to have no data rows.');
         return;
       }
 
@@ -376,7 +526,11 @@ export default function BulkImportPage() {
       setColumnMap(autoMap);
       setStep('mapping');
     };
-    reader.readAsText(file);
+    if (isXLSX) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -586,7 +740,7 @@ export default function BulkImportPage() {
           {/* Drop zone */}
           <Card>
             <CardHeader>
-              <CardTitle>Upload CSV File</CardTitle>
+              <CardTitle>Upload Excel or CSV File</CardTitle>
               <CardDescription>
                 Download the template above, fill it in with your historical transactions, then upload it here.
               </CardDescription>
@@ -599,7 +753,7 @@ export default function BulkImportPage() {
                 className="border-2 border-dashed border-border rounded-xl p-12 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
               >
                 <FileSpreadsheet className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-lg font-medium mb-1">Drop your CSV file here</p>
+                <p className="text-lg font-medium mb-1">Drop your Excel (.xlsx) or CSV file here</p>
                 <p className="text-sm text-muted-foreground mb-4">or click to browse</p>
                 <Button variant="outline" size="sm" type="button">
                   <Upload className="mr-2 h-4 w-4" /> Choose File
@@ -607,7 +761,7 @@ export default function BulkImportPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   className="hidden"
                   onChange={onFileChange}
                 />

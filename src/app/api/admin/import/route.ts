@@ -148,8 +148,18 @@ export interface ImportRow {
   transactionFee: string;
   brokerPct: string;
   brokerGci: string;
+  referral: string;
   agentPct: string;
   agentDollar: string;
+  teamMember1: string;
+  teamMember1Pct: string;
+  teamMember1Gci: string;
+  teamMember2: string;
+  teamMember2Pct: string;
+  teamMember2Gci: string;
+  teamMember3: string;
+  teamMember3Pct: string;
+  teamMember3Gci: string;
   mortgageCompany: string;
   titleCompany: string;
 }
@@ -367,6 +377,18 @@ export async function POST(req: NextRequest) {
         const titleCompany = toOptStr(row.titleCompany);
         const dealSource = normalizeDealSource(String(row.dealSource ?? '').trim());
         const clientName = toOptStr(row.clientName);
+        const referral = toOptStr(row.referral);
+
+        // Team member splits
+        const teamMember1 = toOptStr(row.teamMember1);
+        const teamMember1Pct = toNum(row.teamMember1Pct);
+        const teamMember1Gci = toNum(row.teamMember1Gci);
+        const teamMember2 = toOptStr(row.teamMember2);
+        const teamMember2Pct = toNum(row.teamMember2Pct);
+        const teamMember2Gci = toNum(row.teamMember2Gci);
+        const teamMember3 = toOptStr(row.teamMember3);
+        const teamMember3Pct = toNum(row.teamMember3Pct);
+        const teamMember3Gci = toNum(row.teamMember3Gci);
 
         const year = toYearFromDates(closedDate, contractDate, listingDate);
 
@@ -433,6 +455,26 @@ export async function POST(req: NextRequest) {
           commissionPercent: commissionPct > 0 ? commissionPct : null,
           transactionFee: transactionFee > 0 ? transactionFee : null,
           brokerProfit: companyRetained,
+
+          // Referral
+          ...(referral ? { referral } : {}),
+
+          // Team member splits
+          ...(teamMember1 ? {
+            teamMember1,
+            teamMember1Pct: teamMember1Pct > 0 ? teamMember1Pct : null,
+            teamMember1Gci: teamMember1Gci > 0 ? teamMember1Gci : null,
+          } : {}),
+          ...(teamMember2 ? {
+            teamMember2,
+            teamMember2Pct: teamMember2Pct > 0 ? teamMember2Pct : null,
+            teamMember2Gci: teamMember2Gci > 0 ? teamMember2Gci : null,
+          } : {}),
+          ...(teamMember3 ? {
+            teamMember3,
+            teamMember3Pct: teamMember3Pct > 0 ? teamMember3Pct : null,
+            teamMember3Gci: teamMember3Gci > 0 ? teamMember3Gci : null,
+          } : {}),
 
           // Closing parties
           mortgageCompany,
