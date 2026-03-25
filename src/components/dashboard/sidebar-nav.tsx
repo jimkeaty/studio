@@ -25,6 +25,7 @@ import {
   Settings,
   Target,
   TrendingUp,
+  Trophy,
   Users,
   UserPlus,
   FolderKanban,
@@ -55,6 +56,7 @@ const adminMenuItems = [
   { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
   { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
   { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
+  { href: '/dashboard/admin/keaty-cup', label: 'Keaty Cup', icon: Trophy },
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
   { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
 ];
