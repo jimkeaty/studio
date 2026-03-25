@@ -16,6 +16,20 @@ function jsonError(status: number, error: string, details?: unknown) {
   return NextResponse.json({ ok: false, error, details: details ?? null }, { status });
 }
 
+/** Recursively strip undefined values so Firestore doesn't reject the write. */
+function stripUndefined(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (typeof obj === 'object' && obj.constructor === Object) {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined) out[k] = stripUndefined(v);
+    }
+    return out;
+  }
+  return obj;
+}
+
 type RouteContext = { params: Promise<{ competitionId: string }> };
 
 // ── GET: Single competition ─────────────────────────────────────────────────
@@ -64,7 +78,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       updatedAt: new Date().toISOString(),
     };
 
-    await ref.update({ config: mergedConfig });
+    await ref.update({ config: stripUndefined(mergedConfig) });
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {

@@ -15,6 +15,20 @@ function jsonError(status: number, error: string, details?: unknown) {
   return NextResponse.json({ ok: false, error, details: details ?? null }, { status });
 }
 
+/** Recursively strip undefined values so Firestore doesn't reject the write. */
+function stripUndefined(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (typeof obj === 'object' && obj.constructor === Object) {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined) out[k] = stripUndefined(v);
+    }
+    return out;
+  }
+  return obj;
+}
+
 // ── GET: List competitions ──────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
@@ -96,8 +110,8 @@ export async function POST(req: NextRequest) {
       rankingDirection: body.rankingDirection || (body.scoringStrategy === 'threshold_map' ? 'asc' : 'desc'),
       thresholdRules: body.thresholdRules || [],
 
-      // Points-based
-      pointRules: body.pointRules || undefined,
+      // Points-based (only set if provided — Golf competitions don't use this)
+      ...(body.pointRules ? { pointRules: body.pointRules } : {}),
 
       // Bonuses & Penalties
       bonuses: body.bonuses || {},
@@ -127,7 +141,7 @@ export async function POST(req: NextRequest) {
       createdBy: decoded.uid,
     };
 
-    const ref = await adminDb.collection('competitions').add({ config });
+    const ref = await adminDb.collection('competitions').add({ config: stripUndefined(config) });
 
     return NextResponse.json({
       ok: true,
