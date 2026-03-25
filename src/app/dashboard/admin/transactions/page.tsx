@@ -45,7 +45,7 @@ export default function AdminTransactionLedgerPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
+  const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'under_contract' | 'closed'>('all');
 
   // Edit sheet state
@@ -195,7 +195,7 @@ export default function AdminTransactionLedgerPage() {
 
   const filtered = transactions.filter(t => {
     const txYear = t.year ? String(t.year) : (t.closedDate ?? (t as any).closingDate ?? t.contractDate ?? '').slice(0, 4);
-    const yearMatch = txYear === yearFilter;
+    const yearMatch = yearFilter === 'all' || txYear === yearFilter;
     const statusMatch = statusFilter === 'all' || t.status === statusFilter;
     return yearMatch && statusMatch;
   });
@@ -261,8 +261,11 @@ export default function AdminTransactionLedgerPage() {
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted-foreground">Year</span>
             <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-              <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Years</SelectItem>
+                {YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+              </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1">
@@ -284,7 +287,7 @@ export default function AdminTransactionLedgerPage() {
       <Card>
         <CardHeader>
           <CardTitle>Transactions</CardTitle>
-          <CardDescription>{filtered.length} record{filtered.length !== 1 ? 's' : ''} &middot; Click a row to edit</CardDescription>
+          <CardDescription>{filtered.length} record{filtered.length !== 1 ? 's' : ''}{yearFilter !== 'all' ? ` in ${yearFilter}` : ''} ({transactions.length} total in database) &middot; Click a row to edit</CardDescription>
         </CardHeader>
         <CardContent>
           {loadingTx ? (
