@@ -84,4 +84,5 @@ export type AgentProfileInput = {
   tiers?: AgentTier[];
   gracePeriodEnabled?: boolean;
   notes?: string | null;
+  forceCreate?: boolean; // Skip fuzzy duplicate check
 };

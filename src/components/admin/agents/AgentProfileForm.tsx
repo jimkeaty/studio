@@ -599,10 +599,16 @@ export default function AgentProfileForm({
     }));
   }
 
+  const [similarAgents, setSimilarAgents] = useState<{ agentId: string; displayName: string; similarity: number }[]>([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [forceCreate, setForceCreate] = useState(false);
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+    setSimilarAgents([]);
+    setShowDuplicateWarning(false);
     setIsSaving(true);
 
     try {
@@ -615,7 +621,7 @@ export default function AgentProfileForm({
 
       const token = await currentUser.getIdToken();
 
-      const payload = {
+      const payload: Record<string, any> = {
         firstName: values.firstName,
         lastName: values.lastName,
         displayName: values.displayName,
@@ -684,14 +690,24 @@ export default function AgentProfileForm({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(forceCreate ? { ...payload, forceCreate: true } : payload),
       });
 
       const result = await response.json();
 
+      // Handle fuzzy match duplicate warning
+      if (result?.requiresConfirmation && result?.similarAgents) {
+        setSimilarAgents(result.similarAgents);
+        setShowDuplicateWarning(true);
+        setIsSaving(false);
+        return;
+      }
+
       if (!response.ok || !result?.ok) {
         throw new Error(result?.error || 'Failed to save agent profile.');
       }
+
+      setForceCreate(false);
 
       const savedAgentId = result?.agent?.agentId || agentId;
 
@@ -710,8 +726,79 @@ export default function AgentProfileForm({
     }
   }
 
+  function handleForceCreate() {
+    setForceCreate(true);
+    setShowDuplicateWarning(false);
+    setSimilarAgents([]);
+    // Re-submit with forceCreate flag
+    const form = document.querySelector('form');
+    if (form) {
+      form.requestSubmit();
+    }
+  }
+
   return (
-    <form className="space-y-6" onSubmit={handleSubmit}>
+    <form className="space-y-6" onSubmit={(e) => {
+      // If forceCreate was just set, pass it through
+      handleSubmit(e);
+    }}>
+      {/* ── Duplicate Agent Warning ─────────────────────────────────────── */}
+      {showDuplicateWarning && similarAgents.length > 0 && (
+        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-5 shadow-md">
+          <div className="flex items-start gap-3">
+            <svg className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.194-.833-2.964 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <div className="flex-1">
+              <h3 className="text-base font-bold text-amber-800">
+                Possible Duplicate Agent Detected
+              </h3>
+              <p className="mt-1 text-sm text-amber-700">
+                The name &quot;{values.displayName}&quot; is similar to existing agent(s).
+                Did you mean one of these?
+              </p>
+              <div className="mt-3 space-y-2">
+                {similarAgents.map((match) => (
+                  <div
+                    key={match.agentId}
+                    className="flex items-center justify-between rounded-md border border-amber-300 bg-white px-4 py-2.5"
+                  >
+                    <div>
+                      <span className="font-semibold text-gray-900">{match.displayName}</span>
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        {match.similarity}% match
+                      </span>
+                    </div>
+                    <a
+                      href={`/dashboard/admin/agents/${match.agentId}`}
+                      className="text-sm font-medium text-blue-600 hover:underline"
+                    >
+                      Edit Existing
+                    </a>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleForceCreate}
+                  className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                >
+                  Create Anyway (Not a Duplicate)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowDuplicateWarning(false); setSimilarAgents([]); }}
+                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Basic Info</h2>
 

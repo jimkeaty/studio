@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { deriveAnniversary } from '@/lib/agents/deriveAnniversary';
+import { findFuzzyMatches } from '@/lib/agents/fuzzyMatch';
 import type { AgentProfile, AgentProfileInput, AgentTier, TeamMemberCompMode, TeamMemberOverrideBand } from '@/lib/agents/types';
 
 function extractBearer(req: NextRequest) {
@@ -240,6 +241,33 @@ export async function POST(req: NextRequest) {
       return jsonError(409, 'An agent profile with this agentId already exists', {
         agentId,
       });
+    }
+
+    // Check for similar names (fuzzy match) — warn but allow override
+    const forceCreate = body.forceCreate === true;
+    if (!forceCreate) {
+      const allProfilesSnap = await adminDb.collection('agentProfiles').get();
+      const existingAgents = allProfilesSnap.docs.map(doc => {
+        const d = doc.data();
+        return {
+          agentId: String(d.agentId || doc.id),
+          displayName: String(d.displayName || ''),
+        };
+      }).filter(a => a.displayName);
+
+      const similarMatches = findFuzzyMatches(normalized.displayName, existingAgents, 0.75);
+      if (similarMatches.length > 0) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Similar agent names found. Review the matches below and confirm if you still want to create a new agent.',
+          similarAgents: similarMatches.map(m => ({
+            agentId: m.agentId,
+            displayName: m.displayName,
+            similarity: Math.round(m.similarity * 100),
+          })),
+          requiresConfirmation: true,
+        }, { status: 409 });
+      }
     }
 
     const now = new Date().toISOString();

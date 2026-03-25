@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { fuzzyLookupAgent, DEFAULT_SIMILARITY_THRESHOLD } from '@/lib/agents/fuzzyMatch';
 
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
@@ -181,6 +182,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     const nameToAgent = new Map<string, { agentId: string; displayName: string; docRef: FirebaseFirestore.DocumentReference }>();
+    const allAgentsList: { agentId: string; displayName: string; docRef: FirebaseFirestore.DocumentReference }[] = [];
 
     for (const doc of profilesSnap.docs) {
       const d = doc.data();
@@ -188,6 +190,7 @@ export async function POST(req: NextRequest) {
       const displayName = String(d.displayName || d.firstName + ' ' + d.lastName || '').trim();
       if (agentId && displayName) {
         const entry = { agentId, displayName, docRef: doc.ref };
+        allAgentsList.push(entry);
         nameToAgent.set(displayName.toLowerCase(), entry);
         const firstName = String(d.firstName || '').trim().toLowerCase();
         const lastName = String(d.lastName || '').trim().toLowerCase();
@@ -226,6 +229,7 @@ export async function POST(req: NextRequest) {
     const imported: string[] = [];
     const failed: { row: number; error: string; data: any }[] = [];
     const autoCreatedAgents: { name: string; agentId: string }[] = [];
+    const fuzzyMatchedAgents: { row: number; csvName: string; matchedName: string; similarity: number }[] = [];
 
     // ── Process rows in Firestore batches (max 500 ops each) ─────────────────
     let batch = adminDb.batch();
@@ -249,7 +253,32 @@ export async function POST(req: NextRequest) {
         const agentNameRaw = String(row.agentName ?? '').trim();
         if (!agentNameRaw) throw new Error('Agent Name is required');
 
-        let agent = nameToAgent.get(agentNameRaw.toLowerCase());
+        // Try exact match first, then fuzzy match
+        const exactMatch = nameToAgent.get(agentNameRaw.toLowerCase());
+        let agent = exactMatch || null;
+
+        // If no exact match, try fuzzy matching
+        if (!agent) {
+          const fuzzyResult = fuzzyLookupAgent(
+            agentNameRaw,
+            nameToAgent as Map<string, { agentId: string; displayName: string }>,
+            allAgentsList,
+            DEFAULT_SIMILARITY_THRESHOLD,
+          );
+          if (fuzzyResult) {
+            // Found a fuzzy match — use existing agent instead of creating a duplicate
+            const matchedEntry = allAgentsList.find(a => a.agentId === fuzzyResult.agentId);
+            if (matchedEntry) {
+              agent = matchedEntry;
+              fuzzyMatchedAgents.push({
+                row: rowNum,
+                csvName: agentNameRaw,
+                matchedName: fuzzyResult.displayName,
+                similarity: Math.round(fuzzyResult.similarity * 100),
+              });
+            }
+          }
+        }
 
         // ── Team resolution ──────────────────────────────────────────────────
         const teamRaw = String(row.team ?? '').trim();
@@ -257,7 +286,7 @@ export async function POST(req: NextRequest) {
           ? teamNameToId.get(teamRaw.toLowerCase()) || null
           : null;
 
-        // Auto-create agent profile if not found
+        // Auto-create agent profile if not found (no exact or fuzzy match)
         if (!agent) {
           const parts = agentNameRaw.split(/\s+/);
           const firstName = parts[0] || agentNameRaw;
@@ -443,6 +472,7 @@ export async function POST(req: NextRequest) {
       errors: failed,
       ids: imported,
       autoCreatedAgents: autoCreatedAgents.length > 0 ? autoCreatedAgents : undefined,
+      fuzzyMatchedAgents: fuzzyMatchedAgents.length > 0 ? fuzzyMatchedAgents : undefined,
     });
   } catch (err: any) {
     console.error('[api/admin/import POST]', err);

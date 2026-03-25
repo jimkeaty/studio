@@ -135,6 +135,7 @@ type ImportResult = {
   failed: number;
   errors: { row: number; error: string }[];
   autoCreatedAgents?: { name: string; agentId: string }[];
+  fuzzyMatchedAgents?: { row: number; csvName: string; matchedName: string; similarity: number }[];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1098,6 +1099,34 @@ export default function BulkImportPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Fuzzy-matched agents (misspellings auto-corrected) */}
+          {importResult.fuzzyMatchedAgents && importResult.fuzzyMatchedAgents.length > 0 && (
+            <Alert className="border-green-500/40 bg-green-50">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertTitle className="text-green-800">
+                {importResult.fuzzyMatchedAgents.length} Misspelled Name{importResult.fuzzyMatchedAgents.length !== 1 ? 's' : ''} Auto-Corrected
+              </AlertTitle>
+              <AlertDescription>
+                <p className="text-sm mb-2 text-green-700">
+                  These names were similar to existing agents and were automatically matched instead of creating duplicates:
+                </p>
+                <div className="mt-2 space-y-1">
+                  {importResult.fuzzyMatchedAgents.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-500">Row {m.row}:</span>
+                      <span className="line-through text-red-600">{m.csvName}</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="font-medium text-green-700">{m.matchedName}</span>
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        {m.similarity}% match
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Auto-created agents */}
           {importResult.autoCreatedAgents && importResult.autoCreatedAgents.length > 0 && (
