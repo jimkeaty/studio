@@ -75,6 +75,18 @@ export interface AgentRosterRow {
   startDate: string | null;
   isGracePeriod: boolean;
 
+  // Grace period tracking
+  gracePeriodDaysElapsed: number | null;   // days since start date
+  gracePeriodDaysRemaining: number | null; // days left in 90-day window
+  gracePeriodMonth: number | null;         // which month they are in (1, 2, 3)
+  hasFirstDeal: boolean;                   // has at least 1 closed or under_contract/pending
+  graceStatus: 'in_grace' | 'grace_on_track' | 'grace_at_risk' | 'grace_passed' | 'established';
+  // in_grace = within 90 days, no deal yet (needs attention)
+  // grace_on_track = within 90 days, has a deal (doing great)
+  // grace_at_risk = in month 3 with no deal (urgent attention)
+  // grace_passed = past 90 days, had grace period
+  // established = not in grace period / veteran agent
+
   // Engagement
   engagementsActual: number;
   engagementsGoal: number;
@@ -247,16 +259,26 @@ export async function GET(req: NextRequest) {
       const activity = actByAgent.get(uid) || { calls: 0, engagements: 0, apptSet: 0, apptHeld: 0, contracts: 0 };
       const transactions = txByAgent.get(uid) || [];
 
-      // Grace period check
+      // Grace period check — enhanced tracking
       let isGracePeriod = false;
-      if (agent.gracePeriodEnabled === true) {
-        const sd = toDate(agent.startDate);
-        if (sd) {
-          const daysSince = Math.floor((todayUtc.getTime() - sd.getTime()) / (1000 * 60 * 60 * 24));
-          isGracePeriod = daysSince <= 90;
-        } else {
+      let gracePeriodDaysElapsed: number | null = null;
+      let gracePeriodDaysRemaining: number | null = null;
+      let gracePeriodMonth: number | null = null;
+      const agentStartDate = toDate(agent.startDate);
+
+      if (agentStartDate) {
+        const daysSince = Math.floor((todayUtc.getTime() - agentStartDate.getTime()) / (1000 * 60 * 60 * 24));
+        gracePeriodDaysElapsed = Math.max(0, daysSince);
+        if (daysSince <= 90) {
           isGracePeriod = true;
+          gracePeriodDaysRemaining = Math.max(0, 90 - daysSince);
+          gracePeriodMonth = Math.min(3, Math.ceil(Math.max(1, daysSince) / 30));
+        } else {
+          gracePeriodDaysRemaining = 0;
         }
+      } else if (agent.gracePeriodEnabled === true) {
+        // No start date but flagged as grace — treat as in grace
+        isGracePeriod = true;
       }
 
       // Effective start for prorating
@@ -317,6 +339,21 @@ export async function GET(req: NextRequest) {
       }
 
       const pipeline = netEarned + netPending;
+      const hasFirstDeal = closedUnits > 0 || pendingUnits > 0;
+
+      // Grace status determination
+      let graceStatus: AgentRosterRow['graceStatus'] = 'established';
+      if (isGracePeriod) {
+        if (hasFirstDeal) {
+          graceStatus = 'grace_on_track';
+        } else if (gracePeriodMonth === 3) {
+          graceStatus = 'grace_at_risk'; // month 3, no deal — urgent
+        } else {
+          graceStatus = 'in_grace';
+        }
+      } else if (gracePeriodDaysElapsed !== null && gracePeriodDaysElapsed > 90) {
+        graceStatus = 'grace_passed'; // was new, now past 90 days
+      }
 
       // Grades
       const engPerf = perf(activity.engagements, engTarget);
@@ -332,6 +369,12 @@ export async function GET(req: NextRequest) {
         teamRole: agent.teamRole || null,
         startDate: toYmd(agent.startDate) || null,
         isGracePeriod,
+
+        gracePeriodDaysElapsed,
+        gracePeriodDaysRemaining,
+        gracePeriodMonth,
+        hasFirstDeal,
+        graceStatus,
 
         engagementsActual: activity.engagements,
         engagementsGoal: Number(engTarget.toFixed(0)),
@@ -378,6 +421,12 @@ export async function GET(req: NextRequest) {
     const struggling = rows.filter(r => r.incomeGrade === 'D' || r.incomeGrade === 'F').length;
     const onTrack = rows.filter(r => r.incomeGrade === 'A' || r.incomeGrade === 'B').length;
 
+    // Grace period summary
+    const inGrace = rows.filter(r => r.isGracePeriod);
+    const graceOnTrack = rows.filter(r => r.graceStatus === 'grace_on_track').length;
+    const graceAtRisk = rows.filter(r => r.graceStatus === 'grace_at_risk').length;
+    const graceNoDeal = rows.filter(r => r.graceStatus === 'in_grace').length;
+
     return NextResponse.json({
       ok: true,
       year: yearNum,
@@ -389,6 +438,12 @@ export async function GET(req: NextRequest) {
         onTrack,
         avgEngagementPerf: totalAgents > 0 ? Number((rows.reduce((s, r) => s + r.engagementsPerf, 0) / totalAgents).toFixed(1)) : 0,
         avgIncomePerf: totalAgents > 0 ? Number((rows.reduce((s, r) => s + r.incomePerf, 0) / totalAgents).toFixed(1)) : 0,
+        // Grace period summary
+        totalInGrace: inGrace.length,
+        graceOnTrack,
+        graceAtRisk,
+        graceNoDeal,
+        established: totalAgents - inGrace.length,
       },
     });
   } catch (err: any) {

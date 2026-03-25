@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown } from 'lucide-react';
+import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
 import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ComposedChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -343,9 +343,44 @@ function Delta({ value, isCurrency = false }: { value: number; isCurrency?: bool
   );
 }
 
+// ── Grace Status Badge ──────────────────────────────────────────────────────
+
+function GraceStatusBadge({ status, daysRemaining, month, hasFirstDeal }: {
+  status: string; daysRemaining: number | null; month: number | null; hasFirstDeal: boolean;
+}) {
+  if (status === 'established') return null;
+
+  const configs: Record<string, { label: string; className: string; icon: React.ElementType }> = {
+    grace_on_track: { label: 'On Track', className: 'bg-green-100 text-green-800 border-green-300', icon: CheckCircle2 },
+    in_grace: { label: 'In Grace', className: 'bg-amber-100 text-amber-800 border-amber-300', icon: Clock },
+    grace_at_risk: { label: 'At Risk', className: 'bg-red-100 text-red-800 border-red-300', icon: ShieldAlert },
+    grace_passed: { label: 'Past Grace', className: 'bg-gray-100 text-gray-600 border-gray-300', icon: ShieldCheck },
+  };
+
+  const cfg = configs[status] || configs.in_grace;
+  const Icon = cfg.icon;
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${cfg.className}`}>
+        <Icon className="h-3 w-3" />
+        {cfg.label}
+      </span>
+      {month !== null && daysRemaining !== null && daysRemaining > 0 && (
+        <span className="text-[10px] text-muted-foreground">Month {month}/3 · {daysRemaining}d left</span>
+      )}
+      {status !== 'grace_passed' && status !== 'established' && (
+        <span className={`text-[10px] font-medium ${hasFirstDeal ? 'text-green-600' : 'text-red-600'}`}>
+          {hasFirstDeal ? '✓ Has deal' : '✗ No deal yet'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Agent Performance Roster ────────────────────────────────────────────────
 
-type SortField = 'name' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual';
+type SortField = 'name' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual' | 'graceStatus';
 type SortDir = 'asc' | 'desc';
 
 const GRADE_ORDER: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 };
@@ -359,6 +394,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [filterGrade, setFilterGrade] = useState<string>('all');
   const [filterTeam, setFilterTeam] = useState<string>('all');
+  const [filterGrace, setFilterGrace] = useState<string>('all');
   const [view, setView] = useState<'table' | 'cards'>('table');
 
   const fetchRoster = useCallback(async () => {
@@ -396,6 +432,17 @@ function AgentPerformanceRoster({ year }: { year: number }) {
   if (filterTeam !== 'all') {
     filtered = filtered.filter((a: any) => a.teamName === filterTeam);
   }
+  if (filterGrace !== 'all') {
+    if (filterGrace === 'in_grace') {
+      filtered = filtered.filter((a: any) => a.isGracePeriod);
+    } else if (filterGrace === 'established') {
+      filtered = filtered.filter((a: any) => !a.isGracePeriod);
+    } else if (filterGrace === 'at_risk') {
+      filtered = filtered.filter((a: any) => a.graceStatus === 'grace_at_risk');
+    } else if (filterGrace === 'no_deal') {
+      filtered = filtered.filter((a: any) => a.isGracePeriod && !a.hasFirstDeal);
+    }
+  }
 
   // Sort
   filtered.sort((a: any, b: any) => {
@@ -409,6 +456,11 @@ function AgentPerformanceRoster({ year }: { year: number }) {
       case 'incomeActual': cmp = a.incomeActual - b.incomeActual; break;
       case 'engActual': cmp = a.engagementsActual - b.engagementsActual; break;
       case 'apptActual': cmp = a.appointmentsHeldActual - b.appointmentsHeldActual; break;
+      case 'graceStatus': {
+        const graceOrder: Record<string, number> = { grace_at_risk: 0, in_grace: 1, grace_on_track: 2, grace_passed: 3, established: 4 };
+        cmp = (graceOrder[a.graceStatus] ?? 5) - (graceOrder[b.graceStatus] ?? 5);
+        break;
+      }
     }
     return sortDir === 'asc' ? cmp : -cmp;
   });
@@ -429,6 +481,9 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
   const fmtCurrency = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(0)}k` : `$${n.toFixed(0)}`;
 
+  // Separate grace period agents for the tracker
+  const graceAgents = agents.filter((a: any) => a.isGracePeriod || a.graceStatus === 'grace_passed');
+
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
@@ -437,6 +492,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground">Total Agents</p>
             <p className="text-2xl font-bold">{summary.totalAgents}</p>
+            <p className="text-[10px] text-muted-foreground">{summary.established} established · {summary.totalInGrace} new</p>
           </CardContent>
         </Card>
         <Card className="border-2 border-green-200 bg-green-50/50">
@@ -464,6 +520,133 @@ function AgentPerformanceRoster({ year }: { year: number }) {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── New Agent Grace Period Tracker ──────────────────────────────── */}
+      {summary.totalInGrace > 0 && (
+        <Card className="border-2 border-amber-200">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-amber-600" />
+                <CardTitle className="text-lg">New Agent 90-Day Tracker</CardTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                  {summary.totalInGrace} agent{summary.totalInGrace !== 1 ? 's' : ''} in grace period
+                </Badge>
+              </div>
+            </div>
+            <CardDescription>
+              Standard: at least 1 deal under contract or closed by month 3. Agents are tracked from their start date.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Grace period summary mini-cards */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="border rounded-lg p-3 text-center bg-green-50/50 border-green-200">
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-semibold text-green-700">On Track</span>
+                </div>
+                <p className="text-2xl font-bold text-green-700">{summary.graceOnTrack}</p>
+                <p className="text-[10px] text-muted-foreground">Have a deal</p>
+              </div>
+              <div className="border rounded-lg p-3 text-center bg-amber-50/50 border-amber-200">
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  <Clock className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-700">No Deal Yet</span>
+                </div>
+                <p className="text-2xl font-bold text-amber-700">{summary.graceNoDeal}</p>
+                <p className="text-[10px] text-muted-foreground">Month 1-2, still time</p>
+              </div>
+              <div className="border rounded-lg p-3 text-center bg-red-50/50 border-red-200">
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  <ShieldAlert className="h-4 w-4 text-red-600" />
+                  <span className="text-sm font-semibold text-red-700">At Risk</span>
+                </div>
+                <p className="text-2xl font-bold text-red-700">{summary.graceAtRisk}</p>
+                <p className="text-[10px] text-muted-foreground">Month 3, no deal</p>
+              </div>
+            </div>
+
+            {/* Grace period agent list */}
+            <div className="space-y-2">
+              {graceAgents
+                .sort((a: any, b: any) => {
+                  // At risk first, then no deal, then on track, then passed
+                  const order: Record<string, number> = { grace_at_risk: 0, in_grace: 1, grace_on_track: 2, grace_passed: 3 };
+                  return (order[a.graceStatus] ?? 4) - (order[b.graceStatus] ?? 4);
+                })
+                .map((a: any) => {
+                  const progressPct = a.gracePeriodDaysElapsed != null ? Math.min(100, (a.gracePeriodDaysElapsed / 90) * 100) : 0;
+                  const barColor = a.graceStatus === 'grace_on_track' ? 'bg-green-500'
+                    : a.graceStatus === 'grace_at_risk' ? 'bg-red-500'
+                    : a.graceStatus === 'grace_passed' ? 'bg-gray-400'
+                    : 'bg-amber-500';
+                  const rowBg = a.graceStatus === 'grace_at_risk' ? 'bg-red-50/50 border-red-200'
+                    : a.graceStatus === 'grace_on_track' ? 'bg-green-50/30 border-green-200'
+                    : a.graceStatus === 'grace_passed' ? 'bg-gray-50/50 border-gray-200'
+                    : 'bg-amber-50/30 border-amber-200';
+
+                  return (
+                    <div key={a.agentId} className={`flex items-center gap-4 border rounded-lg p-3 ${rowBg}`}>
+                      {/* Name & Team */}
+                      <div className="min-w-[140px]">
+                        <p className="text-sm font-medium">{a.displayName}</p>
+                        <p className="text-[10px] text-muted-foreground">{a.teamName || 'Independent'}</p>
+                      </div>
+
+                      {/* Grace Status Badge */}
+                      <div className="min-w-[100px]">
+                        <GraceStatusBadge status={a.graceStatus} daysRemaining={a.gracePeriodDaysRemaining} month={a.gracePeriodMonth} hasFirstDeal={a.hasFirstDeal} />
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="flex-1 min-w-[120px]">
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>Day {a.gracePeriodDaysElapsed ?? '?'} / 90</span>
+                          {a.startDate && <span>Started {a.startDate}</span>}
+                        </div>
+                        <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden relative">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${progressPct}%` }} />
+                          {/* Month markers */}
+                          <div className="absolute top-0 left-[33.3%] w-px h-full bg-gray-400/50" />
+                          <div className="absolute top-0 left-[66.6%] w-px h-full bg-gray-400/50" />
+                        </div>
+                        <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
+                          <span>M1</span><span>M2</span><span>M3</span>
+                        </div>
+                      </div>
+
+                      {/* Deals */}
+                      <div className="text-center min-w-[60px]">
+                        <p className="text-xs text-muted-foreground">Deals</p>
+                        <p className="text-sm font-bold">
+                          {a.closedDeals + a.pendingDeals > 0 ? (
+                            <span className="text-green-600">{a.closedDeals}c / {a.pendingDeals}p</span>
+                          ) : (
+                            <span className="text-red-600">0</span>
+                          )}
+                        </p>
+                      </div>
+
+                      {/* Engagements */}
+                      <div className="text-center min-w-[50px]">
+                        <p className="text-xs text-muted-foreground">Eng.</p>
+                        <p className="text-sm font-medium">{a.engagementsActual}</p>
+                      </div>
+
+                      {/* View button */}
+                      <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                        <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button>
+                      </Link>
+                    </div>
+                  );
+                })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Grade Distribution Bar */}
       <div className="flex items-center gap-2 text-sm">
@@ -493,6 +676,18 @@ function AgentPerformanceRoster({ year }: { year: number }) {
             </SelectContent>
           </Select>
         )}
+        <Select value={filterGrace} onValueChange={setFilterGrace}>
+          <SelectTrigger className="w-[170px] h-8 text-xs">
+            <SelectValue placeholder="All Agents" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Agents</SelectItem>
+            <SelectItem value="in_grace">🕐 In Grace Period</SelectItem>
+            <SelectItem value="at_risk">🔴 Grace At Risk</SelectItem>
+            <SelectItem value="no_deal">⚠️ Grace — No Deal</SelectItem>
+            <SelectItem value="established">✅ Established</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="flex gap-1 ml-auto">
           <Button variant={view === 'table' ? 'default' : 'outline'} size="sm" className="h-8 text-xs" onClick={() => setView('table')}>Table</Button>
           <Button variant={view === 'cards' ? 'default' : 'outline'} size="sm" className="h-8 text-xs" onClick={() => setView('cards')}>Cards</Button>
@@ -510,6 +705,9 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                   <TableRow className="bg-muted/50">
                     <TableHead className="sticky left-0 bg-muted/50 z-10 cursor-pointer" onClick={() => toggleSort('name')}>
                       <div className="flex items-center gap-1">Agent <SortIcon field="name" /></div>
+                    </TableHead>
+                    <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('graceStatus')}>
+                      <div className="flex items-center justify-center gap-1">Status <SortIcon field="graceStatus" /></div>
                     </TableHead>
                     <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('engGrade')}>
                       <div className="flex items-center justify-center gap-1">Engagements <SortIcon field="engGrade" /></div>
@@ -538,9 +736,17 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {a.teamName && <span className="text-[10px] text-muted-foreground">{a.teamName}</span>}
                             {a.teamRole === 'leader' && <Badge variant="outline" className="text-[9px] h-4 px-1">Leader</Badge>}
-                            {a.isGracePeriod && <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-amber-100 text-amber-700">90-Day</Badge>}
                           </div>
                         </div>
+                      </TableCell>
+
+                      {/* Grace / Status */}
+                      <TableCell className="text-center">
+                        {a.graceStatus === 'established' ? (
+                          <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">Established</Badge>
+                        ) : (
+                          <GraceStatusBadge status={a.graceStatus} daysRemaining={a.gracePeriodDaysRemaining} month={a.gracePeriodMonth} hasFirstDeal={a.hasFirstDeal} />
+                        )}
                       </TableCell>
 
                       {/* Engagements */}
@@ -618,7 +824,6 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                     <CardDescription className="text-xs">
                       {a.teamName || 'Independent'}
                       {a.teamRole === 'leader' && ' · Team Leader'}
-                      {a.isGracePeriod && ' · 🟡 Grace Period'}
                     </CardDescription>
                   </div>
                   <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
@@ -627,6 +832,26 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* Grace Status Bar (only for non-established) */}
+                {a.graceStatus !== 'established' && (
+                  <div className={`rounded-lg p-2.5 border ${a.graceStatus === 'grace_at_risk' ? 'bg-red-50 border-red-200' : a.graceStatus === 'grace_on_track' ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <GraceStatusBadge status={a.graceStatus} daysRemaining={a.gracePeriodDaysRemaining} month={a.gracePeriodMonth} hasFirstDeal={a.hasFirstDeal} />
+                      {a.gracePeriodDaysElapsed != null && (
+                        <span className="text-[10px] text-muted-foreground">Day {a.gracePeriodDaysElapsed}/90</span>
+                      )}
+                    </div>
+                    {a.isGracePeriod && a.gracePeriodDaysElapsed != null && (
+                      <div className="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden relative">
+                        <div className={`h-full rounded-full ${a.graceStatus === 'grace_on_track' ? 'bg-green-500' : a.graceStatus === 'grace_at_risk' ? 'bg-red-500' : 'bg-amber-500'}`}
+                          style={{ width: `${Math.min(100, (a.gracePeriodDaysElapsed / 90) * 100)}%` }} />
+                        <div className="absolute top-0 left-[33.3%] w-px h-full bg-gray-400/50" />
+                        <div className="absolute top-0 left-[66.6%] w-px h-full bg-gray-400/50" />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Grades Row */}
                 <div className="grid grid-cols-4 gap-2">
                   <div className="text-center">
