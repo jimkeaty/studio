@@ -429,11 +429,11 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                   </CollapsibleTrigger>
                   <div className="flex gap-2">
                     {hasPrevData && (
-                      <Button variant="outline" size="sm" onClick={resetSeasonalityToPrev} className="text-xs h-7">
-                        Use {prevYearStats.year} Data
+                      <Button variant="default" onClick={() => { resetSeasonalityToPrev(); setTimeout(distribute, 50); }} className="gap-2">
+                        <BarChart3 className="h-4 w-4" /> Use {prevYearStats.year} Seasonality
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={resetSeasonality} className="text-xs h-7">
+                    <Button variant="outline" size="sm" onClick={() => { resetSeasonality(); setTimeout(distribute, 50); }} className="text-xs h-7">
                       Even Split
                     </Button>
                   </div>
@@ -485,6 +485,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 pr-4 font-medium">Month</th>
+                    <th className="text-center py-2 px-1 font-medium w-16">Season %</th>
                     <th className="text-left py-2 px-2 font-medium">Income Goal ($)</th>
                     <th className="text-left py-2 px-2 font-medium">Volume Goal ($)</th>
                     <th className="text-left py-2 px-2 font-medium">Sales Goal</th>
@@ -493,10 +494,14 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                 <tbody>
                   {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
                     const g = goals[m] || { margin: '', volume: '', sales: '' };
+                    const sw = seasonWeights[m] || { salesPct: '8.33', volumePct: '8.33' };
                     const label = months.find(md => md.month === m)?.label || `M${m}`;
                     return (
                       <tr key={m} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{label}</td>
+                        <td className="py-2 px-1">
+                          <Input type="number" step="0.1" value={sw.salesPct} onChange={e => setSeasonWeights(p => ({ ...p, [m]: { ...p[m], salesPct: e.target.value, volumePct: e.target.value } }))} className="h-7 w-16 text-center text-xs bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" />
+                        </td>
                         <td className="py-2 px-2"><Input type="number" value={g.margin} onChange={e => setGoals(p => ({ ...p, [m]: { ...p[m], margin: e.target.value } }))} placeholder="0" className="h-8 w-28" /></td>
                         <td className="py-2 px-2"><Input type="number" value={g.volume} onChange={e => setGoals(p => ({ ...p, [m]: { ...p[m], volume: e.target.value } }))} placeholder="0" className="h-8 w-28" /></td>
                         <td className="py-2 px-2"><Input type="number" value={g.sales} onChange={e => setGoals(p => ({ ...p, [m]: { ...p[m], sales: e.target.value } }))} placeholder="0" className="h-8 w-24" /></td>
@@ -507,6 +512,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                 <tfoot>
                   <tr className="border-t-2 font-semibold">
                     <td className="py-2 pr-4">Total</td>
+                    <td className={cn('py-2 px-1 text-center text-xs', totalSalesPct > 99.5 && totalSalesPct < 100.5 ? 'text-green-600' : 'text-amber-600')}>{totalSalesPct.toFixed(1)}%</td>
                     <td className="py-2 px-2">{fmtCurrency(totalsMargin)}</td>
                     <td className="py-2 px-2">{fmtCurrencyCompact(totalsVolume, true)}</td>
                     <td className="py-2 px-2">{totalsSales}</td>
@@ -939,10 +945,23 @@ function HeroCard({ title, grade, primary, secondary, performancePct, icon: Icon
 }
 
 function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
+  const ytdIncomeGoal = dashboard.expectedYTDIncomeGoal;
   const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
-  const incomeDeltaPct = dashboard.expectedYTDIncomeGoal > 0 ? Math.round((incomeDelta / dashboard.expectedYTDIncomeGoal) * 100) : 0;
-  const pipelinePct = dashboard.expectedYTDIncomeGoal > 0 ? Math.round((dashboard.ytdTotalPotential / dashboard.expectedYTDIncomeGoal) * 100) : 0;
+  const incomePct = ytdIncomeGoal > 0 ? Math.round((dashboard.netEarned / ytdIncomeGoal) * 100) : 0;
+  const incomeDeltaPct = ytdIncomeGoal > 0 ? Math.round((incomeDelta / ytdIncomeGoal) * 100) : 0;
+  const pipelinePct = ytdIncomeGoal > 0 ? Math.round((dashboard.ytdTotalPotential / ytdIncomeGoal) * 100) : 0;
+  const pipelineDeltaPct = ytdIncomeGoal > 0 ? Math.round(((dashboard.ytdTotalPotential - ytdIncomeGoal) / ytdIncomeGoal) * 100) : 0;
   const vm = dashboard.volumeMetrics;
+  const engGoal = dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target;
+  const engActual = dashboard.kpis.engagements.actual;
+  const engPct = engGoal > 0 ? Math.round((engActual / engGoal) * 100) : 0;
+  const engDeltaPct = engGoal > 0 ? Math.round(((engActual - engGoal) / engGoal) * 100) : 0;
+
+  // Helper: format pace text
+  const paceText = (deltaPct: number, goalStr: string) =>
+    deltaPct >= 0
+      ? `${Math.abs(deltaPct)}% ahead of pace · ${goalStr} YTD goal`
+      : `${Math.abs(deltaPct)}% behind pace · ${goalStr} YTD goal`;
 
   return (
     <div className="space-y-6">
@@ -952,21 +971,21 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
       <div className="grid gap-4 md:grid-cols-3">
         <HeroCard
           title="Net Income YTD" grade={dashboard.incomeGrade} primary={fmtCurrency(dashboard.netEarned)}
-          performancePct={dashboard.expectedYTDIncomeGoal > 0 ? Math.round((dashboard.netEarned / dashboard.expectedYTDIncomeGoal) * 100) : undefined}
-          secondary={incomeDelta >= 0 ? `${Math.abs(incomeDeltaPct)}% ahead of pace · ${fmtCurrency(dashboard.expectedYTDIncomeGoal)} YTD goal` : `${Math.abs(incomeDeltaPct)}% behind pace · ${fmtCurrency(dashboard.expectedYTDIncomeGoal)} YTD goal`}
+          performancePct={ytdIncomeGoal > 0 ? incomePct : undefined}
+          secondary={ytdIncomeGoal > 0 ? paceText(incomeDeltaPct, fmtCurrency(ytdIncomeGoal)) : 'No income goal set'}
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
         <HeroCard
           title="Projected with Pending" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)}
-          performancePct={dashboard.expectedYTDIncomeGoal > 0 ? pipelinePct : undefined}
-          secondary={`${fmtCurrency(dashboard.netPending)} pending · closed + pipeline`}
+          performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
+          secondary={ytdIncomeGoal > 0 ? paceText(pipelineDeltaPct, fmtCurrency(ytdIncomeGoal)) + ` · ${fmtCurrency(dashboard.netPending)} pending` : `${fmtCurrency(dashboard.netPending)} pending · closed + pipeline`}
           icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
         <HeroCard
           title="Engagements YTD" grade={dashboard.leadIndicatorGrade}
-          primary={`${fmtNum(dashboard.kpis.engagements.actual)} / ${fmtNum(dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target)}`}
-          performancePct={Math.round(dashboard.leadIndicatorPerformance)}
-          secondary={`${dashboard.leadIndicatorPerformance}% of engagement goal-to-date`}
+          primary={`${fmtNum(engActual)} / ${fmtNum(engGoal)}`}
+          performancePct={engGoal > 0 ? engPct : undefined}
+          secondary={engGoal > 0 ? paceText(engDeltaPct, `${fmtNum(engGoal)} engagements`) : `${fmtNum(engActual)} engagements · No goal set`}
           icon={Target}
         />
       </div>
@@ -977,19 +996,25 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
           <HeroCard
             title="Deals Closed" grade={vm.dealsGrade} primary={`${vm.closedDeals} closed`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.dealsPerformance) : undefined}
-            secondary={vm.dealsGoal != null ? `Goal: ${vm.dealsGoal} deals · ${vm.pendingDeals} pending` : `${vm.pendingDeals} pending · No goal set`}
+            secondary={vm.dealsGoal != null
+              ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${vm.dealsGoal} deals YTD goal · ${vm.pendingDeals} pending`
+              : `${vm.pendingDeals} pending · No goal set`}
             icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
             title="$ Volume Sold" grade={vm.volumeGrade} primary={fmtCurrency(vm.closedVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.volumePerformance) : undefined}
-            secondary={vm.volumeGoal != null ? `Goal: ${fmtCurrency(vm.volumeGoal)} · ${fmtCurrency(vm.pendingVolume)} pending` : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
+            secondary={vm.volumeGoal != null
+              ? (vm.volumePerformance >= 100 ? `${Math.round(vm.volumePerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.volumePerformance)}% behind pace`) + ` · ${fmtCurrency(vm.volumeGoal)} YTD goal`
+              : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
             icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
             title="Projected Volume (w/ Pending)" grade={vm.projectedVolumeGrade} primary={fmtCurrency(vm.totalVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.projectedVolumePerformance) : undefined}
-            secondary={vm.volumeGoal != null ? `Closed + pending vs ${fmtCurrency(vm.volumeGoal)} goal` : 'Closed + pending volume'}
+            secondary={vm.volumeGoal != null
+              ? (vm.projectedVolumePerformance >= 100 ? `${Math.round(vm.projectedVolumePerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.projectedVolumePerformance)}% behind pace`) + ` · ${fmtCurrency(vm.volumeGoal)} YTD goal · ${fmtCurrency(vm.pendingVolume)} pending`
+              : `${fmtCurrency(vm.pendingVolume)} pending · Closed + pending volume`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
         </div>
