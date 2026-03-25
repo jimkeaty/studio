@@ -68,17 +68,43 @@ export async function POST(req: NextRequest) {
     const year = toYearFromDates(closedDate, contractDate)
     const now = new Date()
 
-    const calculation = await resolveTransactionCalculation({
-      agentId,
-      agentDisplayName,
-      commission,
-    })
+    // If the admin already provided a manual splitSnapshot, use it directly
+    // instead of running the tier-based calculation (which requires tiers to be configured)
+    let splitSnapshot = body.splitSnapshot || null
+    let creditSnapshot = body.creditSnapshot || null
+    let agentType = body.agentType || 'independent'
+    let calculationModel = body.calculationModel || 'manual'
 
-    const payload = {
+    if (!splitSnapshot) {
+      // No manual override — run the automatic tier-based calculation
+      const calculation = await resolveTransactionCalculation({
+        agentId,
+        agentDisplayName,
+        commission,
+      })
+      splitSnapshot = calculation.splitSnapshot
+      creditSnapshot = calculation.creditSnapshot
+      agentType = calculation.agentType
+      calculationModel = calculation.calculationModel
+    } else {
+      // Manual override provided — build a default creditSnapshot if not supplied
+      if (!creditSnapshot) {
+        creditSnapshot = {
+          leaderboardAgentId: agentId,
+          leaderboardAgentDisplayName: agentDisplayName,
+          progressionMemberAgentId: agentId,
+          progressionLeaderAgentId: null,
+          progressionTeamId: null,
+          progressionCompanyDollarCredit: commission,
+        }
+      }
+    }
+
+    const payload: Record<string, any> = {
       agentId,
       agentDisplayName,
-      agentType: calculation.agentType,
-      calculationModel: calculation.calculationModel,
+      agentType,
+      calculationModel,
 
       status,
       transactionType,
@@ -93,8 +119,42 @@ export async function POST(req: NextRequest) {
       brokerProfit: toNumber(body.brokerProfit),
       notes: toOptionalString(body.notes),
 
-      splitSnapshot: calculation.splitSnapshot,
-      creditSnapshot: calculation.creditSnapshot,
+      splitSnapshot,
+      creditSnapshot,
+
+      // Pass through additional fields from the form
+      ...(body.closingType ? { closingType: body.closingType } : {}),
+      ...(body.dealType ? { dealType: body.dealType } : {}),
+      ...(body.dealSource ? { dealSource: body.dealSource } : {}),
+      ...(body.listPrice ? { listPrice: toNumber(body.listPrice) } : {}),
+      ...(body.commissionPercent ? { commissionPercent: toNumber(body.commissionPercent) } : {}),
+      ...(body.transactionFee ? { transactionFee: toNumber(body.transactionFee) } : {}),
+      ...(body.earnestMoney ? { earnestMoney: toNumber(body.earnestMoney) } : {}),
+      ...(body.listingDate ? { listingDate: body.listingDate } : {}),
+      ...(body.optionExpiration ? { optionExpiration: body.optionExpiration } : {}),
+      ...(body.inspectionDeadline ? { inspectionDeadline: body.inspectionDeadline } : {}),
+      ...(body.surveyDeadline ? { surveyDeadline: body.surveyDeadline } : {}),
+      ...(body.projectedCloseDate ? { projectedCloseDate: body.projectedCloseDate } : {}),
+      // Client contact
+      ...(body.clientEmail ? { clientEmail: body.clientEmail } : {}),
+      ...(body.clientPhone ? { clientPhone: body.clientPhone } : {}),
+      ...(body.clientNewAddress ? { clientNewAddress: body.clientNewAddress } : {}),
+      ...(body.client2Name ? { client2Name: body.client2Name } : {}),
+      ...(body.client2Email ? { client2Email: body.client2Email } : {}),
+      ...(body.client2Phone ? { client2Phone: body.client2Phone } : {}),
+      // Parties
+      ...(body.otherAgentName ? { otherAgentName: body.otherAgentName } : {}),
+      ...(body.otherAgentEmail ? { otherAgentEmail: body.otherAgentEmail } : {}),
+      ...(body.otherAgentPhone ? { otherAgentPhone: body.otherAgentPhone } : {}),
+      ...(body.otherBrokerage ? { otherBrokerage: body.otherBrokerage } : {}),
+      ...(body.mortgageCompany ? { mortgageCompany: body.mortgageCompany } : {}),
+      ...(body.loanOfficer ? { loanOfficer: body.loanOfficer } : {}),
+      ...(body.loanOfficerEmail ? { loanOfficerEmail: body.loanOfficerEmail } : {}),
+      ...(body.loanOfficerPhone ? { loanOfficerPhone: body.loanOfficerPhone } : {}),
+      ...(body.titleCompany ? { titleCompany: body.titleCompany } : {}),
+      ...(body.titleOfficer ? { titleOfficer: body.titleOfficer } : {}),
+      ...(body.titleOfficerEmail ? { titleOfficerEmail: body.titleOfficerEmail } : {}),
+      ...(body.titleOfficerPhone ? { titleOfficerPhone: body.titleOfficerPhone } : {}),
 
       createdAt: now,
       updatedAt: now,
