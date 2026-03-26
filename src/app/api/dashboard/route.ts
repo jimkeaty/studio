@@ -313,9 +313,6 @@ export async function GET(req: NextRequest) {
       const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
       if (profileByIdSnap.exists) {
         agentProfileData = profileByIdSnap.data();
-        console.log('[dashboard] Profile found by doc ID:', uid, 'tiers:', agentProfileData?.tiers?.length ?? 0);
-      } else {
-        console.log('[dashboard] No profile by doc ID:', uid);
       }
 
       // Strategy 2: Search by agentId field (in case doc ID differs)
@@ -326,16 +323,12 @@ export async function GET(req: NextRequest) {
           .get();
         if (!profileByAgentIdSnap.empty) {
           agentProfileData = profileByAgentIdSnap.docs[0].data();
-          console.log('[dashboard] Profile found by agentId field:', uid, 'tiers:', agentProfileData?.tiers?.length ?? 0);
-        } else {
-          console.log('[dashboard] No profile by agentId field:', uid);
         }
       }
 
       // Strategy 3: Match by email from auth token
       if (!agentProfileData) {
         const email = decoded.email || '';
-        console.log('[dashboard] Trying email lookup:', email);
         if (email) {
           const profileByEmailSnap = await adminDb.collection('agentProfiles')
             .where('email', '==', email)
@@ -343,20 +336,8 @@ export async function GET(req: NextRequest) {
             .get();
           if (!profileByEmailSnap.empty) {
             agentProfileData = profileByEmailSnap.docs[0].data();
-            console.log('[dashboard] Profile found by email:', email, 'tiers:', agentProfileData?.tiers?.length ?? 0);
-          } else {
-            console.log('[dashboard] No profile found by email:', email);
           }
         }
-      }
-
-      if (agentProfileData) {
-        console.log('[dashboard] Final profile data: startDate=', agentProfileData.startDate,
-          'tiers=', JSON.stringify(agentProfileData.tiers?.slice(0, 2)),
-          'anniversaryMonth=', agentProfileData.anniversaryMonth,
-          'anniversaryDay=', agentProfileData.anniversaryDay);
-      } else {
-        console.log('[dashboard] WARNING: No agent profile found at all for uid:', uid);
       }
 
       // Check grace period from profile
@@ -571,24 +552,94 @@ export async function GET(req: NextRequest) {
     };
 
     // ── Tier / Cap progress ──────────────────────────────────────────────
-    console.log('[dashboard] Tier calc: grossGCIYTD=', grossGCIYTD, 'pendingGrossGCI=', pendingGrossGCI,
-      'totalGCI(splitSnapshot)=', totalGCI, 'closedUnits=', closedUnits);
-    const agentTiers: any[] = Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers : [];
-    console.log('[dashboard] agentTiers count:', agentTiers.length,
-      agentTiers.length > 0 ? 'first tier:' + JSON.stringify(agentTiers[0]) : 'NO TIERS');
-    if (agentTiers.length > 0) {
-      // Sort tiers by fromCompanyDollar ascending
-      const sortedTiers = [...agentTiers].sort(
-        (a, b) => asNumber(a.fromCompanyDollar) - asNumber(b.fromCompanyDollar)
+    // Build tiers from profile (independent agents) OR team plan (team agents)
+    let resolvedTiers: { tierName: string; fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number; companySplitPercent: number }[] = [];
+
+    // 1) Try individual tiers from profile
+    if (Array.isArray(agentProfileData?.tiers) && agentProfileData.tiers.length > 0) {
+      resolvedTiers = agentProfileData.tiers.map((t: any, i: number) => ({
+        tierName: t.tierName || `Tier ${i + 1}`,
+        fromCompanyDollar: asNumber(t.fromCompanyDollar),
+        toCompanyDollar: t.toCompanyDollar != null ? asNumber(t.toCompanyDollar) : null,
+        agentSplitPercent: asNumber(t.agentSplitPercent),
+        companySplitPercent: asNumber(t.companySplitPercent),
+      }));
+    }
+
+    // 2) If no individual tiers, try team plan bands (for team leaders/members)
+    if (resolvedTiers.length === 0 && agentProfileData?.primaryTeamId) {
+      try {
+        const teamId = agentProfileData.primaryTeamId;
+        const teamRole = agentProfileData.teamRole; // 'leader' | 'member'
+
+        // Find the team to get teamPlanId
+        const teamSnap = await adminDb.collection('teams').doc(teamId).get();
+        const teamData = teamSnap.exists ? teamSnap.data() : null;
+        const teamPlanId = teamData?.teamPlanId;
+
+        if (teamPlanId) {
+          const planSnap = await adminDb.collection('teamPlans').doc(teamPlanId).get();
+          const planData = planSnap.exists ? planSnap.data() : null;
+
+          if (planData) {
+            if (teamRole === 'leader' && Array.isArray(planData.leaderStructureBands)) {
+              // Leader: leaderPercent = agent side, companyPercent = company side
+              resolvedTiers = planData.leaderStructureBands.map((b: any, i: number) => ({
+                tierName: b.tierName || `Tier ${i + 1}`,
+                fromCompanyDollar: asNumber(b.fromCompanyDollar),
+                toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
+                agentSplitPercent: asNumber(b.leaderPercent),
+                companySplitPercent: asNumber(b.companyPercent),
+              }));
+            } else if (teamRole === 'member') {
+              // Check for custom member plan first
+              const memberPlanSnap = await adminDb.collection('memberPlans')
+                .where('agentId', '==', agentProfileData.agentId)
+                .where('teamId', '==', teamId)
+                .limit(1)
+                .get();
+
+              if (!memberPlanSnap.empty) {
+                const mp = memberPlanSnap.docs[0].data();
+                if (Array.isArray(mp.payoutBands)) {
+                  resolvedTiers = mp.payoutBands.map((b: any, i: number) => ({
+                    tierName: b.tierName || `Tier ${i + 1}`,
+                    fromCompanyDollar: asNumber(b.fromCompanyDollar),
+                    toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
+                    agentSplitPercent: asNumber(b.memberPercent),
+                    companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
+                  }));
+                }
+              } else if (Array.isArray(planData.memberDefaultBands)) {
+                // Fall back to team's default member bands
+                resolvedTiers = planData.memberDefaultBands.map((b: any, i: number) => ({
+                  tierName: b.tierName || `Tier ${i + 1}`,
+                  fromCompanyDollar: asNumber(b.fromCompanyDollar),
+                  toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
+                  agentSplitPercent: asNumber(b.memberPercent),
+                  companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
+                }));
+              }
+            }
+          }
+        }
+      } catch (teamErr) {
+        console.warn('[dashboard] Failed to load team plan tiers:', teamErr);
+      }
+    }
+
+    // Sort tiers and compute progress
+    if (resolvedTiers.length > 0) {
+      const sortedTiers = [...resolvedTiers].sort(
+        (a, b) => a.fromCompanyDollar - b.fromCompanyDollar
       );
 
-      // Tier progression tracks total gross commission generated
       const totalGCIForTier = grossGCIYTD;
 
       // Find current tier
       let currentTierIndex = 0;
       for (let i = sortedTiers.length - 1; i >= 0; i--) {
-        if (totalGCIForTier >= asNumber(sortedTiers[i].fromCompanyDollar)) {
+        if (totalGCIForTier >= sortedTiers[i].fromCompanyDollar) {
           currentTierIndex = i;
           break;
         }
@@ -597,22 +648,21 @@ export async function GET(req: NextRequest) {
       const currentTier = sortedTiers[currentTierIndex];
       const nextTier = currentTierIndex < sortedTiers.length - 1 ? sortedTiers[currentTierIndex + 1] : null;
 
-      const tierFrom = asNumber(currentTier.fromCompanyDollar);
+      const tierFrom = currentTier.fromCompanyDollar;
       const tierTo = currentTier.toCompanyDollar != null
-        ? asNumber(currentTier.toCompanyDollar)
-        : (nextTier ? asNumber(nextTier.fromCompanyDollar) : null);
+        ? currentTier.toCompanyDollar
+        : (nextTier ? nextTier.fromCompanyDollar : null);
 
       let progressInCurrentTier = 0;
       let capReached = false;
       if (tierTo != null && tierTo > tierFrom) {
         progressInCurrentTier = Math.min(100, Math.round(((totalGCIForTier - tierFrom) / (tierTo - tierFrom)) * 100));
       } else if (!nextTier) {
-        // Highest tier with no cap — they've capped
         capReached = totalGCIForTier > tierFrom;
         progressInCurrentTier = 100;
       }
 
-      // Calculate effective start date + anniversary (tier reset) date
+      // Start date + anniversary (tier reset) date
       const agentStartDate = agentProfileData?.startDate || null;
       const annivMonth = asNumber(agentProfileData?.anniversaryMonth);
       const annivDay = asNumber(agentProfileData?.anniversaryDay);
@@ -620,32 +670,22 @@ export async function GET(req: NextRequest) {
       let daysUntilReset: number | null = null;
 
       if (annivMonth >= 1 && annivMonth <= 12 && annivDay >= 1) {
-        // Build next anniversary date
         let annivYear = yearNum;
         const annivThisYear = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
-        // If anniversary already passed this year, use next year's
-        if (annivThisYear.getTime() < todayUtc.getTime()) {
-          annivYear += 1;
-        }
+        if (annivThisYear.getTime() < todayUtc.getTime()) annivYear += 1;
         const nextAnniv = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
         anniversaryDate = nextAnniv.toISOString().slice(0, 10);
         daysUntilReset = Math.ceil((nextAnniv.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24));
       }
 
       dashboard.tierProgress = {
-        tiers: sortedTiers.map((t) => ({
-          tierName: t.tierName || '',
-          fromCompanyDollar: asNumber(t.fromCompanyDollar),
-          toCompanyDollar: t.toCompanyDollar != null ? asNumber(t.toCompanyDollar) : null,
-          agentSplitPercent: asNumber(t.agentSplitPercent),
-          companySplitPercent: asNumber(t.companySplitPercent),
-        })),
+        tiers: sortedTiers,
         grossGCIYTD: Number(grossGCIYTD.toFixed(2)),
         pendingGrossGCI: Number(pendingGrossGCI.toFixed(2)),
         currentTierIndex,
         currentTierName: currentTier.tierName || `Tier ${currentTierIndex + 1}`,
         nextTierName: nextTier ? (nextTier.tierName || `Tier ${currentTierIndex + 2}`) : null,
-        nextTierThreshold: nextTier ? asNumber(nextTier.fromCompanyDollar) : null,
+        nextTierThreshold: nextTier ? nextTier.fromCompanyDollar : null,
         progressInCurrentTier,
         capReached,
         effectiveStartDate: agentStartDate,
