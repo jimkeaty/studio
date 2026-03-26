@@ -208,6 +208,19 @@ export interface AgentDashboardData {
     pendingVolume: number;
   };
 
+  // Tier / cap progress
+  tierProgress?: {
+    tiers: { tierName: string; fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number; companySplitPercent: number }[];
+    companyDollarGCIYTD: number;    // total company $ GCI earned this year
+    pendingCompanyDollarGCI: number; // pending company $ GCI
+    currentTierIndex: number;        // which tier the agent is in (0-based)
+    currentTierName: string;
+    nextTierName: string | null;
+    nextTierThreshold: number | null; // $ needed to reach next tier
+    progressInCurrentTier: number;    // 0-100 percentage through current tier
+    capReached: boolean;             // true if at highest tier and past toCompanyDollar
+  };
+
   // Volume & deals grading
   volumeMetrics?: {
     closedVolume: number;

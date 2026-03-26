@@ -173,7 +173,9 @@ export async function GET(req: NextRequest) {
         : countWeekdaysInclusive(effectiveStart, asOf);
 
     const annualIncomeGoal = asNumber(plan.annualIncomeGoal);
-    const expectedYTDIncomeGoal = Number(
+    // Initial estimate using workday proration; will be overridden by actual
+    // monthly goals from brokerCommandGoals if they exist (see below).
+    let expectedYTDIncomeGoal = Number(
       ((annualIncomeGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2)
     );
 
@@ -206,6 +208,8 @@ export async function GET(req: NextRequest) {
     let closedVolume = 0;
     let pendingVolume = 0;
     let totalGCI = 0;
+    let companyDollarGCIYTD = 0;
+    let pendingCompanyDollarGCI = 0;
 
     for (const doc of txSnap.docs) {
       const t = doc.data() || {};
@@ -213,6 +217,10 @@ export async function GET(req: NextRequest) {
       const net = getTransactionNet(t);
       const dealValue = asNumber(t.dealValue);
       const gci = asNumber(t.splitSnapshot?.grossCommission || t.commission);
+      const companyDollar = asNumber(
+        t.creditSnapshot?.progressionCompanyDollarCredit
+        || t.splitSnapshot?.companyRetained
+      );
 
       if (status === "closed") {
         const d = getTransactionDateForEarned(t);
@@ -231,6 +239,7 @@ export async function GET(req: NextRequest) {
           closedUnits += 1;
           closedVolume += dealValue;
           totalGCI += gci;
+          companyDollarGCIYTD += companyDollar;
         }
       } else if (status === "pending" || status === "under_contract") {
         const d = getTransactionDateForPending(t);
@@ -248,6 +257,7 @@ export async function GET(req: NextRequest) {
           netPending += net;
           pendingUnits += 1;
           pendingVolume += dealValue;
+          pendingCompanyDollarGCI += companyDollar;
         }
       }
     }
@@ -292,13 +302,15 @@ export async function GET(req: NextRequest) {
       (asNumber(plan.calculatedTargets?.engagements?.daily) + behindAmount / catchUpWindowDays).toFixed(2)
     );
 
-    // ── Fetch agent profile for grace period check ────────────────────────
+    // ── Fetch agent profile for grace period + tiers ───────────────────
     let isMetricsGracePeriod = false;
+    let agentProfileData: any = null;
     try {
       // Try matching by agentId patterns: uid directly, or by email
       const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
       if (profileByIdSnap.exists) {
-        const profile = profileByIdSnap.data();
+        agentProfileData = profileByIdSnap.data();
+        const profile = agentProfileData;
         if (profile?.gracePeriodEnabled === true) {
           // Check if agent started within last 90 days
           const startDate = toDate(profile.startDate);
@@ -318,7 +330,8 @@ export async function GET(req: NextRequest) {
             .limit(1)
             .get();
           if (!profileByEmailSnap.empty) {
-            const profile = profileByEmailSnap.docs[0].data();
+            agentProfileData = profileByEmailSnap.docs[0].data();
+            const profile = agentProfileData;
             if (profile?.gracePeriodEnabled === true) {
               const startDate = toDate(profile.startDate);
               if (startDate) {
@@ -459,28 +472,58 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    // ── Fetch agent goals (volume + sales count) ─────────────────────────
+    // ── Fetch agent goals (volume + sales count + income) ──────────────
     const goalSegment = `agent_${uid}`;
     const goalsSnap = await adminDb.collection("brokerCommandGoals")
       .where("year", "==", yearNum)
       .where("segment", "==", goalSegment)
       .get();
 
+    // Current month (1-based)
+    const currentMonth = asOf.getUTCMonth() + 1; // 1=Jan, 12=Dec
+
     let yearlyVolumeGoal = 0;
     let yearlySalesGoal = 0;
+    let yearlyIncomeGoalFromMonthly = 0;
+    let volumeGoalToDate = 0;
+    let salesGoalToDate = 0;
+    let incomeGoalToDate = 0;
+
     for (const gDoc of goalsSnap.docs) {
       const g = gDoc.data();
+      const gMonth = asNumber(g.month); // 1-12
       yearlyVolumeGoal += asNumber(g.volumeGoal);
       yearlySalesGoal += asNumber(g.salesCountGoal);
+      yearlyIncomeGoalFromMonthly += asNumber(g.grossMarginGoal);
+
+      // Sum goals for months 1 through current month for YTD targets
+      if (gMonth >= 1 && gMonth <= currentMonth) {
+        volumeGoalToDate += asNumber(g.volumeGoal);
+        salesGoalToDate += asNumber(g.salesCountGoal);
+        incomeGoalToDate += asNumber(g.grossMarginGoal);
+      }
     }
 
-    // Prorate goals to elapsed workdays
-    const volumeGoalToDate = totalWorkdaysInYear > 0
-      ? Number(((yearlyVolumeGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2))
-      : 0;
-    const salesGoalToDate = totalWorkdaysInYear > 0
-      ? Number(((yearlySalesGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2))
-      : 0;
+    volumeGoalToDate = Number(volumeGoalToDate.toFixed(2));
+    salesGoalToDate = Number(salesGoalToDate.toFixed(2));
+    incomeGoalToDate = Number(incomeGoalToDate.toFixed(2));
+
+    // Override income YTD goal with actual monthly goals if available
+    // (sum of grossMarginGoal for months 1 through current month)
+    if (incomeGoalToDate > 0) {
+      expectedYTDIncomeGoal = incomeGoalToDate;
+      // Recalculate income performance & grades with correct YTD goal
+      const recalcIncomePerf = performance(netEarned, expectedYTDIncomeGoal);
+      const recalcPipelinePerf = performance(ytdTotalPotential, expectedYTDIncomeGoal);
+      dashboard.expectedYTDIncomeGoal = expectedYTDIncomeGoal;
+      dashboard.incomeGrade = isMetricsGracePeriod ? 'A' : gradeFromPerformance(recalcIncomePerf);
+      dashboard.incomePerformance = recalcIncomePerf;
+      dashboard.pipelineAdjustedIncome = {
+        grade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(recalcPipelinePerf),
+        performance: recalcPipelinePerf,
+      };
+      dashboard.incomeDeltaToGoal = Number((netEarned - expectedYTDIncomeGoal).toFixed(2));
+    }
 
     const volumePerf = performance(closedVolume, volumeGoalToDate);
     const projectedVolumePerf = performance(closedVolume + pendingVolume, volumeGoalToDate);
@@ -490,17 +533,73 @@ export async function GET(req: NextRequest) {
       closedVolume: Number(closedVolume.toFixed(2)),
       pendingVolume: Number(pendingVolume.toFixed(2)),
       totalVolume: Number((closedVolume + pendingVolume).toFixed(2)),
-      volumeGoal: yearlyVolumeGoal > 0 ? yearlyVolumeGoal : null,
+      volumeGoal: volumeGoalToDate > 0 ? volumeGoalToDate : null,
       volumeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(volumePerf),
       volumePerformance: volumePerf,
       projectedVolumeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(projectedVolumePerf),
       projectedVolumePerformance: projectedVolumePerf,
       closedDeals: closedUnits,
       pendingDeals: pendingUnits,
-      dealsGoal: yearlySalesGoal > 0 ? yearlySalesGoal : null,
+      dealsGoal: salesGoalToDate > 0 ? salesGoalToDate : null,
       dealsGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(dealsPerf),
       dealsPerformance: dealsPerf,
     };
+
+    // ── Tier / Cap progress ──────────────────────────────────────────────
+    const agentTiers: any[] = Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers : [];
+    if (agentTiers.length > 0) {
+      // Sort tiers by fromCompanyDollar ascending
+      const sortedTiers = [...agentTiers].sort(
+        (a, b) => asNumber(a.fromCompanyDollar) - asNumber(b.fromCompanyDollar)
+      );
+
+      const totalGCIForTier = companyDollarGCIYTD;
+
+      // Find current tier
+      let currentTierIndex = 0;
+      for (let i = sortedTiers.length - 1; i >= 0; i--) {
+        if (totalGCIForTier >= asNumber(sortedTiers[i].fromCompanyDollar)) {
+          currentTierIndex = i;
+          break;
+        }
+      }
+
+      const currentTier = sortedTiers[currentTierIndex];
+      const nextTier = currentTierIndex < sortedTiers.length - 1 ? sortedTiers[currentTierIndex + 1] : null;
+
+      const tierFrom = asNumber(currentTier.fromCompanyDollar);
+      const tierTo = currentTier.toCompanyDollar != null
+        ? asNumber(currentTier.toCompanyDollar)
+        : (nextTier ? asNumber(nextTier.fromCompanyDollar) : null);
+
+      let progressInCurrentTier = 0;
+      let capReached = false;
+      if (tierTo != null && tierTo > tierFrom) {
+        progressInCurrentTier = Math.min(100, Math.round(((totalGCIForTier - tierFrom) / (tierTo - tierFrom)) * 100));
+      } else if (!nextTier) {
+        // Highest tier with no cap — they've capped
+        capReached = totalGCIForTier > tierFrom;
+        progressInCurrentTier = 100;
+      }
+
+      dashboard.tierProgress = {
+        tiers: sortedTiers.map((t) => ({
+          tierName: t.tierName || '',
+          fromCompanyDollar: asNumber(t.fromCompanyDollar),
+          toCompanyDollar: t.toCompanyDollar != null ? asNumber(t.toCompanyDollar) : null,
+          agentSplitPercent: asNumber(t.agentSplitPercent),
+          companySplitPercent: asNumber(t.companySplitPercent),
+        })),
+        companyDollarGCIYTD: Number(companyDollarGCIYTD.toFixed(2)),
+        pendingCompanyDollarGCI: Number(pendingCompanyDollarGCI.toFixed(2)),
+        currentTierIndex,
+        currentTierName: currentTier.tierName || `Tier ${currentTierIndex + 1}`,
+        nextTierName: nextTier ? (nextTier.tierName || `Tier ${currentTierIndex + 2}`) : null,
+        nextTierThreshold: nextTier ? asNumber(nextTier.fromCompanyDollar) : null,
+        progressInCurrentTier,
+        capReached,
+      };
+    }
 
     // ── Previous year comparison ─────────────────────────────────────────
     const compareYearParam = reqParams.get("compareYear");

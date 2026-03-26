@@ -688,9 +688,9 @@ function AgentDashboardPage() {
       />
 
       {/* ════════════════════════════════════════════════════════════════════
-          2. PACING & GOALS
+          2. TIER / CAP PROGRESS
          ════════════════════════════════════════════════════════════════════ */}
-      {!loading && dashboard && <PacingGoalsCard dashboard={dashboard} />}
+      {!loading && dashboard && <TierProgressCard dashboard={dashboard} />}
 
       {/* ════════════════════════════════════════════════════════════════════
           3. REPORT CARD — Hero Grade Cards
@@ -855,47 +855,159 @@ function MetricTileWithDelta({ title, value, previous, icon: Icon }: { title: st
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 2. PACING & GOALS
+// 2. TIER / CAP PROGRESS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function PacingGoalsCard({ dashboard }: { dashboard: AgentDashboardData }) {
-  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
-  const effectiveStartLabel = !dashboard.effectiveStartDate ? 'Jan 1' : (() => {
-    const d = new Date(`${dashboard.effectiveStartDate}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return dashboard.effectiveStartDate;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  })();
+const tierColors = [
+  { bar: 'bg-slate-400', text: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-300' },
+  { bar: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-300' },
+  { bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-300' },
+  { bar: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-300' },
+  { bar: 'bg-purple-500', text: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-300' },
+  { bar: 'bg-rose-500', text: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-300' },
+];
+
+function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
+  const tp = dashboard.tierProgress;
+
+  if (!tp || tp.tiers.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
+          <CardDescription>No commission tiers configured — contact your admin.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const { tiers, companyDollarGCIYTD, pendingCompanyDollarGCI, currentTierIndex, currentTierName, nextTierName, nextTierThreshold, capReached } = tp;
+
+  // Calculate the max value for the full bar (highest tier boundary or current GCI whichever is larger)
+  const highestBound = tiers.reduce((max, t) => {
+    const to = t.toCompanyDollar ?? t.fromCompanyDollar;
+    return Math.max(max, to);
+  }, 0);
+  const maxBarValue = Math.max(highestBound, companyDollarGCIYTD + pendingCompanyDollarGCI) * 1.05;
+
+  const closedPct = maxBarValue > 0 ? Math.min(100, (companyDollarGCIYTD / maxBarValue) * 100) : 0;
+  const pendingPct = maxBarValue > 0 ? Math.min(100 - closedPct, ((pendingCompanyDollarGCI) / maxBarValue) * 100) : 0;
+  const remainToNext = nextTierThreshold != null ? Math.max(0, nextTierThreshold - companyDollarGCIYTD) : 0;
+  const currentColor = tierColors[currentTierIndex % tierColors.length];
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-semibold">Pacing & Goals</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <PacingItem label="Effective Start" value={effectiveStartLabel} />
-          <PacingItem label="Annual Income Goal" value={fmtCurrency(dashboard.annualIncomeGoal ?? 0)} />
-          <PacingItem label="Net Earned" value={fmtCurrency(dashboard.netEarned)} />
-          <PacingItem label="Net Pending" value={fmtCurrency(dashboard.netPending)} />
-          <PacingItem label="Total Potential" value={fmtCurrency(dashboard.ytdTotalPotential)} highlight />
-          <div className="rounded-lg border p-3">
-            <p className="text-xs text-muted-foreground font-medium">Pace Delta</p>
-            <p className={cn('text-lg font-bold mt-0.5', incomeDelta >= 0 ? 'text-green-600' : 'text-red-600')}>
-              {incomeDelta >= 0 ? '+' : ''}{fmtCurrency(incomeDelta)}
-            </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
+            <CardDescription className="mt-0.5">
+              Company $GCI into the brokerage — {fmtCurrency(companyDollarGCIYTD)} closed
+              {pendingCompanyDollarGCI > 0 && ` + ${fmtCurrency(pendingCompanyDollarGCI)} pending`}
+            </CardDescription>
           </div>
+          <div className={cn('px-3 py-1.5 rounded-full text-sm font-bold border', currentColor.bg, currentColor.border, currentColor.text)}>
+            {currentTierName} · {tiers[currentTierIndex].agentSplitPercent}%/{tiers[currentTierIndex].companySplitPercent}%
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Progress bar */}
+        <div className="relative">
+          <div className="h-8 rounded-full bg-muted/40 overflow-hidden relative border">
+            {/* Closed GCI fill */}
+            <div
+              className={cn('absolute inset-y-0 left-0 rounded-l-full transition-all duration-700', currentColor.bar)}
+              style={{ width: `${closedPct}%` }}
+            />
+            {/* Pending GCI fill (striped) */}
+            {pendingPct > 0 && (
+              <div
+                className={cn('absolute inset-y-0 opacity-40 transition-all duration-700', currentColor.bar)}
+                style={{
+                  left: `${closedPct}%`,
+                  width: `${pendingPct}%`,
+                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.3) 4px, rgba(255,255,255,0.3) 8px)',
+                }}
+              />
+            )}
+            {/* Tier boundary markers */}
+            {tiers.map((tier, idx) => {
+              if (idx === 0) return null;
+              const markerPct = maxBarValue > 0 ? (tier.fromCompanyDollar / maxBarValue) * 100 : 0;
+              if (markerPct > 100) return null;
+              const tc = tierColors[idx % tierColors.length];
+              return (
+                <div key={idx} className="absolute inset-y-0 flex flex-col items-center" style={{ left: `${markerPct}%` }}>
+                  <div className={cn('w-0.5 h-full', idx <= currentTierIndex ? tc.bar : 'bg-muted-foreground/30')} />
+                </div>
+              );
+            })}
+            {/* Current GCI label on bar */}
+            <div className="absolute inset-0 flex items-center px-3">
+              <span className="text-xs font-bold text-white drop-shadow-sm">
+                {fmtCurrency(companyDollarGCIYTD)}
+              </span>
+            </div>
+          </div>
+
+          {/* Tier labels below bar */}
+          <div className="relative h-6 mt-1">
+            {tiers.map((tier, idx) => {
+              const startPct = maxBarValue > 0 ? (tier.fromCompanyDollar / maxBarValue) * 100 : 0;
+              if (startPct > 100) return null;
+              const tc = tierColors[idx % tierColors.length];
+              return (
+                <div key={idx} className="absolute text-center" style={{ left: `${startPct}%`, transform: 'translateX(-50%)' }}>
+                  <span className={cn('text-[10px] font-semibold whitespace-nowrap', idx === currentTierIndex ? tc.text : 'text-muted-foreground')}>
+                    {fmtCurrencyCompact(tier.fromCompanyDollar, true)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tier cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+          {tiers.map((tier, idx) => {
+            const tc = tierColors[idx % tierColors.length];
+            const isActive = idx === currentTierIndex;
+            return (
+              <div key={idx} className={cn(
+                'rounded-lg border p-2.5 transition-all',
+                isActive ? `${tc.bg} ${tc.border} ring-2 ring-offset-1` : 'bg-muted/20 border-muted opacity-60',
+                isActive && `ring-${tc.bar.replace('bg-', '')}/30`
+              )}>
+                <div className="flex items-center gap-1.5">
+                  <div className={cn('w-2.5 h-2.5 rounded-full', tc.bar)} />
+                  <span className={cn('text-xs font-bold', isActive ? tc.text : 'text-muted-foreground')}>{tier.tierName || `Tier ${idx + 1}`}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {tier.agentSplitPercent}% / {tier.companySplitPercent}%
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {fmtCurrencyCompact(tier.fromCompanyDollar, true)}
+                  {tier.toCompanyDollar != null ? ` – ${fmtCurrencyCompact(tier.toCompanyDollar, true)}` : '+'}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Status line */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
+          {capReached ? (
+            <span className="font-semibold text-emerald-600">Cap reached — max tier active</span>
+          ) : nextTierName ? (
+            <span><span className="font-semibold">{fmtCurrency(remainToNext)}</span> more company $GCI to reach <span className="font-semibold">{nextTierName}</span></span>
+          ) : (
+            <span>Active tier: {currentTierName}</span>
+          )}
+          <span>YTD Company $GCI: <span className="font-bold text-foreground">{fmtCurrency(companyDollarGCIYTD)}</span></span>
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function PacingItem({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-muted-foreground font-medium">{label}</p>
-      <p className={cn('text-lg font-bold mt-0.5', highlight && 'text-primary')}>{value}</p>
-    </div>
   );
 }
 
@@ -997,7 +1109,7 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
             title="Deals Closed" grade={vm.dealsGrade} primary={`${vm.closedDeals} closed`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.dealsPerformance) : undefined}
             secondary={vm.dealsGoal != null
-              ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${vm.dealsGoal} deals YTD goal · ${vm.pendingDeals} pending`
+              ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${fmtNum(vm.dealsGoal)} deals YTD goal · ${vm.pendingDeals} pending`
               : `${vm.pendingDeals} pending · No goal set`}
             icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
