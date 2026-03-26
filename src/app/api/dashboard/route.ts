@@ -313,6 +313,9 @@ export async function GET(req: NextRequest) {
       const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
       if (profileByIdSnap.exists) {
         agentProfileData = profileByIdSnap.data();
+        console.log('[dashboard] Profile found by doc ID:', uid, 'tiers:', agentProfileData?.tiers?.length ?? 0);
+      } else {
+        console.log('[dashboard] No profile by doc ID:', uid);
       }
 
       // Strategy 2: Search by agentId field (in case doc ID differs)
@@ -323,12 +326,16 @@ export async function GET(req: NextRequest) {
           .get();
         if (!profileByAgentIdSnap.empty) {
           agentProfileData = profileByAgentIdSnap.docs[0].data();
+          console.log('[dashboard] Profile found by agentId field:', uid, 'tiers:', agentProfileData?.tiers?.length ?? 0);
+        } else {
+          console.log('[dashboard] No profile by agentId field:', uid);
         }
       }
 
       // Strategy 3: Match by email from auth token
       if (!agentProfileData) {
         const email = decoded.email || '';
+        console.log('[dashboard] Trying email lookup:', email);
         if (email) {
           const profileByEmailSnap = await adminDb.collection('agentProfiles')
             .where('email', '==', email)
@@ -336,8 +343,20 @@ export async function GET(req: NextRequest) {
             .get();
           if (!profileByEmailSnap.empty) {
             agentProfileData = profileByEmailSnap.docs[0].data();
+            console.log('[dashboard] Profile found by email:', email, 'tiers:', agentProfileData?.tiers?.length ?? 0);
+          } else {
+            console.log('[dashboard] No profile found by email:', email);
           }
         }
+      }
+
+      if (agentProfileData) {
+        console.log('[dashboard] Final profile data: startDate=', agentProfileData.startDate,
+          'tiers=', JSON.stringify(agentProfileData.tiers?.slice(0, 2)),
+          'anniversaryMonth=', agentProfileData.anniversaryMonth,
+          'anniversaryDay=', agentProfileData.anniversaryDay);
+      } else {
+        console.log('[dashboard] WARNING: No agent profile found at all for uid:', uid);
       }
 
       // Check grace period from profile
@@ -552,7 +571,11 @@ export async function GET(req: NextRequest) {
     };
 
     // ── Tier / Cap progress ──────────────────────────────────────────────
+    console.log('[dashboard] Tier calc: grossGCIYTD=', grossGCIYTD, 'pendingGrossGCI=', pendingGrossGCI,
+      'totalGCI(splitSnapshot)=', totalGCI, 'closedUnits=', closedUnits);
     const agentTiers: any[] = Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers : [];
+    console.log('[dashboard] agentTiers count:', agentTiers.length,
+      agentTiers.length > 0 ? 'first tier:' + JSON.stringify(agentTiers[0]) : 'NO TIERS');
     if (agentTiers.length > 0) {
       // Sort tiers by fromCompanyDollar ascending
       const sortedTiers = [...agentTiers].sort(
