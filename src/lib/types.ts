@@ -239,6 +239,11 @@ export interface AgentDashboardData {
     dealsGoal: number | null;
     dealsGrade: 'A' | 'B' | 'C' | 'D' | 'F';
     dealsPerformance: number;
+    projectedDealsGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+    projectedDealsPerformance: number;
+    projectedVolumeGoal: number | null;
+    projectedDealsGoal: number | null;
+    projectedIncomeGoal: number | null;
   };
 
   // Previous year comparison

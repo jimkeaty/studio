@@ -1100,8 +1100,8 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
     <div className="space-y-6">
       <h2 className="text-lg font-semibold">Report Card</h2>
 
-      {/* Row 1: Income + Engagements */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Row 1: Income */}
+      <div className="grid gap-4 md:grid-cols-2">
         <HeroCard
           title="Net Income YTD" grade={dashboard.incomeGrade} primary={fmtCurrency(dashboard.netEarned)}
           performancePct={ytdIncomeGoal > 0 ? incomePct : undefined}
@@ -1111,21 +1111,20 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
         <HeroCard
           title="Projected with Pending" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)}
           performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
-          secondary={ytdIncomeGoal > 0 ? paceText(pipelineDeltaPct, fmtCurrency(ytdIncomeGoal)) + ` · ${fmtCurrency(dashboard.netPending)} pending` : `${fmtCurrency(dashboard.netPending)} pending · closed + pipeline`}
+          secondary={ytdIncomeGoal > 0
+            ? (() => {
+                const projGoal = vm?.projectedIncomeGoal ?? ytdIncomeGoal;
+                const projPct = projGoal > 0 ? Math.round(((dashboard.ytdTotalPotential - projGoal) / projGoal) * 100) : 0;
+                return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` · ${fmtCurrency(projGoal)} projected goal · ${fmtCurrency(dashboard.netPending)} pending`;
+              })()
+            : `${fmtCurrency(dashboard.netPending)} pending · closed + pipeline`}
           icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
-        />
-        <HeroCard
-          title="Engagements YTD" grade={dashboard.leadIndicatorGrade}
-          primary={`${fmtNum(engActual)} / ${fmtNum(engGoal)}`}
-          performancePct={engGoal > 0 ? engPct : undefined}
-          secondary={engGoal > 0 ? paceText(engDeltaPct, `${fmtNum(engGoal)} engagements`) : `${fmtNum(engActual)} engagements · No goal set`}
-          icon={Target}
         />
       </div>
 
       {/* Row 2: Deals & Volume */}
       {vm && (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <HeroCard
             title="Deals Closed" grade={vm.dealsGrade} primary={`${vm.closedDeals} closed`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.dealsPerformance) : undefined}
@@ -1133,6 +1132,17 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
               ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${fmtNum(vm.dealsGoal)} deals YTD goal · ${vm.pendingDeals} pending`
               : `${vm.pendingDeals} pending · No goal set`}
             icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod}
+          />
+          <HeroCard
+            title="Projected Deals (w/ Pending)" grade={vm.projectedDealsGrade} primary={`${vm.closedDeals + vm.pendingDeals} total`}
+            performancePct={vm.dealsGoal != null ? Math.round(vm.projectedDealsPerformance) : undefined}
+            secondary={vm.dealsGoal != null
+              ? (() => {
+                  const projDGoal = vm.projectedDealsGoal ?? vm.dealsGoal;
+                  return (vm.projectedDealsPerformance >= 100 ? `${Math.round(vm.projectedDealsPerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedDealsPerformance)}% behind`) + ` · ${fmtNum(projDGoal!)} projected goal · ${vm.pendingDeals} pending`;
+                })()
+              : `${vm.closedDeals} closed + ${vm.pendingDeals} pending`}
+            icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
             title="$ Volume Sold" grade={vm.volumeGrade} primary={fmtCurrency(vm.closedVolume)}
@@ -1146,7 +1156,10 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
             title="Projected Volume (w/ Pending)" grade={vm.projectedVolumeGrade} primary={fmtCurrency(vm.totalVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.projectedVolumePerformance) : undefined}
             secondary={vm.volumeGoal != null
-              ? (vm.projectedVolumePerformance >= 100 ? `${Math.round(vm.projectedVolumePerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.projectedVolumePerformance)}% behind pace`) + ` · ${fmtCurrency(vm.volumeGoal)} YTD goal · ${fmtCurrency(vm.pendingVolume)} pending`
+              ? (() => {
+                  const projVolGoal = vm.projectedVolumeGoal ?? vm.volumeGoal;
+                  return (vm.projectedVolumePerformance >= 100 ? `${Math.round(vm.projectedVolumePerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedVolumePerformance)}% behind`) + ` · ${fmtCurrency(projVolGoal!)} projected goal · ${fmtCurrency(vm.pendingVolume)} pending`;
+                })()
               : `${fmtCurrency(vm.pendingVolume)} pending · Closed + pending volume`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
           />

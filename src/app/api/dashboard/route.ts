@@ -210,6 +210,7 @@ export async function GET(req: NextRequest) {
     let totalGCI = 0;
     let grossGCIYTD = 0;
     let pendingGrossGCI = 0;
+    let latestPendingCloseMonth = 0; // 1-based month of the latest pending expected close
 
     for (const doc of txSnap.docs) {
       const t = doc.data() || {};
@@ -252,6 +253,17 @@ export async function GET(req: NextRequest) {
         const monthIndex = dUtc.getUTCMonth();
 
         monthlyBuckets[monthIndex].pending += net;
+
+        // Track expected close date for projection grading
+        const expectedCloseDate = toDate(
+          t.projectedCloseDate || t.closedDate || t.closingDate
+        );
+        if (expectedCloseDate) {
+          const closeMonth = expectedCloseDate.getUTCMonth() + 1; // 1-based
+          if (closeMonth > latestPendingCloseMonth) {
+            latestPendingCloseMonth = closeMonth;
+          }
+        }
 
         if (
           dUtc.getTime() >= effectiveStart.getTime() &&
@@ -494,6 +506,11 @@ export async function GET(req: NextRequest) {
     let volumeGoalToDate = 0;
     let salesGoalToDate = 0;
     let incomeGoalToDate = 0;
+    // Projected goals: through the latest pending close month (for grading projections)
+    const projectedMonth = Math.max(currentMonth, latestPendingCloseMonth);
+    let projectedIncomeGoal = 0;
+    let projectedVolumeGoal = 0;
+    let projectedSalesGoal = 0;
 
     for (const gDoc of goalsSnap.docs) {
       const g = gDoc.data();
@@ -508,19 +525,29 @@ export async function GET(req: NextRequest) {
         salesGoalToDate += asNumber(g.salesCountGoal);
         incomeGoalToDate += asNumber(g.grossMarginGoal);
       }
+
+      // Sum goals through projected month (when pending deals close)
+      if (gMonth >= 1 && gMonth <= projectedMonth) {
+        projectedIncomeGoal += asNumber(g.grossMarginGoal);
+        projectedVolumeGoal += asNumber(g.volumeGoal);
+        projectedSalesGoal += asNumber(g.salesCountGoal);
+      }
     }
 
     volumeGoalToDate = Number(volumeGoalToDate.toFixed(2));
     salesGoalToDate = Number(salesGoalToDate.toFixed(2));
     incomeGoalToDate = Number(incomeGoalToDate.toFixed(2));
+    projectedIncomeGoal = Number(projectedIncomeGoal.toFixed(2));
+    projectedVolumeGoal = Number(projectedVolumeGoal.toFixed(2));
+    projectedSalesGoal = Number(projectedSalesGoal.toFixed(2));
 
     // Override income YTD goal with actual monthly goals if available
-    // (sum of grossMarginGoal for months 1 through current month)
     if (incomeGoalToDate > 0) {
       expectedYTDIncomeGoal = incomeGoalToDate;
-      // Recalculate income performance & grades with correct YTD goal
       const recalcIncomePerf = performance(netEarned, expectedYTDIncomeGoal);
-      const recalcPipelinePerf = performance(ytdTotalPotential, expectedYTDIncomeGoal);
+      // Projected: grade closed+pending against goal at their close date
+      const projIncomeTarget = projectedIncomeGoal > 0 ? projectedIncomeGoal : expectedYTDIncomeGoal;
+      const recalcPipelinePerf = performance(ytdTotalPotential, projIncomeTarget);
       dashboard.expectedYTDIncomeGoal = expectedYTDIncomeGoal;
       dashboard.incomeGrade = isMetricsGracePeriod ? 'A' : gradeFromPerformance(recalcIncomePerf);
       dashboard.incomePerformance = recalcIncomePerf;
@@ -531,9 +558,14 @@ export async function GET(req: NextRequest) {
       dashboard.incomeDeltaToGoal = Number((netEarned - expectedYTDIncomeGoal).toFixed(2));
     }
 
+    // Volume & deals: grade closed against current YTD goal,
+    // projected against goal at pending close date
     const volumePerf = performance(closedVolume, volumeGoalToDate);
-    const projectedVolumePerf = performance(closedVolume + pendingVolume, volumeGoalToDate);
+    const projVolTarget = projectedVolumeGoal > 0 ? projectedVolumeGoal : volumeGoalToDate;
+    const projectedVolumePerf = performance(closedVolume + pendingVolume, projVolTarget);
     const dealsPerf = performance(closedUnits, salesGoalToDate);
+    const projDealsTarget = projectedSalesGoal > 0 ? projectedSalesGoal : salesGoalToDate;
+    const projectedDealsPerf = performance(closedUnits + pendingUnits, projDealsTarget);
 
     dashboard.volumeMetrics = {
       closedVolume: Number(closedVolume.toFixed(2)),
@@ -549,11 +581,22 @@ export async function GET(req: NextRequest) {
       dealsGoal: salesGoalToDate > 0 ? salesGoalToDate : null,
       dealsGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(dealsPerf),
       dealsPerformance: dealsPerf,
+      projectedDealsGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(projectedDealsPerf),
+      projectedDealsPerformance: projectedDealsPerf,
+      projectedVolumeGoal: projectedVolumeGoal > 0 ? projectedVolumeGoal : null,
+      projectedDealsGoal: projectedSalesGoal > 0 ? projectedSalesGoal : null,
+      projectedIncomeGoal: projectedIncomeGoal > 0 ? projectedIncomeGoal : null,
     };
 
     // ── Tier / Cap progress ──────────────────────────────────────────────
     // Build tiers from profile (independent agents) OR team plan (team agents)
     let resolvedTiers: { tierName: string; fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number; companySplitPercent: number }[] = [];
+
+    console.log('[dashboard/tiers] uid:', uid, 'profileFound:', !!agentProfileData,
+      'agentType:', agentProfileData?.agentType,
+      'tiersOnProfile:', Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers.length : 'none',
+      'primaryTeamId:', agentProfileData?.primaryTeamId,
+      'teamRole:', agentProfileData?.teamRole);
 
     // 1) Try individual tiers from profile
     if (Array.isArray(agentProfileData?.tiers) && agentProfileData.tiers.length > 0) {
@@ -564,6 +607,7 @@ export async function GET(req: NextRequest) {
         agentSplitPercent: asNumber(t.agentSplitPercent),
         companySplitPercent: asNumber(t.companySplitPercent),
       }));
+      console.log('[dashboard/tiers] Resolved from profile tiers:', resolvedTiers.length);
     }
 
     // 2) If no individual tiers, try team plan bands (for team leaders/members)
@@ -576,15 +620,21 @@ export async function GET(req: NextRequest) {
         const teamSnap = await adminDb.collection('teams').doc(teamId).get();
         const teamData = teamSnap.exists ? teamSnap.data() : null;
         const teamPlanId = teamData?.teamPlanId;
+        console.log('[dashboard/tiers] teamId:', teamId, 'teamExists:', teamSnap.exists,
+          'teamPlanId:', teamPlanId, 'teamRole:', teamRole,
+          'teamDataKeys:', teamData ? Object.keys(teamData) : 'null');
 
         if (teamPlanId) {
-          const planSnap = await adminDb.collection('teamPlans').doc(teamPlanId).get();
-          const planData = planSnap.exists ? planSnap.data() : null;
+          const tpSnap = await adminDb.collection('teamPlans').doc(teamPlanId).get();
+          const tpData = tpSnap.exists ? tpSnap.data() : null;
+          console.log('[dashboard/tiers] teamPlan exists:', tpSnap.exists,
+            'leaderBands:', Array.isArray(tpData?.leaderStructureBands) ? tpData.leaderStructureBands.length : 'none',
+            'memberDefaultBands:', Array.isArray(tpData?.memberDefaultBands) ? tpData.memberDefaultBands.length : 'none');
 
-          if (planData) {
-            if (teamRole === 'leader' && Array.isArray(planData.leaderStructureBands)) {
+          if (tpData) {
+            if (teamRole === 'leader' && Array.isArray(tpData.leaderStructureBands)) {
               // Leader: leaderPercent = agent side, companyPercent = company side
-              resolvedTiers = planData.leaderStructureBands.map((b: any, i: number) => ({
+              resolvedTiers = tpData.leaderStructureBands.map((b: any, i: number) => ({
                 tierName: b.tierName || `Tier ${i + 1}`,
                 fromCompanyDollar: asNumber(b.fromCompanyDollar),
                 toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
@@ -593,8 +643,10 @@ export async function GET(req: NextRequest) {
               }));
             } else if (teamRole === 'member') {
               // Check for custom member plan first
+              const agentIdForMember = agentProfileData.agentId || uid;
+              console.log('[dashboard/tiers] Looking up memberPlan for agentId:', agentIdForMember, 'teamId:', teamId);
               const memberPlanSnap = await adminDb.collection('memberPlans')
-                .where('agentId', '==', agentProfileData.agentId)
+                .where('agentId', '==', agentIdForMember)
                 .where('teamId', '==', teamId)
                 .limit(1)
                 .get();
@@ -610,9 +662,9 @@ export async function GET(req: NextRequest) {
                     companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
                   }));
                 }
-              } else if (Array.isArray(planData.memberDefaultBands)) {
+              } else if (Array.isArray(tpData.memberDefaultBands)) {
                 // Fall back to team's default member bands
-                resolvedTiers = planData.memberDefaultBands.map((b: any, i: number) => ({
+                resolvedTiers = tpData.memberDefaultBands.map((b: any, i: number) => ({
                   tierName: b.tierName || `Tier ${i + 1}`,
                   fromCompanyDollar: asNumber(b.fromCompanyDollar),
                   toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
@@ -627,6 +679,7 @@ export async function GET(req: NextRequest) {
         console.warn('[dashboard] Failed to load team plan tiers:', teamErr);
       }
     }
+    console.log('[dashboard/tiers] Final resolvedTiers:', resolvedTiers.length, 'grossGCIYTD:', grossGCIYTD);
 
     // Sort tiers and compute progress
     if (resolvedTiers.length > 0) {
