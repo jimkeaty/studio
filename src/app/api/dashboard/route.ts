@@ -208,8 +208,8 @@ export async function GET(req: NextRequest) {
     let closedVolume = 0;
     let pendingVolume = 0;
     let totalGCI = 0;
-    let companyDollarGCIYTD = 0;
-    let pendingCompanyDollarGCI = 0;
+    let grossGCIYTD = 0;
+    let pendingGrossGCI = 0;
 
     for (const doc of txSnap.docs) {
       const t = doc.data() || {};
@@ -217,9 +217,12 @@ export async function GET(req: NextRequest) {
       const net = getTransactionNet(t);
       const dealValue = asNumber(t.dealValue);
       const gci = asNumber(t.splitSnapshot?.grossCommission || t.commission);
-      const companyDollar = asNumber(
+      // Tier progression tracks total gross commission (progressionCompanyDollarCredit = commission).
+      // Fall back to grossCommission if creditSnapshot not present.
+      const tierGCI = asNumber(
         t.creditSnapshot?.progressionCompanyDollarCredit
-        || t.splitSnapshot?.companyRetained
+        || t.splitSnapshot?.grossCommission
+        || t.commission
       );
 
       if (status === "closed") {
@@ -239,7 +242,7 @@ export async function GET(req: NextRequest) {
           closedUnits += 1;
           closedVolume += dealValue;
           totalGCI += gci;
-          companyDollarGCIYTD += companyDollar;
+          grossGCIYTD += tierGCI;
         }
       } else if (status === "pending" || status === "under_contract") {
         const d = getTransactionDateForPending(t);
@@ -257,7 +260,7 @@ export async function GET(req: NextRequest) {
           netPending += net;
           pendingUnits += 1;
           pendingVolume += dealValue;
-          pendingCompanyDollarGCI += companyDollar;
+          pendingGrossGCI += tierGCI;
         }
       }
     }
@@ -306,23 +309,25 @@ export async function GET(req: NextRequest) {
     let isMetricsGracePeriod = false;
     let agentProfileData: any = null;
     try {
-      // Try matching by agentId patterns: uid directly, or by email
+      // Strategy 1: uid IS the agentId (doc ID) — works for viewAs=agentId
       const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
       if (profileByIdSnap.exists) {
         agentProfileData = profileByIdSnap.data();
-        const profile = agentProfileData;
-        if (profile?.gracePeriodEnabled === true) {
-          // Check if agent started within last 90 days
-          const startDate = toDate(profile.startDate);
-          if (startDate) {
-            const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-            isMetricsGracePeriod = daysSinceStart <= 90;
-          } else {
-            isMetricsGracePeriod = true; // gracePeriodEnabled but no start date → assume grace
-          }
+      }
+
+      // Strategy 2: Search by agentId field (in case doc ID differs)
+      if (!agentProfileData) {
+        const profileByAgentIdSnap = await adminDb.collection('agentProfiles')
+          .where('agentId', '==', uid)
+          .limit(1)
+          .get();
+        if (!profileByAgentIdSnap.empty) {
+          agentProfileData = profileByAgentIdSnap.docs[0].data();
         }
-      } else {
-        // Try finding by email from decoded token
+      }
+
+      // Strategy 3: Match by email from auth token
+      if (!agentProfileData) {
         const email = decoded.email || '';
         if (email) {
           const profileByEmailSnap = await adminDb.collection('agentProfiles')
@@ -331,17 +336,18 @@ export async function GET(req: NextRequest) {
             .get();
           if (!profileByEmailSnap.empty) {
             agentProfileData = profileByEmailSnap.docs[0].data();
-            const profile = agentProfileData;
-            if (profile?.gracePeriodEnabled === true) {
-              const startDate = toDate(profile.startDate);
-              if (startDate) {
-                const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-                isMetricsGracePeriod = daysSinceStart <= 90;
-              } else {
-                isMetricsGracePeriod = true;
-              }
-            }
           }
+        }
+      }
+
+      // Check grace period from profile
+      if (agentProfileData?.gracePeriodEnabled === true) {
+        const startDate = toDate(agentProfileData.startDate);
+        if (startDate) {
+          const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+          isMetricsGracePeriod = daysSinceStart <= 90;
+        } else {
+          isMetricsGracePeriod = true; // gracePeriodEnabled but no start date → assume grace
         }
       }
     } catch (err) {
@@ -553,7 +559,8 @@ export async function GET(req: NextRequest) {
         (a, b) => asNumber(a.fromCompanyDollar) - asNumber(b.fromCompanyDollar)
       );
 
-      const totalGCIForTier = companyDollarGCIYTD;
+      // Tier progression tracks total gross commission generated
+      const totalGCIForTier = grossGCIYTD;
 
       // Find current tier
       let currentTierIndex = 0;
@@ -582,6 +589,26 @@ export async function GET(req: NextRequest) {
         progressInCurrentTier = 100;
       }
 
+      // Calculate effective start date + anniversary (tier reset) date
+      const agentStartDate = agentProfileData?.startDate || null;
+      const annivMonth = asNumber(agentProfileData?.anniversaryMonth);
+      const annivDay = asNumber(agentProfileData?.anniversaryDay);
+      let anniversaryDate: string | null = null;
+      let daysUntilReset: number | null = null;
+
+      if (annivMonth >= 1 && annivMonth <= 12 && annivDay >= 1) {
+        // Build next anniversary date
+        let annivYear = yearNum;
+        const annivThisYear = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
+        // If anniversary already passed this year, use next year's
+        if (annivThisYear.getTime() < todayUtc.getTime()) {
+          annivYear += 1;
+        }
+        const nextAnniv = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
+        anniversaryDate = nextAnniv.toISOString().slice(0, 10);
+        daysUntilReset = Math.ceil((nextAnniv.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24));
+      }
+
       dashboard.tierProgress = {
         tiers: sortedTiers.map((t) => ({
           tierName: t.tierName || '',
@@ -590,14 +617,17 @@ export async function GET(req: NextRequest) {
           agentSplitPercent: asNumber(t.agentSplitPercent),
           companySplitPercent: asNumber(t.companySplitPercent),
         })),
-        companyDollarGCIYTD: Number(companyDollarGCIYTD.toFixed(2)),
-        pendingCompanyDollarGCI: Number(pendingCompanyDollarGCI.toFixed(2)),
+        grossGCIYTD: Number(grossGCIYTD.toFixed(2)),
+        pendingGrossGCI: Number(pendingGrossGCI.toFixed(2)),
         currentTierIndex,
         currentTierName: currentTier.tierName || `Tier ${currentTierIndex + 1}`,
         nextTierName: nextTier ? (nextTier.tierName || `Tier ${currentTierIndex + 2}`) : null,
         nextTierThreshold: nextTier ? asNumber(nextTier.fromCompanyDollar) : null,
         progressInCurrentTier,
         capReached,
+        effectiveStartDate: agentStartDate,
+        anniversaryDate,
+        daysUntilReset,
       };
     }
 

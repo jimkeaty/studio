@@ -881,33 +881,54 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
     );
   }
 
-  const { tiers, companyDollarGCIYTD, pendingCompanyDollarGCI, currentTierIndex, currentTierName, nextTierName, nextTierThreshold, capReached } = tp;
+  const { tiers, grossGCIYTD, pendingGrossGCI, currentTierIndex, currentTierName, nextTierName, nextTierThreshold, capReached, effectiveStartDate, anniversaryDate, daysUntilReset } = tp;
+
+  // Format start / anniversary dates
+  const fmtDate = (d: string | null) => {
+    if (!d) return null;
+    try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; }
+  };
 
   // Calculate the max value for the full bar (highest tier boundary or current GCI whichever is larger)
   const highestBound = tiers.reduce((max, t) => {
     const to = t.toCompanyDollar ?? t.fromCompanyDollar;
     return Math.max(max, to);
   }, 0);
-  const maxBarValue = Math.max(highestBound, companyDollarGCIYTD + pendingCompanyDollarGCI) * 1.05;
+  const maxBarValue = Math.max(highestBound, grossGCIYTD + pendingGrossGCI) * 1.05;
 
-  const closedPct = maxBarValue > 0 ? Math.min(100, (companyDollarGCIYTD / maxBarValue) * 100) : 0;
-  const pendingPct = maxBarValue > 0 ? Math.min(100 - closedPct, ((pendingCompanyDollarGCI) / maxBarValue) * 100) : 0;
-  const remainToNext = nextTierThreshold != null ? Math.max(0, nextTierThreshold - companyDollarGCIYTD) : 0;
+  const closedPct = maxBarValue > 0 ? Math.min(100, (grossGCIYTD / maxBarValue) * 100) : 0;
+  const pendingPct = maxBarValue > 0 ? Math.min(100 - closedPct, (pendingGrossGCI / maxBarValue) * 100) : 0;
+  const remainToNext = nextTierThreshold != null ? Math.max(0, nextTierThreshold - grossGCIYTD) : 0;
   const currentColor = tierColors[currentTierIndex % tierColors.length];
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
             <CardDescription className="mt-0.5">
-              Company $GCI into the brokerage — {fmtCurrency(companyDollarGCIYTD)} closed
-              {pendingCompanyDollarGCI > 0 && ` + ${fmtCurrency(pendingCompanyDollarGCI)} pending`}
+              Gross $GCI generated — {fmtCurrency(grossGCIYTD)} closed
+              {pendingGrossGCI > 0 && ` + ${fmtCurrency(pendingGrossGCI)} pending`}
             </CardDescription>
           </div>
-          <div className={cn('px-3 py-1.5 rounded-full text-sm font-bold border', currentColor.bg, currentColor.border, currentColor.text)}>
-            {currentTierName} · {tiers[currentTierIndex].agentSplitPercent}%/{tiers[currentTierIndex].companySplitPercent}%
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Start date + anniversary info */}
+            {effectiveStartDate && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
+                <CalendarDays className="h-3 w-3" />
+                <span>Started {fmtDate(effectiveStartDate)}</span>
+              </div>
+            )}
+            {daysUntilReset != null && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
+                <Clock className="h-3 w-3" />
+                <span>{daysUntilReset} days until reset{anniversaryDate ? ` (${fmtDate(anniversaryDate)})` : ''}</span>
+              </div>
+            )}
+            <div className={cn('px-3 py-1.5 rounded-full text-sm font-bold border', currentColor.bg, currentColor.border, currentColor.text)}>
+              {currentTierName} · {tiers[currentTierIndex].agentSplitPercent}%/{tiers[currentTierIndex].companySplitPercent}%
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -946,7 +967,7 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
             {/* Current GCI label on bar */}
             <div className="absolute inset-0 flex items-center px-3">
               <span className="text-xs font-bold text-white drop-shadow-sm">
-                {fmtCurrency(companyDollarGCIYTD)}
+                {fmtCurrency(grossGCIYTD)}
               </span>
             </div>
           </div>
@@ -1000,11 +1021,11 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
           {capReached ? (
             <span className="font-semibold text-emerald-600">Cap reached — max tier active</span>
           ) : nextTierName ? (
-            <span><span className="font-semibold">{fmtCurrency(remainToNext)}</span> more company $GCI to reach <span className="font-semibold">{nextTierName}</span></span>
+            <span><span className="font-semibold">{fmtCurrency(remainToNext)}</span> more $GCI to reach <span className="font-semibold">{nextTierName}</span></span>
           ) : (
             <span>Active tier: {currentTierName}</span>
           )}
-          <span>YTD Company $GCI: <span className="font-bold text-foreground">{fmtCurrency(companyDollarGCIYTD)}</span></span>
+          <span>YTD Gross $GCI: <span className="font-bold text-foreground">{fmtCurrency(grossGCIYTD)}</span></span>
         </div>
       </CardContent>
     </Card>

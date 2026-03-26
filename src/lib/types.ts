@@ -211,14 +211,17 @@ export interface AgentDashboardData {
   // Tier / cap progress
   tierProgress?: {
     tiers: { tierName: string; fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number; companySplitPercent: number }[];
-    companyDollarGCIYTD: number;    // total company $ GCI earned this year
-    pendingCompanyDollarGCI: number; // pending company $ GCI
+    grossGCIYTD: number;             // total gross commission generated this year (tier metric)
+    pendingGrossGCI: number;         // pending gross commission
     currentTierIndex: number;        // which tier the agent is in (0-based)
     currentTierName: string;
     nextTierName: string | null;
     nextTierThreshold: number | null; // $ needed to reach next tier
     progressInCurrentTier: number;    // 0-100 percentage through current tier
     capReached: boolean;             // true if at highest tier and past toCompanyDollar
+    effectiveStartDate: string | null; // agent start date
+    anniversaryDate: string | null;   // next anniversary (tier reset) date
+    daysUntilReset: number | null;    // days until anniversary/tier reset
   };
 
   // Volume & deals grading
