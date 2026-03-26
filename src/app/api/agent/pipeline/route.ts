@@ -22,13 +22,19 @@ export async function GET(req: NextRequest) {
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
 
     // Fetch all agent transactions
+    // Note: no orderBy to avoid requiring a composite index
     const txSnap = await adminDb
       .collection('transactions')
       .where('agentId', '==', uid)
-      .orderBy('createdAt', 'desc')
       .get();
 
-    const allTx = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allTx = txSnap.docs
+      .map(d => ({ id: d.id, ...d.data() } as any))
+      .sort((a, b) => {
+        const aDate = a.createdAt?.toDate?.() ?? new Date(a.createdAt ?? 0);
+        const bDate = b.createdAt?.toDate?.() ?? new Date(b.createdAt ?? 0);
+        return bDate.getTime() - aDate.getTime();
+      });
 
     const pendingTransactions = allTx.filter((t: any) =>
       t.status === 'pending' || t.status === 'under_contract'
