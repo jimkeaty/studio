@@ -29,11 +29,21 @@ export async function GET(req: NextRequest) {
       .get();
 
     const allTx = txSnap.docs
-      .map(d => ({ id: d.id, ...d.data() } as any))
+      .map(d => {
+        const raw = d.data() || {};
+        // Serialize Firestore Timestamps to ISO strings for JSON safety
+        const serialized: any = { id: d.id };
+        for (const [k, v] of Object.entries(raw)) {
+          serialized[k] = (v && typeof (v as any).toDate === 'function')
+            ? (v as any).toDate().toISOString()
+            : v;
+        }
+        return serialized;
+      })
       .sort((a, b) => {
-        const aDate = a.createdAt?.toDate?.() ?? new Date(a.createdAt ?? 0);
-        const bDate = b.createdAt?.toDate?.() ?? new Date(b.createdAt ?? 0);
-        return bDate.getTime() - aDate.getTime();
+        const aTime = new Date(a.createdAt || 0).getTime() || 0;
+        const bTime = new Date(b.createdAt || 0).getTime() || 0;
+        return bTime - aTime;
       });
 
     const pendingTransactions = allTx.filter((t: any) =>
@@ -47,14 +57,20 @@ export async function GET(req: NextRequest) {
       return dateStr.startsWith(String(year));
     });
 
-    // Fetch active opportunities
-    const oppSnap = await adminDb
-      .collection('opportunities')
-      .where('agentId', '==', uid)
-      .where('isActive', '==', true)
-      .get();
+    // Fetch active opportunities (single-field query + client filter to avoid composite index)
+    let opportunities: any[] = [];
+    try {
+      const oppSnap = await adminDb
+        .collection('opportunities')
+        .where('agentId', '==', uid)
+        .get();
 
-    const opportunities = oppSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      opportunities = oppSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter((o: any) => o.isActive === true);
+    } catch (oppErr: any) {
+      console.warn('[api/agent/pipeline] Failed to fetch opportunities:', oppErr.message);
+    }
 
     return NextResponse.json({
       ok: true,
