@@ -870,12 +870,48 @@ const tierColors = [
 function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
   const tp = dashboard.tierProgress;
 
+  // Format start / anniversary dates (declared early so it's available in both branches)
+  const fmtDateLocal = (d: string | null | undefined) => {
+    if (!d) return null;
+    try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; }
+  };
+
   if (!tp || tp.tiers.length === 0) {
+    const debugInfo = (tp as any)?._debug;
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
-          <CardDescription>No commission tiers configured — contact your admin.</CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
+              <CardDescription>No commission tiers configured — contact your admin.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {tp?.effectiveStartDate && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
+                  <CalendarDays className="h-3 w-3" />
+                  <span>Started {fmtDateLocal(tp.effectiveStartDate)}</span>
+                </div>
+              )}
+              {tp?.daysUntilReset != null && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
+                  <Clock className="h-3 w-3" />
+                  <span>{tp.daysUntilReset} days until reset{tp.anniversaryDate ? ` (${fmtDateLocal(tp.anniversaryDate)})` : ''}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          {tp && (tp.grossGCIYTD > 0 || tp.pendingGrossGCI > 0) && (
+            <p className="text-sm mt-2 text-muted-foreground">
+              Gross GCI: {fmtCurrency(tp.grossGCIYTD)} closed{tp.pendingGrossGCI > 0 && ` + ${fmtCurrency(tp.pendingGrossGCI)} pending`}
+            </p>
+          )}
+          {debugInfo && (
+            <p className="text-xs mt-2 text-muted-foreground/60">
+              Debug: profile={debugInfo.profileFound ? 'found' : 'NOT FOUND'}, type={debugInfo.agentType ?? 'null'},
+              tiers={debugInfo.tiersOnProfile}, teamId={debugInfo.primaryTeamId ?? 'none'}, role={debugInfo.teamRole ?? 'none'}
+            </p>
+          )}
         </CardHeader>
       </Card>
     );
@@ -883,11 +919,7 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
 
   const { tiers, grossGCIYTD, pendingGrossGCI, currentTierIndex, currentTierName, nextTierName, nextTierThreshold, capReached, effectiveStartDate, anniversaryDate, daysUntilReset } = tp;
 
-  // Format start / anniversary dates
-  const fmtDate = (d: string | null) => {
-    if (!d) return null;
-    try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; }
-  };
+  const fmtDate = fmtDateLocal;
 
   // Calculate the max value for the full bar (highest tier boundary or current GCI whichever is larger)
   const highestBound = tiers.reduce((max, t) => {

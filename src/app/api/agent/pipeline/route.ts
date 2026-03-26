@@ -7,6 +7,21 @@ function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
+/** Recursively convert Firestore Timestamps to ISO strings */
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
@@ -29,17 +44,7 @@ export async function GET(req: NextRequest) {
       .get();
 
     const allTx = txSnap.docs
-      .map(d => {
-        const raw = d.data() || {};
-        // Serialize Firestore Timestamps to ISO strings for JSON safety
-        const serialized: any = { id: d.id };
-        for (const [k, v] of Object.entries(raw)) {
-          serialized[k] = (v && typeof (v as any).toDate === 'function')
-            ? (v as any).toDate().toISOString()
-            : v;
-        }
-        return serialized;
-      })
+      .map(d => ({ id: d.id, ...serializeFirestore(d.data() || {}) }))
       .sort((a, b) => {
         const aTime = new Date(a.createdAt || 0).getTime() || 0;
         const bTime = new Date(b.createdAt || 0).getTime() || 0;
@@ -66,7 +71,7 @@ export async function GET(req: NextRequest) {
         .get();
 
       opportunities = oppSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
+        .map(d => ({ id: d.id, ...serializeFirestore(d.data() || {}) }))
         .filter((o: any) => o.isActive === true);
     } catch (oppErr: any) {
       console.warn('[api/agent/pipeline] Failed to fetch opportunities:', oppErr.message);

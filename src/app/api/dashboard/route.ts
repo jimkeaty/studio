@@ -681,6 +681,22 @@ export async function GET(req: NextRequest) {
     }
     console.log('[dashboard/tiers] Final resolvedTiers:', resolvedTiers.length, 'grossGCIYTD:', grossGCIYTD);
 
+    // Start date + anniversary (tier reset) date — always compute regardless of tiers
+    const agentStartDate = agentProfileData?.startDate || null;
+    const annivMonth = asNumber(agentProfileData?.anniversaryMonth);
+    const annivDay = asNumber(agentProfileData?.anniversaryDay);
+    let anniversaryDate: string | null = null;
+    let daysUntilReset: number | null = null;
+
+    if (annivMonth >= 1 && annivMonth <= 12 && annivDay >= 1) {
+      let annivYear = yearNum;
+      const annivThisYear = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
+      if (annivThisYear.getTime() < todayUtc.getTime()) annivYear += 1;
+      const nextAnniv = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
+      anniversaryDate = nextAnniv.toISOString().slice(0, 10);
+      daysUntilReset = Math.ceil((nextAnniv.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24));
+    }
+
     // Sort tiers and compute progress
     if (resolvedTiers.length > 0) {
       const sortedTiers = [...resolvedTiers].sort(
@@ -715,22 +731,6 @@ export async function GET(req: NextRequest) {
         progressInCurrentTier = 100;
       }
 
-      // Start date + anniversary (tier reset) date
-      const agentStartDate = agentProfileData?.startDate || null;
-      const annivMonth = asNumber(agentProfileData?.anniversaryMonth);
-      const annivDay = asNumber(agentProfileData?.anniversaryDay);
-      let anniversaryDate: string | null = null;
-      let daysUntilReset: number | null = null;
-
-      if (annivMonth >= 1 && annivMonth <= 12 && annivDay >= 1) {
-        let annivYear = yearNum;
-        const annivThisYear = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
-        if (annivThisYear.getTime() < todayUtc.getTime()) annivYear += 1;
-        const nextAnniv = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
-        anniversaryDate = nextAnniv.toISOString().slice(0, 10);
-        daysUntilReset = Math.ceil((nextAnniv.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24));
-      }
-
       dashboard.tierProgress = {
         tiers: sortedTiers,
         grossGCIYTD: Number(grossGCIYTD.toFixed(2)),
@@ -745,6 +745,30 @@ export async function GET(req: NextRequest) {
         anniversaryDate,
         daysUntilReset,
       };
+    } else {
+      // No tiers resolved — still provide start date info + diagnostic data
+      dashboard.tierProgress = {
+        tiers: [],
+        grossGCIYTD: Number(grossGCIYTD.toFixed(2)),
+        pendingGrossGCI: Number(pendingGrossGCI.toFixed(2)),
+        currentTierIndex: 0,
+        currentTierName: 'No Tier',
+        nextTierName: null,
+        nextTierThreshold: null,
+        progressInCurrentTier: 0,
+        capReached: false,
+        effectiveStartDate: agentStartDate,
+        anniversaryDate,
+        daysUntilReset,
+        // Diagnostic: why tiers weren't resolved
+        _debug: {
+          profileFound: !!agentProfileData,
+          agentType: agentProfileData?.agentType ?? null,
+          tiersOnProfile: Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers.length : 0,
+          primaryTeamId: agentProfileData?.primaryTeamId ?? null,
+          teamRole: agentProfileData?.teamRole ?? null,
+        },
+      } as any;
     }
 
     // ── Previous year comparison ─────────────────────────────────────────
