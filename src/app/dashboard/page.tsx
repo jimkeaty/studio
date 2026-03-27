@@ -1141,7 +1141,7 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
         <HeroCard
-          title="Projected with Pending" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)}
+          title="Pipeline Net Income" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)}
           performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
           secondary={ytdIncomeGoal > 0
             ? (() => {
@@ -1166,7 +1166,7 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
             icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
-            title="Projected Deals (w/ Pending)" grade={vm.projectedDealsGrade} primary={`${vm.closedDeals + vm.pendingDeals} total`}
+            title="Pipeline Sales" grade={vm.projectedDealsGrade} primary={`${vm.closedDeals + vm.pendingDeals} total`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.projectedDealsPerformance) : undefined}
             secondary={vm.dealsGoal != null
               ? (() => {
@@ -1185,7 +1185,7 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
             icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
-            title="Projected Volume (w/ Pending)" grade={vm.projectedVolumeGrade} primary={fmtCurrency(vm.totalVolume)}
+            title="Pipeline $ Volume Sold" grade={vm.projectedVolumeGrade} primary={fmtCurrency(vm.totalVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.projectedVolumePerformance) : undefined}
             secondary={vm.volumeGoal != null
               ? (() => {

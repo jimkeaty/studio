@@ -569,6 +569,17 @@ export async function GET(req: NextRequest) {
       dashboard.incomeDeltaToGoal = Number((netEarned - expectedYTDIncomeGoal).toFixed(2));
     }
 
+    // Override KPI closings target with monthly sales goals if available
+    if (salesGoalToDate > 0) {
+      const recalcClosingsPerf = performance(closedUnits, salesGoalToDate);
+      dashboard.kpis.closings = {
+        actual: closedUnits,
+        target: salesGoalToDate,
+        performance: recalcClosingsPerf,
+        grade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(recalcClosingsPerf),
+      };
+    }
+
     // Volume & deals: grade closed against current YTD goal,
     // projected against goal at pending close date
     const volumePerf = performance(closedVolume, volumeGoalToDate);
