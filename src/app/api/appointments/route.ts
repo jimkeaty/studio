@@ -6,6 +6,20 @@ import { differenceInDays, startOfMonth, endOfMonth, format } from 'date-fns';
 
 const EDIT_WINDOW_DAYS = 45;
 
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 // --- API Helpers ---
 function jsonError(status: number, error: string, code?: string) {
   return NextResponse.json({ ok: false, error, code: code ?? `http_${status}` }, { status });
@@ -71,13 +85,10 @@ export async function GET(req: NextRequest) {
     const snap = await q.get();
 
     const appointments = snap.docs.map(doc => {
-        const data = doc.data();
-        // Convert Timestamps to ISO strings for a consistent return shape.
-        const scheduledAt = data.scheduledAt ? data.scheduledAt.toDate().toISOString() : null;
-        const heldAt = data.heldAt ? data.heldAt.toDate().toISOString() : null;
-        // Also convert createdAt to handle sorting and provide a consistent data shape.
-        const createdAt = data.createdAt ? data.createdAt.toDate().toISOString() : new Date(0).toISOString();
-        return { id: doc.id, ...data, scheduledAt, heldAt, createdAt };
+        const serialized = serializeFirestore(doc.data());
+        // Ensure createdAt has a fallback for sorting
+        if (!serialized.createdAt) serialized.createdAt = new Date(0).toISOString();
+        return { id: doc.id, ...serialized };
     });
 
     // Sort in memory to avoid needing composite indexes in Firestore.
@@ -105,7 +116,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { uid, role } = await requireUser(req);
-    const body = await req.json();
+
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return jsonError(400, 'Invalid or missing JSON body');
+    }
 
     if (!body.date || !body.contactName || !body.category || !body.status) {
       return jsonError(400, 'Missing required fields');

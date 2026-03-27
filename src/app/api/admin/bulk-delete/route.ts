@@ -100,22 +100,26 @@ export async function POST(req: NextRequest) {
         .get();
 
       if (!agentSnap.empty) {
-        // For each auto-created agent, check if they still have transactions
-        // Only delete agents with zero remaining transactions
+        // Check all agents for remaining transactions in parallel (fixes N+1 query)
+        const agentDocs = agentSnap.docs;
+        const remainingTxChecks = await Promise.all(
+          agentDocs.map((agentDoc) => {
+            const agentId = agentDoc.data().agentId || agentDoc.id;
+            return adminDb
+              .collection('transactions')
+              .where('agentId', '==', agentId)
+              .limit(1)
+              .get();
+          })
+        );
+
+        // Now batch-delete agents with zero remaining transactions
         let agentBatch = adminDb.batch();
         let agentBatchCount = 0;
 
-        for (const agentDoc of agentSnap.docs) {
-          const agentId = agentDoc.data().agentId || agentDoc.id;
-          const remainingTx = await adminDb
-            .collection('transactions')
-            .where('agentId', '==', agentId)
-            .limit(1)
-            .get();
-
-          if (remainingTx.empty) {
-            // No transactions left — safe to delete this agent
-            agentBatch.delete(agentDoc.ref);
+        for (let i = 0; i < agentDocs.length; i++) {
+          if (remainingTxChecks[i].empty) {
+            agentBatch.delete(agentDocs[i].ref);
             agentsDeleted++;
             agentBatchCount++;
 

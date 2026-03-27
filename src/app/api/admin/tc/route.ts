@@ -5,6 +5,20 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
@@ -28,29 +42,26 @@ export async function GET(req: NextRequest) {
 
     let query: FirebaseFirestore.Query = adminDb
       .collection('tcIntakes')
-      .orderBy('submittedAt', 'desc')
       .limit(500);
 
     if (statusFilter && statusFilter !== 'all') {
       query = adminDb
         .collection('tcIntakes')
         .where('status', '==', statusFilter)
-        .orderBy('submittedAt', 'desc')
         .limit(500);
     }
 
     const snap = await query.get();
-    const intakes = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        submittedAt: data.submittedAt?.toDate?.()?.toISOString() ?? data.submittedAt,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? data.updatedAt,
-        reviewedAt: data.reviewedAt?.toDate?.()?.toISOString() ?? data.reviewedAt,
-        contractDate: data.contractDate?.toDate?.()?.toISOString() ?? data.contractDate,
-        projectedCloseDate: data.projectedCloseDate?.toDate?.()?.toISOString() ?? data.projectedCloseDate,
-      };
+    const intakes = snap.docs.map((d) => ({
+      id: d.id,
+      ...serializeFirestore(d.data()),
+    }));
+
+    // Sort client-side to avoid composite index requirements
+    intakes.sort((a, b) => {
+      const aTime = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+      const bTime = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+      return bTime - aTime;
     });
 
     return NextResponse.json({ ok: true, intakes });

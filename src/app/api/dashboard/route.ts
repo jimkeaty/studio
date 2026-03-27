@@ -4,6 +4,20 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
 import type { AgentDashboardData, BusinessPlan } from "@/lib/types";
 
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 function getBearerToken(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const match = authHeader.match(/^Bearer (.+)$/i);
@@ -141,7 +155,40 @@ export async function GET(req: NextRequest) {
     const year = parseYear(req);
     const yearNum = Number(year);
 
-    const planSnap = await planDocRef(adminDb, uid, year).get();
+    // ── Phase 1: Fetch plan + agent profile in parallel ────────────────
+    const [planSnap, agentProfileData] = await Promise.all([
+      planDocRef(adminDb, uid, year).get(),
+      (async () => {
+        try {
+          // Strategy 1: uid IS the agentId (doc ID)
+          const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+          if (profileByIdSnap.exists) return profileByIdSnap.data();
+
+          // Strategy 2: Search by agentId field
+          const profileByAgentIdSnap = await adminDb.collection('agentProfiles')
+            .where('agentId', '==', uid)
+            .limit(1)
+            .get();
+          if (!profileByAgentIdSnap.empty) return profileByAgentIdSnap.docs[0].data();
+
+          // Strategy 3: Match by email from auth token
+          const email = decoded.email || '';
+          if (email) {
+            const profileByEmailSnap = await adminDb.collection('agentProfiles')
+              .where('email', '==', email)
+              .limit(1)
+              .get();
+            if (!profileByEmailSnap.empty) return profileByEmailSnap.docs[0].data();
+          }
+
+          return null;
+        } catch (err) {
+          console.warn('[dashboard] Failed to fetch agent profile:', err);
+          return null;
+        }
+      })(),
+    ]);
+
     const plan = (planSnap.exists ? (planSnap.data() ?? {}) : {}) as Partial<BusinessPlan>;
 
     const yearStart = startOfYear(yearNum);
@@ -182,11 +229,25 @@ export async function GET(req: NextRequest) {
     const dailyEngagementTarget = asNumber(plan.calculatedTargets?.engagements?.daily);
     const engagementGoalToDate = Number((dailyEngagementTarget * elapsedWorkdays).toFixed(2));
 
-    const txSnap = await adminDb
-      .collection("transactions")
-      .where("agentId", "==", uid)
-      .where("year", "==", yearNum)
-      .get();
+    // ── Phase 2: Fetch transactions, daily activity, and goals in parallel ─
+    const goalSegment = `agent_${uid}`;
+    const [txSnap, activitySnap, goalsSnap] = await Promise.all([
+      adminDb
+        .collection("transactions")
+        .where("agentId", "==", uid)
+        .where("year", "==", yearNum)
+        .get(),
+      adminDb
+        .collection("daily_activity")
+        .where("agentId", "==", uid)
+        .where("date", ">=", toYmd(effectiveStart))
+        .where("date", "<=", toYmd(asOf))
+        .get(),
+      adminDb.collection("brokerCommandGoals")
+        .where("year", "==", yearNum)
+        .where("segment", "==", goalSegment)
+        .get(),
+    ]);
 
     let netEarned = 0;
     let netPending = 0;
@@ -277,13 +338,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const activitySnap = await adminDb
-      .collection("daily_activity")
-      .where("agentId", "==", uid)
-      .where("date", ">=", toYmd(effectiveStart))
-      .where("date", "<=", toYmd(asOf))
-      .get();
-
     let callsActual = 0;
     let engagementsActual = 0;
     let appointmentsSetActual = 0;
@@ -317,53 +371,16 @@ export async function GET(req: NextRequest) {
       (asNumber(plan.calculatedTargets?.engagements?.daily) + behindAmount / catchUpWindowDays).toFixed(2)
     );
 
-    // ── Fetch agent profile for grace period + tiers ───────────────────
+    // ── Grace period from agent profile (fetched in Phase 1) ───────────
     let isMetricsGracePeriod = false;
-    let agentProfileData: any = null;
-    try {
-      // Strategy 1: uid IS the agentId (doc ID) — works for viewAs=agentId
-      const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
-      if (profileByIdSnap.exists) {
-        agentProfileData = profileByIdSnap.data();
+    if (agentProfileData?.gracePeriodEnabled === true) {
+      const startDate = toDate(agentProfileData.startDate);
+      if (startDate) {
+        const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+        isMetricsGracePeriod = daysSinceStart <= 90;
+      } else {
+        isMetricsGracePeriod = true; // gracePeriodEnabled but no start date → assume grace
       }
-
-      // Strategy 2: Search by agentId field (in case doc ID differs)
-      if (!agentProfileData) {
-        const profileByAgentIdSnap = await adminDb.collection('agentProfiles')
-          .where('agentId', '==', uid)
-          .limit(1)
-          .get();
-        if (!profileByAgentIdSnap.empty) {
-          agentProfileData = profileByAgentIdSnap.docs[0].data();
-        }
-      }
-
-      // Strategy 3: Match by email from auth token
-      if (!agentProfileData) {
-        const email = decoded.email || '';
-        if (email) {
-          const profileByEmailSnap = await adminDb.collection('agentProfiles')
-            .where('email', '==', email)
-            .limit(1)
-            .get();
-          if (!profileByEmailSnap.empty) {
-            agentProfileData = profileByEmailSnap.docs[0].data();
-          }
-        }
-      }
-
-      // Check grace period from profile
-      if (agentProfileData?.gracePeriodEnabled === true) {
-        const startDate = toDate(agentProfileData.startDate);
-        if (startDate) {
-          const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-          isMetricsGracePeriod = daysSinceStart <= 90;
-        } else {
-          isMetricsGracePeriod = true; // gracePeriodEnabled but no start date → assume grace
-        }
-      }
-    } catch (err) {
-      console.warn('[dashboard] Failed to check grace period:', err);
     }
 
     const dashboard: AgentDashboardData = {
@@ -490,13 +507,7 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    // ── Fetch agent goals (volume + sales count + income) ──────────────
-    const goalSegment = `agent_${uid}`;
-    const goalsSnap = await adminDb.collection("brokerCommandGoals")
-      .where("year", "==", yearNum)
-      .where("segment", "==", goalSegment)
-      .get();
-
+    // ── Process agent goals (volume + sales count + income) ────────────
     // Current month (1-based)
     const currentMonth = asOf.getUTCMonth() + 1; // 1=Jan, 12=Dec
 
@@ -592,12 +603,6 @@ export async function GET(req: NextRequest) {
     // Build tiers from profile (independent agents) OR team plan (team agents)
     let resolvedTiers: { tierName: string; fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number; companySplitPercent: number }[] = [];
 
-    console.log('[dashboard/tiers] uid:', uid, 'profileFound:', !!agentProfileData,
-      'agentType:', agentProfileData?.agentType,
-      'tiersOnProfile:', Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers.length : 'none',
-      'primaryTeamId:', agentProfileData?.primaryTeamId,
-      'teamRole:', agentProfileData?.teamRole);
-
     // 1) Try individual tiers from profile
     if (Array.isArray(agentProfileData?.tiers) && agentProfileData.tiers.length > 0) {
       resolvedTiers = agentProfileData.tiers.map((t: any, i: number) => ({
@@ -607,7 +612,6 @@ export async function GET(req: NextRequest) {
         agentSplitPercent: asNumber(t.agentSplitPercent),
         companySplitPercent: asNumber(t.companySplitPercent),
       }));
-      console.log('[dashboard/tiers] Resolved from profile tiers:', resolvedTiers.length);
     }
 
     // 2) If no individual tiers, try team plan bands (for team leaders/members)
@@ -620,16 +624,10 @@ export async function GET(req: NextRequest) {
         const teamSnap = await adminDb.collection('teams').doc(teamId).get();
         const teamData = teamSnap.exists ? teamSnap.data() : null;
         const teamPlanId = teamData?.teamPlanId;
-        console.log('[dashboard/tiers] teamId:', teamId, 'teamExists:', teamSnap.exists,
-          'teamPlanId:', teamPlanId, 'teamRole:', teamRole,
-          'teamDataKeys:', teamData ? Object.keys(teamData) : 'null');
 
         if (teamPlanId) {
           const tpSnap = await adminDb.collection('teamPlans').doc(teamPlanId).get();
           const tpData = tpSnap.exists ? tpSnap.data() : null;
-          console.log('[dashboard/tiers] teamPlan exists:', tpSnap.exists,
-            'leaderBands:', Array.isArray(tpData?.leaderStructureBands) ? tpData.leaderStructureBands.length : 'none',
-            'memberDefaultBands:', Array.isArray(tpData?.memberDefaultBands) ? tpData.memberDefaultBands.length : 'none');
 
           if (tpData) {
             if (teamRole === 'leader' && Array.isArray(tpData.leaderStructureBands)) {
@@ -644,7 +642,6 @@ export async function GET(req: NextRequest) {
             } else if (teamRole === 'member') {
               // Check for custom member plan first
               const agentIdForMember = agentProfileData.agentId || uid;
-              console.log('[dashboard/tiers] Looking up memberPlan for agentId:', agentIdForMember, 'teamId:', teamId);
               const memberPlanSnap = await adminDb.collection('memberPlans')
                 .where('agentId', '==', agentIdForMember)
                 .where('teamId', '==', teamId)
@@ -679,7 +676,7 @@ export async function GET(req: NextRequest) {
         console.warn('[dashboard] Failed to load team plan tiers:', teamErr);
       }
     }
-    console.log('[dashboard/tiers] Final resolvedTiers:', resolvedTiers.length, 'grossGCIYTD:', grossGCIYTD);
+    console.log(`[dashboard] tiers resolved: ${resolvedTiers.length}, grossGCI: ${grossGCIYTD.toFixed(2)}, profile: ${!!agentProfileData}`);
 
     // Start date + anniversary (tier reset) date — always compute regardless of tiers
     const agentStartDate = agentProfileData?.startDate || null;
@@ -771,18 +768,30 @@ export async function GET(req: NextRequest) {
       } as any;
     }
 
-    // ── Previous year comparison ─────────────────────────────────────────
+    // ── Phase 3: Previous year comparison + available years in parallel ─
     const compareYearParam = reqParams.get("compareYear");
     let prevYearComparison: typeof dashboard.prevYearComparison = null;
 
     const compYear = compareYearParam ? Number(compareYearParam) : yearNum - 1;
 
-    // Always try to load comparison data
-    const prevTxSnap = await adminDb
-      .collection("transactions")
-      .where("agentId", "==", uid)
-      .where("year", "==", compYear)
-      .get();
+    const [prevTxSnap, prevActivitySnap, allTxYearsSnap] = await Promise.all([
+      adminDb
+        .collection("transactions")
+        .where("agentId", "==", uid)
+        .where("year", "==", compYear)
+        .get(),
+      adminDb
+        .collection("daily_activity")
+        .where("agentId", "==", uid)
+        .where("date", ">=", `${compYear}-01-01`)
+        .where("date", "<=", `${compYear}-12-31`)
+        .get(),
+      adminDb
+        .collection("transactions")
+        .where("agentId", "==", uid)
+        .select("year")
+        .get(),
+    ]);
 
     if (!prevTxSnap.empty) {
       let prevNetEarned = 0;
@@ -800,14 +809,6 @@ export async function GET(req: NextRequest) {
         prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
         prevClosedUnits += 1;
       }
-
-      // Get prev year activity for engagement/appointment values
-      const prevActivitySnap = await adminDb
-        .collection("daily_activity")
-        .where("agentId", "==", uid)
-        .where("date", ">=", `${compYear}-01-01`)
-        .where("date", "<=", `${compYear}-12-31`)
-        .get();
 
       let prevEngagements = 0;
       let prevAppointmentsHeld = 0;
@@ -831,12 +832,6 @@ export async function GET(req: NextRequest) {
 
     dashboard.prevYearComparison = prevYearComparison;
 
-    // Available comparison years
-    const allTxYearsSnap = await adminDb
-      .collection("transactions")
-      .where("agentId", "==", uid)
-      .select("year")
-      .get();
     const availableYears = [...new Set(allTxYearsSnap.docs.map(d => asNumber(d.data().year)))]
       .filter(y => y > 0 && y !== yearNum)
       .sort((a, b) => b - a);
@@ -847,7 +842,7 @@ export async function GET(req: NextRequest) {
       ok: true,
       year: yearNum,
       dashboard,
-      plan,
+      plan: serializeFirestore(plan),
       ytdMetrics: null,
     });
   } catch (e: any) {

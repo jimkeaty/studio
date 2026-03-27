@@ -255,7 +255,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
     if (!prevYearStats) return;
     const sw: typeof seasonWeights = {};
     for (let m = 1; m <= 12; m++) {
-      const s = prevYearStats.seasonality[m - 1];
+      const s = prevYearStats?.seasonality?.[m - 1];
       sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
     }
     setSeasonWeights(sw);
@@ -1117,8 +1117,8 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
   const pipelinePct = ytdIncomeGoal > 0 ? Math.round((dashboard.ytdTotalPotential / ytdIncomeGoal) * 100) : 0;
   const pipelineDeltaPct = ytdIncomeGoal > 0 ? Math.round(((dashboard.ytdTotalPotential - ytdIncomeGoal) / ytdIncomeGoal) * 100) : 0;
   const vm = dashboard.volumeMetrics;
-  const engGoal = dashboard.engagementGoalToDate ?? dashboard.kpis.engagements.target;
-  const engActual = dashboard.kpis.engagements.actual;
+  const engGoal = dashboard.engagementGoalToDate ?? dashboard.kpis?.engagements?.target ?? 0;
+  const engActual = dashboard.kpis?.engagements?.actual ?? 0;
   const engPct = engGoal > 0 ? Math.round((engActual / engGoal) * 100) : 0;
   const engDeltaPct = engGoal > 0 ? Math.round(((engActual - engGoal) / engGoal) * 100) : 0;
 
@@ -1171,7 +1171,7 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
             secondary={vm.dealsGoal != null
               ? (() => {
                   const projDGoal = vm.projectedDealsGoal ?? vm.dealsGoal;
-                  return (vm.projectedDealsPerformance >= 100 ? `${Math.round(vm.projectedDealsPerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedDealsPerformance)}% behind`) + ` · ${fmtNum(projDGoal!)} projected goal · ${vm.pendingDeals} pending`;
+                  return (vm.projectedDealsPerformance >= 100 ? `${Math.round(vm.projectedDealsPerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedDealsPerformance)}% behind`) + ` · ${fmtNum(projDGoal ?? 0)} projected goal · ${vm.pendingDeals} pending`;
                 })()
               : `${vm.closedDeals} closed + ${vm.pendingDeals} pending`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
@@ -1190,7 +1190,7 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
             secondary={vm.volumeGoal != null
               ? (() => {
                   const projVolGoal = vm.projectedVolumeGoal ?? vm.volumeGoal;
-                  return (vm.projectedVolumePerformance >= 100 ? `${Math.round(vm.projectedVolumePerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedVolumePerformance)}% behind`) + ` · ${fmtCurrency(projVolGoal!)} projected goal · ${fmtCurrency(vm.pendingVolume)} pending`;
+                  return (vm.projectedVolumePerformance >= 100 ? `${Math.round(vm.projectedVolumePerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedVolumePerformance)}% behind`) + ` · ${fmtCurrency(projVolGoal ?? 0)} projected goal · ${fmtCurrency(vm.pendingVolume)} pending`;
                 })()
               : `${fmtCurrency(vm.pendingVolume)} pending · Closed + pending volume`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}

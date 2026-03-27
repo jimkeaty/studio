@@ -8,6 +8,20 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
@@ -59,7 +73,6 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (!result) return jsonError(404, 'Intake not found');
 
     const { doc, collection } = result;
-    const data = doc.data()!;
 
     // Fetch checklist subcollection (works for both collections)
     let checklist: any[] = [];
@@ -68,17 +81,15 @@ export async function GET(req: NextRequest, { params }: Params) {
         .collection(collection)
         .doc(id)
         .collection('checklist')
-        .orderBy('order', 'asc')
         .get();
 
-      checklist = checklistSnap.docs.map((d) => {
-        const itemData = d.data();
-        return {
-          id: d.id,
-          ...itemData,
-          completedAt: itemData.completedAt?.toDate?.()?.toISOString() ?? itemData.completedAt,
-        };
-      });
+      checklist = checklistSnap.docs.map((d) => ({
+        id: d.id,
+        ...serializeFirestore(d.data()),
+      }));
+
+      // Sort client-side by order
+      checklist.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     } catch {
       // Checklist subcollection may not exist
     }
@@ -87,12 +98,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       ok: true,
       intake: {
         id: doc.id,
-        ...data,
-        submittedAt: data.submittedAt?.toDate?.()?.toISOString() ?? data.submittedAt,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? data.updatedAt,
-        reviewedAt: data.reviewedAt?.toDate?.()?.toISOString() ?? data.reviewedAt,
-        contractDate: data.contractDate?.toDate?.()?.toISOString() ?? data.contractDate,
-        projectedCloseDate: data.projectedCloseDate?.toDate?.()?.toISOString() ?? data.projectedCloseDate,
+        ...serializeFirestore(doc.data()!),
       },
       checklist,
     });

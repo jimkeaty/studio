@@ -5,6 +5,20 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
@@ -25,17 +39,18 @@ export async function GET(req: NextRequest) {
 
     const snap = await adminDb
       .collection('tcProfiles')
-      .orderBy('createdAt', 'desc')
       .get();
 
-    const profiles = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? data.createdAt,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? data.updatedAt,
-      };
+    const profiles = snap.docs.map((d) => ({
+      id: d.id,
+      ...serializeFirestore(d.data()),
+    }));
+
+    // Sort client-side to avoid composite index requirements
+    profiles.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
     });
 
     return NextResponse.json({ ok: true, profiles });

@@ -10,6 +10,19 @@ function bearer(req: NextRequest) {
   return h.startsWith('Bearer ') ? h.slice(7).trim() : null;
 }
 function num(v: any): number { const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0; }
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
 function toDate(v: any): Date | null {
   if (!v) return null;
   if (typeof v?.toDate === 'function') return v.toDate();
@@ -90,16 +103,15 @@ export async function GET(req: NextRequest) {
     const rules = rulesDoc.exists ? { ...DEFAULT_RULES, ...rulesDoc.data() } : DEFAULT_RULES;
 
     // ── Fetch agents ──────────────────────────────────────────────────────
-    const profileSnap = await adminDb.collection('agentProfiles').get();
+    const profileSnap = await adminDb.collection('agentProfiles').where('status', '==', 'active').get();
     const agents: any[] = [];
     for (const doc of profileSnap.docs) {
       const d = doc.data();
-      if (d.status && d.status !== 'active') continue;
       agents.push({ id: doc.id, ...d });
     }
 
     // ── Fetch transactions ────────────────────────────────────────────────
-    const txSnap = await adminDb.collection('transactions').where('year', '==', yearNum).get();
+    const txSnap = await adminDb.collection('transactions').where('year', '==', yearNum).limit(5000).get();
     const txByAgent = new Map<string, any[]>();
     for (const doc of txSnap.docs) {
       const t = { id: doc.id, ...doc.data() };
@@ -116,6 +128,7 @@ export async function GET(req: NextRequest) {
     const actSnap = await adminDb.collection('daily_activity')
       .where('date', '>=', `${yearNum}-01-01`)
       .where('date', '<=', endYmd)
+      .limit(5000)
       .get();
 
     const actByAgent = new Map<string, { eng: number; apptHeld: number; contracts: number }>();
@@ -254,14 +267,14 @@ export async function GET(req: NextRequest) {
         : 5;
     }
 
-    return NextResponse.json({
+    return NextResponse.json(serializeFirestore({
       ok: true,
       year: yearNum,
       standings,
       rules,
       totalRacers: standings.length,
       seasonName: rules.seasonName,
-    });
+    }));
   } catch (err: any) {
     console.error('[keaty-cup]', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

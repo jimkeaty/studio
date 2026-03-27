@@ -6,6 +6,20 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 function jsonError(status: number, error: string, details?: any) {
   return NextResponse.json({ ok: false, error, details: details ?? null }, { status });
 }
@@ -26,10 +40,15 @@ export async function GET(req: NextRequest) {
 
     const snap = await adminDb
       .collection('transactions')
-      .orderBy('createdAt', 'desc')
       .get();
 
-    const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const transactions = snap.docs
+      .map(d => serializeFirestore({ id: d.id, ...d.data() }))
+      .sort((a: any, b: any) => {
+        const da = a.createdAt ?? '';
+        const db = b.createdAt ?? '';
+        return da < db ? 1 : da > db ? -1 : 0;
+      });
 
     return NextResponse.json({ ok: true, transactions });
   } catch (err: any) {
@@ -121,7 +140,7 @@ export async function PATCH(req: NextRequest) {
 
     // Fetch the updated doc to return
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
-    const updated = { id: updatedSnap.id, ...updatedSnap.data() };
+    const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });
 
     return NextResponse.json({ ok: true, transaction: updated });
   } catch (err: any) {

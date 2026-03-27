@@ -8,6 +8,20 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
+function serializeFirestore(val: any): any {
+  if (val == null) return val;
+  if (typeof val?.toDate === 'function') return val.toDate().toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestore);
+  if (typeof val === 'object' && val.constructor === Object) {
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = serializeFirestore(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
@@ -54,7 +68,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const data = doc.data()!;
+    const data = serializeFirestore(doc.data()!);
     return NextResponse.json({
       ok: true,
       branding: {
@@ -64,7 +78,7 @@ export async function GET(req: NextRequest) {
         animatedLogoUrl: data.animatedLogoUrl ?? null,
         useAnimatedLogo: data.useAnimatedLogo ?? false,
         primaryColor: data.primaryColor ?? null,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? data.updatedAt ?? null,
+        updatedAt: data.updatedAt ?? null,
       },
     });
   } catch (err: any) {
