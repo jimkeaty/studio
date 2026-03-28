@@ -400,15 +400,13 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
                     : yr.totals.sales;
                   const metricVal = metric === 'grossMargin' ? margin : metric === 'volume' ? volume : sales;
                   const prev = arr[idx + 1];
-                  const prevLimit = prev ? getYearMonthLimit(prev.year) : 11;
-                  const prevMetricVal = prev ? (
-                    metric === 'grossMargin'
-                      ? (compareMode === 'ytd' ? prev.months.slice(0, prevLimit + 1).reduce((s, m) => s + m.grossMargin, 0) : prev.totals.grossMargin)
-                      : metric === 'volume'
-                      ? (compareMode === 'ytd' ? prev.months.slice(0, prevLimit + 1).reduce((s, m) => s + m.volume, 0) : prev.totals.volume)
-                      : (compareMode === 'ytd' ? prev.months.slice(0, prevLimit + 1).reduce((s, m) => s + m.sales, 0) : prev.totals.sales)
-                  ) : null;
-                  const change = prevMetricVal && prevMetricVal > 0 ? ((metricVal - prevMetricVal) / prevMetricVal * 100) : null;
+                  // YoY Change always compares Jan–today for both years (never full-year vs YTD)
+                  const ytdCutoff = currentMonthIdxMY + 1;
+                  const ytdMetricVal = yr.months.slice(0, ytdCutoff).reduce((s, m) => s + m[metric], 0);
+                  const prevYtdMetricVal = prev
+                    ? prev.months.slice(0, ytdCutoff).reduce((s, m) => s + m[metric], 0)
+                    : null;
+                  const change = prevYtdMetricVal && prevYtdMetricVal > 0 ? ((ytdMetricVal - prevYtdMetricVal) / prevYtdMetricVal * 100) : null;
                   const colorIdx = allYears.findIndex(y => y.year === yr.year);
                   return (
                     <tr key={yr.year} className="border-t">
