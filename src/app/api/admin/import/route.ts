@@ -160,9 +160,15 @@ export interface ImportRow {
   teamMember3: string;
   teamMember3Pct: string;
   teamMember3Gci: string;
-  additionalPayee: string;
-  payeePct: string;
-  payeeGci: string;
+  coAgent1: string;
+  coAgent1Pct: string;
+  coAgent1Gci: string;
+  coAgent2: string;
+  coAgent2Pct: string;
+  coAgent2Gci: string;
+  coAgent3: string;
+  coAgent3Pct: string;
+  coAgent3Gci: string;
   expenseCredits: string;
   mortgageCompany: string;
   titleCompany: string;
@@ -393,9 +399,15 @@ export async function POST(req: NextRequest) {
         const teamMember3 = toOptStr(row.teamMember3);
         const teamMember3Pct = toNum(row.teamMember3Pct);
         const teamMember3Gci = toNum(row.teamMember3Gci);
-        const additionalPayee = toOptStr(row.additionalPayee);
-        const payeePct = toNum(row.payeePct);
-        const payeeGci = toNum(row.payeeGci);
+        const coAgent1 = toOptStr(row.coAgent1);
+        const coAgent1Pct = toNum(row.coAgent1Pct);
+        const coAgent1Gci = toNum(row.coAgent1Gci);
+        const coAgent2 = toOptStr(row.coAgent2);
+        const coAgent2Pct = toNum(row.coAgent2Pct);
+        const coAgent2Gci = toNum(row.coAgent2Gci);
+        const coAgent3 = toOptStr(row.coAgent3);
+        const coAgent3Pct = toNum(row.coAgent3Pct);
+        const coAgent3Gci = toNum(row.coAgent3Gci);
         const expenseCredits = toNum(row.expenseCredits);
 
         const year = toYearFromDates(closedDate, contractDate, listingDate);
@@ -483,10 +495,20 @@ export async function POST(req: NextRequest) {
             teamMember3Pct: teamMember3Pct > 0 ? teamMember3Pct : null,
             teamMember3Gci: teamMember3Gci > 0 ? teamMember3Gci : null,
           } : {}),
-          ...(additionalPayee ? {
-            additionalPayee,
-            payeePct: payeePct > 0 ? payeePct : null,
-            payeeGci: payeeGci > 0 ? payeeGci : null,
+          ...(coAgent1 ? {
+            coAgent1,
+            coAgent1Pct: coAgent1Pct > 0 ? coAgent1Pct : null,
+            coAgent1Gci: coAgent1Gci > 0 ? coAgent1Gci : null,
+          } : {}),
+          ...(coAgent2 ? {
+            coAgent2,
+            coAgent2Pct: coAgent2Pct > 0 ? coAgent2Pct : null,
+            coAgent2Gci: coAgent2Gci > 0 ? coAgent2Gci : null,
+          } : {}),
+          ...(coAgent3 ? {
+            coAgent3,
+            coAgent3Pct: coAgent3Pct > 0 ? coAgent3Pct : null,
+            coAgent3Gci: coAgent3Gci > 0 ? coAgent3Gci : null,
           } : {}),
           ...(expenseCredits > 0 ? { expenseCredits } : {}),
 

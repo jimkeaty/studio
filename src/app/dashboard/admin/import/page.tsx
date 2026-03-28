@@ -70,9 +70,15 @@ const CSV_HEADERS = [
   'Team Member3',
   '% to Member 3',
   'Member GCI 3',
-  'Additional Payee',
-  '% to Payee',
-  'Payee GCI',
+  'Co-Agent 1',
+  'Co-Agent 1 Split%',
+  'Co-Agent 1 GCI',
+  'Co-Agent 2',
+  'Co-Agent 2 Split%',
+  'Co-Agent 2 GCI',
+  'Co-Agent 3',
+  'Co-Agent 3 Split%',
+  'Co-Agent 3 GCI',
   'Expense Credits',
   'Mortgage Company',
   'Title Company',
@@ -186,14 +192,25 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   'member gci 3': 'teamMember3Gci',
   'member gci3': 'teamMember3Gci',
 
-  // Additional payee
-  'additional payee': 'additionalPayee',
-  'co-agent': 'additionalPayee',
-  'co agent': 'additionalPayee',
-  '% to payee': 'payeePct',
-  'payee %': 'payeePct',
-  'payee gci': 'payeeGci',
-  'payee dollar': 'payeeGci',
+  // Co-agents
+  'co-agent 1': 'coAgent1',
+  'co agent 1': 'coAgent1',
+  'additional payee': 'coAgent1',
+  'co-agent 1 split%': 'coAgent1Pct',
+  'co-agent 1 split %': 'coAgent1Pct',
+  '% to payee': 'coAgent1Pct',
+  'co-agent 1 gci': 'coAgent1Gci',
+  'payee gci': 'coAgent1Gci',
+  'co-agent 2': 'coAgent2',
+  'co agent 2': 'coAgent2',
+  'co-agent 2 split%': 'coAgent2Pct',
+  'co-agent 2 split %': 'coAgent2Pct',
+  'co-agent 2 gci': 'coAgent2Gci',
+  'co-agent 3': 'coAgent3',
+  'co agent 3': 'coAgent3',
+  'co-agent 3 split%': 'coAgent3Pct',
+  'co-agent 3 split %': 'coAgent3Pct',
+  'co-agent 3 gci': 'coAgent3Gci',
 
   // Expense credits
   'expense credits': 'expenseCredits',
@@ -386,9 +403,15 @@ const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
   { header: 'Team Member3', hint: 'Third team member (optional)' },
   { header: '% to Member 3', hint: 'Team member 3 split percentage' },
   { header: 'Member GCI 3', hint: 'Team member 3 dollar amount' },
-  { header: 'Additional Payee', hint: 'Co-listing agent who also receives a commission (informational)' },
-  { header: '% to Payee', hint: "Additional payee's broker split % (informational)" },
-  { header: 'Payee GCI', hint: "Additional payee's gross commission portion before company split ($, informational)" },
+  { header: 'Co-Agent 1', hint: 'Co-listing agent 1 name (informational)' },
+  { header: 'Co-Agent 1 Split%', hint: "Co-Agent 1 broker split % (informational)" },
+  { header: 'Co-Agent 1 GCI', hint: "Co-Agent 1 gross commission portion before company split ($, informational)" },
+  { header: 'Co-Agent 2', hint: 'Co-listing agent 2 name (informational)' },
+  { header: 'Co-Agent 2 Split%', hint: "Co-Agent 2 broker split % (informational)" },
+  { header: 'Co-Agent 2 GCI', hint: "Co-Agent 2 gross commission portion before company split ($, informational)" },
+  { header: 'Co-Agent 3', hint: 'Co-listing agent 3 name (informational)' },
+  { header: 'Co-Agent 3 Split%', hint: "Co-Agent 3 broker split % (informational)" },
+  { header: 'Co-Agent 3 GCI', hint: "Co-Agent 3 gross commission portion before company split ($, informational)" },
   { header: 'Expense Credits', hint: 'Credits paid to save a deal (informational, not deducted from calculations)' },
   { header: 'Mortgage Company', hint: 'Lender name (optional)' },
   { header: 'Title Company', hint: 'Title/escrow company (optional)' },
@@ -922,9 +945,24 @@ export default function BulkImportPage() {
                               <option value="brokerGci">Broker GCI</option>
                               <option value="agentPct">Agent %</option>
                               <option value="agentDollar">Agent $ (Primary GCI)</option>
-                              <option value="additionalPayee">Additional Payee</option>
-                              <option value="payeePct">% to Payee</option>
-                              <option value="payeeGci">Payee GCI</option>
+                              <option value="teamMember1">Team Member 1</option>
+                              <option value="teamMember1Pct">Team Member 1 Split%</option>
+                              <option value="teamMember1Gci">Team Member 1 GCI</option>
+                              <option value="teamMember2">Team Member 2</option>
+                              <option value="teamMember2Pct">Team Member 2 Split%</option>
+                              <option value="teamMember2Gci">Team Member 2 GCI</option>
+                              <option value="teamMember3">Team Member 3</option>
+                              <option value="teamMember3Pct">Team Member 3 Split%</option>
+                              <option value="teamMember3Gci">Team Member 3 GCI</option>
+                              <option value="coAgent1">Co-Agent 1</option>
+                              <option value="coAgent1Pct">Co-Agent 1 Split%</option>
+                              <option value="coAgent1Gci">Co-Agent 1 GCI</option>
+                              <option value="coAgent2">Co-Agent 2</option>
+                              <option value="coAgent2Pct">Co-Agent 2 Split%</option>
+                              <option value="coAgent2Gci">Co-Agent 2 GCI</option>
+                              <option value="coAgent3">Co-Agent 3</option>
+                              <option value="coAgent3Pct">Co-Agent 3 Split%</option>
+                              <option value="coAgent3Gci">Co-Agent 3 GCI</option>
                               <option value="expenseCredits">Expense Credits</option>
                               <option value="mortgageCompany">Mortgage Company</option>
                               <option value="titleCompany">Title Company</option>
