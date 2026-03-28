@@ -446,6 +446,8 @@ function GoalsEditor({
   const [yearlyVolume, setYearlyVolume] = useState('');
   const [yearlySales, setYearlySales] = useState('');
   const [yearlyMargin, setYearlyMargin] = useState('');
+  const [goalAvgSalePrice, setGoalAvgSalePrice] = useState('');
+  const [goalAvgCommPct, setGoalAvgCommPct] = useState('');
   // Editable seasonality weights (% of year for each month)
   const [seasonWeights, setSeasonWeights] = useState<Record<number, { salesPct: string; volumePct: string }>>({});
   const [saving, setSaving] = useState(false);
@@ -477,6 +479,10 @@ function GoalsEditor({
     if (totalSales > 0) setYearlySales(String(Math.round(totalSales)));
     if (totalMargin > 0) setYearlyMargin(String(Math.round(totalMargin)));
 
+    // Initialize goal averages from prev year data
+    if (prevYearStats?.avgSalePrice) setGoalAvgSalePrice(String(Math.round(prevYearStats.avgSalePrice)));
+    if (prevYearStats?.avgCommissionPct) setGoalAvgCommPct(String(prevYearStats.avgCommissionPct.toFixed(2)));
+
     // Initialize seasonality weights
     const sw: typeof seasonWeights = {};
     for (let m = 1; m <= 12; m++) {
@@ -497,18 +503,20 @@ function GoalsEditor({
     setSeasonWeights(prev => ({ ...prev, [month]: { ...prev[month], [field]: val } }));
   };
 
+  // Use goal averages if set, otherwise fall back to prev year actuals
+  const effectiveAvgSalePrice = parseFloat(goalAvgSalePrice) || avgSalePrice;
+  const effectiveAvgCommPct = parseFloat(goalAvgCommPct) || avgCommPct;
+
   // ── Auto-calculate derived fields when volume changes ───────────────────
   // Volume → auto-calc sales (volume / avgSalePrice) and margin
   const handleVolumeChange = (val: string) => {
     setYearlyVolume(val);
     const vol = parseFloat(val) || 0;
-    if (vol > 0 && avgSalePrice > 0) {
-      const calcSales = Math.round(vol / avgSalePrice);
-      setYearlySales(String(calcSales));
+    if (vol > 0 && effectiveAvgSalePrice > 0) {
+      setYearlySales(String(Math.round(vol / effectiveAvgSalePrice)));
     }
-    if (vol > 0 && avgCommPct > 0 && avgMarginPct > 0) {
-      // volume × avgCommission% = total GCI → × avgMarginPct% = gross margin
-      const totalGCI = vol * (avgCommPct / 100);
+    if (vol > 0 && effectiveAvgCommPct > 0 && avgMarginPct > 0) {
+      const totalGCI = vol * (effectiveAvgCommPct / 100);
       const calcMargin = Math.round(totalGCI * (avgMarginPct / 100));
       setYearlyMargin(String(calcMargin));
     }
@@ -518,13 +526,12 @@ function GoalsEditor({
   const handleSalesChange = (val: string) => {
     setYearlySales(val);
     const sales = parseInt(val, 10) || 0;
-    if (sales > 0 && avgSalePrice > 0) {
-      const calcVol = Math.round(sales * avgSalePrice);
+    if (sales > 0 && effectiveAvgSalePrice > 0) {
+      const calcVol = Math.round(sales * effectiveAvgSalePrice);
       setYearlyVolume(String(calcVol));
-      if (avgCommPct > 0 && avgMarginPct > 0) {
-        const totalGCI = calcVol * (avgCommPct / 100);
-        const calcMargin = Math.round(totalGCI * (avgMarginPct / 100));
-        setYearlyMargin(String(calcMargin));
+      if (effectiveAvgCommPct > 0 && avgMarginPct > 0) {
+        const totalGCI = calcVol * (effectiveAvgCommPct / 100);
+        setYearlyMargin(String(Math.round(totalGCI * (avgMarginPct / 100))));
       }
     }
   };
@@ -533,13 +540,11 @@ function GoalsEditor({
   const handleMarginChange = (val: string) => {
     setYearlyMargin(val);
     const margin = parseFloat(val) || 0;
-    if (margin > 0 && avgMarginPct > 0 && avgCommPct > 0) {
-      // margin = volume × commPct × marginPct
-      // volume = margin / (commPct × marginPct)
-      const calcVol = Math.round(margin / ((avgCommPct / 100) * (avgMarginPct / 100)));
+    if (margin > 0 && avgMarginPct > 0 && effectiveAvgCommPct > 0) {
+      const calcVol = Math.round(margin / ((effectiveAvgCommPct / 100) * (avgMarginPct / 100)));
       setYearlyVolume(String(calcVol));
-      if (avgSalePrice > 0) {
-        setYearlySales(String(Math.round(calcVol / avgSalePrice)));
+      if (effectiveAvgSalePrice > 0) {
+        setYearlySales(String(Math.round(calcVol / effectiveAvgSalePrice)));
       }
     }
   };
@@ -565,27 +570,43 @@ function GoalsEditor({
     setGoals(newGoals);
   };
 
-  // Reset seasonality to even split
-  const resetSeasonality = () => {
-    const sw: typeof seasonWeights = {};
+  // Distribute using even split weights
+  const distributeEven = () => {
+    const vol = parseFloat(yearlyVolume) || 0;
+    const sales = parseInt(yearlySales, 10) || 0;
+    const margin = parseFloat(yearlyMargin) || 0;
+    const newGoals: typeof goals = {};
     for (let m = 1; m <= 12; m++) {
-      sw[m] = { salesPct: '8.33', volumePct: '8.33' };
-    }
-    setSeasonWeights(sw);
-  };
-
-  // Reset seasonality to previous year
-  const resetSeasonalityToPrev = () => {
-    if (!prevYearStats) return;
-    const sw: typeof seasonWeights = {};
-    for (let m = 1; m <= 12; m++) {
-      const s = prevYearStats.seasonality[m - 1];
-      sw[m] = {
-        salesPct: String(s?.salesPct ?? 8.33),
-        volumePct: String(s?.volumePct ?? 8.33),
+      newGoals[m] = {
+        volume: vol > 0 ? String(Math.round(vol / 12)) : '',
+        sales: sales > 0 ? String(Math.round(sales / 12)) : '',
+        margin: margin > 0 ? String(Math.round(margin / 12)) : '',
       };
     }
-    setSeasonWeights(sw);
+    setGoals(newGoals);
+  };
+
+  // Apply prev year seasonality weights and distribute
+  const distributeWithPrevSeasonality = () => {
+    if (!prevYearStats) return;
+    const vol = parseFloat(yearlyVolume) || 0;
+    const sales = parseInt(yearlySales, 10) || 0;
+    const margin = parseFloat(yearlyMargin) || 0;
+    const newGoals: typeof goals = {};
+    const newWeights: typeof seasonWeights = {};
+    for (let m = 1; m <= 12; m++) {
+      const s = prevYearStats.seasonality[m - 1];
+      const volPct = s?.volumePct ?? 8.33;
+      const salesPct = s?.salesPct ?? 8.33;
+      newWeights[m] = { salesPct: String(salesPct), volumePct: String(volPct) };
+      newGoals[m] = {
+        volume: vol > 0 ? String(Math.round(vol * (volPct / 100))) : '',
+        sales: sales > 0 ? String(Math.round(sales * (salesPct / 100))) : '',
+        margin: margin > 0 ? String(Math.round(margin * (salesPct / 100))) : '',
+      };
+    }
+    setSeasonWeights(newWeights);
+    setGoals(newGoals);
   };
 
   const save = async () => {
@@ -740,46 +761,93 @@ function GoalsEditor({
                   )}
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Target Averages — drive the auto-calculations */}
+              <div className="border border-dashed rounded-lg p-4 space-y-3 bg-muted/20">
+                <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Target Averages (drives calculations below)</h5>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs">
+                      Gross Margin Goal ($)
+                      {avgMarginPct > 0 && <span className="text-muted-foreground ml-1">@ {avgMarginPct}% margin</span>}
+                    </Label>
+                    <Input
+                      type="number"
+                      value={yearlyMargin}
+                      onChange={e => handleMarginChange(e.target.value)}
+                      placeholder={hasPrevData ? `Last year: ${formatCurrency(prevYearStats!.totalGrossMargin, true)}` : 'e.g. 500000'}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">
+                      Avg Sale Price Goal ($)
+                      {hasPrevData && <span className="text-muted-foreground ml-1">Last yr: {formatCurrency(prevYearStats!.avgSalePrice)}</span>}
+                    </Label>
+                    <Input
+                      type="number"
+                      value={goalAvgSalePrice}
+                      onChange={e => {
+                        setGoalAvgSalePrice(e.target.value);
+                        // Recalculate sales from existing volume
+                        const price = parseFloat(e.target.value) || 0;
+                        if (price > 0 && yearlyVolume) {
+                          setYearlySales(String(Math.round(parseFloat(yearlyVolume) / price)));
+                        }
+                      }}
+                      placeholder={hasPrevData ? `Last year: ${formatCurrency(prevYearStats!.avgSalePrice)}` : 'e.g. 350000'}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">
+                      Avg Commission % Goal
+                      {hasPrevData && <span className="text-muted-foreground ml-1">Last yr: {prevYearStats!.avgCommissionPct.toFixed(2)}%</span>}
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={goalAvgCommPct}
+                      onChange={e => {
+                        setGoalAvgCommPct(e.target.value);
+                        // Recalculate margin from existing volume
+                        const commPct = parseFloat(e.target.value) || 0;
+                        const vol = parseFloat(yearlyVolume) || 0;
+                        if (commPct > 0 && vol > 0 && avgMarginPct > 0) {
+                          setYearlyMargin(String(Math.round(vol * (commPct / 100) * (avgMarginPct / 100))));
+                        }
+                      }}
+                      placeholder={hasPrevData ? `Last year: ${prevYearStats!.avgCommissionPct.toFixed(2)}` : 'e.g. 3.00'}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Yearly totals (auto-calculated from averages above, or enter manually) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="yearly-volume" className="text-xs">Total Volume Goal ($)</Label>
+                  <Label htmlFor="yearly-volume" className="text-xs">Total Volume Goal ($) — auto-calculated</Label>
                   <Input
                     id="yearly-volume"
                     type="number"
                     value={yearlyVolume}
                     onChange={e => handleVolumeChange(e.target.value)}
-                    placeholder={hasPrevData ? `Last year: ${formatCurrency(prevYearStats.totalVolume, true)}` : 'e.g. 50000000'}
+                    placeholder={hasPrevData ? `Last year: ${formatCurrency(prevYearStats!.totalVolume, true)}` : 'e.g. 50000000'}
                   />
                   {hasPrevData && yearlyVolume && (
                     <p className="text-xs text-muted-foreground">
-                      {((parseFloat(yearlyVolume) / prevYearStats.totalVolume) * 100).toFixed(0)}% of last year
+                      {((parseFloat(yearlyVolume) / prevYearStats!.totalVolume) * 100).toFixed(0)}% of last year
                     </p>
                   )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="yearly-sales" className="text-xs">
-                    Total Sales Goal (#)
-                    {avgSalePrice > 0 && <span className="text-muted-foreground ml-1">@ {formatCurrency(avgSalePrice)} avg</span>}
+                    Total Sales Goal (#) — auto-calculated
+                    {effectiveAvgSalePrice > 0 && <span className="text-muted-foreground ml-1">@ {formatCurrency(effectiveAvgSalePrice)} avg</span>}
                   </Label>
                   <Input
                     id="yearly-sales"
                     type="number"
                     value={yearlySales}
                     onChange={e => handleSalesChange(e.target.value)}
-                    placeholder={hasPrevData ? `Last year: ${prevYearStats.totalSales}` : 'e.g. 200'}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="yearly-margin" className="text-xs">
-                    Total Gross Margin Goal ($)
-                    {avgMarginPct > 0 && <span className="text-muted-foreground ml-1">@ {avgMarginPct}% margin</span>}
-                  </Label>
-                  <Input
-                    id="yearly-margin"
-                    type="number"
-                    value={yearlyMargin}
-                    onChange={e => handleMarginChange(e.target.value)}
-                    placeholder={hasPrevData ? `Last year: ${formatCurrency(prevYearStats.totalGrossMargin, true)}` : 'e.g. 500000'}
+                    placeholder={hasPrevData ? `Last year: ${prevYearStats!.totalSales}` : 'e.g. 200'}
                   />
                 </div>
               </div>
@@ -788,6 +856,14 @@ function GoalsEditor({
                 <Button variant="default" onClick={distribute} disabled={!yearlyVolume && !yearlySales && !yearlyMargin}>
                   <Target className="mr-2 h-4 w-4" />
                   Distribute Across Months
+                </Button>
+                {hasPrevData && (
+                  <Button variant="default" onClick={distributeWithPrevSeasonality} disabled={!yearlyVolume && !yearlySales && !yearlyMargin}>
+                    Use {prevYearStats!.year} Seasonality
+                  </Button>
+                )}
+                <Button variant="default" onClick={distributeEven} disabled={!yearlyVolume && !yearlySales && !yearlyMargin}>
+                  Avg / Even Split
                 </Button>
               </div>
             </div>
@@ -804,16 +880,7 @@ function GoalsEditor({
                       </h4>
                     </Button>
                   </CollapsibleTrigger>
-                  <div className="flex gap-2">
-                    {hasPrevData && (
-                      <Button variant="outline" size="sm" onClick={resetSeasonalityToPrev}>
-                        Use {prevYearStats.year} Data
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={resetSeasonality}>
-                      Even Split
-                    </Button>
-                  </div>
+                  <span className="text-xs text-muted-foreground">Adjust weights then click Distribute above</span>
                 </div>
                 <CollapsibleContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-3">
