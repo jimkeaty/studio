@@ -160,6 +160,10 @@ export interface ImportRow {
   teamMember3: string;
   teamMember3Pct: string;
   teamMember3Gci: string;
+  additionalPayee: string;
+  payeePct: string;
+  payeeGci: string;
+  expenseCredits: string;
   mortgageCompany: string;
   titleCompany: string;
 }
@@ -389,6 +393,10 @@ export async function POST(req: NextRequest) {
         const teamMember3 = toOptStr(row.teamMember3);
         const teamMember3Pct = toNum(row.teamMember3Pct);
         const teamMember3Gci = toNum(row.teamMember3Gci);
+        const additionalPayee = toOptStr(row.additionalPayee);
+        const payeePct = toNum(row.payeePct);
+        const payeeGci = toNum(row.payeeGci);
+        const expenseCredits = toNum(row.expenseCredits);
 
         const year = toYearFromDates(closedDate, contractDate, listingDate);
 
@@ -475,6 +483,12 @@ export async function POST(req: NextRequest) {
             teamMember3Pct: teamMember3Pct > 0 ? teamMember3Pct : null,
             teamMember3Gci: teamMember3Gci > 0 ? teamMember3Gci : null,
           } : {}),
+          ...(additionalPayee ? {
+            additionalPayee,
+            payeePct: payeePct > 0 ? payeePct : null,
+            payeeGci: payeeGci > 0 ? payeeGci : null,
+          } : {}),
+          ...(expenseCredits > 0 ? { expenseCredits } : {}),
 
           // Closing parties
           mortgageCompany,

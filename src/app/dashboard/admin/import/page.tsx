@@ -70,6 +70,10 @@ const CSV_HEADERS = [
   'Team Member3',
   '% to Member 3',
   'Member GCI 3',
+  'Additional Payee',
+  '% to Payee',
+  'Payee GCI',
+  'Expense Credits',
   'Mortgage Company',
   'Title Company',
 ] as const;
@@ -181,6 +185,20 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   '% to member3': 'teamMember3Pct',
   'member gci 3': 'teamMember3Gci',
   'member gci3': 'teamMember3Gci',
+
+  // Additional payee
+  'additional payee': 'additionalPayee',
+  'co-agent': 'additionalPayee',
+  'co agent': 'additionalPayee',
+  '% to payee': 'payeePct',
+  'payee %': 'payeePct',
+  'payee gci': 'payeeGci',
+  'payee dollar': 'payeeGci',
+
+  // Expense credits
+  'expense credits': 'expenseCredits',
+  'expense credit': 'expenseCredits',
+  'expenses': 'expenseCredits',
 
   // Parties
   'mortgage company': 'mortgageCompany',
@@ -368,6 +386,10 @@ const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
   { header: 'Team Member3', hint: 'Third team member (optional)' },
   { header: '% to Member 3', hint: 'Team member 3 split percentage' },
   { header: 'Member GCI 3', hint: 'Team member 3 dollar amount' },
+  { header: 'Additional Payee', hint: 'Co-listing agent who also receives a commission (informational)' },
+  { header: '% to Payee', hint: "Additional payee's broker split % (informational)" },
+  { header: 'Payee GCI', hint: "Additional payee's gross commission portion before company split ($, informational)" },
+  { header: 'Expense Credits', hint: 'Credits paid to save a deal (informational, not deducted from calculations)' },
   { header: 'Mortgage Company', hint: 'Lender name (optional)' },
   { header: 'Title Company', hint: 'Title/escrow company (optional)' },
 ];
@@ -900,6 +922,10 @@ export default function BulkImportPage() {
                               <option value="brokerGci">Broker GCI</option>
                               <option value="agentPct">Agent %</option>
                               <option value="agentDollar">Agent $ (Primary GCI)</option>
+                              <option value="additionalPayee">Additional Payee</option>
+                              <option value="payeePct">% to Payee</option>
+                              <option value="payeeGci">Payee GCI</option>
+                              <option value="expenseCredits">Expense Credits</option>
                               <option value="mortgageCompany">Mortgage Company</option>
                               <option value="titleCompany">Title Company</option>
                             </select>
