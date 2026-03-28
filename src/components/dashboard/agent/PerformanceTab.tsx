@@ -427,6 +427,19 @@ export function PerformanceTab() {
   })();
   // isProjected removed — use showProjected state directly
 
+  // YTD slice helpers
+  const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+  const ytdLabel = isCurrentYear ? ' YTD' : '';
+
+  // Letter grade helper
+  const letterGrade = (pct: number) => {
+    if (pct >= 90) return { letter: 'A', color: 'text-green-600' };
+    if (pct >= 80) return { letter: 'B', color: 'text-blue-600' };
+    if (pct >= 70) return { letter: 'C', color: 'text-yellow-600' };
+    if (pct >= 60) return { letter: 'D', color: 'text-orange-600' };
+    return { letter: 'F', color: 'text-red-600' };
+  };
+
   // Calculate averages
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
   const avgCommPct = totals.closedVolume > 0 ? (totals.totalGCI / totals.closedVolume) * 100 : 0;
@@ -575,15 +588,18 @@ export function PerformanceTab() {
           {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
             <div className="mt-4 space-y-3 border-t pt-4 text-sm">
               {compareYear && data.comparisonData && (() => {
-                const compIncome = data.comparisonData.months.reduce((s, m) => s + (m.netIncome ?? 0), 0);
-                const diff = totals.netIncome - compIncome;
-                const pct = compIncome > 0 ? (diff / compIncome * 100) : 0;
-                const compVol = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
-                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
-                return <div className="grid grid-cols-3 gap-4">
-                  <div><span className="text-muted-foreground">Income vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p></div>
-                  <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVol, true)}</p></div>
-                  <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                const compIncomeYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const compVolYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compSalesYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const diff = totals.netIncome - compIncomeYTD;
+                const pctChange = compIncomeYTD > 0 ? (diff / compIncomeYTD * 100) : 0;
+                const yoyPct = compIncomeYTD > 0 ? Math.round((totals.netIncome / compIncomeYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return <div className="grid grid-cols-4 gap-4 items-start">
+                  <div><span className="text-muted-foreground">Income vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                  <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{formatCurrency(compVolYTD, true)}</p></div>
+                  <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{formatNumber(compSalesYTD)}</p></div>
+                  <div className="flex items-center justify-end gap-1"><span className="text-xs text-muted-foreground mr-1">YoY</span><span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span><span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span></div>
                 </div>;
               })()}
               {showProjected && projectedMonthData && (
@@ -643,14 +659,18 @@ export function PerformanceTab() {
           {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
             <div className="mt-4 space-y-3 border-t pt-4 text-sm">
               {compareYear && data.comparisonData && (() => {
-                const compVol = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
-                const diff = totals.closedVolume - compVol;
-                const pct = compVol > 0 ? (diff / compVol * 100) : 0;
-                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
-                return <div className="grid grid-cols-3 gap-4">
-                  <div><span className="text-muted-foreground">Volume vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p></div>
-                  <div><span className="text-muted-foreground">{compareYear} Volume</span><p className="font-semibold">{formatCurrency(compVol, true)}</p></div>
-                  <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                const compVolYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compSalesYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const compIncomeYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const diff = totals.closedVolume - compVolYTD;
+                const pctChange = compVolYTD > 0 ? (diff / compVolYTD * 100) : 0;
+                const yoyPct = compVolYTD > 0 ? Math.round((totals.closedVolume / compVolYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return <div className="grid grid-cols-4 gap-4 items-start">
+                  <div><span className="text-muted-foreground">Volume vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                  <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{formatCurrency(compIncomeYTD, true)}</p></div>
+                  <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{formatNumber(compSalesYTD)}</p></div>
+                  <div className="flex items-center justify-end gap-1"><span className="text-xs text-muted-foreground mr-1">YoY</span><span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span><span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span></div>
                 </div>;
               })()}
               {showProjected && projectedMonthData && (
@@ -710,14 +730,18 @@ export function PerformanceTab() {
           {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
             <div className="mt-4 space-y-3 border-t pt-4 text-sm">
               {compareYear && data.comparisonData && (() => {
-                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
-                const diff = totals.closedCount - compSales;
-                const pct = compSales > 0 ? (diff / compSales * 100) : 0;
-                const compVol = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
-                return <div className="grid grid-cols-3 gap-4">
-                  <div><span className="text-muted-foreground">Sales vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p></div>
-                  <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVol, true)}</p></div>
-                  <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                const compSalesYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const compVolYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compIncomeYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const diff = totals.closedCount - compSalesYTD;
+                const pctChange = compSalesYTD > 0 ? (diff / compSalesYTD * 100) : 0;
+                const yoyPct = compSalesYTD > 0 ? Math.round((totals.closedCount / compSalesYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return <div className="grid grid-cols-4 gap-4 items-start">
+                  <div><span className="text-muted-foreground">Sales vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                  <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{formatCurrency(compVolYTD, true)}</p></div>
+                  <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{formatCurrency(compIncomeYTD, true)}</p></div>
+                  <div className="flex items-center justify-end gap-1"><span className="text-xs text-muted-foreground mr-1">YoY</span><span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span><span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span></div>
                 </div>;
               })()}
               {showProjected && projectedMonthData && (
