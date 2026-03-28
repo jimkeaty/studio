@@ -129,28 +129,31 @@ function KPICard({ title, value, subtitle, icon: Icon, highlight }: {
   );
 }
 
-// ── Comparison Year Selector (reusable) ─────────────────────────────────────
+// ── Chart overlay controls (reusable) ──────────────────────────────────────
 
-function CompareSelector({ value, onChange, years, isCurrentYear }: {
-  value: number | 'projected' | null;
-  onChange: (v: number | 'projected' | null) => void;
-  years: number[];
-  isCurrentYear?: boolean;
+function ChartControls({ compareYear, setCompareYear, showGoals, setShowGoals, showProjected, setShowProjected, years, isCurrentYear }: {
+  compareYear: number | null; setCompareYear: (v: number | null) => void;
+  showGoals: boolean; setShowGoals: (v: boolean) => void;
+  showProjected: boolean; setShowProjected: (v: boolean) => void;
+  years: number[]; isCurrentYear: boolean;
 }) {
+  const toggleCls = (on: boolean, amber = false) =>
+    `px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${on
+      ? amber ? 'bg-amber-500 text-white border-amber-500' : 'bg-primary text-primary-foreground border-primary'
+      : 'bg-background text-muted-foreground border-border hover:bg-muted'}`;
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
-      <Select
-        value={value ? String(value) : 'none'}
-        onValueChange={v => onChange(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
-      >
-        <SelectTrigger className="w-[160px]"><SelectValue placeholder="None" /></SelectTrigger>
+    <div className="flex items-center gap-2 flex-wrap">
+      <Select value={compareYear ? String(compareYear) : 'none'} onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}>
+        <SelectTrigger className="w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="none">None</SelectItem>
-          {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
+          <SelectItem value="none">Year: None</SelectItem>
           {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
         </SelectContent>
       </Select>
+      <button type="button" onClick={() => setShowGoals(!showGoals)} className={toggleCls(showGoals)}>Goals</button>
+      {isCurrentYear && (
+        <button type="button" onClick={() => setShowProjected(!showProjected)} className={toggleCls(showProjected, true)}>📈 Projected</button>
+      )}
     </div>
   );
 }
@@ -293,7 +296,9 @@ export function PerformanceTab() {
   const { user, loading: userLoading } = useUser();
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [view, setView] = useState<'personal' | 'team'>('personal');
-  const [compareYear, setCompareYear] = useState<number | 'projected' | null>(null);
+  const [compareYear, setCompareYear] = useState<number | null>(null);
+  const [showGoals, setShowGoals] = useState(false);
+  const [showProjected, setShowProjected] = useState(false);
   const [data, setData] = useState<AgentMetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -308,7 +313,7 @@ export function PerformanceTab() {
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(year), view });
-      if (compareYear && compareYear !== 'projected') params.set('compareYear', String(compareYear));
+      if (compareYear) params.set('compareYear', String(compareYear));
       const res = await fetch(`/api/agent/command-metrics?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -403,13 +408,24 @@ export function PerformanceTab() {
     const ytdVolume = completedMonths.reduce((s, m) => s + m.closedVolume, 0);
     const ytdSales = completedMonths.reduce((s, m) => s + m.closedCount, 0);
 
+    const fullYear = (ytdActual: number, goalKey: keyof typeof months[0]) => {
+      const yearlyGoalTotal = months.reduce((s, m) => s + ((m[goalKey] as number) ?? 0), 0);
+      const share = yearlyGoalTotal > 0
+        ? completedMonths.reduce((s, m) => s + ((m[goalKey] as number) ?? 0), 0) / yearlyGoalTotal
+        : (currentMonthIdx + 1) / 12;
+      return share > 0 ? Math.round(ytdActual / share) : 0;
+    };
+
     return {
       income: compute(ytdIncome, 'grossMarginGoal'),
       volume: compute(ytdVolume, 'volumeGoal'),
       sales: compute(ytdSales, 'salesCountGoal'),
+      fullYearMargin: fullYear(ytdIncome, 'grossMarginGoal'),
+      fullYearVolume: fullYear(ytdVolume, 'volumeGoal'),
+      fullYearSales: fullYear(ytdSales, 'salesCountGoal'),
     };
   })();
-  const isProjected = compareYear === 'projected';
+  // isProjected removed — use showProjected state directly
 
   // Calculate averages
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
@@ -520,9 +536,9 @@ export function PerformanceTab() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle>Monthly Net Income</CardTitle>
-              <CardDescription>Income after broker split — {year}{compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
+              <CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription>
             </div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
+            <ChartControls compareYear={compareYear} setCompareYear={setCompareYear} showGoals={showGoals} setShowGoals={setShowGoals} showProjected={showProjected} setShowProjected={setShowProjected} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
           </div>
         </CardHeader>
         <CardContent>
@@ -532,9 +548,9 @@ export function PerformanceTab() {
                 label: m.label,
                 netIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyNetIncome[i] || 0),
                 pendingNetIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyPendingNetIncome[i] || 0),
-                incomeGoal: isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal,
-                compareIncome: isProjected ? null : (data.comparisonData?.months?.[i]?.netIncome ?? null),
-                projectedIncome: isProjected ? (projectedMonthData?.income[i] ?? null) : null,
+                incomeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal) : null,
+                compareIncome: compareYear ? (data.comparisonData?.months?.[i]?.netIncome ?? null) : null,
+                projectedIncome: showProjected ? (projectedMonthData?.income[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -544,18 +560,41 @@ export function PerformanceTab() {
               <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => {
                 const labels: Record<string, string> = {
                   netIncome: `${year} Income`, pendingNetIncome: 'Pending',
-                  incomeGoal: 'Goal', compareIncome: `${compareYear ?? ''} Income`,
+                  incomeGoal: 'Goal', compareIncome: `${compareYear} Income`, projectedIncome: 'Projected',
                 };
                 return [formatCurrency(Number(v)), labels[name as string] ?? name];
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="netIncome" fill="var(--color-netIncome)" radius={[4, 4, 0, 0]} name={`${year}`} />
-              {compareYear && !isProjected && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              {isProjected && <Bar dataKey="projectedIncome" fill="var(--color-projectedIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
+              {compareYear && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {showGoals && <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedIncome" fill="var(--color-projectedIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               <Bar dataKey="pendingNetIncome" fill="var(--color-pendingNetIncome)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
+          {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && data.comparisonData && (() => {
+                const compIncome = data.comparisonData.months.reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const diff = totals.netIncome - compIncome;
+                const pct = compIncome > 0 ? (diff / compIncome * 100) : 0;
+                const compVol = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
+                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
+                return <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Income vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p></div>
+                  <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVol, true)}</p></div>
+                  <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                </div>;
+              })()}
+              {showProjected && projectedMonthData && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearMargin, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearVolume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{formatNumber(projectedMonthData.fullYearSales)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -565,9 +604,9 @@ export function PerformanceTab() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle>Monthly Dollar Volume</CardTitle>
-              <CardDescription>Closed and pending deal value — {year}{compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
+              <CardDescription>Closed and pending deal value — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription>
             </div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
+            <ChartControls compareYear={compareYear} setCompareYear={setCompareYear} showGoals={showGoals} setShowGoals={setShowGoals} showProjected={showProjected} setShowProjected={setShowProjected} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
           </div>
         </CardHeader>
         <CardContent>
@@ -577,9 +616,9 @@ export function PerformanceTab() {
                 ...m,
                 closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
                 pendingVolume: isCurrentYear && i > currentMonthIdx ? null : m.pendingVolume,
-                volumeGoal: isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal,
-                compareVolume: isProjected ? null : (data.comparisonData?.months?.[i]?.closedVolume ?? null),
-                projectedVolume: isProjected ? (projectedMonthData?.volume[i] ?? null) : null,
+                volumeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal) : null,
+                compareVolume: compareYear ? (data.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
+                projectedVolume: showProjected ? (projectedMonthData?.volume[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -589,18 +628,40 @@ export function PerformanceTab() {
               <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => {
                 const labels: Record<string, string> = {
                   closedVolume: `${year} Closed`, pendingVolume: 'Pending',
-                  volumeGoal: 'Goal', compareVolume: `${compareYear ?? ''} Volume`,
+                  volumeGoal: 'Goal', compareVolume: `${compareYear} Volume`, projectedVolume: 'Projected',
                 };
                 return [formatCurrency(Number(v)), labels[name as string] ?? name];
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && !isProjected && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              {isProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
+              {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {showGoals && <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
+          {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && data.comparisonData && (() => {
+                const compVol = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
+                const diff = totals.closedVolume - compVol;
+                const pct = compVol > 0 ? (diff / compVol * 100) : 0;
+                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
+                return <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Volume vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p></div>
+                  <div><span className="text-muted-foreground">{compareYear} Volume</span><p className="font-semibold">{formatCurrency(compVol, true)}</p></div>
+                  <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                </div>;
+              })()}
+              {showProjected && projectedMonthData && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearVolume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearMargin, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{formatNumber(projectedMonthData.fullYearSales)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -610,9 +671,9 @@ export function PerformanceTab() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle>Monthly Number of Sales</CardTitle>
-              <CardDescription>Closed and pending — {year}{compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
+              <CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription>
             </div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
+            <ChartControls compareYear={compareYear} setCompareYear={setCompareYear} showGoals={showGoals} setShowGoals={setShowGoals} showProjected={showProjected} setShowProjected={setShowProjected} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
           </div>
         </CardHeader>
         <CardContent>
@@ -622,9 +683,9 @@ export function PerformanceTab() {
                 ...m,
                 closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
                 pendingCount: isCurrentYear && i > currentMonthIdx ? null : m.pendingCount,
-                salesCountGoal: isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal,
-                compareCount: isProjected ? null : (data.comparisonData?.months?.[i]?.closedCount ?? null),
-                projectedCount: isProjected ? (projectedMonthData?.sales[i] ?? null) : null,
+                salesCountGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal) : null,
+                compareCount: compareYear ? (data.comparisonData?.months?.[i]?.closedCount ?? null) : null,
+                projectedCount: showProjected ? (projectedMonthData?.sales[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -634,18 +695,40 @@ export function PerformanceTab() {
               <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => {
                 const labels: Record<string, string> = {
                   closedCount: `${year} Closed`, pendingCount: 'Pending',
-                  salesCountGoal: 'Goal', compareCount: `${compareYear ?? ''} Sales`,
+                  salesCountGoal: 'Goal', compareCount: `${compareYear} Sales`, projectedCount: 'Projected',
                 };
                 return [formatNumber(Number(v)), labels[name as string] ?? name];
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && !isProjected && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              {isProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
+              {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {showGoals && <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
+          {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && data.comparisonData && (() => {
+                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
+                const diff = totals.closedCount - compSales;
+                const pct = compSales > 0 ? (diff / compSales * 100) : 0;
+                const compVol = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
+                return <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Sales vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p></div>
+                  <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVol, true)}</p></div>
+                  <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                </div>;
+              })()}
+              {showProjected && projectedMonthData && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{formatNumber(projectedMonthData.fullYearSales)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearVolume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearMargin, true)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

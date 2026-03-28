@@ -1013,7 +1013,9 @@ function GoalsEditor({
 export function BrokerDashboardInner() {
   const { user } = useUser();
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [compareYear, setCompareYear] = useState<number | 'projected' | null>(null);
+  const [compareYear, setCompareYear] = useState<number | null>(null);
+  const [showGoals, setShowGoals] = useState(false);
+  const [showProjected, setShowProjected] = useState(false);
   const [showPending, setShowPending] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null); // null = all teams
   const [selectedType, setSelectedType] = useState<string | null>(null); // null = all types
@@ -1031,7 +1033,7 @@ export function BrokerDashboardInner() {
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(year) });
-      if (compareYear && compareYear !== 'projected') params.set('compareYear', String(compareYear));
+      if (compareYear) params.set('compareYear', String(compareYear));
       if (selectedTeam) params.set('teamId', selectedTeam);
       if (selectedType) params.set('type', selectedType);
       const res = await fetch(
@@ -1167,8 +1169,6 @@ export function BrokerDashboardInner() {
       })(),
     };
   })();
-  const isProjected = compareYear === 'projected';
-
   const ytdGrossMarginGoal = yearlyGrossMarginGoal ? Math.round(yearlyGrossMarginGoal * ytdFraction) : null;
   const ytdVolumeGoal = yearlyVolumeGoal ? Math.round(yearlyVolumeGoal * ytdFraction) : null;
   const ytdSalesGoal = yearlySalesGoal ? Math.round(yearlySalesGoal * ytdFraction * 10) / 10 : null;
@@ -1399,34 +1399,34 @@ export function BrokerDashboardInner() {
         </Card>
       </div>
 
-      {/* ── CHART 1: Gross Margin vs Goal + YoY Comparison ─────────────────── */}
+      {/* ── CHART 1: Gross Margin ─────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <CardTitle>Monthly Gross Margin vs Goal</CardTitle>
+              <CardTitle>Monthly Gross Margin</CardTitle>
               <CardDescription>
                 Company retained revenue after agent payouts — {year}
-                {compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` compared to ${compareYear}` : ''}
+                {compareYear ? ` vs ${compareYear}` : ''}
+                {showProjected ? ' + Projected' : ''}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
-              <Select
-                value={compareYear ? String(compareYear) : 'none'}
-                onValueChange={v => setCompareYear(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
-              >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={compareYear ? String(compareYear) : 'none'} onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}>
+                <SelectTrigger className="w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
-                  {(data.availableYears ?? []).map(y => (
-                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                  ))}
+                  <SelectItem value="none">Year: None</SelectItem>
+                  {(data.availableYears ?? []).map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <button type="button" onClick={() => setShowGoals(g => !g)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showGoals ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                Goals
+              </button>
+              {isCurrentYear && (
+                <button type="button" onClick={() => setShowProjected(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                  📈 Projected
+                </button>
+              )}
             </div>
           </div>
           {gradeMargin && (() => { const g = letterGrade(gradeMargin); return (
@@ -1458,70 +1458,59 @@ export function BrokerDashboardInner() {
               data={months.map((m, i) => ({
                 ...m,
                 grossMargin: isCurrentYear && i > currentMonthIdx ? null : m.grossMargin,
-                grossMarginGoal: isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal,
-                compareMargin: isProjected ? null : (data.comparisonData?.months?.[i]?.grossMargin ?? null),
-                projectedMargin: isProjected ? (projectedMonthData?.margin[i] ?? null) : null,
+                grossMarginGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal) : null,
+                compareMargin: compareYear ? (data.comparisonData?.months?.[i]?.grossMargin ?? null) : null,
+                projectedMargin: showProjected ? (projectedMonthData?.margin[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => formatCurrency(val, true)} />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name) => {
-                      const labels: Record<string, string> = {
-                        grossMargin: `${year} Gross Margin`,
-                        grossMarginGoal: `${year} Goal`,
-                        compareMargin: `${compareYear ?? ''} Gross Margin`,
-                      };
-                      return [formatCurrency(Number(value)), labels[name as string] ?? name];
-                    }}
-                  />
-                }
-              />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => {
+                const labels: Record<string, string> = {
+                  grossMargin: `${year} Gross Margin`, grossMarginGoal: `${year} Goal`,
+                  compareMargin: `${compareYear} Gross Margin`, projectedMargin: 'Projected',
+                };
+                return [formatCurrency(Number(value)), labels[name as string] ?? name];
+              }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="grossMargin" fill="var(--color-grossMargin)" radius={[4, 4, 0, 0]} name={`${year}`} />
-              {compareYear && !isProjected && <Bar dataKey="compareMargin" fill="var(--color-compareMargin)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              {isProjected && <Bar dataKey="projectedMargin" fill="var(--color-projectedMargin)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
-              <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
+              {compareYear && <Bar dataKey="compareMargin" fill="var(--color-compareMargin)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {showGoals && <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedMargin" fill="var(--color-projectedMargin)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
-          {/* YoY Summary when comparing */}
-          {compareYear && data.comparisonData && (
-            <div className="mt-4 grid grid-cols-3 gap-4 text-sm border-t pt-4">
-              {(() => {
+          {/* Summaries */}
+          {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && data.comparisonData && (() => {
                 const compTotal = data.comparisonData.months.reduce((s, m) => s + m.grossMargin, 0);
                 const diff = totals.grossMargin - compTotal;
-                const pctChange = compTotal > 0 ? ((diff / compTotal) * 100) : 0;
+                const pctChange = compTotal > 0 ? (diff / compTotal * 100) : 0;
                 const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
                 const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
                 return (
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Margin Change</span>
-                      <p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">{compareYear} Total Volume</span>
-                      <p className="font-semibold">{formatCurrency(compVolume, true)}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">{compareYear} Total Sales</span>
-                      <p className="font-semibold">{formatNumber(compSales)}</p>
-                    </div>
-                  </>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div><span className="text-muted-foreground">Margin vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVolume, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                  </div>
                 );
               })()}
+              {showProjected && projectedMonthData && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Margin</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearMargin, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearVolume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{formatNumber(projectedMonthData.fullYearSales)}</p></div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* ── CHART 2: Total $ Volume + Goal + YoY ─────────────────────────── */}
+      {/* ── CHART 2: Dollar Volume ────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1529,33 +1518,27 @@ export function BrokerDashboardInner() {
               <CardTitle>Monthly Dollar Volume</CardTitle>
               <CardDescription>
                 Closed and pending deal value — {year}
-                {compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` compared to ${compareYear}` : ''}
+                {compareYear ? ` vs ${compareYear}` : ''}
+                {showProjected ? ' + Projected' : ''}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
-                <Select
-                  value={compareYear ? String(compareYear) : 'none'}
-                  onValueChange={v => setCompareYear(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
-                >
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
-                    {(data.availableYears ?? []).map(y => (
-                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPending(p => !p)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPending ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
-              >
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={compareYear ? String(compareYear) : 'none'} onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}>
+                <SelectTrigger className="w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Year: None</SelectItem>
+                  {(data.availableYears ?? []).map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <button type="button" onClick={() => setShowGoals(g => !g)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showGoals ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                Goals
+              </button>
+              {isCurrentYear && (
+                <button type="button" onClick={() => setShowProjected(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                  📈 Projected
+                </button>
+              )}
+              <button type="button" onClick={() => setShowPending(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPending ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
                 Pending
               </button>
             </div>
@@ -1589,70 +1572,60 @@ export function BrokerDashboardInner() {
               data={months.map((m, i) => ({
                 ...m,
                 closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
-                volumeGoal: isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal,
+                volumeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal) : null,
                 pendingVolume: (!showPending || (isCurrentYear && i > currentMonthIdx)) ? null : m.pendingVolume,
-                compareVolume: isProjected ? null : (data.comparisonData?.months?.[i]?.closedVolume ?? null),
-                projectedVolume: isProjected ? (projectedMonthData?.volume[i] ?? null) : null,
+                compareVolume: compareYear ? (data.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
+                projectedVolume: showProjected ? (projectedMonthData?.volume[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => formatCurrency(val, true)} />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name) => {
-                      const labels: Record<string, string> = {
-                        closedVolume: `${year} Closed`,
-                        pendingVolume: `${year} Pending`,
-                        volumeGoal: `${year} Goal`,
-                        compareVolume: `${compareYear ?? ''} Volume`,
-                      };
-                      return [formatCurrency(Number(value)), labels[name as string] ?? name];
-                    }}
-                  />
-                }
-              />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => {
+                const labels: Record<string, string> = {
+                  closedVolume: `${year} Closed`, pendingVolume: `${year} Pending`,
+                  volumeGoal: `${year} Goal`, compareVolume: `${compareYear} Volume`, projectedVolume: 'Projected',
+                };
+                return [formatCurrency(Number(value)), labels[name as string] ?? name];
+              }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && !isProjected && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              {isProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
+              {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {showGoals && <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               {showPending && <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
-              <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
-          {compareYear && data.comparisonData && (
-            <div className="mt-4 grid grid-cols-3 gap-4 text-sm border-t pt-4">
-              {(() => {
+          {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && data.comparisonData && (() => {
                 const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
                 const diff = totals.closedVolume - compVolume;
-                const pctChange = compVolume > 0 ? ((diff / compVolume) * 100) : 0;
+                const pctChange = compVolume > 0 ? (diff / compVolume * 100) : 0;
+                const compMargin = data.comparisonData.months.reduce((s, m) => s + m.grossMargin, 0);
+                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
                 return (
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Volume Change</span>
-                      <p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">{year} Volume</span>
-                      <p className="font-semibold">{formatCurrency(totals.closedVolume, true)}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">{compareYear} Volume</span>
-                      <p className="font-semibold">{formatCurrency(compVolume, true)}</p>
-                    </div>
-                  </>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div><span className="text-muted-foreground">Volume vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear} Total Margin</span><p className="font-semibold">{formatCurrency(compMargin, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                  </div>
                 );
               })()}
+              {showProjected && projectedMonthData && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearVolume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Margin</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearMargin, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{formatNumber(projectedMonthData.fullYearSales)}</p></div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* ── CHART 3: Number of Sales + Goal + YoY ─────────────────────────── */}
+      {/* ── CHART 3: Number of Sales ──────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1660,33 +1633,27 @@ export function BrokerDashboardInner() {
               <CardTitle>Monthly Number of Sales</CardTitle>
               <CardDescription>
                 Closed and pending transaction counts — {year}
-                {compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` compared to ${compareYear}` : ''}
+                {compareYear ? ` vs ${compareYear}` : ''}
+                {showProjected ? ' + Projected' : ''}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
-                <Select
-                  value={compareYear ? String(compareYear) : 'none'}
-                  onValueChange={v => setCompareYear(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
-                >
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
-                    {(data.availableYears ?? []).map(y => (
-                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPending(p => !p)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPending ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
-              >
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={compareYear ? String(compareYear) : 'none'} onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}>
+                <SelectTrigger className="w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Year: None</SelectItem>
+                  {(data.availableYears ?? []).map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <button type="button" onClick={() => setShowGoals(g => !g)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showGoals ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                Goals
+              </button>
+              {isCurrentYear && (
+                <button type="button" onClick={() => setShowProjected(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                  📈 Projected
+                </button>
+              )}
+              <button type="button" onClick={() => setShowPending(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPending ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
                 Pending
               </button>
             </div>
@@ -1720,64 +1687,54 @@ export function BrokerDashboardInner() {
               data={months.map((m, i) => ({
                 ...m,
                 closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
-                salesCountGoal: isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal,
+                salesCountGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal) : null,
                 pendingCount: (!showPending || (isCurrentYear && i > currentMonthIdx)) ? null : m.pendingCount,
-                compareCount: isProjected ? null : (data.comparisonData?.months?.[i]?.closedCount ?? null),
-                projectedCount: isProjected ? (projectedMonthData?.sales[i] ?? null) : null,
+                compareCount: compareYear ? (data.comparisonData?.months?.[i]?.closedCount ?? null) : null,
+                projectedCount: showProjected ? (projectedMonthData?.sales[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name) => {
-                      const labels: Record<string, string> = {
-                        closedCount: `${year} Closed`,
-                        pendingCount: `${year} Pending`,
-                        salesCountGoal: `${year} Goal`,
-                        compareCount: `${compareYear ?? ''} Sales`,
-                      };
-                      return [formatNumber(Number(value)), labels[name as string] ?? name];
-                    }}
-                  />
-                }
-              />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => {
+                const labels: Record<string, string> = {
+                  closedCount: `${year} Closed`, pendingCount: `${year} Pending`,
+                  salesCountGoal: `${year} Goal`, compareCount: `${compareYear} Sales`, projectedCount: 'Projected',
+                };
+                return [formatNumber(Number(value)), labels[name as string] ?? name];
+              }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && !isProjected && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              {isProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
+              {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {showGoals && <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               {showPending && <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
-              <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
-          {compareYear && data.comparisonData && (
-            <div className="mt-4 grid grid-cols-3 gap-4 text-sm border-t pt-4">
-              {(() => {
+          {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && data.comparisonData && (() => {
                 const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
                 const diff = totals.closedCount - compSales;
-                const pctChange = compSales > 0 ? ((diff / compSales) * 100) : 0;
+                const pctChange = compSales > 0 ? (diff / compSales * 100) : 0;
+                const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
+                const compMargin = data.comparisonData.months.reduce((s, m) => s + m.grossMargin, 0);
                 return (
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Sales Change</span>
-                      <p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {diff >= 0 ? '+' : ''}{diff} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">{year} Sales</span>
-                      <p className="font-semibold">{formatNumber(totals.closedCount)}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">{compareYear} Sales</span>
-                      <p className="font-semibold">{formatNumber(compSales)}</p>
-                    </div>
-                  </>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div><span className="text-muted-foreground">Sales vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVolume, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear} Total Margin</span><p className="font-semibold">{formatCurrency(compMargin, true)}</p></div>
+                  </div>
                 );
               })()}
+              {showProjected && projectedMonthData && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{formatNumber(projectedMonthData.fullYearSales)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearVolume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Margin</span><p className="font-semibold text-amber-600">{formatCurrency(projectedMonthData.fullYearMargin, true)}</p></div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
