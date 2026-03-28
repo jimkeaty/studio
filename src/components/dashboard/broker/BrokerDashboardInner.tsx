@@ -649,8 +649,13 @@ function GoalsEditor({
             <Button variant="ghost" className="flex w-full justify-between p-0 h-auto hover:bg-transparent">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Target className="h-5 w-5" /> Goal Setting
+                {!open && (
+                  <span className="text-xs font-normal text-primary border border-primary/30 rounded px-2 py-0.5 bg-primary/5">
+                    Click to set goals
+                  </span>
+                )}
               </CardTitle>
-              {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5 text-primary" />}
             </Button>
           </CollapsibleTrigger>
           <CardDescription>

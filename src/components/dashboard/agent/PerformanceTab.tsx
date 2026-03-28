@@ -224,8 +224,15 @@ function GoalsEditor({ months, year, goalSegment, onSaved }: {
         <CardHeader className="pb-3">
           <CollapsibleTrigger asChild>
             <Button variant="ghost" className="flex w-full justify-between p-0 h-auto hover:bg-transparent">
-              <CardTitle className="text-lg">My Goals</CardTitle>
-              {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              <CardTitle className="text-lg flex items-center gap-2">
+                My Goals
+                {!open && (
+                  <span className="text-xs font-normal text-primary border border-primary/30 rounded px-2 py-0.5 bg-primary/5">
+                    Click to set goals
+                  </span>
+                )}
+              </CardTitle>
+              {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5 text-primary" />}
             </Button>
           </CollapsibleTrigger>
           <CardDescription>Set your monthly income, volume, and sales goals.</CardDescription>
