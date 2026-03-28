@@ -945,6 +945,7 @@ export default function BulkImportPage() {
                               <option value="brokerGci">Broker GCI</option>
                               <option value="agentPct">Agent %</option>
                               <option value="agentDollar">Agent $ (Primary GCI)</option>
+                              <option value="referral">Referral</option>
                               <option value="teamMember1">Team Member 1</option>
                               <option value="teamMember1Pct">Team Member 1 Split%</option>
                               <option value="teamMember1Gci">Team Member 1 GCI</option>
