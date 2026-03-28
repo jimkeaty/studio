@@ -127,8 +127,8 @@ export async function POST(req: NextRequest) {
       // Commentary & Audio
       commentaryPack: body.commentaryPack || 'generic',
       audioPack: body.audioPack || 'none',
-      audioEnabled: body.audioEnabled ?? false,
-      commentaryEnabled: body.commentaryEnabled ?? false,
+      audioEnabled: body.audioEnabled ?? true,
+      commentaryEnabled: body.commentaryEnabled ?? true,
 
       // Presentation
       autoRefreshSeconds: body.autoRefreshSeconds ?? 30,

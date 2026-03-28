@@ -879,6 +879,7 @@ export default function BulkImportPage() {
                             >
                               <option value="">— skip this column —</option>
                               <option value="agentName">Agent Name *</option>
+                              <option value="team">Team</option>
                               <option value="closingType">Deal Type (Buyer/Listing/Lease/Referral)</option>
                               <option value="status">Status *</option>
                               <option value="dealType">Type of Closing (Residential/Land/Commercial)</option>
