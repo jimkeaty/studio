@@ -451,8 +451,8 @@ function GoalsEditor({
   const [yearlyMargin, setYearlyMargin] = useState('');
   const [goalAvgSalePrice, setGoalAvgSalePrice] = useState('');
   const [goalAvgCommPct, setGoalAvgCommPct] = useState('');
-  // Editable seasonality weights (% of year for each month)
-  const [seasonWeights, setSeasonWeights] = useState<Record<number, { salesPct: string; volumePct: string }>>({});
+  // Editable seasonality weights (% of year for each month) — single weight drives both sales and volume
+  const [seasonWeights, setSeasonWeights] = useState<Record<number, { pct: string }>>({});
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -486,14 +486,11 @@ function GoalsEditor({
     if (prevYearStats?.avgSalePrice) setGoalAvgSalePrice(String(Math.round(prevYearStats.avgSalePrice)));
     if (prevYearStats?.avgCommissionPct) setGoalAvgCommPct(String(prevYearStats.avgCommissionPct.toFixed(2)));
 
-    // Initialize seasonality weights
+    // Initialize seasonality weights from prev year sales %
     const sw: typeof seasonWeights = {};
     for (let m = 1; m <= 12; m++) {
       const s = prevYearStats?.seasonality?.[m - 1];
-      sw[m] = {
-        salesPct: String(s?.salesPct ?? 8.33),
-        volumePct: String(s?.volumePct ?? 8.33),
-      };
+      sw[m] = { pct: String(s?.salesPct ?? 8.33) };
     }
     setSeasonWeights(sw);
   }, [months, prevYearStats]);
@@ -502,8 +499,8 @@ function GoalsEditor({
     setGoals(prev => ({ ...prev, [month]: { ...prev[month], [field]: val } }));
   };
 
-  const updateSeasonWeight = (month: number, field: 'salesPct' | 'volumePct', val: string) => {
-    setSeasonWeights(prev => ({ ...prev, [month]: { ...prev[month], [field]: val } }));
+  const updateSeasonWeight = (month: number, val: string) => {
+    setSeasonWeights(prev => ({ ...prev, [month]: { pct: val } }));
   };
 
   // Use goal averages if set, otherwise fall back to prev year actuals
@@ -561,13 +558,12 @@ function GoalsEditor({
     const newGoals: typeof goals = {};
     for (let m = 1; m <= 12; m++) {
       const sw = seasonWeights[m];
-      const volPct = parseFloat(sw?.volumePct) || 8.33;
-      const salesPct = parseFloat(sw?.salesPct) || 8.33;
+      const pct = parseFloat(sw?.pct) || 8.33;
 
       newGoals[m] = {
-        volume: vol > 0 ? String(Math.round(vol * (volPct / 100))) : '',
-        sales: sales > 0 ? String(Math.round(sales * (salesPct / 100))) : '',
-        margin: margin > 0 ? String(Math.round(margin * (salesPct / 100))) : '',
+        volume: vol > 0 ? String(Math.round(vol * (pct / 100))) : '',
+        sales: sales > 0 ? String(Math.round(sales * (pct / 100))) : '',
+        margin: margin > 0 ? String(Math.round(margin * (pct / 100))) : '',
       };
     }
     setGoals(newGoals);
@@ -599,13 +595,12 @@ function GoalsEditor({
     const newWeights: typeof seasonWeights = {};
     for (let m = 1; m <= 12; m++) {
       const s = prevYearStats.seasonality[m - 1];
-      const volPct = s?.volumePct ?? 8.33;
-      const salesPct = s?.salesPct ?? 8.33;
-      newWeights[m] = { salesPct: String(salesPct), volumePct: String(volPct) };
+      const pct = s?.salesPct ?? 8.33;
+      newWeights[m] = { pct: String(pct) };
       newGoals[m] = {
-        volume: vol > 0 ? String(Math.round(vol * (volPct / 100))) : '',
-        sales: sales > 0 ? String(Math.round(sales * (salesPct / 100))) : '',
-        margin: margin > 0 ? String(Math.round(margin * (salesPct / 100))) : '',
+        volume: vol > 0 ? String(Math.round(vol * (pct / 100))) : '',
+        sales: sales > 0 ? String(Math.round(sales * (pct / 100))) : '',
+        margin: margin > 0 ? String(Math.round(margin * (pct / 100))) : '',
       };
     }
     setSeasonWeights(newWeights);
@@ -646,8 +641,7 @@ function GoalsEditor({
   };
 
   // Seasonality totals for validation
-  const totalSalesPct = Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.salesPct) || 0), 0);
-  const totalVolPct = Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.volumePct) || 0), 0);
+  const totalSeasonPct = Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.pct) || 0), 0);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -871,70 +865,18 @@ function GoalsEditor({
               </div>
             </div>
 
-            {/* Editable Seasonality Weights */}
-            <Collapsible>
-              <div className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="p-0 h-auto hover:bg-transparent">
-                      <h4 className="font-semibold text-sm flex items-center gap-1">
-                        Seasonality Weights
-                        <ChevronDown className="h-4 w-4" />
-                      </h4>
-                    </Button>
-                  </CollapsibleTrigger>
-                  <span className="text-xs text-muted-foreground">Adjust weights then click Distribute above</span>
-                </div>
-                <CollapsibleContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-3">
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
-                      const sw = seasonWeights[m] || { salesPct: '8.33', volumePct: '8.33' };
-                      const label = months.find(md => md.month === m)?.label || `M${m}`;
-                      return (
-                        <div key={m} className="border rounded p-2 space-y-1">
-                          <span className="font-medium text-xs">{label}</span>
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={sw.salesPct}
-                              onChange={e => updateSeasonWeight(m, 'salesPct', e.target.value)}
-                              className="h-7 text-xs w-16"
-                            />
-                            <span className="text-xs text-muted-foreground">% sales</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={sw.volumePct}
-                              onChange={e => updateSeasonWeight(m, 'volumePct', e.target.value)}
-                              className="h-7 text-xs w-16"
-                            />
-                            <span className="text-xs text-muted-foreground">% vol</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex gap-4 mt-2 text-xs">
-                    <span className={totalSalesPct < 99 || totalSalesPct > 101 ? 'text-destructive font-medium' : 'text-muted-foreground'}>
-                      Sales total: {totalSalesPct.toFixed(1)}%
-                    </span>
-                    <span className={totalVolPct < 99 || totalVolPct > 101 ? 'text-destructive font-medium' : 'text-muted-foreground'}>
-                      Volume total: {totalVolPct.toFixed(1)}%
-                    </span>
-                  </div>
-                </CollapsibleContent>
-              </div>
-            </Collapsible>
-
-            {/* Monthly Breakdown Table */}
+            {/* Monthly Breakdown Table — Seasonality inline as second column */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 pr-2 font-medium">Month</th>
+                    <th className="text-left py-2 px-2 font-medium">
+                      Seasonality %
+                      <span className={`ml-2 text-xs font-normal ${totalSeasonPct < 99 || totalSeasonPct > 101 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        ({totalSeasonPct.toFixed(1)}%)
+                      </span>
+                    </th>
                     <th className="text-left py-2 px-2 font-medium">Volume Goal ($)</th>
                     <th className="text-left py-2 px-2 font-medium">Sales Goal (#)</th>
                     <th className="text-left py-2 px-2 font-medium">Margin Goal ($)</th>
@@ -943,10 +885,21 @@ function GoalsEditor({
                 <tbody>
                   {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
                     const g = goals[m] || { margin: '', volume: '', sales: '' };
+                    const sw = seasonWeights[m] || { pct: '8.33' };
                     const label = months.find(md => md.month === m)?.label || `M${m}`;
                     return (
                       <tr key={m} className="border-b last:border-0">
                         <td className="py-2 pr-2 font-medium">{label}</td>
+                        <td className="py-2 px-2">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={sw.pct}
+                            onChange={e => updateSeasonWeight(m, e.target.value)}
+                            placeholder="8.33"
+                            className="h-8 w-20"
+                          />
+                        </td>
                         <td className="py-2 px-2">
                           <Input
                             type="number"
@@ -981,15 +934,10 @@ function GoalsEditor({
                 <tfoot>
                   <tr className="border-t-2 font-semibold">
                     <td className="py-2 pr-2">Total</td>
-                    <td className="py-2 px-2">
-                      {formatCurrency(Object.values(goals).reduce((s, g) => s + (parseFloat(g.volume) || 0), 0), true)}
-                    </td>
-                    <td className="py-2 px-2">
-                      {Object.values(goals).reduce((s, g) => s + (parseInt(g.sales, 10) || 0), 0)}
-                    </td>
-                    <td className="py-2 px-2">
-                      {formatCurrency(Object.values(goals).reduce((s, g) => s + (parseFloat(g.margin) || 0), 0), true)}
-                    </td>
+                    <td className="py-2 px-2 text-xs font-normal text-muted-foreground">{totalSeasonPct.toFixed(1)}%</td>
+                    <td className="py-2 px-2">{formatCurrency(Object.values(goals).reduce((s, g) => s + (parseFloat(g.volume) || 0), 0), true)}</td>
+                    <td className="py-2 px-2">{Object.values(goals).reduce((s, g) => s + (parseInt(g.sales, 10) || 0), 0)}</td>
+                    <td className="py-2 px-2">{formatCurrency(Object.values(goals).reduce((s, g) => s + (parseFloat(g.margin) || 0), 0), true)}</td>
                   </tr>
                 </tfoot>
               </table>
