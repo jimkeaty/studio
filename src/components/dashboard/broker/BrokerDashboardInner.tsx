@@ -29,7 +29,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import type { BrokerCommandMetrics, MonthlyData, PrevYearStats } from '@/lib/types/brokerCommandMetrics';
+import type { BrokerCommandMetrics, MonthlyData, PrevYearStats, CategoryMetrics } from '@/lib/types/brokerCommandMetrics';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -1020,6 +1020,9 @@ export function BrokerDashboardInner() {
   const [data, setData] = useState<BrokerCommandMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [catYear, setCatYear] = useState<number>(new Date().getFullYear());
+  const [catBreakdown, setCatBreakdown] = useState<{ closed: CategoryMetrics; pending: CategoryMetrics } | null>(null);
+  const [catLoading, setCatLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -1052,6 +1055,29 @@ export function BrokerDashboardInner() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Reset catYear when main year changes
+  useEffect(() => { setCatYear(year); setCatBreakdown(null); }, [year]);
+
+  // Fetch category breakdown for a different year
+  useEffect(() => {
+    if (!user || catYear === year) { setCatBreakdown(null); return; }
+    setCatLoading(true);
+    (async () => {
+      try {
+        const token = await user.getIdToken(true);
+        const params = new URLSearchParams({ year: String(catYear) });
+        if (selectedTeam) params.set('teamId', selectedTeam);
+        if (selectedType) params.set('type', selectedType);
+        const res = await fetch(`/api/broker/command-metrics?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const d = await res.json();
+        setCatBreakdown(d.overview?.categoryBreakdown ?? null);
+      } catch { /* silent */ }
+      finally { setCatLoading(false); }
+    })();
+  }, [catYear, year, user, selectedTeam, selectedType]);
 
   // ── Guards ──────────────────────────────────────────────────────────────
   if (loading) return <BrokerDashboardSkeleton />;
@@ -1772,17 +1798,20 @@ export function BrokerDashboardInner() {
         const CAT_KEYS = ['residential_sale', 'commercial_sale', 'commercial_lease', 'land', 'rental'] as const;
         const CAT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
 
+        const activeCat = catBreakdown ?? categoryBreakdown;
+        const catYearOptions = [year, ...(data.availableYears ?? [])].sort((a, b) => b - a);
+
         const marginData = CAT_KEYS
-          .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].netRevenue, color: CAT_COLORS[i] }))
+          .map((k, i) => ({ name: CAT_LABELS[k], value: activeCat.closed[k].netRevenue, color: CAT_COLORS[i] }))
           .filter(d => d.value > 0);
         const salesData = CAT_KEYS
-          .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].count, color: CAT_COLORS[i] }))
+          .map((k, i) => ({ name: CAT_LABELS[k], value: activeCat.closed[k].count, color: CAT_COLORS[i] }))
           .filter(d => d.value > 0);
         const volumeData = CAT_KEYS
-          .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].volume, color: CAT_COLORS[i] }))
+          .map((k, i) => ({ name: CAT_LABELS[k], value: activeCat.closed[k].volume, color: CAT_COLORS[i] }))
           .filter(d => d.value > 0);
 
-        if (marginData.length === 0) return null;
+        if (marginData.length === 0 && !catLoading) return null;
 
         const renderPie = (data: typeof marginData, formatter: (v: number) => string, title: string) => (
           <div className="flex flex-col items-center">
@@ -1809,48 +1838,69 @@ export function BrokerDashboardInner() {
         return (
           <Card>
             <CardHeader>
-              <CardTitle>Category Breakdown — {year}</CardTitle>
-              <CardDescription>Closed transactions by type — gross margin, sales, and volume</CardDescription>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Category Breakdown — {catYear}</CardTitle>
+                  <CardDescription>Closed transactions by type — gross margin, sales, and volume</CardDescription>
+                </div>
+                {catYearOptions.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">View year:</span>
+                    <Select value={String(catYear)} onValueChange={v => setCatYear(Number(v))}>
+                      <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {catYearOptions.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {renderPie(marginData, v => formatCurrency(v, true), 'Gross Margin')}
-                {renderPie(salesData, v => `${v} sales`, 'Number of Sales')}
-                {renderPie(volumeData, v => formatCurrency(v, true), 'Dollar Volume')}
-              </div>
-              {/* Detail table */}
-              <div className="mt-6 border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium">Category</th>
-                      <th className="px-4 py-2 text-right font-medium">Closed</th>
-                      <th className="px-4 py-2 text-right font-medium">Volume</th>
-                      <th className="px-4 py-2 text-right font-medium">Gross Margin</th>
-                      <th className="px-4 py-2 text-right font-medium">Pending</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {CAT_KEYS.map((k, i) => {
-                      const c = categoryBreakdown.closed[k];
-                      const p = categoryBreakdown.pending[k];
-                      if (c.count === 0 && p.count === 0) return null;
-                      return (
-                        <tr key={k} className="border-t">
-                          <td className="px-4 py-2 flex items-center gap-2">
-                            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CAT_COLORS[i] }} />
-                            {CAT_LABELS[k]}
-                          </td>
-                          <td className="px-4 py-2 text-right">{c.count}</td>
-                          <td className="px-4 py-2 text-right">{formatCurrency(c.volume, true)}</td>
-                          <td className="px-4 py-2 text-right">{formatCurrency(c.netRevenue, true)}</td>
-                          <td className="px-4 py-2 text-right text-muted-foreground">{p.count > 0 ? `${p.count} (${formatCurrency(p.volume, true)})` : '—'}</td>
+              {catLoading ? (
+                <div className="h-60 flex items-center justify-center text-muted-foreground text-sm">Loading {catYear} data…</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {renderPie(marginData, v => formatCurrency(v, true), 'Gross Margin')}
+                    {renderPie(salesData, v => `${v} sales`, 'Number of Sales')}
+                    {renderPie(volumeData, v => formatCurrency(v, true), 'Dollar Volume')}
+                  </div>
+                  {/* Detail table */}
+                  <div className="mt-6 border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium">Category</th>
+                          <th className="px-4 py-2 text-right font-medium">Closed</th>
+                          <th className="px-4 py-2 text-right font-medium">Volume</th>
+                          <th className="px-4 py-2 text-right font-medium">Gross Margin</th>
+                          <th className="px-4 py-2 text-right font-medium">Pending</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {CAT_KEYS.map((k, i) => {
+                          const c = activeCat.closed[k];
+                          const p = activeCat.pending[k];
+                          if (c.count === 0 && p.count === 0) return null;
+                          return (
+                            <tr key={k} className="border-t">
+                              <td className="px-4 py-2 flex items-center gap-2">
+                                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CAT_COLORS[i] }} />
+                                {CAT_LABELS[k]}
+                              </td>
+                              <td className="px-4 py-2 text-right">{c.count}</td>
+                              <td className="px-4 py-2 text-right">{formatCurrency(c.volume, true)}</td>
+                              <td className="px-4 py-2 text-right">{formatCurrency(c.netRevenue, true)}</td>
+                              <td className="px-4 py-2 text-right text-muted-foreground">{p.count > 0 ? `${p.count} (${formatCurrency(p.volume, true)})` : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         );

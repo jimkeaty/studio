@@ -297,6 +297,9 @@ export function PerformanceTab() {
   const [data, setData] = useState<AgentMetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [catYear, setCatYear] = useState<number>(new Date().getFullYear());
+  const [catBreakdown, setCatBreakdown] = useState<{ closed: CategoryMetrics; pending: CategoryMetrics } | null>(null);
+  const [catLoading, setCatLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -322,6 +325,27 @@ export function PerformanceTab() {
   }, [user, year, view, compareYear]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Reset catYear when main year changes
+  useEffect(() => { setCatYear(year); setCatBreakdown(null); }, [year]);
+
+  // Fetch category breakdown for a different year
+  useEffect(() => {
+    if (!user || catYear === year) { setCatBreakdown(null); return; }
+    setCatLoading(true);
+    (async () => {
+      try {
+        const token = await user.getIdToken(true);
+        const params = new URLSearchParams({ year: String(catYear), view });
+        const res = await fetch(`/api/agent/command-metrics?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const d = await res.json();
+        setCatBreakdown(d.overview?.categoryBreakdown ?? null);
+      } catch { /* silent */ }
+      finally { setCatLoading(false); }
+    })();
+  }, [catYear, year, user, view]);
 
   if (userLoading || loading) {
     return (
@@ -628,30 +652,50 @@ export function PerformanceTab() {
       {/* ── Category Breakdown ─────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>Category Breakdown — {year}</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle>Category Breakdown — {catYear}</CardTitle>
+            {(data.availableYears ?? []).length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">View year:</span>
+                <Select value={String(catYear)} onValueChange={v => setCatYear(Number(v))}>
+                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[year, ...(data.availableYears ?? [])].sort((a, b) => b - a).map(y => (
+                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {([
-              ['Residential Sale', 'residential_sale'], ['Commercial Sale', 'commercial_sale'],
-              ['Commercial Lease', 'commercial_lease'], ['Land', 'land'], ['Rental / Lease', 'rental'],
-            ] as const).map(([label, key]) => {
-              const c = overview.categoryBreakdown.closed[key];
-              const p = overview.categoryBreakdown.pending[key];
-              if (c.count === 0 && p.count === 0) return null;
-              return (
-                <div key={key} className="border rounded-lg p-4 space-y-2">
-                  <h4 className="font-semibold">{label}</h4>
-                  <div className="grid grid-cols-2 text-sm gap-1">
-                    <span className="text-muted-foreground">Closed:</span>
-                    <span className="font-medium">{c.count} ({formatCurrency(c.netRevenue)})</span>
-                    <span className="text-muted-foreground">Pending:</span>
-                    <span className="font-medium">{p.count} ({formatCurrency(p.netRevenue)})</span>
+          {catLoading ? (
+            <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Loading {catYear} data…</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {([
+                ['Residential Sale', 'residential_sale'], ['Commercial Sale', 'commercial_sale'],
+                ['Commercial Lease', 'commercial_lease'], ['Land', 'land'], ['Rental / Lease', 'rental'],
+              ] as const).map(([label, key]) => {
+                const activeCat = catBreakdown ?? overview.categoryBreakdown;
+                const c = activeCat.closed[key];
+                const p = activeCat.pending[key];
+                if (c.count === 0 && p.count === 0) return null;
+                return (
+                  <div key={key} className="border rounded-lg p-4 space-y-2">
+                    <h4 className="font-semibold">{label}</h4>
+                    <div className="grid grid-cols-2 text-sm gap-1">
+                      <span className="text-muted-foreground">Closed:</span>
+                      <span className="font-medium">{c.count} ({formatCurrency(c.netRevenue)})</span>
+                      <span className="text-muted-foreground">Pending:</span>
+                      <span className="font-medium">{p.count} ({formatCurrency(p.netRevenue)})</span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
