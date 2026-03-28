@@ -47,6 +47,14 @@ const formatCurrency = (amount: number | null | undefined, compact = false) => {
   }).format(amount);
 };
 
+function letterGrade(pct: number): { letter: string; color: string } {
+  if (pct >= 90) return { letter: 'A', color: 'text-green-600' };
+  if (pct >= 80) return { letter: 'B', color: 'text-blue-600' };
+  if (pct >= 70) return { letter: 'C', color: 'text-yellow-600' };
+  if (pct >= 60) return { letter: 'D', color: 'text-orange-600' };
+  return { letter: 'F', color: 'text-red-600' };
+}
+
 const formatNumber = (num: number | null | undefined) =>
   num != null ? num.toLocaleString() : '—';
 
@@ -1079,17 +1087,17 @@ export function BrokerDashboardInner() {
               <span className="text-muted-foreground text-sm">Transaction Fees</span>
               <span className="font-medium">{formatCurrency(totals.transactionFees)}</span>
             </div>
-            {gradeMargin && (
+            {gradeMargin && (() => { const g = letterGrade(gradeMargin); return (
               <div className="border-t pt-2 flex justify-between items-center">
                 <span className="text-muted-foreground text-xs">{isCurrentYear ? 'Grade vs YTD Goal' : 'Grade vs Goal'}</span>
-                <span className={`text-sm font-bold ${gradeMargin >= 100 ? 'text-green-600' : gradeMargin >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
-                  {gradeMargin}%
-                  <span className="text-muted-foreground font-normal text-xs ml-1">
-                    ({formatCurrency(totals.grossMargin, true)} / {formatCurrency(ytdGrossMarginGoal!, true)})
+                <span className="flex items-center gap-2">
+                  <span className={`text-2xl font-black ${g.color}`}>{g.letter}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {gradeMargin}% · {formatCurrency(totals.grossMargin, true)} / {formatCurrency(ytdGrossMarginGoal!, true)}
                   </span>
                 </span>
               </div>
-            )}
+            ); })()}
           </CardContent>
         </Card>
 
@@ -1117,28 +1125,28 @@ export function BrokerDashboardInner() {
             </div>
             {(gradeVolume || gradeSales) && (
               <div className="border-t pt-2 space-y-1">
-                {gradeVolume && (
+                {gradeVolume && (() => { const g = letterGrade(gradeVolume); return (
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground text-xs">{isCurrentYear ? 'Volume vs YTD Goal' : 'Volume Grade'}</span>
-                    <span className={`text-sm font-bold ${gradeVolume >= 100 ? 'text-green-600' : gradeVolume >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
-                      {gradeVolume}%
-                      <span className="text-muted-foreground font-normal text-xs ml-1">
-                        ({formatCurrency(totals.closedVolume, true)} / {formatCurrency(ytdVolumeGoal!, true)})
+                    <span className="flex items-center gap-2">
+                      <span className={`text-2xl font-black ${g.color}`}>{g.letter}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {gradeVolume}% · {formatCurrency(totals.closedVolume, true)} / {formatCurrency(ytdVolumeGoal!, true)}
                       </span>
                     </span>
                   </div>
-                )}
-                {gradeSales && (
+                ); })()}
+                {gradeSales && (() => { const g = letterGrade(gradeSales); return (
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground text-xs">{isCurrentYear ? 'Sales vs YTD Goal' : 'Sales Grade'}</span>
-                    <span className={`text-sm font-bold ${gradeSales >= 100 ? 'text-green-600' : gradeSales >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
-                      {gradeSales}%
-                      <span className="text-muted-foreground font-normal text-xs ml-1">
-                        ({totals.closedCount} / {ytdSalesGoal})
+                    <span className="flex items-center gap-2">
+                      <span className={`text-2xl font-black ${g.color}`}>{g.letter}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {gradeSales}% · {totals.closedCount} / {ytdSalesGoal}
                       </span>
                     </span>
                   </div>
-                )}
+                ); })()}
               </div>
             )}
           </CardContent>
