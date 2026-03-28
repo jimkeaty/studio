@@ -595,11 +595,10 @@ export default function BulkImportPage() {
   const handleImport = async () => {
     if (!user) return;
     setImporting(true);
-    setImportProgress(10);
+    setImportProgress(5);
 
     try {
       const token = await user.getIdToken();
-      setImportProgress(20);
 
       const validRows = parsedRows
         .filter((r) => r.__errors.length === 0)
@@ -611,26 +610,46 @@ export default function BulkImportPage() {
         return;
       }
 
-      setImportProgress(40);
-
-      const res = await fetch('/api/admin/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ rows: validRows }),
-      });
-
-      setImportProgress(80);
-      const data = await res.json();
-      setImportProgress(100);
-
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'Import failed');
+      const CHUNK_SIZE = 500;
+      const chunks: typeof validRows[] = [];
+      for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
+        chunks.push(validRows.slice(i, i + CHUNK_SIZE));
       }
 
-      setImportResult(data);
+      const accumulated = {
+        imported: 0,
+        failed: 0,
+        fuzzyMatchedAgents: [] as any[],
+        autoCreatedAgents: [] as any[],
+        errors: [] as any[],
+      };
+
+      for (let i = 0; i < chunks.length; i++) {
+        const res = await fetch('/api/admin/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ rows: chunks[i] }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || `Chunk ${i + 1} failed`);
+        }
+
+        accumulated.imported += data.imported ?? 0;
+        accumulated.failed += data.failed ?? 0;
+        accumulated.fuzzyMatchedAgents.push(...(data.fuzzyMatchedAgents ?? []));
+        accumulated.autoCreatedAgents.push(...(data.autoCreatedAgents ?? []));
+        accumulated.errors.push(...(data.errors ?? []));
+
+        setImportProgress(Math.round(((i + 1) / chunks.length) * 100));
+      }
+
+      setImportResult({ ok: true, ...accumulated });
       setStep('result');
     } catch (err: any) {
       setPageError(err.message || 'Import failed. Please try again.');
@@ -1284,7 +1303,7 @@ export default function BulkImportPage() {
           {importing && (
             <Card>
               <CardContent className="pt-6">
-                <p className="text-sm font-medium mb-2">Importing {validRows.length} transactions…</p>
+                <p className="text-sm font-medium mb-2">Importing {validRows.length} transaction{validRows.length !== 1 ? 's' : ''}…{validRows.length > 500 ? ` (${Math.ceil(validRows.length / 500)} batches)` : ''}</p>
                 <Progress value={importProgress} className="h-2" />
                 <p className="text-xs text-muted-foreground mt-1">{importProgress}% complete</p>
               </CardContent>
