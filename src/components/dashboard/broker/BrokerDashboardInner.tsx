@@ -1433,16 +1433,25 @@ export function BrokerDashboardInner() {
           {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
             <div className="mt-4 space-y-3 border-t pt-4 text-sm">
               {compareYear && data.comparisonData && (() => {
-                const compTotal = data.comparisonData.months.reduce((s, m) => s + m.grossMargin, 0);
-                const diff = totals.grossMargin - compTotal;
-                const pctChange = compTotal > 0 ? (diff / compTotal * 100) : 0;
-                const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
-                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const compMarginYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.grossMargin, 0);
+                const compVolumeYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compSalesYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const diff = totals.grossMargin - compMarginYTD;
+                const pctChange = compMarginYTD > 0 ? (diff / compMarginYTD * 100) : 0;
+                const yoyPct = compMarginYTD > 0 ? Math.round((totals.grossMargin / compMarginYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
                 return (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div><span className="text-muted-foreground">Margin vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
-                    <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVolume, true)}</p></div>
-                    <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Margin vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{formatCurrency(compVolumeYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{formatNumber(compSalesYTD)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
                   </div>
                 );
               })()}
@@ -1548,16 +1557,25 @@ export function BrokerDashboardInner() {
           {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
             <div className="mt-4 space-y-3 border-t pt-4 text-sm">
               {compareYear && data.comparisonData && (() => {
-                const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
-                const diff = totals.closedVolume - compVolume;
-                const pctChange = compVolume > 0 ? (diff / compVolume * 100) : 0;
-                const compMargin = data.comparisonData.months.reduce((s, m) => s + m.grossMargin, 0);
-                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const compVolumeYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compMarginYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.grossMargin, 0);
+                const compSalesYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const diff = totals.closedVolume - compVolumeYTD;
+                const pctChange = compVolumeYTD > 0 ? (diff / compVolumeYTD * 100) : 0;
+                const yoyPct = compVolumeYTD > 0 ? Math.round((totals.closedVolume / compVolumeYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
                 return (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div><span className="text-muted-foreground">Volume vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
-                    <div><span className="text-muted-foreground">{compareYear} Total Margin</span><p className="font-semibold">{formatCurrency(compMargin, true)}</p></div>
-                    <div><span className="text-muted-foreground">{compareYear} Total Sales</span><p className="font-semibold">{formatNumber(compSales)}</p></div>
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Volume vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Margin</span><p className="font-semibold">{formatCurrency(compMarginYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{formatNumber(compSalesYTD)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
                   </div>
                 );
               })()}
@@ -1663,16 +1681,25 @@ export function BrokerDashboardInner() {
           {(compareYear && data.comparisonData || showProjected && projectedMonthData) && (
             <div className="mt-4 space-y-3 border-t pt-4 text-sm">
               {compareYear && data.comparisonData && (() => {
-                const compSales = data.comparisonData.months.reduce((s, m) => s + m.closedCount, 0);
-                const diff = totals.closedCount - compSales;
-                const pctChange = compSales > 0 ? (diff / compSales * 100) : 0;
-                const compVolume = data.comparisonData.months.reduce((s, m) => s + m.closedVolume, 0);
-                const compMargin = data.comparisonData.months.reduce((s, m) => s + m.grossMargin, 0);
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const compSalesYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const compVolumeYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compMarginYTD = data.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + m.grossMargin, 0);
+                const diff = totals.closedCount - compSalesYTD;
+                const pctChange = compSalesYTD > 0 ? (diff / compSalesYTD * 100) : 0;
+                const yoyPct = compSalesYTD > 0 ? Math.round((totals.closedCount / compSalesYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
                 return (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div><span className="text-muted-foreground">Sales vs {compareYear}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
-                    <div><span className="text-muted-foreground">{compareYear} Total Volume</span><p className="font-semibold">{formatCurrency(compVolume, true)}</p></div>
-                    <div><span className="text-muted-foreground">{compareYear} Total Margin</span><p className="font-semibold">{formatCurrency(compMargin, true)}</p></div>
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Sales vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{formatCurrency(compVolumeYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Margin</span><p className="font-semibold">{formatCurrency(compMarginYTD, true)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
                   </div>
                 );
               })()}
