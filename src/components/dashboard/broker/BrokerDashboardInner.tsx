@@ -29,7 +29,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import type { BrokerCommandMetrics, MonthlyData, PrevYearStats, CategoryMetrics } from '@/lib/types/brokerCommandMetrics';
+import type { BrokerCommandMetrics, MonthlyData, PrevYearStats, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -970,6 +970,7 @@ export function BrokerDashboardInner() {
   const [error, setError] = useState<string | null>(null);
   const [catYear, setCatYear] = useState<number>(new Date().getFullYear());
   const [catBreakdown, setCatBreakdown] = useState<{ closed: CategoryMetrics; pending: CategoryMetrics } | null>(null);
+  const [catSourceBreakdown, setCatSourceBreakdown] = useState<{ closed: Record<string, { count: number; volume: number; netRevenue: number }>; pending: Record<string, { count: number; volume: number; netRevenue: number }> } | null>(null);
   const [catLoading, setCatLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -1005,11 +1006,11 @@ export function BrokerDashboardInner() {
   }, [fetchData]);
 
   // Reset catYear when main year changes
-  useEffect(() => { setCatYear(year); setCatBreakdown(null); }, [year]);
+  useEffect(() => { setCatYear(year); setCatBreakdown(null); setCatSourceBreakdown(null); }, [year]);
 
   // Fetch category breakdown for a different year
   useEffect(() => {
-    if (!user || catYear === year) { setCatBreakdown(null); return; }
+    if (!user || catYear === year) { setCatBreakdown(null); setCatSourceBreakdown(null); return; }
     setCatLoading(true);
     (async () => {
       try {
@@ -1022,6 +1023,7 @@ export function BrokerDashboardInner() {
         });
         const d = await res.json();
         setCatBreakdown(d.overview?.categoryBreakdown ?? null);
+        setCatSourceBreakdown(d.overview?.sourceBreakdown ?? null);
       } catch { /* silent */ }
       finally { setCatLoading(false); }
     })();
@@ -1729,7 +1731,26 @@ export function BrokerDashboardInner() {
         const CAT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
 
         const activeCat = catBreakdown ?? categoryBreakdown;
+        const activeSource: SourceBreakdown = catSourceBreakdown ?? (data.overview.sourceBreakdown ?? { closed: {}, pending: {} });
         const catYearOptions = [year, ...(data.availableYears ?? [])].sort((a, b) => b - a);
+
+        const SOURCE_LABELS: Record<string, string> = {
+          boomtown: 'Boomtown', referral: 'Referral', sphere: 'Sphere of Influence',
+          sign_call: 'Sign Call', company_gen: 'Company Generated', social: 'Social Media',
+          open_house: 'Open House', fsbo: 'FSBO', expired_listing: 'Expired Listing', other: 'Other',
+        };
+        const SOURCE_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6'];
+        const sourceEntries = Object.entries(activeSource.closed)
+          .sort((a, b) => b[1].count - a[1].count);
+        const sourceMarginData = sourceEntries
+          .filter(([, v]) => v.netRevenue > 0)
+          .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.netRevenue, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+        const sourceSalesData = sourceEntries
+          .filter(([, v]) => v.count > 0)
+          .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.count, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+        const sourceVolumeData = sourceEntries
+          .filter(([, v]) => v.volume > 0)
+          .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.volume, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
 
         const marginData = CAT_KEYS
           .map((k, i) => ({ name: CAT_LABELS[k], value: activeCat.closed[k].netRevenue, color: CAT_COLORS[i] }))
@@ -1829,6 +1850,51 @@ export function BrokerDashboardInner() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* ── Source Breakdown ──────────────────────────────────────── */}
+                  {sourceSalesData.length > 0 && (
+                    <>
+                      <div className="mt-8 mb-3">
+                        <p className="font-semibold text-sm">Breakdown by Lead Source</p>
+                        <p className="text-xs text-muted-foreground">Closed transactions grouped by how the lead originated</p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {renderPie(sourceMarginData, v => formatCurrency(v, true), 'Gross Margin by Source')}
+                        {renderPie(sourceSalesData, v => `${v} sales`, 'Sales by Source')}
+                        {renderPie(sourceVolumeData, v => formatCurrency(v, true), 'Volume by Source')}
+                      </div>
+                      <div className="mt-6 border rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-medium">Lead Source</th>
+                              <th className="px-4 py-2 text-right font-medium">Closed</th>
+                              <th className="px-4 py-2 text-right font-medium">Volume</th>
+                              <th className="px-4 py-2 text-right font-medium">Gross Margin</th>
+                              <th className="px-4 py-2 text-right font-medium">Pending</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sourceEntries.map(([k, c], i) => {
+                              const p = activeSource.pending[k];
+                              return (
+                                <tr key={k} className="border-t">
+                                  <td className="px-4 py-2 flex items-center gap-2">
+                                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SOURCE_COLORS[i % SOURCE_COLORS.length] }} />
+                                    {SOURCE_LABELS[k] ?? k}
+                                  </td>
+                                  <td className="px-4 py-2 text-right">{c.count}</td>
+                                  <td className="px-4 py-2 text-right">{formatCurrency(c.volume, true)}</td>
+                                  <td className="px-4 py-2 text-right">{formatCurrency(c.netRevenue, true)}</td>
+                                  <td className="px-4 py-2 text-right text-muted-foreground">{p && p.count > 0 ? `${p.count} (${formatCurrency(p.volume, true)})` : '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </CardContent>

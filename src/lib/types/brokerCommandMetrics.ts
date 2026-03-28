@@ -21,6 +21,18 @@ export type CategoryMetrics = {
   unknown: Metric;
 };
 
+export type SourceMetric = {
+  count: number;
+  volume: number;
+  netRevenue: number;
+};
+
+// keyed by dealSource value (e.g. 'boomtown', 'sphere', 'referral', etc.)
+export type SourceBreakdown = {
+  closed: Record<string, SourceMetric>;
+  pending: Record<string, SourceMetric>;
+};
+
 // ── Monthly data point for the 12-month charts ──────────────────────────────
 
 export type MonthlyData = {
@@ -72,6 +84,9 @@ export type BrokerCommandOverview = {
     closed: CategoryMetrics;
     pending: CategoryMetrics;
   };
+
+  // Source breakdown (broker dashboard only)
+  sourceBreakdown?: SourceBreakdown;
 };
 
 // Legacy type kept for backward compatibility

@@ -24,6 +24,7 @@ interface Transaction {
   commission?: number;
   transactionType: string;
   transactionFee?: number;
+  dealSource?: string;
   year: number;
   splitSnapshot?: {
     grossCommission?: number;
@@ -231,6 +232,18 @@ export async function GET(req: NextRequest) {
       pending: emptyCategoryMetrics(),
     };
 
+    const sourceBreakdown: { closed: Record<string, { count: number; volume: number; netRevenue: number }>; pending: Record<string, { count: number; volume: number; netRevenue: number }> } = {
+      closed: {},
+      pending: {},
+    };
+
+    const addToSource = (bucket: typeof sourceBreakdown.closed, src: string, volume: number, netRevenue: number) => {
+      if (!bucket[src]) bucket[src] = { count: 0, volume: 0, netRevenue: 0 };
+      bucket[src].count += 1;
+      bucket[src].volume += volume;
+      bucket[src].netRevenue += netRevenue;
+    };
+
     // 6. Process each transaction
     for (const t of transactions) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
@@ -239,6 +252,7 @@ export async function GET(req: NextRequest) {
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
+      const srcKey = (t.dealSource || 'other').toLowerCase();
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -269,6 +283,9 @@ export async function GET(req: NextRequest) {
         categoryBreakdown.closed[catKey].netRevenue += companyRetained;
         categoryBreakdown.closed[catKey].volume += dealValue;
 
+        // Source
+        addToSource(sourceBreakdown.closed, srcKey, dealValue, companyRetained);
+
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         const contractDate = parseDate(t.contractDate);
         const txMonth = contractDate ? contractDate.getMonth() : null;
@@ -287,6 +304,9 @@ export async function GET(req: NextRequest) {
         categoryBreakdown.pending[catKey].count += 1;
         categoryBreakdown.pending[catKey].netRevenue += companyRetained;
         categoryBreakdown.pending[catKey].volume += dealValue;
+
+        // Source
+        addToSource(sourceBreakdown.pending, srcKey, dealValue, companyRetained);
       }
     }
 
@@ -393,6 +413,7 @@ export async function GET(req: NextRequest) {
       totals,
       months,
       categoryBreakdown,
+      sourceBreakdown,
     };
 
     const result: BrokerCommandMetrics = {
