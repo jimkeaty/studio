@@ -64,6 +64,7 @@ const marginChartConfig: ChartConfig = {
   grossMargin: { label: 'Gross Margin', color: 'hsl(var(--chart-1))' },
   grossMarginGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareMargin: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedMargin: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 
 const volumeChartConfig: ChartConfig = {
@@ -71,6 +72,7 @@ const volumeChartConfig: ChartConfig = {
   pendingVolume: { label: 'Pending Volume', color: 'hsl(var(--chart-4))' },
   volumeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareVolume: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedVolume: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 
 const salesChartConfig: ChartConfig = {
@@ -78,6 +80,7 @@ const salesChartConfig: ChartConfig = {
   pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareCount: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedCount: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
@@ -1010,7 +1013,7 @@ function GoalsEditor({
 export function BrokerDashboardInner() {
   const { user } = useUser();
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [compareYear, setCompareYear] = useState<number | null>(null);
+  const [compareYear, setCompareYear] = useState<number | 'projected' | null>(null);
   const [showPending, setShowPending] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null); // null = all teams
   const [selectedType, setSelectedType] = useState<string | null>(null); // null = all types
@@ -1025,7 +1028,7 @@ export function BrokerDashboardInner() {
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(year) });
-      if (compareYear) params.set('compareYear', String(compareYear));
+      if (compareYear && compareYear !== 'projected') params.set('compareYear', String(compareYear));
       if (selectedTeam) params.set('teamId', selectedTeam);
       if (selectedType) params.set('type', selectedType);
       const res = await fetch(
@@ -1089,6 +1092,56 @@ export function BrokerDashboardInner() {
   const daysElapsed = Math.floor((today.getTime() - startOfYear.getTime()) / 86400000) + 1;
   const ytdFraction = isCurrentYear ? daysElapsed / daysInYear : 1;
   const currentMonthIdx = today.getMonth(); // 0-indexed, e.g. March = 2
+
+  // ── Seasonality Projection ────────────────────────────────────────────────
+  // For each metric, project future months based on how actual YTD compares to
+  // the YTD portion of the goal seasonality curve.
+  const projectedMonthData = (() => {
+    if (!isCurrentYear) return null;
+    const completedMonths = months.slice(0, currentMonthIdx + 1);
+
+    const compute = (actualKey: keyof typeof months[0], goalKey: keyof typeof months[0]) => {
+      const ytdActual = completedMonths.reduce((s, m) => s + ((m[actualKey] as number) ?? 0), 0);
+      const yearlyGoalTotal = months.reduce((s, m) => s + ((m[goalKey] as number) ?? 0), 0);
+      const ytdGoalShare = yearlyGoalTotal > 0
+        ? completedMonths.reduce((s, m) => s + ((m[goalKey] as number) ?? 0), 0) / yearlyGoalTotal
+        : (currentMonthIdx + 1) / 12;
+      const projectedFullYear = ytdGoalShare > 0 ? ytdActual / ytdGoalShare : 0;
+      return months.map((m, i) => {
+        if (i <= currentMonthIdx) return null; // actuals shown for past months
+        const monthShare = yearlyGoalTotal > 0
+          ? ((m[goalKey] as number) ?? 0) / yearlyGoalTotal
+          : 1 / 12;
+        return Math.round(projectedFullYear * monthShare);
+      });
+    };
+
+    return {
+      margin: compute('grossMargin', 'grossMarginGoal'),
+      volume: compute('closedVolume', 'volumeGoal'),
+      sales: compute('closedCount', 'salesCountGoal'),
+      // Projected full-year totals for the banner
+      fullYearMargin: (() => {
+        const ytd = completedMonths.reduce((s, m) => s + m.grossMargin, 0);
+        const yearlyGoal = months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0);
+        const share = yearlyGoal > 0 ? completedMonths.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) / yearlyGoal : (currentMonthIdx + 1) / 12;
+        return share > 0 ? Math.round(ytd / share) : 0;
+      })(),
+      fullYearVolume: (() => {
+        const ytd = completedMonths.reduce((s, m) => s + m.closedVolume, 0);
+        const yearlyGoal = months.reduce((s, m) => s + (m.volumeGoal ?? 0), 0);
+        const share = yearlyGoal > 0 ? completedMonths.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) / yearlyGoal : (currentMonthIdx + 1) / 12;
+        return share > 0 ? Math.round(ytd / share) : 0;
+      })(),
+      fullYearSales: (() => {
+        const ytd = completedMonths.reduce((s, m) => s + m.closedCount, 0);
+        const yearlyGoal = months.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0);
+        const share = yearlyGoal > 0 ? completedMonths.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) / yearlyGoal : (currentMonthIdx + 1) / 12;
+        return share > 0 ? Math.round(ytd / share) : 0;
+      })(),
+    };
+  })();
+  const isProjected = compareYear === 'projected';
 
   const ytdGrossMarginGoal = yearlyGrossMarginGoal ? Math.round(yearlyGrossMarginGoal * ytdFraction) : null;
   const ytdVolumeGoal = yearlyVolumeGoal ? Math.round(yearlyVolumeGoal * ytdFraction) : null;
@@ -1328,20 +1381,21 @@ export function BrokerDashboardInner() {
               <CardTitle>Monthly Gross Margin vs Goal</CardTitle>
               <CardDescription>
                 Company retained revenue after agent payouts — {year}
-                {compareYear ? ` compared to ${compareYear}` : ''}
+                {compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` compared to ${compareYear}` : ''}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
               <Select
                 value={compareYear ? String(compareYear) : 'none'}
-                onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}
+                onValueChange={v => setCompareYear(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
               >
-                <SelectTrigger className="w-[120px]">
+                <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
+                  {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
                   {(data.availableYears ?? []).map(y => (
                     <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                   ))}
@@ -1379,7 +1433,8 @@ export function BrokerDashboardInner() {
                 ...m,
                 grossMargin: isCurrentYear && i > currentMonthIdx ? null : m.grossMargin,
                 grossMarginGoal: isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal,
-                compareMargin: data.comparisonData?.months?.[i]?.grossMargin ?? null,
+                compareMargin: isProjected ? null : (data.comparisonData?.months?.[i]?.grossMargin ?? null),
+                projectedMargin: isProjected ? (projectedMonthData?.margin[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -1402,9 +1457,8 @@ export function BrokerDashboardInner() {
               />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="grossMargin" fill="var(--color-grossMargin)" radius={[4, 4, 0, 0]} name={`${year}`} />
-              {compareYear && (
-                <Bar dataKey="compareMargin" fill="var(--color-compareMargin)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />
-              )}
+              {compareYear && !isProjected && <Bar dataKey="compareMargin" fill="var(--color-compareMargin)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {isProjected && <Bar dataKey="projectedMargin" fill="var(--color-projectedMargin)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
           </ChartContainer>
@@ -1449,7 +1503,7 @@ export function BrokerDashboardInner() {
               <CardTitle>Monthly Dollar Volume</CardTitle>
               <CardDescription>
                 Closed and pending deal value — {year}
-                {compareYear ? ` compared to ${compareYear}` : ''}
+                {compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` compared to ${compareYear}` : ''}
               </CardDescription>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -1457,13 +1511,14 @@ export function BrokerDashboardInner() {
                 <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
                 <Select
                   value={compareYear ? String(compareYear) : 'none'}
-                  onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}
+                  onValueChange={v => setCompareYear(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
                 >
-                  <SelectTrigger className="w-[120px]">
+                  <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
+                    {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
                     {(data.availableYears ?? []).map(y => (
                       <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                     ))}
@@ -1510,7 +1565,8 @@ export function BrokerDashboardInner() {
                 closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
                 volumeGoal: isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal,
                 pendingVolume: (!showPending || (isCurrentYear && i > currentMonthIdx)) ? null : m.pendingVolume,
-                compareVolume: data.comparisonData?.months?.[i]?.closedVolume ?? null,
+                compareVolume: isProjected ? null : (data.comparisonData?.months?.[i]?.closedVolume ?? null),
+                projectedVolume: isProjected ? (projectedMonthData?.volume[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -1534,9 +1590,8 @@ export function BrokerDashboardInner() {
               />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && (
-                <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />
-              )}
+              {compareYear && !isProjected && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {isProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               {showPending && <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
               <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
@@ -1579,7 +1634,7 @@ export function BrokerDashboardInner() {
               <CardTitle>Monthly Number of Sales</CardTitle>
               <CardDescription>
                 Closed and pending transaction counts — {year}
-                {compareYear ? ` compared to ${compareYear}` : ''}
+                {compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` compared to ${compareYear}` : ''}
               </CardDescription>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -1587,13 +1642,14 @@ export function BrokerDashboardInner() {
                 <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
                 <Select
                   value={compareYear ? String(compareYear) : 'none'}
-                  onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}
+                  onValueChange={v => setCompareYear(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
                 >
-                  <SelectTrigger className="w-[120px]">
+                  <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
+                    {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
                     {(data.availableYears ?? []).map(y => (
                       <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                     ))}
@@ -1640,7 +1696,8 @@ export function BrokerDashboardInner() {
                 closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
                 salesCountGoal: isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal,
                 pendingCount: (!showPending || (isCurrentYear && i > currentMonthIdx)) ? null : m.pendingCount,
-                compareCount: data.comparisonData?.months?.[i]?.closedCount ?? null,
+                compareCount: isProjected ? null : (data.comparisonData?.months?.[i]?.closedCount ?? null),
+                projectedCount: isProjected ? (projectedMonthData?.sales[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -1664,9 +1721,8 @@ export function BrokerDashboardInner() {
               />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && (
-                <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />
-              )}
+              {compareYear && !isProjected && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {isProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               {showPending && <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
               <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
