@@ -54,6 +54,7 @@ const incomeChartConfig: ChartConfig = {
   pendingNetIncome: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   incomeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareIncome: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedIncome: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 
 const volumeChartConfig: ChartConfig = {
@@ -61,6 +62,7 @@ const volumeChartConfig: ChartConfig = {
   pendingVolume: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   volumeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareVolume: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedVolume: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 
 const salesChartConfig: ChartConfig = {
@@ -68,6 +70,7 @@ const salesChartConfig: ChartConfig = {
   pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareCount: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedCount: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -128,19 +131,23 @@ function KPICard({ title, value, subtitle, icon: Icon, highlight }: {
 
 // ── Comparison Year Selector (reusable) ─────────────────────────────────────
 
-function CompareSelector({ value, onChange, years }: {
-  value: number | null; onChange: (v: number | null) => void; years: number[];
+function CompareSelector({ value, onChange, years, isCurrentYear }: {
+  value: number | 'projected' | null;
+  onChange: (v: number | 'projected' | null) => void;
+  years: number[];
+  isCurrentYear?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm text-muted-foreground whitespace-nowrap">Compare to:</span>
       <Select
         value={value ? String(value) : 'none'}
-        onValueChange={v => onChange(v === 'none' ? null : Number(v))}
+        onValueChange={v => onChange(v === 'none' ? null : v === 'projected' ? 'projected' : Number(v))}
       >
-        <SelectTrigger className="w-[120px]"><SelectValue placeholder="None" /></SelectTrigger>
+        <SelectTrigger className="w-[160px]"><SelectValue placeholder="None" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="none">None</SelectItem>
+          {isCurrentYear && <SelectItem value="projected">📈 Projected (Seasonality)</SelectItem>}
           {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
         </SelectContent>
       </Select>
@@ -286,7 +293,7 @@ export function PerformanceTab() {
   const { user, loading: userLoading } = useUser();
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [view, setView] = useState<'personal' | 'team'>('personal');
-  const [compareYear, setCompareYear] = useState<number | null>(null);
+  const [compareYear, setCompareYear] = useState<number | 'projected' | null>(null);
   const [data, setData] = useState<AgentMetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -298,7 +305,7 @@ export function PerformanceTab() {
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(year), view });
-      if (compareYear) params.set('compareYear', String(compareYear));
+      if (compareYear && compareYear !== 'projected') params.set('compareYear', String(compareYear));
       const res = await fetch(`/api/agent/command-metrics?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -340,6 +347,45 @@ export function PerformanceTab() {
   const { overview, agentView } = data;
   const { totals, months } = overview;
   const { monthlyNetIncome, monthlyPendingNetIncome, isTeamLeader, availableTeams } = agentView;
+
+  // ── YTD / Current Month ────────────────────────────────────────────────────
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const isCurrentYear = year === currentYear;
+  const currentMonthIdx = today.getMonth(); // 0-indexed
+
+  // ── Seasonality Projection ────────────────────────────────────────────────
+  const projectedMonthData = (() => {
+    if (!isCurrentYear) return null;
+    const completedMonths = months.slice(0, currentMonthIdx + 1);
+    const completedIncome = monthlyNetIncome.slice(0, currentMonthIdx + 1);
+
+    const compute = (ytdActual: number, goalKey: keyof typeof months[0]) => {
+      const yearlyGoalTotal = months.reduce((s, m) => s + ((m[goalKey] as number) ?? 0), 0);
+      const ytdGoalShare = yearlyGoalTotal > 0
+        ? completedMonths.reduce((s, m) => s + ((m[goalKey] as number) ?? 0), 0) / yearlyGoalTotal
+        : (currentMonthIdx + 1) / 12;
+      const projectedFullYear = ytdGoalShare > 0 ? ytdActual / ytdGoalShare : 0;
+      return months.map((m, i) => {
+        if (i <= currentMonthIdx) return null;
+        const monthShare = yearlyGoalTotal > 0
+          ? ((m[goalKey] as number) ?? 0) / yearlyGoalTotal
+          : 1 / 12;
+        return Math.round(projectedFullYear * monthShare);
+      });
+    };
+
+    const ytdIncome = completedIncome.reduce((s, v) => s + v, 0);
+    const ytdVolume = completedMonths.reduce((s, m) => s + m.closedVolume, 0);
+    const ytdSales = completedMonths.reduce((s, m) => s + m.closedCount, 0);
+
+    return {
+      income: compute(ytdIncome, 'grossMarginGoal'),
+      volume: compute(ytdVolume, 'volumeGoal'),
+      sales: compute(ytdSales, 'salesCountGoal'),
+    };
+  })();
+  const isProjected = compareYear === 'projected';
 
   // Calculate averages
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
@@ -450,9 +496,9 @@ export function PerformanceTab() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle>Monthly Net Income</CardTitle>
-              <CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
+              <CardDescription>Income after broker split — {year}{compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
             </div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} />
+            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
           </div>
         </CardHeader>
         <CardContent>
@@ -460,10 +506,11 @@ export function PerformanceTab() {
             <BarChart
               data={months.map((m, i) => ({
                 label: m.label,
-                netIncome: monthlyNetIncome[i] || 0,
-                pendingNetIncome: monthlyPendingNetIncome[i] || 0,
-                incomeGoal: m.grossMarginGoal,
-                compareIncome: data.comparisonData?.months?.[i]?.netIncome ?? null,
+                netIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyNetIncome[i] || 0),
+                pendingNetIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyPendingNetIncome[i] || 0),
+                incomeGoal: isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal,
+                compareIncome: isProjected ? null : (data.comparisonData?.months?.[i]?.netIncome ?? null),
+                projectedIncome: isProjected ? (projectedMonthData?.income[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -479,7 +526,8 @@ export function PerformanceTab() {
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="netIncome" fill="var(--color-netIncome)" radius={[4, 4, 0, 0]} name={`${year}`} />
-              {compareYear && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {compareYear && !isProjected && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {isProjected && <Bar dataKey="projectedIncome" fill="var(--color-projectedIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               <Bar dataKey="pendingNetIncome" fill="var(--color-pendingNetIncome)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
               <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
@@ -493,9 +541,9 @@ export function PerformanceTab() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle>Monthly Dollar Volume</CardTitle>
-              <CardDescription>Closed and pending deal value — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
+              <CardDescription>Closed and pending deal value — {year}{compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
             </div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} />
+            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
           </div>
         </CardHeader>
         <CardContent>
@@ -503,7 +551,11 @@ export function PerformanceTab() {
             <BarChart
               data={months.map((m, i) => ({
                 ...m,
-                compareVolume: data.comparisonData?.months?.[i]?.closedVolume ?? null,
+                closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
+                pendingVolume: isCurrentYear && i > currentMonthIdx ? null : m.pendingVolume,
+                volumeGoal: isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal,
+                compareVolume: isProjected ? null : (data.comparisonData?.months?.[i]?.closedVolume ?? null),
+                projectedVolume: isProjected ? (projectedMonthData?.volume[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -519,7 +571,8 @@ export function PerformanceTab() {
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {compareYear && !isProjected && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {isProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
               <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
@@ -533,9 +586,9 @@ export function PerformanceTab() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle>Monthly Number of Sales</CardTitle>
-              <CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
+              <CardDescription>Closed and pending — {year}{compareYear === 'projected' ? ' + seasonality projection' : compareYear ? ` vs ${compareYear}` : ''}</CardDescription>
             </div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} />
+            <CompareSelector value={compareYear} onChange={setCompareYear} years={data.availableYears ?? []} isCurrentYear={isCurrentYear} />
           </div>
         </CardHeader>
         <CardContent>
@@ -543,7 +596,11 @@ export function PerformanceTab() {
             <BarChart
               data={months.map((m, i) => ({
                 ...m,
-                compareCount: data.comparisonData?.months?.[i]?.closedCount ?? null,
+                closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
+                pendingCount: isCurrentYear && i > currentMonthIdx ? null : m.pendingCount,
+                salesCountGoal: isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal,
+                compareCount: isProjected ? null : (data.comparisonData?.months?.[i]?.closedCount ?? null),
+                projectedCount: isProjected ? (projectedMonthData?.sales[i] ?? null) : null,
               }))}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
@@ -559,7 +616,8 @@ export function PerformanceTab() {
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
-              {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {compareYear && !isProjected && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
+              {isProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
               <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
               <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
             </BarChart>
