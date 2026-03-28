@@ -955,12 +955,26 @@ export function BrokerDashboardInner() {
   const yearlyGrossMarginGoal = months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
   const yearlyVolumeGoal = months.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) || null;
   const yearlySalesGoal = months.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) || null;
-  const gradeMargin = yearlyGrossMarginGoal
-    ? Math.round((totals.grossMargin / yearlyGrossMarginGoal) * 100) : null;
-  const gradeVolume = yearlyVolumeGoal
-    ? Math.round((totals.closedVolume / yearlyVolumeGoal) * 100) : null;
-  const gradeSales = yearlySalesGoal
-    ? Math.round((totals.closedCount / yearlySalesGoal) * 100) : null;
+
+  // Prorate goals to YTD pace when viewing the current year
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const isCurrentYear = year === currentYear;
+  const daysInYear = ((currentYear % 4 === 0 && currentYear % 100 !== 0) || currentYear % 400 === 0) ? 366 : 365;
+  const startOfYear = new Date(currentYear, 0, 1);
+  const daysElapsed = Math.floor((today.getTime() - startOfYear.getTime()) / 86400000) + 1;
+  const ytdFraction = isCurrentYear ? daysElapsed / daysInYear : 1;
+
+  const ytdGrossMarginGoal = yearlyGrossMarginGoal ? Math.round(yearlyGrossMarginGoal * ytdFraction) : null;
+  const ytdVolumeGoal = yearlyVolumeGoal ? Math.round(yearlyVolumeGoal * ytdFraction) : null;
+  const ytdSalesGoal = yearlySalesGoal ? Math.round(yearlySalesGoal * ytdFraction * 10) / 10 : null;
+
+  const gradeMargin = ytdGrossMarginGoal
+    ? Math.round((totals.grossMargin / ytdGrossMarginGoal) * 100) : null;
+  const gradeVolume = ytdVolumeGoal
+    ? Math.round((totals.closedVolume / ytdVolumeGoal) * 100) : null;
+  const gradeSales = ytdSalesGoal
+    ? Math.round((totals.closedCount / ytdSalesGoal) * 100) : null;
 
   const teamName = selectedTeam
     ? (data.teams ?? []).find(t => t.teamId === selectedTeam)?.teamName ?? selectedTeam
@@ -1067,11 +1081,11 @@ export function BrokerDashboardInner() {
             </div>
             {gradeMargin && (
               <div className="border-t pt-2 flex justify-between items-center">
-                <span className="text-muted-foreground text-xs">Grade vs Goal</span>
+                <span className="text-muted-foreground text-xs">{isCurrentYear ? 'Grade vs YTD Goal' : 'Grade vs Goal'}</span>
                 <span className={`text-sm font-bold ${gradeMargin >= 100 ? 'text-green-600' : gradeMargin >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
                   {gradeMargin}%
                   <span className="text-muted-foreground font-normal text-xs ml-1">
-                    ({formatCurrency(totals.grossMargin, true)} / {formatCurrency(yearlyGrossMarginGoal!, true)})
+                    ({formatCurrency(totals.grossMargin, true)} / {formatCurrency(ytdGrossMarginGoal!, true)})
                   </span>
                 </span>
               </div>
@@ -1105,17 +1119,23 @@ export function BrokerDashboardInner() {
               <div className="border-t pt-2 space-y-1">
                 {gradeVolume && (
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground text-xs">Volume Grade</span>
+                    <span className="text-muted-foreground text-xs">{isCurrentYear ? 'Volume vs YTD Goal' : 'Volume Grade'}</span>
                     <span className={`text-sm font-bold ${gradeVolume >= 100 ? 'text-green-600' : gradeVolume >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
                       {gradeVolume}%
+                      <span className="text-muted-foreground font-normal text-xs ml-1">
+                        ({formatCurrency(totals.closedVolume, true)} / {formatCurrency(ytdVolumeGoal!, true)})
+                      </span>
                     </span>
                   </div>
                 )}
                 {gradeSales && (
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground text-xs">Sales Grade</span>
+                    <span className="text-muted-foreground text-xs">{isCurrentYear ? 'Sales vs YTD Goal' : 'Sales Grade'}</span>
                     <span className={`text-sm font-bold ${gradeSales >= 100 ? 'text-green-600' : gradeSales >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
                       {gradeSales}%
+                      <span className="text-muted-foreground font-normal text-xs ml-1">
+                        ({totals.closedCount} / {ytdSalesGoal})
+                      </span>
                     </span>
                   </div>
                 )}
