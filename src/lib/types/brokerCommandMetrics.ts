@@ -9,6 +9,7 @@ export type Period = {
 export type Metric = {
   count: number;
   netRevenue: number;
+  volume: number;
 };
 
 export type CategoryMetrics = {

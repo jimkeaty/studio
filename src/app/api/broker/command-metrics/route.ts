@@ -47,7 +47,7 @@ function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): 
 }
 
 function emptyCategory(): Metric {
-  return { count: 0, netRevenue: 0 };
+  return { count: 0, netRevenue: 0, volume: 0 };
 }
 
 function emptyCategoryMetrics(): CategoryMetrics {
@@ -267,6 +267,7 @@ export async function GET(req: NextRequest) {
         // Category
         categoryBreakdown.closed[catKey].count += 1;
         categoryBreakdown.closed[catKey].netRevenue += companyRetained;
+        categoryBreakdown.closed[catKey].volume += dealValue;
 
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         const contractDate = parseDate(t.contractDate);
@@ -285,6 +286,7 @@ export async function GET(req: NextRequest) {
         // Category
         categoryBreakdown.pending[catKey].count += 1;
         categoryBreakdown.pending[catKey].netRevenue += companyRetained;
+        categoryBreakdown.pending[catKey].volume += dealValue;
       }
     }
 

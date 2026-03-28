@@ -44,7 +44,7 @@ function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): 
   return null;
 }
 
-function emptyCategory(): Metric { return { count: 0, netRevenue: 0 }; }
+function emptyCategory(): Metric { return { count: 0, netRevenue: 0, volume: 0 }; }
 function emptyCategoryMetrics(): CategoryMetrics {
   return {
     residential_sale: emptyCategory(), rental: emptyCategory(),

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Cell,
-  Legend, Tooltip, ResponsiveContainer,
+  Legend, Tooltip, ResponsiveContainer, PieChart, Pie,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
@@ -142,6 +142,7 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [metric, setMetric] = useState<'grossMargin' | 'volume' | 'sales'>('grossMargin');
   const [view, setView] = useState<'month' | 'quarter' | 'year'>('month');
+  const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('full');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -185,20 +186,25 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
   const currentYearMY = todayMY.getFullYear();
   const currentMonthIdxMY = todayMY.getMonth(); // 0-indexed
 
+  // In YTD mode, cap all years at the same day-of-year as today
+  const ytdMonthCutoff = currentMonthIdxMY; // 0-indexed, inclusive
+
+  const getYearMonthLimit = (yrNum: number) => {
+    if (compareMode === 'ytd') return ytdMonthCutoff;
+    if (yrNum === currentYearMY) return currentMonthIdxMY; // never show future months
+    return 11; // full year for past years in full mode
+  };
+
   // Build chart data based on view
   const chartData = (() => {
     const filteredYears = allYears.filter(y => selectedYears.includes(y.year));
 
     if (view === 'month') {
-      // 12 data points, each year is a separate line
       return Array.from({ length: 12 }, (_, i) => {
         const point: Record<string, any> = { label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i] };
         for (const yr of filteredYears) {
-          if (yr.year === currentYearMY && i > currentMonthIdxMY) {
-            point[String(yr.year)] = null;
-          } else {
-            point[String(yr.year)] = yr.months[i]?.[metric] ?? 0;
-          }
+          const limit = getYearMonthLimit(yr.year);
+          point[String(yr.year)] = i > limit ? null : (yr.months[i]?.[metric] ?? 0);
         }
         return point;
       });
@@ -208,18 +214,22 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
       return Array.from({ length: 4 }, (_, q) => {
         const point: Record<string, any> = { label: QUARTER_LABELS[q] };
         for (const yr of filteredYears) {
-          const qMonths = yr.months.slice(q * 3, q * 3 + 3);
-          point[String(yr.year)] = qMonths.reduce((sum, m) => sum + (m[metric] ?? 0), 0);
+          const limit = getYearMonthLimit(yr.year);
+          const qMonths = yr.months.slice(q * 3, Math.min(q * 3 + 3, limit + 1));
+          point[String(yr.year)] = qMonths.length > 0 ? qMonths.reduce((sum, m) => sum + (m[metric] ?? 0), 0) : null;
         }
         return point;
       });
     }
 
-    // year view — one data point per year
-    return filteredYears.map(yr => ({
-      label: String(yr.year),
-      value: yr.totals[metric] ?? 0,
-    }));
+    // year view — one data point per year (sum up to cutoff in YTD mode)
+    return filteredYears.map(yr => {
+      const limit = getYearMonthLimit(yr.year);
+      const val = compareMode === 'ytd' || yr.year === currentYearMY
+        ? yr.months.slice(0, limit + 1).reduce((s, m) => s + (m[metric] ?? 0), 0)
+        : yr.totals[metric] ?? 0;
+      return { label: String(yr.year), value: val };
+    });
   })();
 
   if (loading) return <Skeleton className="h-[500px] w-full" />;
@@ -265,6 +275,24 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
                   }`}
                 >
                   {v === 'month' ? 'Monthly' : v === 'quarter' ? 'Quarterly' : 'Yearly'}
+                </button>
+              ))}
+            </div>
+
+            {/* YTD / Full Year toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              {(['full', 'ytd'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setCompareMode(m)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    compareMode === m
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background hover:bg-muted'
+                  }`}
+                >
+                  {m === 'full' ? 'Full Year' : `YTD (thru ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][currentMonthIdxMY]})`}
                 </button>
               ))}
             </div>
@@ -356,23 +384,38 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
                 .filter(yr => selectedYears.includes(yr.year))
                 .sort((a, b) => b.year - a.year)
                 .map((yr, idx, arr) => {
+                  const limit = getYearMonthLimit(yr.year);
+                  const ytdMonths = yr.months.slice(0, limit + 1);
+                  const margin = compareMode === 'ytd' || yr.year === currentYearMY
+                    ? ytdMonths.reduce((s, m) => s + m.grossMargin, 0)
+                    : yr.totals.grossMargin;
+                  const volume = compareMode === 'ytd' || yr.year === currentYearMY
+                    ? ytdMonths.reduce((s, m) => s + m.volume, 0)
+                    : yr.totals.volume;
+                  const sales = compareMode === 'ytd' || yr.year === currentYearMY
+                    ? ytdMonths.reduce((s, m) => s + m.sales, 0)
+                    : yr.totals.sales;
+                  const metricVal = metric === 'grossMargin' ? margin : metric === 'volume' ? volume : sales;
                   const prev = arr[idx + 1];
-                  const metricVal = yr.totals[metric];
-                  const prevVal = prev ? prev.totals[metric] : null;
-                  const change = prevVal && prevVal > 0 ? ((metricVal - prevVal) / prevVal * 100) : null;
+                  const prevLimit = prev ? getYearMonthLimit(prev.year) : 11;
+                  const prevMetricVal = prev ? (
+                    metric === 'grossMargin'
+                      ? (compareMode === 'ytd' ? prev.months.slice(0, prevLimit + 1).reduce((s, m) => s + m.grossMargin, 0) : prev.totals.grossMargin)
+                      : metric === 'volume'
+                      ? (compareMode === 'ytd' ? prev.months.slice(0, prevLimit + 1).reduce((s, m) => s + m.volume, 0) : prev.totals.volume)
+                      : (compareMode === 'ytd' ? prev.months.slice(0, prevLimit + 1).reduce((s, m) => s + m.sales, 0) : prev.totals.sales)
+                  ) : null;
+                  const change = prevMetricVal && prevMetricVal > 0 ? ((metricVal - prevMetricVal) / prevMetricVal * 100) : null;
                   const colorIdx = allYears.findIndex(y => y.year === yr.year);
                   return (
                     <tr key={yr.year} className="border-t">
                       <td className="px-4 py-2 font-medium flex items-center gap-2">
-                        <span
-                          className="inline-block w-3 h-3 rounded-full"
-                          style={{ backgroundColor: YEAR_COLORS[colorIdx % YEAR_COLORS.length] }}
-                        />
-                        {yr.year}
+                        <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: YEAR_COLORS[colorIdx % YEAR_COLORS.length] }} />
+                        {yr.year}{compareMode === 'ytd' && <span className="text-xs text-muted-foreground ml-1">YTD</span>}
                       </td>
-                      <td className="px-4 py-2 text-right">{formatCurrency(yr.totals.grossMargin, true)}</td>
-                      <td className="px-4 py-2 text-right">{formatCurrency(yr.totals.volume, true)}</td>
-                      <td className="px-4 py-2 text-right">{yr.totals.sales.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right">{formatCurrency(margin, true)}</td>
+                      <td className="px-4 py-2 text-right">{formatCurrency(volume, true)}</td>
+                      <td className="px-4 py-2 text-right">{sales.toLocaleString()}</td>
                       <td className={`px-4 py-2 text-right font-medium ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
                         {change !== null ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%` : '—'}
                       </td>
@@ -1595,38 +1638,100 @@ export function BrokerDashboardInner() {
       <MultiYearComparison teamId={selectedTeam} />
 
       {/* ── Category Breakdown ─────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Category Breakdown — {year}</CardTitle>
-          <CardDescription>Closed vs pending by transaction type</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {([
-              ['Residential Sale', 'residential_sale'],
-              ['Commercial Sale', 'commercial_sale'],
-              ['Commercial Lease', 'commercial_lease'],
-              ['Land', 'land'],
-              ['Rental / Lease', 'rental'],
-            ] as const).map(([label, key]) => {
-              const c = categoryBreakdown.closed[key];
-              const p = categoryBreakdown.pending[key];
-              if (c.count === 0 && p.count === 0) return null;
-              return (
-                <div key={key} className="border rounded-lg p-4 space-y-2">
-                  <h4 className="font-semibold">{label}</h4>
-                  <div className="grid grid-cols-2 text-sm gap-1">
-                    <span className="text-muted-foreground">Closed:</span>
-                    <span className="font-medium">{c.count} ({formatCurrency(c.netRevenue)})</span>
-                    <span className="text-muted-foreground">Pending:</span>
-                    <span className="font-medium">{p.count} ({formatCurrency(p.netRevenue)})</span>
-                  </div>
-                </div>
-              );
-            })}
+      {(() => {
+        const CAT_LABELS: Record<string, string> = {
+          residential_sale: 'Residential',
+          commercial_sale: 'Commercial Sale',
+          commercial_lease: 'Commercial Lease',
+          land: 'Land',
+          rental: 'Rental / Lease',
+        };
+        const CAT_KEYS = ['residential_sale', 'commercial_sale', 'commercial_lease', 'land', 'rental'] as const;
+        const CAT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
+
+        const marginData = CAT_KEYS
+          .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].netRevenue, color: CAT_COLORS[i] }))
+          .filter(d => d.value > 0);
+        const salesData = CAT_KEYS
+          .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].count, color: CAT_COLORS[i] }))
+          .filter(d => d.value > 0);
+        const volumeData = CAT_KEYS
+          .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].volume, color: CAT_COLORS[i] }))
+          .filter(d => d.value > 0);
+
+        if (marginData.length === 0) return null;
+
+        const renderPie = (data: typeof marginData, formatter: (v: number) => string, title: string) => (
+          <div className="flex flex-col items-center">
+            <p className="text-sm font-semibold mb-2 text-center">{title}</p>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                  {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip formatter={(val: number) => formatter(val)} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1">
+              {data.map((d, i) => (
+                <span key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                  {d.name}: {formatter(d.value)}
+                </span>
+              ))}
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        );
+
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Category Breakdown — {year}</CardTitle>
+              <CardDescription>Closed transactions by type — gross margin, sales, and volume</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {renderPie(marginData, v => formatCurrency(v, true), 'Gross Margin')}
+                {renderPie(salesData, v => `${v} sales`, 'Number of Sales')}
+                {renderPie(volumeData, v => formatCurrency(v, true), 'Dollar Volume')}
+              </div>
+              {/* Detail table */}
+              <div className="mt-6 border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">Category</th>
+                      <th className="px-4 py-2 text-right font-medium">Closed</th>
+                      <th className="px-4 py-2 text-right font-medium">Volume</th>
+                      <th className="px-4 py-2 text-right font-medium">Gross Margin</th>
+                      <th className="px-4 py-2 text-right font-medium">Pending</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {CAT_KEYS.map((k, i) => {
+                      const c = categoryBreakdown.closed[k];
+                      const p = categoryBreakdown.pending[k];
+                      if (c.count === 0 && p.count === 0) return null;
+                      return (
+                        <tr key={k} className="border-t">
+                          <td className="px-4 py-2 flex items-center gap-2">
+                            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CAT_COLORS[i] }} />
+                            {CAT_LABELS[k]}
+                          </td>
+                          <td className="px-4 py-2 text-right">{c.count}</td>
+                          <td className="px-4 py-2 text-right">{formatCurrency(c.volume, true)}</td>
+                          <td className="px-4 py-2 text-right">{formatCurrency(c.netRevenue, true)}</td>
+                          <td className="px-4 py-2 text-right text-muted-foreground">{p.count > 0 ? `${p.count} (${formatCurrency(p.volume, true)})` : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* ── Goals Editor ───────────────────────────────────────────────────── */}
       <GoalsEditor months={months} year={year} prevYearStats={data.prevYearStats} onSaved={fetchData} segment={selectedTeam || 'TOTAL'} />
