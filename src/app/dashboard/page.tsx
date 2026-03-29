@@ -860,12 +860,12 @@ function MetricTileWithDelta({ title, value, previous, icon: Icon }: { title: st
 
 // ── Tier color palette (hex values for inline SVG/gradient use)
 const TIER_PALETTE = [
-  { hex: '#64748b', light: '#f1f5f9', text: '#334155', ring: 'ring-slate-400/40',   label: 'slate'   },
-  { hex: '#3b82f6', light: '#eff6ff', text: '#1d4ed8', ring: 'ring-blue-400/40',    label: 'blue'    },
-  { hex: '#10b981', light: '#ecfdf5', text: '#065f46', ring: 'ring-emerald-400/40', label: 'emerald' },
-  { hex: '#f59e0b', light: '#fffbeb', text: '#92400e', ring: 'ring-amber-400/40',   label: 'amber'   },
-  { hex: '#8b5cf6', light: '#f5f3ff', text: '#5b21b6', ring: 'ring-violet-400/40', label: 'violet'  },
-  { hex: '#ef4444', light: '#fef2f2', text: '#991b1b', ring: 'ring-red-400/40',    label: 'red'     },
+  { hex: '#2563eb', light: '#eff6ff', text: '#1e40af', ring: 'ring-blue-400/40',    label: 'blue'    },
+  { hex: '#16a34a', light: '#f0fdf4', text: '#14532d', ring: 'ring-green-400/40',   label: 'green'   },
+  { hex: '#eab308', light: '#fefce8', text: '#713f12', ring: 'ring-yellow-400/40',  label: 'yellow'  },
+  { hex: '#ea580c', light: '#fff7ed', text: '#7c2d12', ring: 'ring-orange-400/40',  label: 'orange'  },
+  { hex: '#9333ea', light: '#faf5ff', text: '#581c87', ring: 'ring-purple-400/40',  label: 'purple'  },
+  { hex: '#e11d48', light: '#fff1f2', text: '#881337', ring: 'ring-rose-400/40',    label: 'rose'    },
 ];
 
 function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
