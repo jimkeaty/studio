@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/card';
 import {
   DollarSign, TrendingUp, Target, AlertCircle, Percent, Clock,
-  ChevronDown, ChevronUp, Save,
+  ChevronDown, ChevronUp, Save, BarChart3, Banknote, Building2,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Cell,
@@ -1162,6 +1162,71 @@ export function BrokerDashboardInner() {
             })}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* ── YTD Summary Hero Row ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Team Volume YTD */}
+        <Card className="border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 shrink-0">
+              <Building2 className="h-6 w-6 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-blue-700 dark:text-blue-400 uppercase tracking-wide truncate">
+                Total Team Volume YTD
+              </p>
+              <p className="text-2xl font-black text-blue-900 dark:text-blue-100 leading-tight">
+                {formatCurrency(totals.closedVolume, true)}
+              </p>
+              <p className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-0.5">
+                {formatNumber(totals.closedCount)} closed deal{totals.closedCount !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Sales YTD */}
+        <Card className="border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 shrink-0">
+              <BarChart3 className="h-6 w-6 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wide truncate">
+                Total Sales YTD
+              </p>
+              <p className="text-2xl font-black text-emerald-900 dark:text-emerald-100 leading-tight">
+                {formatNumber(totals.closedCount)}
+              </p>
+              <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
+                {totals.pendingCount > 0 ? `+ ${formatNumber(totals.pendingCount)} pending` : 'closed transactions'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Commissions Paid Out */}
+        <Card className="border-violet-200 bg-violet-50 dark:border-violet-900/50 dark:bg-violet-950/20">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-600 shrink-0">
+              <Banknote className="h-6 w-6 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-violet-700 dark:text-violet-400 uppercase tracking-wide truncate">
+                Total Commissions Paid Out
+              </p>
+              <p className="text-2xl font-black text-violet-900 dark:text-violet-100 leading-tight">
+                {formatCurrency(totals.agentNetCommission, true)}
+              </p>
+              <p className="text-xs text-violet-600/70 dark:text-violet-400/70 mt-0.5">
+                {totals.totalGCI > 0
+                  ? `${((totals.agentNetCommission / totals.totalGCI) * 100).toFixed(1)}% of ${formatCurrency(totals.totalGCI, true)} GCI`
+                  : 'agent net commissions'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Team Tabs */}

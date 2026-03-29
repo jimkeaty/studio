@@ -69,6 +69,7 @@ export type BrokerCommandOverview = {
     totalGCI: number;
     grossMargin: number;
     grossMarginPct: number;
+    agentNetCommission: number;   // totalGCI - grossMargin: paid out to agents
     transactionFees: number;
     closedVolume: number;
     pendingVolume: number;

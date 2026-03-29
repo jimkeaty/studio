@@ -220,6 +220,7 @@ export async function GET(req: NextRequest) {
       totalGCI: 0,
       grossMargin: 0,
       grossMarginPct: 0,
+      agentNetCommission: 0,
       transactionFees: 0,
       closedVolume: 0,
       pendingVolume: 0,
@@ -274,6 +275,7 @@ export async function GET(req: NextRequest) {
         // Yearly totals
         totals.totalGCI += gci;
         totals.grossMargin += companyRetained;
+        totals.agentNetCommission += Math.max(0, gci - companyRetained);
         totals.transactionFees += txFee;
         totals.closedVolume += dealValue;
         totals.closedCount += 1;
