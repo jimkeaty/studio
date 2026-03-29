@@ -30,13 +30,13 @@ export interface AgentYearMonthData {
     netIncome: number; // agent take-home after broker split
     volume: number;
     sales: number;
-    gci: number;
+    gci?: number; // stripped from non-admin responses
   }[];
   totals: {
     netIncome: number;
     volume: number;
     sales: number;
-    gci: number;
+    gci?: number; // stripped from non-admin responses
   };
 }
 
@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
 
     const decoded = await adminAuth.verifyIdToken(token);
     const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+    const isAdminCaller = decoded.uid === ADMIN_UID;
     const { searchParams } = new URL(req.url);
     const viewAs = searchParams.get('viewAs');
     const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
@@ -127,10 +128,13 @@ export async function GET(req: NextRequest) {
         totalGci += bucket.gci;
       }
 
+      // Strip GCI (gross commission income) from non-admin responses
       years.push({
         year: yr,
-        months,
-        totals: { netIncome: totalNet, volume: totalVol, sales: totalSales, gci: totalGci },
+        months: months.map(m => isAdminCaller ? m : { month: m.month, label: m.label, netIncome: m.netIncome, volume: m.volume, sales: m.sales }),
+        totals: isAdminCaller
+          ? { netIncome: totalNet, volume: totalVol, sales: totalSales, gci: totalGci }
+          : { netIncome: totalNet, volume: totalVol, sales: totalSales },
       });
     }
 

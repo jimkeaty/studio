@@ -118,14 +118,16 @@ const YEAR_COLORS = [
 type AgentMetricsResponse = {
   overview: {
     year: number;
-    totals: { totalGCI: number; grossMargin: number; grossMarginPct: number; transactionFees: number; closedVolume: number; pendingVolume: number; closedCount: number; pendingCount: number; netIncome: number; pendingNetIncome: number; };
+    // Agent-safe totals: commission split fields (totalGCI, grossMargin, etc.) are
+    // stripped server-side for non-admin callers. Only net income is returned.
+    totals: { closedVolume: number; pendingVolume: number; closedCount: number; pendingCount: number; netIncome: number; pendingNetIncome: number; totalGCI?: number; grossMargin?: number; grossMarginPct?: number; transactionFees?: number; };
     months: MonthlyData[];
     categoryBreakdown: { closed: CategoryMetrics; pending: CategoryMetrics };
     sourceBreakdown?: SourceBreakdown;
   };
-  prevYearStats?: { year: number; totalVolume: number; totalSales: number; totalGCI: number; totalGrossMargin: number; avgSalePrice: number; avgGCI: number; avgGrossMargin: number; avgMarginPct: number; avgCommissionPct: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number; netIncome?: number }[]; };
+  prevYearStats?: { year: number; totalVolume: number; totalSales: number; avgSalePrice: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number }[]; totalGCI?: number; totalGrossMargin?: number; avgGCI?: number; avgGrossMargin?: number; avgMarginPct?: number; avgCommissionPct?: number; };
   availableYears?: number[];
-  comparisonData?: { year: number; months: { grossMargin: number; closedVolume: number; closedCount: number; totalGCI: number; netIncome: number }[] } | null;
+  comparisonData?: { year: number; months: { closedVolume: number; closedCount: number; netIncome: number; grossMargin?: number; totalGCI?: number }[] } | null;
   agentView: { view: string; viewLabel: string; isTeamLeader: boolean; availableTeams: { teamId: string; teamName: string }[]; monthlyNetIncome: number[]; monthlyPendingNetIncome: number[]; netIncome: number; pendingNetIncome: number; goalSegment: string; };
 };
 
@@ -152,14 +154,15 @@ type AgentPrevYearStats = {
   year: number;
   totalVolume: number;
   totalSales: number;
-  totalGCI: number;
-  totalGrossMargin: number;
   avgSalePrice: number;
-  avgGCI: number;
-  avgGrossMargin: number;
-  avgMarginPct: number;
-  avgCommissionPct: number;
   seasonality: { month: number; salesPct: number; volumePct: number }[];
+  // Admin-only fields (stripped from agent responses)
+  totalGCI?: number;
+  totalGrossMargin?: number;
+  avgGCI?: number;
+  avgGrossMargin?: number;
+  avgMarginPct?: number;
+  avgCommissionPct?: number;
 };
 
 function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
@@ -343,7 +346,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Net Income</span>
-                    <p className="font-semibold">{fmtCurrency(prevYearStats.totalGrossMargin)}</p>
+                    <p className="font-semibold">{fmtCurrency((prevYearStats.totalGrossMargin ?? 0))}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Volume</span>
@@ -359,7 +362,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Avg Net/Deal</span>
-                    <p className="font-semibold">{fmtCurrency(prevYearStats.avgGrossMargin)}</p>
+                    <p className="font-semibold">{fmtCurrency((prevYearStats.avgGrossMargin ?? 0))}</p>
                   </div>
                 </div>
               </div>
@@ -374,7 +377,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {[5, 10, 15, 20, 25, 30, 40, 50].map(pct => {
-                    const targetIncome = Math.round(prevYearStats.totalGrossMargin * (1 + pct / 100));
+                    const targetIncome = Math.round((prevYearStats.totalGrossMargin ?? 0) * (1 + pct / 100));
                     const isActive = yearlyIncome && Math.abs(parseFloat(yearlyIncome) - targetIncome) < 100;
                     return (
                       <button key={pct} type="button" onClick={() => {
@@ -395,10 +398,10 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                     <span className="text-xs text-muted-foreground">%</span>
                   </div>
                 </div>
-                {yearlyIncome && prevYearStats.totalGrossMargin > 0 && (
+                {yearlyIncome && (prevYearStats.totalGrossMargin ?? 0) > 0 && (
                   <p className="text-xs text-blue-600">
-                    {fmtCurrency(prevYearStats.totalGrossMargin)} → {fmtCurrency(parseFloat(yearlyIncome))}
-                    {' '}({((parseFloat(yearlyIncome) / prevYearStats.totalGrossMargin - 1) * 100).toFixed(1)}% increase)
+                    {fmtCurrency((prevYearStats.totalGrossMargin ?? 0))} → {fmtCurrency(parseFloat(yearlyIncome))}
+                    {' '}({((parseFloat(yearlyIncome) / (prevYearStats.totalGrossMargin ?? 0) - 1) * 100).toFixed(1)}% increase)
                   </p>
                 )}
               </div>
@@ -415,7 +418,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="agent-yearly-income" className="text-xs">Net Income Goal ($)</Label>
-                  <Input id="agent-yearly-income" type="number" value={yearlyIncome} onChange={e => handleIncomeChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${fmtCurrency(prevYearStats.totalGrossMargin)}` : 'e.g. 120000'} />
+                  <Input id="agent-yearly-income" type="number" value={yearlyIncome} onChange={e => handleIncomeChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${fmtCurrency((prevYearStats.totalGrossMargin ?? 0))}` : 'e.g. 120000'} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="agent-yearly-volume" className="text-xs">Volume Goal ($)</Label>
@@ -792,7 +795,6 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
   const { isTeamLeader, availableTeams } = agentView;
 
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
-  const avgCommPct = totals.closedVolume > 0 ? (totals.totalGCI / totals.closedVolume) * 100 : 0;
   const avgNetPerDeal = totals.closedCount > 0 ? totals.netIncome / totals.closedCount : 0;
 
   // YTD-prorated goal logic (apples-to-apples: compare YTD actuals to YTD goal)
@@ -864,8 +866,7 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
           <MetricTile title="Closed Volume" value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={`Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
           <MetricTile title="Avg Sale Price" value={fmtCurrencyCompact(avgSalePrice)} subtitle={prevYearStats ? `vs ${fmtCurrencyCompact(prevYearStats.avgSalePrice)} prev year` : '—'} icon={DollarSign} />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-          <MetricTile title="Total GCI" value={fmtCurrencyCompact(totals.totalGCI)} subtitle={`Avg Commission: ${avgCommPct > 0 ? `${avgCommPct.toFixed(2)}%` : '—'}`} icon={Target} />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
           <MetricTileWithDelta title="$ per Engagement" value={fmtCurrencyCompact(perEngagement)} previous={prevPerEngagement} icon={MessageSquare} />
           <MetricTileWithDelta title="$ per Appointment" value={fmtCurrencyCompact(perAppointment)} previous={prevPerAppointment} icon={CalendarCheck2} />
           <MetricTileWithDelta title="Avg Net per Deal" value={fmtCurrencyCompact(avgNetPerDeal)} previous={prevAvgNetPerDeal} icon={DollarSign} />
@@ -1713,7 +1714,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
   const { user } = useUser();
   const [allYears, setAllYears] = useState<AgentMultiYearData[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
-  const [metric, setMetric] = useState<'netIncome' | 'volume' | 'sales' | 'gci'>('netIncome');
+  const [metric, setMetric] = useState<'netIncome' | 'volume' | 'sales'>('netIncome');
   const [chartView, setChartView] = useState<'month' | 'quarter' | 'year'>('month');
   const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('ytd');
   const [loading, setLoading] = useState(true);
@@ -1758,7 +1759,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
     return 11;
   };
 
-  const metricLabel = { netIncome: 'Net Income', volume: 'Dollar Volume', sales: 'Number of Sales', gci: 'Total GCI' }[metric];
+  const metricLabel = { netIncome: 'Net Income', volume: 'Dollar Volume', sales: 'Number of Sales' }[metric];
   const fmt = (val: number) => metric === 'sales' ? val.toLocaleString() : fmtCurrencyCompact(val, true);
 
   const chartData = (() => {
@@ -1813,7 +1814,6 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
                 <SelectItem value="netIncome">Net Income</SelectItem>
                 <SelectItem value="volume">Dollar Volume</SelectItem>
                 <SelectItem value="sales">Number of Sales</SelectItem>
-                <SelectItem value="gci">Total GCI</SelectItem>
               </SelectContent>
             </Select>
             {/* View toggle */}
@@ -2123,8 +2123,8 @@ function PendingTable({ transactions }: { transactions: Transaction[] }) {
   return (
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Pending / Under Contract</CardTitle><CardDescription>Deals in progress — not yet closed.</CardDescription></CardHeader>
       <CardContent>{pending.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">No pending transactions.</p>) : (
-        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Client</TableHead><TableHead>Contract Date</TableHead><TableHead>Est. Close</TableHead><TableHead className="text-right">Deal Value</TableHead><TableHead className="text-right">Proj. Net</TableHead></TableRow></TableHeader>
-          <TableBody>{pending.map(t => { const projNet = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{t.clientName ?? '—'}</TableCell><TableCell>{formatDate(t.contractDate)}</TableCell><TableCell><span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>{(t.closedDate || t.closingDate) && <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
+        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Client</TableHead><TableHead>Contract Date</TableHead><TableHead>Est. Close</TableHead><TableHead className="text-right">Sale Price</TableHead><TableHead className="text-right">Projected Net Income</TableHead></TableRow></TableHeader>
+          <TableBody>{pending.map(t => { const projNet = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{t.clientName ?? '—'}</TableCell><TableCell>{formatDate(t.contractDate)}</TableCell><TableCell><span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>{(t.closedDate || t.closingDate) && <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
       )}</CardContent></Card>
   );
 }
@@ -2134,8 +2134,8 @@ function ClosedTable({ transactions, year }: { transactions: Transaction[]; year
   return (
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileCheck2 className="h-5 w-5" /> Closed Transactions — {year}</CardTitle><CardDescription>All transactions you closed this calendar year.</CardDescription></CardHeader>
       <CardContent>{closed.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">No closed transactions for {year}.</p>) : (
-        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Closed Date</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Deal Value</TableHead><TableHead className="text-right">Gross Comm.</TableHead><TableHead className="text-right">Net to Agent</TableHead></TableRow></TableHeader>
-          <TableBody>{closed.map(t => { const net = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0; const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{formatDate(t.closedDate ?? t.closingDate)}</TableCell><TableCell>{t.transactionType ? <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge> : '—'}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right">{gross ? formatCurrencyLocal(gross) : '—'}</TableCell><TableCell className="text-right font-semibold">{net ? formatCurrencyLocal(net) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
+        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Closed Date</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Sale Price</TableHead><TableHead className="text-right">Your Net Income</TableHead></TableRow></TableHeader>
+          <TableBody>{closed.map(t => { const net = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{formatDate(t.closedDate ?? t.closingDate)}</TableCell><TableCell>{t.transactionType ? <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge> : '—'}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{net ? formatCurrencyLocal(net) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
       )}</CardContent></Card>
   );
 }

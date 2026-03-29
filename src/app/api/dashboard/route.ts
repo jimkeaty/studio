@@ -877,6 +877,15 @@ export async function GET(req: NextRequest) {
 
     dashboard.availableComparisonYears = availableYears;
 
+    // ── Strip commission split fields for non-admin callers ───────────────
+    const isAdminCaller = decoded.uid === ADMIN_UID;
+    if (!isAdminCaller && dashboard.stats) {
+      delete (dashboard.stats as any).avgCommissionPct;
+    }
+    if (!isAdminCaller && (dashboard as any).prevYearComparison) {
+      delete (dashboard as any).prevYearComparison.avgCommissionPct;
+    }
+
     return NextResponse.json({
       ok: true,
       year: yearNum,

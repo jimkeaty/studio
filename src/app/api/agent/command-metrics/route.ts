@@ -317,7 +317,7 @@ export async function GET(req: NextRequest) {
     };
 
     // ── Comparison year ───────────────────────────────────────────────────
-    let comparisonData = null;
+    let comparisonData: { year: number; months: { month: number; label: string; grossMargin: number; closedVolume: number; closedCount: number; totalGCI: number; netIncome: number }[] } | null = null;
     if (compareYear && compareTransactions.length > 0) {
       const compMonths = Array.from({ length: 12 }, (_, i) => ({
         month: i + 1, label: format(new Date(2000, i), 'MMM'),
@@ -345,13 +345,65 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Response ──────────────────────────────────────────────────────────
+    const isAdminCaller = decoded.uid === ADMIN_UID;
     const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown };
 
+    // ── Strip commission split data for non-admin callers ─────────────────
+    // Agents only receive their net income; all gross commission / broker
+    // retained / split percentage fields are removed server-side.
+    function stripCommissionFromTotals(t: typeof totals) {
+      const { netIncome, pendingNetIncome, closedVolume, pendingVolume, closedCount, pendingCount } = t;
+      return { netIncome, pendingNetIncome, closedVolume, pendingVolume, closedCount, pendingCount };
+    }
+
+    function stripCommissionFromMonths(ms: typeof months) {
+      return ms.map(m => ({
+        month: m.month, label: m.label,
+        closedVolume: m.closedVolume, pendingVolume: m.pendingVolume,
+        closedCount: m.closedCount, pendingCount: m.pendingCount,
+        grossMarginGoal: m.grossMarginGoal, // renamed: this is the agent's income goal
+        volumeGoal: m.volumeGoal, salesCountGoal: m.salesCountGoal,
+      }));
+    }
+
+    function stripCommissionFromPrevYearStats(ps: typeof prevYearStats | undefined) {
+      if (!ps) return undefined;
+      return {
+        year: ps.year,
+        totalVolume: ps.totalVolume,
+        totalSales: ps.totalSales,
+        avgSalePrice: ps.avgSalePrice,
+        // Retain seasonality shapes for projection math; strip revenue fields
+        seasonality: ps.seasonality.map(s => ({
+          month: s.month, label: s.label,
+          volumePct: s.volumePct, salesPct: s.salesPct,
+        })),
+      };
+    }
+
+    function stripCommissionFromComparisonData(cd: typeof comparisonData) {
+      if (!cd) return null;
+      return {
+        year: cd.year,
+        months: cd.months.map((m: any) => ({
+          closedVolume: m.closedVolume, closedCount: m.closedCount, netIncome: m.netIncome,
+        })),
+      };
+    }
+
+    const agentSafeOverview = isAdminCaller ? overview : {
+      year,
+      totals: stripCommissionFromTotals(totals),
+      months: stripCommissionFromMonths(months),
+      categoryBreakdown, // netRevenue here = agent net, fine to include
+      sourceBreakdown,   // netRevenue here = agent net, fine to include
+    };
+
     return NextResponse.json({
-      overview,
-      prevYearStats,
+      overview: agentSafeOverview,
+      prevYearStats: isAdminCaller ? prevYearStats : stripCommissionFromPrevYearStats(prevYearStats),
       availableYears,
-      comparisonData,
+      comparisonData: isAdminCaller ? comparisonData : stripCommissionFromComparisonData(comparisonData),
       // Agent-specific data
       agentView: {
         view,
