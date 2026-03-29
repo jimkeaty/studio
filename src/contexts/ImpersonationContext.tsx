@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 
 const STORAGE_KEY = 'impersonation_session';
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
@@ -35,10 +35,18 @@ export function ImpersonationProvider({
   getToken?: () => Promise<string>;
 }) {
   const [agent, setAgent] = useState<ImpersonatedAgent | null>(null);
+  // Track whether we've already attempted to restore from sessionStorage.
+  // We must wait until adminUid is confirmed (not null) before checking,
+  // because Firebase auth loads asynchronously and adminUid starts as null.
+  const restoredRef = useRef(false);
 
-  // On mount, restore from sessionStorage (if this user is admin)
+  // Restore impersonation session from sessionStorage after Firebase auth confirms the user.
   useEffect(() => {
-    if (adminUid !== ADMIN_UID) return;
+    // Only attempt restore once, and only after we know the real adminUid.
+    if (restoredRef.current) return;
+    if (adminUid === null) return; // Firebase auth still loading — wait for next render
+    restoredRef.current = true;
+    if (adminUid !== ADMIN_UID) return; // Not admin — no impersonation to restore
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
