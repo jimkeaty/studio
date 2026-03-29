@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
       listPrice: toNum(body.listPrice),
       salePrice: toNum(body.salePrice),
       commissionPercent: toNum(body.commissionPercent),
+      commissionBasePrice: toNum(body.commissionBasePrice) || toNum(body.salePrice) || null,
       gci: toNum(body.gci),
       transactionFee: toNum(body.transactionFee),
       earnestMoney: toNum(body.earnestMoney),

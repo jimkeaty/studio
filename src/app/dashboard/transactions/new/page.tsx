@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUser } from '@/firebase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useForm } from 'react-hook-form';
@@ -76,6 +76,7 @@ const schema = z.object({
   listPrice: z.coerce.number().min(0).optional().or(z.literal('')),
   salePrice: z.coerce.number().min(0).optional().or(z.literal('')),
   commissionPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  commissionBasePrice: z.coerce.number().min(0).optional().or(z.literal('')),
   gci: z.coerce.number().min(0).optional().or(z.literal('')),
   transactionFee: z.coerce.number().min(0).optional().or(z.literal('')),
   earnestMoney: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -251,6 +252,31 @@ export default function AddTransactionPage() {
   const occupancyAgreement = form.watch('occupancyAgreement');
   const inspectionTypes = form.watch('inspectionTypes') || [];
 
+  // Watched values for commission auto-calc
+  const watchedSalePrice = form.watch('salePrice');
+  const watchedCommPct = form.watch('commissionPercent');
+  const watchedCBP = form.watch('commissionBasePrice');
+
+  // Track if user manually edited commissionBasePrice (prevents salePrice from overwriting it)
+  const cbpManuallyEdited = useRef(false);
+
+  // Auto-fill commissionBasePrice from salePrice when not manually overridden
+  useEffect(() => {
+    if (cbpManuallyEdited.current) return;
+    const sp = Number(watchedSalePrice) || 0;
+    if (sp > 0) form.setValue('commissionBasePrice', sp as any);
+  }, [watchedSalePrice]);
+
+  // Auto-calculate GCI when commissionBasePrice × commissionPercent both set
+  useEffect(() => {
+    const cbp = Number(watchedCBP) || 0;
+    const pct = Number(watchedCommPct) || 0;
+    if (cbp > 0 && pct > 0) {
+      const calcGCI = Math.round(cbp * (pct / 100) * 100) / 100;
+      form.setValue('gci', calcGCI as any);
+    }
+  }, [watchedCBP, watchedCommPct]);
+
   // Admin: load agent list for the dropdown
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -382,6 +408,7 @@ export default function AddTransactionPage() {
           listPrice: Number(values.listPrice) || null,
           dealValue: Number(values.salePrice) || Number(values.listPrice) || null,
           commissionPercent: Number(values.commissionPercent) || null,
+          commissionBasePrice: Number(values.commissionBasePrice) || Number(values.salePrice) || null,
           commission: gci,
           transactionFee: Number(values.transactionFee) || null,
           earnestMoney: Number(values.earnestMoney) || null,
@@ -735,29 +762,33 @@ export default function AddTransactionPage() {
               )} />
             </Grid3>
 
-            <Separator />
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Split</p>
-            <Grid2>
-              <FormField control={form.control} name="brokerPct" render={({ field }) => (
-                <FormItem><FormLabel>Broker %</FormLabel><FormControl><Input type="number" step="0.01" placeholder="30" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="brokerGci" render={({ field }) => (
-                <FormItem><FormLabel>Broker GCI ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="agentPct" render={({ field }) => (
-                <FormItem><FormLabel>Agent % / % to Member</FormLabel><FormControl><Input type="number" step="0.01" placeholder="70" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="agentDollar" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Agent Net $ (Primary GCI)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                  <FormDescription>If filled, overrides split calculation.</FormDescription>
-                </FormItem>
-              )} />
-            </Grid2>
+            {isAdmin && (
+              <>
+                <Separator />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Split (Admin)</p>
+                <Grid2>
+                  <FormField control={form.control} name="brokerPct" render={({ field }) => (
+                    <FormItem><FormLabel>Broker %</FormLabel><FormControl><Input type="number" step="0.01" placeholder="30" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="brokerGci" render={({ field }) => (
+                    <FormItem><FormLabel>Broker GCI ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="agentPct" render={({ field }) => (
+                    <FormItem><FormLabel>Agent % / % to Member</FormLabel><FormControl><Input type="number" step="0.01" placeholder="70" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="agentDollar" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Agent Net $ (Primary GCI)</FormLabel>
+                      <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                      <FormDescription>If filled, overrides split calculation.</FormDescription>
+                    </FormItem>
+                  )} />
+                </Grid2>
+              </>
+            )}
             <div className="max-w-xs">
               <FormField control={form.control} name="earnestMoney" render={({ field }) => (
-                <FormItem><FormLabel>Earnest Money ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Earnest Money / Deposit ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
               )} />
             </div>
           </Section>
@@ -1011,6 +1042,28 @@ export default function AddTransactionPage() {
 
           {/* ── Section 9: Commission Paid by Seller ──────────────────────── */}
           <Section title="Commission Paid by Seller">
+            <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Price Commission Is Based On (Sale Price Less Seller Concessions if any)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="1"
+                    placeholder="Auto-filled from Sale Price"
+                    {...field}
+                    onChange={(e) => {
+                      cbpManuallyEdited.current = true;
+                      field.onChange(e);
+                    }}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Defaults to Sale Price. Edit this if the seller is giving concessions and commissions are based on a lower amount (e.g. $300k sale with $20k concessions → enter $280k here).
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <Separator />
             <div className="space-y-4">
               <div className="flex items-end gap-4">
                 <div className="flex-1 max-w-xs">
