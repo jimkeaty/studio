@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle2, Send, ClipboardList, FileCheck2 } from 'lucide-react';
 import Link from 'next/link';
+import { resolveGCI } from '@/lib/commissions';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -272,7 +273,7 @@ export default function AddTransactionPage() {
     const cbp = Number(watchedCBP) || 0;
     const pct = Number(watchedCommPct) || 0;
     if (cbp > 0 && pct > 0) {
-      const calcGCI = Math.round(cbp * (pct / 100) * 100) / 100;
+      const calcGCI = resolveGCI({ commissionBasePrice: cbp, commissionPercent: pct });
       form.setValue('gci', calcGCI as any);
     }
   }, [watchedCBP, watchedCommPct]);

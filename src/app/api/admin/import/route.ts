@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { fuzzyLookupAgent, DEFAULT_SIMILARITY_THRESHOLD } from '@/lib/agents/fuzzyMatch';
+import { resolveGCI } from '@/lib/commissions';
 
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
@@ -144,6 +145,7 @@ export interface ImportRow {
   listPrice: string;
   salePrice: string;
   commissionPct: string;
+  commissionBasePrice?: string;
   gci: string;
   transactionFee: string;
   brokerPct: string;
@@ -376,7 +378,8 @@ export async function POST(req: NextRequest) {
         const listPrice = toNum(row.listPrice);
         const salePrice = toNum(row.salePrice);
         const commissionPct = toNum(row.commissionPct);
-        const gci = toNum(row.gci);
+        const commissionBasePrice = toNum(row.commissionBasePrice) || null;
+        const gci = resolveGCI({ commissionBasePrice, salePrice, commissionPercent: commissionPct, gci: toNum(row.gci) });
         const transactionFee = toNum(row.transactionFee);
         const brokerPct = toNum(row.brokerPct);
         const brokerGci = toNum(row.brokerGci);
@@ -415,7 +418,7 @@ export async function POST(req: NextRequest) {
         // ── Build splitSnapshot from CSV commission chain ────────────────────
         // When agentDollar is provided, it's the authoritative agent net.
         // companyRetained = brokerGci if provided, else gci - agentDollar.
-        const grossCommission = gci > 0 ? gci : 0;
+        const grossCommission = gci;
         const agentNetCommission = agentDollar > 0 ? agentDollar : null;
         const companyRetained =
           brokerGci > 0
@@ -473,6 +476,7 @@ export async function POST(req: NextRequest) {
           listPrice: listPrice > 0 ? listPrice : null,
           dealValue: salePrice > 0 ? salePrice : listPrice > 0 ? listPrice : null,
           commissionPercent: commissionPct > 0 ? commissionPct : null,
+          commissionBasePrice: commissionBasePrice ?? (salePrice > 0 ? salePrice : null),
           transactionFee: transactionFee > 0 ? transactionFee : null,
           brokerProfit: companyRetained,
 
