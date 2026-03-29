@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
@@ -71,6 +71,13 @@ function fmtNum(value: number) {
 const fmtNumNull = (num: number | null | undefined) => num != null ? num.toLocaleString() : '—';
 function gradeTone(g: string) { return g === 'A' ? 'text-green-600' : g === 'B' ? 'text-primary' : g === 'C' ? 'text-yellow-600' : g === 'D' ? 'text-orange-600' : 'text-red-600'; }
 function gradeBg(g: string) { return g === 'A' ? 'bg-green-500/10 border-green-500/30' : g === 'B' ? 'bg-primary/5 border-primary/30' : g === 'C' ? 'bg-yellow-500/10 border-yellow-500/30' : g === 'D' ? 'bg-orange-500/10 border-orange-500/30' : 'bg-red-500/10 border-red-500/30'; }
+function letterGrade(pct: number): { letter: string; color: string } {
+  if (pct >= 90) return { letter: 'A', color: 'text-green-600' };
+  if (pct >= 80) return { letter: 'B', color: 'text-blue-600' };
+  if (pct >= 70) return { letter: 'C', color: 'text-yellow-600' };
+  if (pct >= 60) return { letter: 'D', color: 'text-orange-600' };
+  return { letter: 'F', color: 'text-red-600' };
+}
 const formatCurrencyLocal = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
 const getTimelineBucket = (dateStr?: string | null): string => { if (!dateStr) return '—'; try { const days = differenceInDays(parseISO(dateStr), new Date()); if (days < 0) return 'Past'; if (days < 30) return 'Under 30 days'; if (days < 60) return '30–60 days'; if (days < 90) return '60–90 days'; return '90+ days'; } catch { return '—'; } };
 const formatDate = (dateStr?: string | null) => { if (!dateStr) return '—'; try { return format(parseISO(dateStr), 'MMM d, yyyy'); } catch { return dateStr; } };
@@ -83,19 +90,28 @@ const incomeChartConfig: ChartConfig = {
   pendingNetIncome: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   incomeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareIncome: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedNetIncome: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 const volumeChartConfig: ChartConfig = {
   closedVolume: { label: 'Closed Volume', color: 'hsl(var(--chart-2))' },
   pendingVolume: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   volumeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareVolume: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedVolume: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 const salesChartConfig: ChartConfig = {
   closedCount: { label: 'Closed Sales', color: 'hsl(var(--chart-1))' },
   pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareCount: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedCount: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
+
+// ── Multi-year color palette ─────────────────────────────────────────────────
+const YEAR_COLORS = [
+  '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
+];
 
 // ── Performance types ───────────────────────────────────────────────────────
 
@@ -718,6 +734,11 @@ function AgentDashboardPage() {
           />
 
           {/* ════════════════════════════════════════════════════════════════
+              5b. MULTI-YEAR PRODUCTION COMPARISON
+             ════════════════════════════════════════════════════════════════ */}
+          <AgentMultiYearComparison view={perfView} viewAs={viewAs} />
+
+          {/* ════════════════════════════════════════════════════════════════
               6. CATEGORY & SOURCE BREAKDOWN
              ════════════════════════════════════════════════════════════════ */}
           {perfData && <CategoryBreakdownSection perfData={perfData} year={perfYear} />}
@@ -773,8 +794,39 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
   const avgCommPct = totals.closedVolume > 0 ? (totals.totalGCI / totals.closedVolume) * 100 : 0;
   const avgNetPerDeal = totals.closedCount > 0 ? totals.netIncome / totals.closedCount : 0;
+
+  // YTD-prorated goal logic (apples-to-apples: compare YTD actuals to YTD goal)
+  const todayPerf = new Date();
+  const currentYearPerf = todayPerf.getFullYear();
+  const isCurrentYearPerf = year === currentYearPerf;
+  const daysInYearPerf = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
+  const daysElapsedPerf = Math.floor((todayPerf.getTime() - new Date(year, 0, 1).getTime()) / 86400000) + 1;
+  const ytdFractionPerf = isCurrentYearPerf ? Math.min(1, daysElapsedPerf / daysInYearPerf) : 1;
+  const currentMonthIdxPerf = isCurrentYearPerf ? todayPerf.getMonth() : 11;
+
   const yearlyIncomeGoal = overview.months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
-  const gradeVsGoal = yearlyIncomeGoal ? Math.round((totals.netIncome / yearlyIncomeGoal) * 100) : null;
+  const yearlyVolumeGoal = overview.months.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) || null;
+  const yearlySalesGoal = overview.months.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) || null;
+  const ytdIncomeGoal = yearlyIncomeGoal ? Math.round(yearlyIncomeGoal * ytdFractionPerf) : null;
+  const ytdVolumeGoal = yearlyVolumeGoal ? Math.round(yearlyVolumeGoal * ytdFractionPerf) : null;
+  const ytdSalesGoal = yearlySalesGoal ? Math.round(yearlySalesGoal * ytdFractionPerf * 10) / 10 : null;
+  const gradeVsGoal = ytdIncomeGoal ? Math.round((totals.netIncome / ytdIncomeGoal) * 100) : null;
+  const gradeVsVolume = ytdVolumeGoal ? Math.round((totals.closedVolume / ytdVolumeGoal) * 100) : null;
+  const gradeVsSales = ytdSalesGoal ? Math.round((totals.closedCount / ytdSalesGoal) * 100) : null;
+
+  // Projection (seasonality-based for current year, straight-line fallback)
+  const projFull = (() => {
+    if (!isCurrentYearPerf) return null;
+    const mn = agentView.monthlyNetIncome;
+    const goalVals = overview.months.map(m => m.grossMarginGoal ?? 0);
+    const yearlyGoal = goalVals.reduce((s, v) => s + v, 0);
+    const ytdActual = mn.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0);
+    const ytdGoalShare = yearlyGoal > 0
+      ? goalVals.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0) / yearlyGoal
+      : (currentMonthIdxPerf + 1) / 12;
+    return ytdGoalShare > 0 ? Math.round(ytdActual / ytdGoalShare) : Math.round(ytdActual * 12 / (currentMonthIdxPerf + 1));
+  })();
+  const projLabel = yearlyIncomeGoal && yearlyIncomeGoal > 0 ? 'Seasonality-Based' : 'Straight-Line';
 
   // $ per engagement & $ per appointment from overview dashboard data
   const perEngagement = dashboard?.stats?.engagementValue ?? 0;
@@ -807,7 +859,7 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricTile title="Net Income (Closed)" value={fmtCurrencyCompact(totals.netIncome)} subtitle={`${fmtNumNull(totals.closedCount)} closings · ${gradeVsGoal ? `${gradeVsGoal}% of goal` : 'No goal set'}`} icon={DollarSign} highlight />
+          <MetricTile title="Net Income (Closed)" value={fmtCurrencyCompact(totals.netIncome)} subtitle={`${fmtNumNull(totals.closedCount)} closings · ${ytdIncomeGoal ? `${gradeVsGoal}% of YTD goal` : 'No goal set'}`} icon={DollarSign} highlight />
           <MetricTile title="Pending Income" value={fmtCurrencyCompact(totals.pendingNetIncome)} subtitle={`${fmtNumNull(totals.pendingCount)} pending deals`} icon={Clock} />
           <MetricTile title="Closed Volume" value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={`Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
           <MetricTile title="Avg Sale Price" value={fmtCurrencyCompact(avgSalePrice)} subtitle={prevYearStats ? `vs ${fmtCurrencyCompact(prevYearStats.avgSalePrice)} prev year` : '—'} icon={DollarSign} />
@@ -818,6 +870,48 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
           <MetricTileWithDelta title="$ per Appointment" value={fmtCurrencyCompact(perAppointment)} previous={prevPerAppointment} icon={CalendarCheck2} />
           <MetricTileWithDelta title="Avg Net per Deal" value={fmtCurrencyCompact(avgNetPerDeal)} previous={prevAvgNetPerDeal} icon={DollarSign} />
         </div>
+
+        {/* ── Grade Cards ─────────────────────────────────────────────────────── */}
+        {(gradeVsGoal || gradeVsVolume || gradeVsSales || projFull) && (
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {gradeVsGoal != null && (() => { const g = letterGrade(gradeVsGoal); return (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Net Income vs YTD Goal' : 'Net Income vs Goal'}</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{fmtCurrencyCompact(totals.netIncome, true)} <span className="text-muted-foreground font-normal text-xs">/ {fmtCurrencyCompact(ytdIncomeGoal!, true)}</span></p>
+                    {projFull && isCurrentYearPerf && <p className="text-xs text-amber-600 mt-0.5">Proj. full year: {fmtCurrencyCompact(projFull, true)} <span className="text-muted-foreground">({projLabel})</span></p>}
+                  </div>
+                  <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                </div>
+              </div>
+            ); })()}
+            {gradeVsVolume != null && (() => { const g = letterGrade(gradeVsVolume); return (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Volume vs YTD Goal' : 'Volume vs Goal'}</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{fmtCurrencyCompact(totals.closedVolume, true)} <span className="text-muted-foreground font-normal text-xs">/ {fmtCurrencyCompact(ytdVolumeGoal!, true)}</span></p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{gradeVsVolume}% of YTD goal</p>
+                  </div>
+                  <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                </div>
+              </div>
+            ); })()}
+            {gradeVsSales != null && (() => { const g = letterGrade(gradeVsSales); return (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Sales vs YTD Goal' : 'Sales vs Goal'}</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{totals.closedCount} closings <span className="text-muted-foreground font-normal text-xs">/ {ytdSalesGoal} goal</span></p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{gradeVsSales}% of YTD goal</p>
+                  </div>
+                  <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                </div>
+              </div>
+            ); })()}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1434,6 +1528,9 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   year: number; compareYear: number | null; setCompareYear: (y: number | null) => void;
 }) {
+  const [showProjected, setShowProjected] = useState(false);
+  const [showGoals, setShowGoals] = useState(true);
+
   if (perfLoading) return <Skeleton className="h-80" />;
   if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Failed to load performance data</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
   if (!perfData?.overview) return <Skeleton className="h-80" />;
@@ -1442,28 +1539,90 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const { months } = overview;
   const { monthlyNetIncome, monthlyPendingNetIncome } = agentView;
 
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const isCurrentYear = year === currentYear;
+  const currentMonthIdx = isCurrentYear ? today.getMonth() : 11;
+
+  // Helper: compute projected future months from YTD actuals + goal seasonality
+  function computeProjection(actualArr: number[], goalArr: (number | null)[]): (number | null)[] {
+    if (!isCurrentYear) return actualArr.map(() => null);
+    const numGoals: number[] = goalArr.map(v => v ?? 0);
+    const yearlyGoal: number = numGoals.reduce((s: number, v: number) => s + v, 0);
+    const ytdActual: number = actualArr.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0);
+    const ytdGoalShare: number = yearlyGoal > 0
+      ? numGoals.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0) / yearlyGoal
+      : (currentMonthIdx + 1) / 12;
+    const projFull = ytdGoalShare > 0 ? ytdActual / ytdGoalShare : ytdActual * (12 / (currentMonthIdx + 1));
+    return actualArr.map((_, i) => {
+      if (i <= currentMonthIdx) return null;
+      const share = yearlyGoal > 0 ? numGoals[i] / yearlyGoal : 1 / 12;
+      return Math.round(projFull * share);
+    });
+  }
+
+  const incomeGoalArr = months.map(m => m.grossMarginGoal);
+  const volumeGoalArr = months.map(m => m.volumeGoal);
+  const salesGoalArr = months.map(m => m.salesCountGoal);
+  const hasIncomeGoal = incomeGoalArr.some(v => (v ?? 0) > 0);
+
+  const projNetIncome = computeProjection(monthlyNetIncome, incomeGoalArr);
+  const projVolume = computeProjection(months.map(m => m.closedVolume), volumeGoalArr);
+  const projSales = computeProjection(months.map(m => m.closedCount), salesGoalArr);
+  const projectionLabel = hasIncomeGoal ? 'Seasonality-Based Projection' : 'Straight-Line Projection';
+
+  const ctrlRow = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+      <button type="button" onClick={() => setShowGoals(g => !g)}
+        className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showGoals ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+        Goals
+      </button>
+      {isCurrentYear && (
+        <button type="button" onClick={() => setShowProjected(p => !p)}
+          className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+          📈 Projected
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      {showProjected && isCurrentYear && (
+        <p className="text-xs text-amber-600 font-medium -mb-2">
+          📈 {projectionLabel} — forward months extrapolated from YTD pace
+        </p>
+      )}
+
       {/* CHART 1: Monthly Net Income */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+            <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
+            {ctrlRow}
           </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={incomeChartConfig} className="h-[350px] w-full">
-            <BarChart data={months.map((m, i) => ({ label: m.label, netIncome: monthlyNetIncome[i] || 0, pendingNetIncome: monthlyPendingNetIncome[i] || 0, incomeGoal: m.grossMarginGoal, compareIncome: perfData.comparisonData?.months?.[i]?.netIncome ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({
+              label: m.label,
+              netIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyNetIncome[i] || 0),
+              pendingNetIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyPendingNetIncome[i] || 0),
+              incomeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal) : null,
+              compareIncome: compareYear ? (perfData.comparisonData?.months?.[i]?.netIncome ?? null) : null,
+              projectedNetIncome: showProjected ? (projNetIncome[i] ?? null) : null,
+            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { netIncome: `${year} Income`, pendingNetIncome: 'Pending', incomeGoal: 'Goal', compareIncome: `${compareYear ?? ''} Income` }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { netIncome: `${year} Income`, pendingNetIncome: 'Pending', incomeGoal: 'Goal', compareIncome: `${compareYear ?? ''} Income`, projectedNetIncome: 'Projected' }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="netIncome" fill="var(--color-netIncome)" radius={[4, 4, 0, 0]} name={`${year}`} />
               {compareYear && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingNetIncome" fill="var(--color-pendingNetIncome)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
+              {showGoals && <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedNetIncome" fill="var(--color-projectedNetIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
         </CardContent>
@@ -1473,22 +1632,30 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+            <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
+            {ctrlRow}
           </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({ ...m, compareVolume: perfData.comparisonData?.months?.[i]?.closedVolume ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({
+              ...m,
+              closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
+              pendingVolume: isCurrentYear && i > currentMonthIdx ? null : m.pendingVolume,
+              volumeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal) : null,
+              compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
+              projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
+            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedVolume: `${year} Closed`, pendingVolume: 'Pending', volumeGoal: 'Goal', compareVolume: `${compareYear ?? ''} Volume` }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedVolume: `${year} Closed`, pendingVolume: 'Pending', volumeGoal: 'Goal', compareVolume: `${compareYear ?? ''} Volume`, projectedVolume: 'Projected' }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
               {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
+              {showGoals && <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
         </CardContent>
@@ -1498,27 +1665,266 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+            <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
+            {ctrlRow}
           </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({ ...m, compareCount: perfData.comparisonData?.months?.[i]?.closedCount ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({
+              ...m,
+              closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
+              pendingCount: isCurrentYear && i > currentMonthIdx ? null : m.pendingCount,
+              salesCountGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal) : null,
+              compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
+              projectedCount: showProjected ? (projSales[i] ?? null) : null,
+            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedCount: `${year} Closed`, pendingCount: 'Pending', salesCountGoal: 'Goal', compareCount: `${compareYear ?? ''} Sales` }; return [fmtNumNull(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedCount: `${year} Closed`, pendingCount: 'Pending', salesCountGoal: 'Goal', compareCount: `${compareYear ?? ''} Sales`, projectedCount: 'Projected' }; return [fmtNumNull(Number(v)), labels[name as string] ?? name]; }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
               {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
+              {showGoals && <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5b. MULTI-YEAR PRODUCTION COMPARISON (Agent-scoped)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4'];
+
+type AgentMultiYearData = {
+  year: number;
+  months: { month: number; label: string; netIncome: number; volume: number; sales: number; gci: number }[];
+  totals: { netIncome: number; volume: number; sales: number; gci: number };
+};
+
+function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team'; viewAs: string | null }) {
+  const { user } = useUser();
+  const [allYears, setAllYears] = useState<AgentMultiYearData[]>([]);
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
+  const [metric, setMetric] = useState<'netIncome' | 'volume' | 'sales' | 'gci'>('netIncome');
+  const [chartView, setChartView] = useState<'month' | 'quarter' | 'year'>('month');
+  const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('ytd');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const params = new URLSearchParams({ view });
+        if (viewAs) params.set('viewAs', viewAs);
+        const res = await fetch(`/api/agent/multi-year-compare?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.ok && data.years) {
+          setAllYears(data.years);
+          const yrs = data.years.map((y: AgentMultiYearData) => y.year);
+          setSelectedYears(yrs.length > 5 ? yrs.slice(-5) : yrs);
+        }
+      } catch (err) {
+        console.error('[agent/multi-year]', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user, view, viewAs]);
+
+  const toggleYear = (yr: number) => setSelectedYears(prev =>
+    prev.includes(yr) ? prev.filter(y => y !== yr) : [...prev, yr]
+  );
+
+  const todayMY = new Date();
+  const currentYearMY = todayMY.getFullYear();
+  const currentMonthIdxMY = todayMY.getMonth();
+
+  const getMonthLimit = (yrNum: number) => {
+    if (compareMode === 'ytd') return currentMonthIdxMY;
+    if (yrNum === currentYearMY) return currentMonthIdxMY;
+    return 11;
+  };
+
+  const metricLabel = { netIncome: 'Net Income', volume: 'Dollar Volume', sales: 'Number of Sales', gci: 'Total GCI' }[metric];
+  const fmt = (val: number) => metric === 'sales' ? val.toLocaleString() : fmtCurrencyCompact(val, true);
+
+  const chartData = (() => {
+    const filtered = allYears.filter(y => selectedYears.includes(y.year));
+    if (chartView === 'month') {
+      return Array.from({ length: 12 }, (_, i) => {
+        const pt: Record<string, any> = { label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i] };
+        for (const yr of filtered) {
+          pt[String(yr.year)] = i > getMonthLimit(yr.year) ? null : (yr.months[i]?.[metric] ?? 0);
+        }
+        return pt;
+      });
+    }
+    if (chartView === 'quarter') {
+      return Array.from({ length: 4 }, (_, q) => {
+        const pt: Record<string, any> = { label: QUARTER_LABELS[q] };
+        for (const yr of filtered) {
+          const limit = getMonthLimit(yr.year);
+          const qMos = yr.months.slice(q * 3, Math.min(q * 3 + 3, limit + 1));
+          pt[String(yr.year)] = qMos.length > 0 ? qMos.reduce((s, m) => s + (m[metric] ?? 0), 0) : null;
+        }
+        return pt;
+      });
+    }
+    return filtered.map(yr => {
+      const limit = getMonthLimit(yr.year);
+      const val = compareMode === 'ytd' || yr.year === currentYearMY
+        ? yr.months.slice(0, limit + 1).reduce((s, m) => s + (m[metric] ?? 0), 0)
+        : yr.totals[metric] ?? 0;
+      return { label: String(yr.year), value: val };
+    });
+  })();
+
+  if (loading) return <Skeleton className="h-[500px] w-full" />;
+  if (allYears.length < 2) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" /> Multi-Year Production Comparison
+            </CardTitle>
+            <CardDescription>Compare {metricLabel.toLowerCase()} across years — agent only</CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Metric selector */}
+            <Select value={metric} onValueChange={(v: any) => setMetric(v)}>
+              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="netIncome">Net Income</SelectItem>
+                <SelectItem value="volume">Dollar Volume</SelectItem>
+                <SelectItem value="sales">Number of Sales</SelectItem>
+                <SelectItem value="gci">Total GCI</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* View toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              {(['month', 'quarter', 'year'] as const).map(v => (
+                <button key={v} type="button" onClick={() => setChartView(v)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${chartView === v ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+                  {v === 'month' ? 'Monthly' : v === 'quarter' ? 'Quarterly' : 'Yearly'}
+                </button>
+              ))}
+            </div>
+            {/* YTD / Full toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              {(['full', 'ytd'] as const).map(m => (
+                <button key={m} type="button" onClick={() => setCompareMode(m)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${compareMode === m ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+                  {m === 'full' ? 'Full Year' : `YTD (thru ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][currentMonthIdxMY]})`}
+                </button>
+              ))}
+            </div>
+            {/* Year pills */}
+            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+              <span className="text-xs text-muted-foreground mr-1">Years:</span>
+              {allYears.map((yr, idx) => (
+                <button key={yr.year} type="button" onClick={() => toggleYear(yr.year)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedYears.includes(yr.year) ? 'text-white border-transparent' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
+                  style={selectedYears.includes(yr.year) ? { backgroundColor: YEAR_COLORS[idx % YEAR_COLORS.length] } : undefined}>
+                  {yr.year}
+                </button>
+              ))}
+              <button type="button" onClick={() => setSelectedYears(allYears.map(y => y.year))} className="px-2 py-1 text-xs text-blue-600 hover:underline">All</button>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={400}>
+          {chartView === 'year' ? (
+            <BarChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis tickFormatter={fmt} />
+              <Tooltip formatter={(val: number) => [fmt(val), metricLabel]} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} name={metricLabel}>
+                {chartData.map((entry: any, idx: number) => {
+                  const yrIdx = allYears.findIndex(y => String(y.year) === entry.label);
+                  return <Cell key={idx} fill={YEAR_COLORS[(yrIdx >= 0 ? yrIdx : idx) % YEAR_COLORS.length]} />;
+                })}
+              </Bar>
+            </BarChart>
+          ) : (
+            <BarChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis tickFormatter={fmt} />
+              <Tooltip formatter={(val: number, name: string) => [fmt(val), name]} />
+              <Legend />
+              {allYears.filter(yr => selectedYears.includes(yr.year)).map((yr) => {
+                const colorIdx = allYears.findIndex(y => y.year === yr.year);
+                return (
+                  <Bar key={yr.year} dataKey={String(yr.year)} fill={YEAR_COLORS[colorIdx % YEAR_COLORS.length]} radius={[4, 4, 0, 0]} name={String(yr.year)} />
+                );
+              })}
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+
+        {/* Summary table */}
+        <div className="mt-6 border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">Year</th>
+                <th className="px-4 py-2 text-right font-medium">Net Income</th>
+                <th className="px-4 py-2 text-right font-medium">Volume</th>
+                <th className="px-4 py-2 text-right font-medium">Sales</th>
+                <th className="px-4 py-2 text-right font-medium">YoY Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allYears.filter(yr => selectedYears.includes(yr.year)).sort((a, b) => b.year - a.year).map((yr, idx, arr) => {
+                const ytdCutoff = currentMonthIdxMY + 1;
+                const ytdVal = yr.months.slice(0, ytdCutoff).reduce((s, m) => s + m[metric], 0);
+                const prev = arr[idx + 1];
+                const prevYtdVal = prev ? prev.months.slice(0, ytdCutoff).reduce((s, m) => s + m[metric], 0) : null;
+                const change = prevYtdVal && prevYtdVal > 0 ? ((ytdVal - prevYtdVal) / prevYtdVal * 100) : null;
+                const limit = getMonthLimit(yr.year);
+                const displayVal = compareMode === 'ytd' || yr.year === currentYearMY
+                  ? yr.months.slice(0, limit + 1).reduce((s, m) => s + m[metric], 0)
+                  : yr.totals[metric] ?? 0;
+                const colorIdx = allYears.findIndex(y => y.year === yr.year);
+                return (
+                  <tr key={yr.year} className="border-t">
+                    <td className="px-4 py-2 font-medium flex items-center gap-2">
+                      <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: YEAR_COLORS[colorIdx % YEAR_COLORS.length] }} />
+                      {yr.year}{compareMode === 'ytd' && <span className="text-xs text-muted-foreground ml-1">YTD</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(yr.months.slice(0, limit + 1).reduce((s, m) => s + m.netIncome, 0), true)}</td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(yr.months.slice(0, limit + 1).reduce((s, m) => s + m.volume, 0), true)}</td>
+                    <td className="px-4 py-2 text-right">{yr.months.slice(0, limit + 1).reduce((s, m) => s + m.sales, 0).toLocaleString()}</td>
+                    <td className={`px-4 py-2 text-right font-medium ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                      {change !== null ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
