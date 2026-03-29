@@ -1617,10 +1617,19 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
     };
   })();
 
-  // YTD grade for net income
-  const ytdNetIncomeActual: number = monthlyNetIncome.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0);
-  const ytdNetIncomeGoal: number = incomeGoalArr.slice(0, currentMonthIdx + 1).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
+  // YTD grades for all three charts
+  const ytdMonthsCount = currentMonthIdx + 1;
+  const ytdNetIncomeActual: number = monthlyNetIncome.slice(0, ytdMonthsCount).reduce((s: number, v: number) => s + v, 0);
+  const ytdNetIncomeGoal: number = incomeGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
   const gradeNetIncome = ytdNetIncomeGoal > 0 ? Math.round((ytdNetIncomeActual / ytdNetIncomeGoal) * 100) : null;
+
+  const ytdVolumeActual: number = months.slice(0, ytdMonthsCount).reduce((s: number, m) => s + m.closedVolume, 0);
+  const ytdVolumeGoal: number = volumeGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
+  const gradeVolume = ytdVolumeGoal > 0 ? Math.round((ytdVolumeActual / ytdVolumeGoal) * 100) : null;
+
+  const ytdSalesActual: number = months.slice(0, ytdMonthsCount).reduce((s: number, m) => s + m.closedCount, 0);
+  const ytdSalesGoal: number = salesGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
+  const gradeSales = ytdSalesGoal > 0 ? Math.round((ytdSalesActual / ytdSalesGoal) * 100) : null;
 
   const ctrlRow = (
     <div className="flex items-center gap-2 flex-wrap">
@@ -1742,6 +1751,28 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
             <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
+          {gradeVolume && (() => { const g = letterGrade(gradeVolume); return (
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+                </p>
+                <p className="text-sm font-semibold">
+                  {fmtCurrencyCompact(ytdVolumeActual, true)} <span className="text-muted-foreground font-normal">/ {fmtCurrencyCompact(ytdVolumeGoal, true)} goal</span>
+                </p>
+                {compareYear && perfData.comparisonData && (() => {
+                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                  const diff = ytdVolumeActual - compYTD;
+                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
+                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
+                })()}
+              </div>
+              <div className="flex items-center gap-2 text-right">
+                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                <span className={`text-xl font-bold ${g.color}`}>{gradeVolume}%</span>
+              </div>
+            </div>
+          ); })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
@@ -1810,6 +1841,28 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
             <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
+          {gradeSales && (() => { const g = letterGrade(gradeSales); return (
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+                </p>
+                <p className="text-sm font-semibold">
+                  {ytdSalesActual} sales <span className="text-muted-foreground font-normal">/ {ytdSalesGoal} goal</span>
+                </p>
+                {compareYear && perfData.comparisonData && (() => {
+                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                  const diff = ytdSalesActual - compYTD;
+                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
+                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{diff} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
+                })()}
+              </div>
+              <div className="flex items-center gap-2 text-right">
+                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                <span className={`text-xl font-bold ${g.color}`}>{gradeSales}%</span>
+              </div>
+            </div>
+          ); })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
