@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import type { DailyActivity } from '@/lib/types';
 
+const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+
 // --- API Helpers ---
 function jsonError(status: number, error: string, code?: string) {
   return NextResponse.json(
@@ -36,10 +38,12 @@ async function requireUser(req: NextRequest): Promise<{ uid: string }> {
 // --- Route Handler ---
 export async function GET(req: NextRequest) {
   try {
-    const { uid } = await requireUser(req);
+    const { uid: callerUid } = await requireUser(req);
     const { searchParams } = new URL(req.url);
     const start = searchParams.get('start');
     const end = searchParams.get('end');
+    const viewAs = searchParams.get('viewAs');
+    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
 
     if (!start || !end) {
       return jsonError(400, 'Missing required query params: start, end');

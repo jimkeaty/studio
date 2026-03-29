@@ -613,8 +613,9 @@ export async function GET(req: NextRequest) {
     // ── Tier / Cap progress ──────────────────────────────────────────────
     // Build tiers from profile (independent agents) OR team plan (team agents)
     let resolvedTiers: { tierName: string; fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number; companySplitPercent: number }[] = [];
+    let resolvedPlanName: string | null = null;
 
-    // 1) Try individual tiers from profile
+    // 1) Try individual tiers from profile (defaultPlanType === 'individual')
     if (Array.isArray(agentProfileData?.tiers) && agentProfileData.tiers.length > 0) {
       resolvedTiers = agentProfileData.tiers.map((t: any, i: number) => ({
         tierName: t.tierName || `Tier ${i + 1}`,
@@ -623,9 +624,31 @@ export async function GET(req: NextRequest) {
         agentSplitPercent: asNumber(t.agentSplitPercent),
         companySplitPercent: asNumber(t.companySplitPercent),
       }));
+      resolvedPlanName = 'Individual Commission Plan';
     }
 
-    // 2) If no individual tiers, try team plan bands (for team leaders/members)
+    // 2) For team members with custom override bands stored directly on the profile
+    //    (teamMemberCompMode === 'custom' && teamMemberOverrideBands.length > 0)
+    //    This takes priority over the memberPlans collection lookup.
+    if (
+      resolvedTiers.length === 0 &&
+      agentProfileData?.primaryTeamId &&
+      agentProfileData?.teamRole === 'member' &&
+      agentProfileData?.teamMemberCompMode === 'custom' &&
+      Array.isArray(agentProfileData?.teamMemberOverrideBands) &&
+      agentProfileData.teamMemberOverrideBands.length > 0
+    ) {
+      resolvedTiers = agentProfileData.teamMemberOverrideBands.map((b: any, i: number) => ({
+        tierName: b.tierName || `Tier ${i + 1}`,
+        fromCompanyDollar: asNumber(b.fromCompanyDollar),
+        toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
+        agentSplitPercent: asNumber(b.memberPercent),
+        companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
+      }));
+      resolvedPlanName = 'Custom Member Plan';
+    }
+
+    // 3) If still no tiers, try team plan bands (for team leaders/members)
     if (resolvedTiers.length === 0 && agentProfileData?.primaryTeamId) {
       try {
         const teamId = agentProfileData.primaryTeamId;
@@ -641,8 +664,9 @@ export async function GET(req: NextRequest) {
           const tpData = tpSnap.exists ? tpSnap.data() : null;
 
           if (tpData) {
+            resolvedPlanName = tpData.planName || 'Team Commission Plan';
+
             if (teamRole === 'leader' && Array.isArray(tpData.leaderStructureBands)) {
-              // Leader: leaderPercent = agent side, companyPercent = company side
               resolvedTiers = tpData.leaderStructureBands.map((b: any, i: number) => ({
                 tierName: b.tierName || `Tier ${i + 1}`,
                 fromCompanyDollar: asNumber(b.fromCompanyDollar),
@@ -651,7 +675,7 @@ export async function GET(req: NextRequest) {
                 companySplitPercent: asNumber(b.companyPercent),
               }));
             } else if (teamRole === 'member') {
-              // Check for custom member plan first
+              // Check memberPlans collection for a named custom plan
               const agentIdForMember = agentProfileData.agentId || uid;
               const memberPlanSnap = await adminDb.collection('memberPlans')
                 .where('agentId', '==', agentIdForMember)
@@ -669,9 +693,9 @@ export async function GET(req: NextRequest) {
                     agentSplitPercent: asNumber(b.memberPercent),
                     companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
                   }));
+                  resolvedPlanName = mp.planName || resolvedPlanName;
                 }
               } else if (Array.isArray(tpData.memberDefaultBands)) {
-                // Fall back to team's default member bands
                 resolvedTiers = tpData.memberDefaultBands.map((b: any, i: number) => ({
                   tierName: b.tierName || `Tier ${i + 1}`,
                   fromCompanyDollar: asNumber(b.fromCompanyDollar),
@@ -687,7 +711,7 @@ export async function GET(req: NextRequest) {
         console.warn('[dashboard] Failed to load team plan tiers:', teamErr);
       }
     }
-    console.log(`[dashboard] tiers resolved: ${resolvedTiers.length}, grossGCI: ${grossGCIYTD.toFixed(2)}, profile: ${!!agentProfileData}`);
+    console.log(`[dashboard] tiers resolved: ${resolvedTiers.length}, planName: ${resolvedPlanName}, grossGCI: ${grossGCIYTD.toFixed(2)}, teamMemberCompMode: ${agentProfileData?.teamMemberCompMode ?? 'n/a'}, overrideBands: ${Array.isArray(agentProfileData?.teamMemberOverrideBands) ? agentProfileData.teamMemberOverrideBands.length : 0}`);
 
     // Start date + anniversary (tier reset) date — always compute regardless of tiers
     const agentStartDate = agentProfileData?.startDate || null;
@@ -752,6 +776,7 @@ export async function GET(req: NextRequest) {
         effectiveStartDate: agentStartDate,
         anniversaryDate,
         daysUntilReset,
+        planName: resolvedPlanName,
       };
     } else {
       // No tiers resolved — still provide start date info + diagnostic data
@@ -768,6 +793,7 @@ export async function GET(req: NextRequest) {
         effectiveStartDate: agentStartDate,
         anniversaryDate,
         daysUntilReset,
+        planName: null,
         // Diagnostic: why tiers weren't resolved
         _debug: {
           profileFound: !!agentProfileData,
@@ -775,6 +801,8 @@ export async function GET(req: NextRequest) {
           tiersOnProfile: Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers.length : 0,
           primaryTeamId: agentProfileData?.primaryTeamId ?? null,
           teamRole: agentProfileData?.teamRole ?? null,
+          teamMemberCompMode: agentProfileData?.teamMemberCompMode ?? null,
+          overrideBandsCount: Array.isArray(agentProfileData?.teamMemberOverrideBands) ? agentProfileData.teamMemberOverrideBands.length : 0,
         },
       } as any;
     }
@@ -848,6 +876,15 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b - a);
 
     dashboard.availableComparisonYears = availableYears;
+
+    // ── Strip commission split fields for non-admin callers ───────────────
+    const isAdminCaller = decoded.uid === ADMIN_UID;
+    if (!isAdminCaller && dashboard.stats) {
+      delete (dashboard.stats as any).avgCommissionPct;
+    }
+    if (!isAdminCaller && (dashboard as any).prevYearComparison) {
+      delete (dashboard as any).prevYearComparison.avgCommissionPct;
+    }
 
     return NextResponse.json({
       ok: true,

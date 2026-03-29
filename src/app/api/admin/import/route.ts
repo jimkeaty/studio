@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { fuzzyLookupAgent, DEFAULT_SIMILARITY_THRESHOLD } from '@/lib/agents/fuzzyMatch';
+import { resolveGCI } from '@/lib/commissions';
 
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
@@ -144,6 +145,7 @@ export interface ImportRow {
   listPrice: string;
   salePrice: string;
   commissionPct: string;
+  commissionBasePrice?: string;
   gci: string;
   transactionFee: string;
   brokerPct: string;
@@ -160,6 +162,16 @@ export interface ImportRow {
   teamMember3: string;
   teamMember3Pct: string;
   teamMember3Gci: string;
+  coAgent1: string;
+  coAgent1Pct: string;
+  coAgent1Gci: string;
+  coAgent2: string;
+  coAgent2Pct: string;
+  coAgent2Gci: string;
+  coAgent3: string;
+  coAgent3Pct: string;
+  coAgent3Gci: string;
+  expenseCredits: string;
   mortgageCompany: string;
   titleCompany: string;
 }
@@ -366,7 +378,8 @@ export async function POST(req: NextRequest) {
         const listPrice = toNum(row.listPrice);
         const salePrice = toNum(row.salePrice);
         const commissionPct = toNum(row.commissionPct);
-        const gci = toNum(row.gci);
+        const commissionBasePrice = toNum(row.commissionBasePrice) || null;
+        const gci = resolveGCI({ commissionBasePrice, salePrice, commissionPercent: commissionPct, gci: toNum(row.gci) });
         const transactionFee = toNum(row.transactionFee);
         const brokerPct = toNum(row.brokerPct);
         const brokerGci = toNum(row.brokerGci);
@@ -389,13 +402,23 @@ export async function POST(req: NextRequest) {
         const teamMember3 = toOptStr(row.teamMember3);
         const teamMember3Pct = toNum(row.teamMember3Pct);
         const teamMember3Gci = toNum(row.teamMember3Gci);
+        const coAgent1 = toOptStr(row.coAgent1);
+        const coAgent1Pct = toNum(row.coAgent1Pct);
+        const coAgent1Gci = toNum(row.coAgent1Gci);
+        const coAgent2 = toOptStr(row.coAgent2);
+        const coAgent2Pct = toNum(row.coAgent2Pct);
+        const coAgent2Gci = toNum(row.coAgent2Gci);
+        const coAgent3 = toOptStr(row.coAgent3);
+        const coAgent3Pct = toNum(row.coAgent3Pct);
+        const coAgent3Gci = toNum(row.coAgent3Gci);
+        const expenseCredits = toNum(row.expenseCredits);
 
         const year = toYearFromDates(closedDate, contractDate, listingDate);
 
         // ── Build splitSnapshot from CSV commission chain ────────────────────
         // When agentDollar is provided, it's the authoritative agent net.
         // companyRetained = brokerGci if provided, else gci - agentDollar.
-        const grossCommission = gci > 0 ? gci : 0;
+        const grossCommission = gci;
         const agentNetCommission = agentDollar > 0 ? agentDollar : null;
         const companyRetained =
           brokerGci > 0
@@ -453,6 +476,7 @@ export async function POST(req: NextRequest) {
           listPrice: listPrice > 0 ? listPrice : null,
           dealValue: salePrice > 0 ? salePrice : listPrice > 0 ? listPrice : null,
           commissionPercent: commissionPct > 0 ? commissionPct : null,
+          commissionBasePrice: commissionBasePrice ?? (salePrice > 0 ? salePrice : null),
           transactionFee: transactionFee > 0 ? transactionFee : null,
           brokerProfit: companyRetained,
 
@@ -475,6 +499,22 @@ export async function POST(req: NextRequest) {
             teamMember3Pct: teamMember3Pct > 0 ? teamMember3Pct : null,
             teamMember3Gci: teamMember3Gci > 0 ? teamMember3Gci : null,
           } : {}),
+          ...(coAgent1 ? {
+            coAgent1,
+            coAgent1Pct: coAgent1Pct > 0 ? coAgent1Pct : null,
+            coAgent1Gci: coAgent1Gci > 0 ? coAgent1Gci : null,
+          } : {}),
+          ...(coAgent2 ? {
+            coAgent2,
+            coAgent2Pct: coAgent2Pct > 0 ? coAgent2Pct : null,
+            coAgent2Gci: coAgent2Gci > 0 ? coAgent2Gci : null,
+          } : {}),
+          ...(coAgent3 ? {
+            coAgent3,
+            coAgent3Pct: coAgent3Pct > 0 ? coAgent3Pct : null,
+            coAgent3Gci: coAgent3Gci > 0 ? coAgent3Gci : null,
+          } : {}),
+          ...(expenseCredits > 0 ? { expenseCredits } : {}),
 
           // Closing parties
           mortgageCompany,

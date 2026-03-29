@@ -67,6 +67,7 @@ function fmtDateRange(start: string, end: string) {
 
 export default function CompetitionCenterPage() {
   const { user, loading: userLoading } = useUser();
+  const isAdmin = user?.uid === ADMIN_UID;
 
   // ── Data state ──────────────────────────────────────────────────────────
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -224,16 +225,6 @@ export default function CompetitionCenterPage() {
     );
   }
 
-  if (user.uid !== ADMIN_UID) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Access Denied</AlertTitle>
-        <AlertDescription>You do not have admin access to the Competition Center.</AlertDescription>
-      </Alert>
-    );
-  }
-
   if (error) {
     return (
       <Alert variant="destructive">
@@ -254,17 +245,19 @@ export default function CompetitionCenterPage() {
           </div>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Competition Center</h1>
-            <p className="text-muted-foreground">Create and manage competitions across themes</p>
+            <p className="text-muted-foreground">{isAdmin ? 'Create and manage competitions across themes' : 'View active competitions and your standings'}</p>
           </div>
         </div>
-        <Button
-          onClick={() => { setShowCreate(true); setSelectedTheme(null); setFormData({}); setCreateError(null); }}
-          size="lg"
-          className="gap-2"
-        >
-          <Plus className="h-5 w-5" />
-          New Competition
-        </Button>
+        {isAdmin && (
+          <Button
+            onClick={() => { setShowCreate(true); setSelectedTheme(null); setFormData({}); setCreateError(null); }}
+            size="lg"
+            className="gap-2"
+          >
+            <Plus className="h-5 w-5" />
+            New Competition
+          </Button>
+        )}
       </div>
 
       {/* ── Summary Cards ─────────────────────────────────────────────────── */}
@@ -309,11 +302,13 @@ export default function CompetitionCenterPage() {
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Trophy className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-1">No Competitions Yet</h3>
-            <p className="text-muted-foreground text-sm mb-4">Create your first competition to get started.</p>
-            <Button onClick={() => { setShowCreate(true); setSelectedTheme(null); setFormData({}); }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Competition
-            </Button>
+            <p className="text-muted-foreground text-sm mb-4">{isAdmin ? 'Create your first competition to get started.' : 'No competitions have been set up yet.'}</p>
+            {isAdmin && (
+              <Button onClick={() => { setShowCreate(true); setSelectedTheme(null); setFormData({}); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Competition
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -367,38 +362,40 @@ export default function CompetitionCenterPage() {
                           </div>
                         </div>
 
-                        {/* Right: Status toggle */}
-                        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.preventDefault()}>
-                          {comp.config.status !== 'archived' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs"
-                              disabled={togglingId === comp.id}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleStatusToggle(comp);
-                              }}
-                            >
-                              {togglingId === comp.id ? (
-                                'Updating...'
-                              ) : comp.config.status === 'draft' ? (
-                                <>
-                                  <Play className="h-3 w-3 mr-1" />
-                                  Activate
-                                </>
-                              ) : comp.config.status === 'active' ? (
-                                <>
-                                  <Flag className="h-3 w-3 mr-1" />
-                                  Complete
-                                </>
-                              ) : (
-                                'Archive'
-                              )}
-                            </Button>
-                          )}
-                        </div>
+                        {/* Right: Status toggle (admin only) */}
+                        {isAdmin && (
+                          <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.preventDefault()}>
+                            {comp.config.status !== 'archived' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                disabled={togglingId === comp.id}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleStatusToggle(comp);
+                                }}
+                              >
+                                {togglingId === comp.id ? (
+                                  'Updating...'
+                                ) : comp.config.status === 'draft' ? (
+                                  <>
+                                    <Play className="h-3 w-3 mr-1" />
+                                    Activate
+                                  </>
+                                ) : comp.config.status === 'active' ? (
+                                  <>
+                                    <Flag className="h-3 w-3 mr-1" />
+                                    Complete
+                                  </>
+                                ) : (
+                                  'Archive'
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -408,8 +405,8 @@ export default function CompetitionCenterPage() {
         </div>
       )}
 
-      {/* ── Create Competition Dialog ─────────────────────────────────────── */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      {/* ── Create Competition Dialog (admin only) ───────────────────────── */}
+      <Dialog open={isAdmin && showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

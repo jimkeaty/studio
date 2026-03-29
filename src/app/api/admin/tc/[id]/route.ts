@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
+import { resolveGCI } from '@/lib/commissions';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
@@ -227,7 +228,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (!agentId) return jsonError(400, 'Intake has no agentId — cannot approve');
 
       // Determine GCI for split calculation
-      const rawGci = toNum(intake.gci);
+      const rawGci = resolveGCI({
+        commissionBasePrice: intake.commissionBasePrice,
+        salePrice: intake.salePrice,
+        commissionPercent: intake.commissionPercent,
+        gci: intake.gci,
+      });
       const rawAgentDollar = intake.agentDollar ? toNum(intake.agentDollar) : null;
       const rawBrokerGci = intake.brokerGci ? toNum(intake.brokerGci) : null;
 

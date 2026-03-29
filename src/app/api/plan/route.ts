@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { admin, adminAuth, adminDb } from '@/lib/firebase/admin';
 
+const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+
 function getBearerToken(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const match = authHeader.match(/^Bearer (.+)$/i);
@@ -26,10 +28,14 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ ok: false, error: "Missing token" }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const callerUid = decoded.uid;
 
     const { searchParams } = new URL(req.url);
     const year = searchParams.get("year") || new Date().getFullYear().toString();
+
+    // Admin can view any agent's plan via ?viewAs=uid
+    const viewAs = searchParams.get("viewAs");
+    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
 
     const ref = planDocRef(adminDb, uid, year);
     const snap = await ref.get();
@@ -52,11 +58,15 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ ok: false, error: "Missing token" }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const callerUid = decoded.uid;
 
     const body = await req.json().catch(() => ({}));
     const year = String(body?.year ?? new Date().getFullYear());
     const plan = (body?.plan ?? {}) as Record<string, any>;
+
+    // Admin can save plan for any agent via body.viewAs
+    const viewAs = body?.viewAs;
+    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
 
     const ref = planDocRef(adminDb, uid, year);
 
