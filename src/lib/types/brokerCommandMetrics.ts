@@ -9,6 +9,7 @@ export type Period = {
 export type Metric = {
   count: number;
   netRevenue: number;
+  volume: number;
 };
 
 export type CategoryMetrics = {
@@ -18,6 +19,18 @@ export type CategoryMetrics = {
   commercial_sale: Metric;
   land: Metric;
   unknown: Metric;
+};
+
+export type SourceMetric = {
+  count: number;
+  volume: number;
+  netRevenue: number;
+};
+
+// keyed by dealSource value (e.g. 'boomtown', 'sphere', 'referral', etc.)
+export type SourceBreakdown = {
+  closed: Record<string, SourceMetric>;
+  pending: Record<string, SourceMetric>;
 };
 
 // ── Monthly data point for the 12-month charts ──────────────────────────────
@@ -56,6 +69,7 @@ export type BrokerCommandOverview = {
     totalGCI: number;
     grossMargin: number;
     grossMarginPct: number;
+    agentNetCommission: number;   // totalGCI - grossMargin: paid out to agents
     transactionFees: number;
     closedVolume: number;
     pendingVolume: number;
@@ -71,6 +85,9 @@ export type BrokerCommandOverview = {
     closed: CategoryMetrics;
     pending: CategoryMetrics;
   };
+
+  // Source breakdown (broker dashboard only)
+  sourceBreakdown?: SourceBreakdown;
 };
 
 // Legacy type kept for backward compatibility

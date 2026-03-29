@@ -23,6 +23,7 @@ interface Transaction {
   commission?: number;
   transactionType: string;
   transactionFee?: number;
+  dealSource?: string;
   year: number;
   splitSnapshot?: {
     grossCommission?: number;
@@ -30,6 +31,19 @@ interface Transaction {
     agentNetCommission?: number;
     primaryTeamId?: string | null;
   };
+}
+
+type SourceBucket = { count: number; volume: number; netRevenue: number };
+function addToSource(
+  bucket: Record<string, SourceBucket>,
+  src: string,
+  volume: number,
+  netRevenue: number
+) {
+  if (!bucket[src]) bucket[src] = { count: 0, volume: 0, netRevenue: 0 };
+  bucket[src].count += 1;
+  bucket[src].volume += volume;
+  bucket[src].netRevenue += netRevenue;
 }
 
 function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): Date | null {
@@ -44,7 +58,7 @@ function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): 
   return null;
 }
 
-function emptyCategory(): Metric { return { count: 0, netRevenue: 0 }; }
+function emptyCategory(): Metric { return { count: 0, netRevenue: 0, volume: 0 }; }
 function emptyCategoryMetrics(): CategoryMetrics {
   return {
     residential_sale: emptyCategory(), rental: emptyCategory(),
@@ -111,30 +125,38 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Fetch transactions ────────────────────────────────────────────────
-    const prevYear = year - 1;
-    const fetchYears = [year, prevYear];
-    if (compareYear && !fetchYears.includes(compareYear)) fetchYears.push(compareYear);
-
-    const snapResults = await Promise.all(
-      fetchYears.map(y => adminDb.collection('transactions').where('year', '==', y).get())
+    // Query by agentId (not year field) so transactions missing the year field are included.
+    // Firestore IN batched at 30 per query.
+    const agentIdList = [...agentIds];
+    const allTxSnaps = await Promise.all(
+      Array.from({ length: Math.ceil(agentIdList.length / 30) }, (_, i) =>
+        adminDb.collection('transactions')
+          .where('agentId', 'in', agentIdList.slice(i * 30, i * 30 + 30))
+          .get()
+      )
     );
+    const allAgentTx: Transaction[] = allTxSnaps.flatMap(s => s.docs.map(d => d.data() as Transaction));
 
-    const filterByAgents = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) =>
-      docs.map(d => d.data() as Transaction).filter(t => agentIds.has(t.agentId));
+    // Derive each transaction's year from the year field (if present) or from closedDate/contractDate
+    const getTxYear = (t: Transaction): number | null => {
+      if (t.year && typeof t.year === 'number') return t.year;
+      const cd = parseDate(t.closedDate) ?? parseDate(t.contractDate);
+      return cd ? cd.getFullYear() : null;
+    };
 
-    const transactions = filterByAgents(snapResults[0].docs);
-    const prevTransactions = filterByAgents(snapResults[1].docs);
+    const prevYear = year - 1;
+    const transactions = allAgentTx.filter(t => getTxYear(t) === year);
+    const prevTransactions = allAgentTx.filter(t => getTxYear(t) === prevYear);
     const compareTransactions = compareYear
-      ? filterByAgents(snapResults[fetchYears.indexOf(compareYear)]?.docs || [])
+      ? allAgentTx.filter(t => getTxYear(t) === compareYear)
       : [];
 
-    // Available years
-    const allYearsSnap = await adminDb.collection('transactions')
-      .where('status', '==', 'closed').select('year', 'agentId').get();
+    // Available years — derived from allAgentTx (already fetched above), no extra query needed
     const availableYears = [...new Set(
-      allYearsSnap.docs
-        .filter(d => agentIds.has(d.data().agentId as string))
-        .map(d => d.data().year as number)
+      allAgentTx
+        .filter(t => t.status === 'closed')
+        .map(t => getTxYear(t))
+        .filter((y): y is number => y !== null && !isNaN(y))
     )].filter(y => y !== year).sort((a, b) => b - a);
 
     // ── Fetch goals ───────────────────────────────────────────────────────
@@ -168,10 +190,14 @@ export async function GET(req: NextRequest) {
       totalGCI: 0, grossMargin: 0, grossMarginPct: 0, transactionFees: 0,
       closedVolume: 0, pendingVolume: 0, closedCount: 0, pendingCount: 0,
       // Agent-specific: net income (what agent takes home)
+      agentNetCommission: 0, // alias for netIncome — satisfies BrokerCommandOverview type
       netIncome: 0, pendingNetIncome: 0,
     };
 
     const categoryBreakdown = { closed: emptyCategoryMetrics(), pending: emptyCategoryMetrics() };
+    const sourceBreakdown: { closed: Record<string, SourceBucket>; pending: Record<string, SourceBucket> } = {
+      closed: {}, pending: {},
+    };
 
     // Also track monthly net income for agents
     const monthlyNetIncome: number[] = new Array(12).fill(0);
@@ -185,6 +211,7 @@ export async function GET(req: NextRequest) {
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
+      const srcKey = (t.dealSource || 'other').toLowerCase();
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -204,9 +231,11 @@ export async function GET(req: NextRequest) {
         totals.closedVolume += dealValue;
         totals.closedCount += 1;
         totals.netIncome += agentNet;
+        totals.agentNetCommission += agentNet;
 
         categoryBreakdown.closed[catKey].count += 1;
         categoryBreakdown.closed[catKey].netRevenue += agentNet;
+        addToSource(sourceBreakdown.closed, srcKey, dealValue, agentNet);
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         const contractDate = parseDate(t.contractDate);
         const mi = contractDate && contractDate.getFullYear() === year ? contractDate.getMonth() : null;
@@ -223,6 +252,7 @@ export async function GET(req: NextRequest) {
 
         categoryBreakdown.pending[catKey].count += 1;
         categoryBreakdown.pending[catKey].netRevenue += agentNet;
+        addToSource(sourceBreakdown.pending, srcKey, dealValue, agentNet);
       }
     }
 
@@ -287,7 +317,7 @@ export async function GET(req: NextRequest) {
     };
 
     // ── Comparison year ───────────────────────────────────────────────────
-    let comparisonData = null;
+    let comparisonData: { year: number; months: { month: number; label: string; grossMargin: number; closedVolume: number; closedCount: number; totalGCI: number; netIncome: number }[] } | null = null;
     if (compareYear && compareTransactions.length > 0) {
       const compMonths = Array.from({ length: 12 }, (_, i) => ({
         month: i + 1, label: format(new Date(2000, i), 'MMM'),
@@ -315,13 +345,65 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Response ──────────────────────────────────────────────────────────
-    const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown };
+    const isAdminCaller = decoded.uid === ADMIN_UID;
+    const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown };
+
+    // ── Strip commission split data for non-admin callers ─────────────────
+    // Agents only receive their net income; all gross commission / broker
+    // retained / split percentage fields are removed server-side.
+    function stripCommissionFromTotals(t: typeof totals) {
+      const { netIncome, pendingNetIncome, closedVolume, pendingVolume, closedCount, pendingCount } = t;
+      return { netIncome, pendingNetIncome, closedVolume, pendingVolume, closedCount, pendingCount };
+    }
+
+    function stripCommissionFromMonths(ms: typeof months) {
+      return ms.map(m => ({
+        month: m.month, label: m.label,
+        closedVolume: m.closedVolume, pendingVolume: m.pendingVolume,
+        closedCount: m.closedCount, pendingCount: m.pendingCount,
+        grossMarginGoal: m.grossMarginGoal, // renamed: this is the agent's income goal
+        volumeGoal: m.volumeGoal, salesCountGoal: m.salesCountGoal,
+      }));
+    }
+
+    function stripCommissionFromPrevYearStats(ps: typeof prevYearStats | undefined) {
+      if (!ps) return undefined;
+      return {
+        year: ps.year,
+        totalVolume: ps.totalVolume,
+        totalSales: ps.totalSales,
+        avgSalePrice: ps.avgSalePrice,
+        // Retain seasonality shapes for projection math; strip revenue fields
+        seasonality: ps.seasonality.map(s => ({
+          month: s.month, label: s.label,
+          volumePct: s.volumePct, salesPct: s.salesPct,
+        })),
+      };
+    }
+
+    function stripCommissionFromComparisonData(cd: typeof comparisonData) {
+      if (!cd) return null;
+      return {
+        year: cd.year,
+        months: cd.months.map((m: any) => ({
+          closedVolume: m.closedVolume, closedCount: m.closedCount, netIncome: m.netIncome,
+        })),
+      };
+    }
+
+    const agentSafeOverview = isAdminCaller ? overview : {
+      year,
+      totals: stripCommissionFromTotals(totals),
+      months: stripCommissionFromMonths(months),
+      categoryBreakdown, // netRevenue here = agent net, fine to include
+      sourceBreakdown,   // netRevenue here = agent net, fine to include
+    };
 
     return NextResponse.json({
-      overview,
-      prevYearStats,
+      overview: agentSafeOverview,
+      prevYearStats: isAdminCaller ? prevYearStats : stripCommissionFromPrevYearStats(prevYearStats),
       availableYears,
-      comparisonData,
+      comparisonData: isAdminCaller ? comparisonData : stripCommissionFromComparisonData(comparisonData),
       // Agent-specific data
       agentView: {
         view,

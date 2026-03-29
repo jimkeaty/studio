@@ -70,6 +70,16 @@ const CSV_HEADERS = [
   'Team Member3',
   '% to Member 3',
   'Member GCI 3',
+  'Co-Agent 1',
+  'Co-Agent 1 Split%',
+  'Co-Agent 1 GCI',
+  'Co-Agent 2',
+  'Co-Agent 2 Split%',
+  'Co-Agent 2 GCI',
+  'Co-Agent 3',
+  'Co-Agent 3 Split%',
+  'Co-Agent 3 GCI',
+  'Expense Credits',
   'Mortgage Company',
   'Title Company',
 ] as const;
@@ -181,6 +191,31 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   '% to member3': 'teamMember3Pct',
   'member gci 3': 'teamMember3Gci',
   'member gci3': 'teamMember3Gci',
+
+  // Co-agents
+  'co-agent 1': 'coAgent1',
+  'co agent 1': 'coAgent1',
+  'additional payee': 'coAgent1',
+  'co-agent 1 split%': 'coAgent1Pct',
+  'co-agent 1 split %': 'coAgent1Pct',
+  '% to payee': 'coAgent1Pct',
+  'co-agent 1 gci': 'coAgent1Gci',
+  'payee gci': 'coAgent1Gci',
+  'co-agent 2': 'coAgent2',
+  'co agent 2': 'coAgent2',
+  'co-agent 2 split%': 'coAgent2Pct',
+  'co-agent 2 split %': 'coAgent2Pct',
+  'co-agent 2 gci': 'coAgent2Gci',
+  'co-agent 3': 'coAgent3',
+  'co agent 3': 'coAgent3',
+  'co-agent 3 split%': 'coAgent3Pct',
+  'co-agent 3 split %': 'coAgent3Pct',
+  'co-agent 3 gci': 'coAgent3Gci',
+
+  // Expense credits
+  'expense credits': 'expenseCredits',
+  'expense credit': 'expenseCredits',
+  'expenses': 'expenseCredits',
 
   // Parties
   'mortgage company': 'mortgageCompany',
@@ -368,6 +403,16 @@ const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
   { header: 'Team Member3', hint: 'Third team member (optional)' },
   { header: '% to Member 3', hint: 'Team member 3 split percentage' },
   { header: 'Member GCI 3', hint: 'Team member 3 dollar amount' },
+  { header: 'Co-Agent 1', hint: 'Co-listing agent 1 name (informational)' },
+  { header: 'Co-Agent 1 Split%', hint: "Co-Agent 1 broker split % (informational)" },
+  { header: 'Co-Agent 1 GCI', hint: "Co-Agent 1 gross commission portion before company split ($, informational)" },
+  { header: 'Co-Agent 2', hint: 'Co-listing agent 2 name (informational)' },
+  { header: 'Co-Agent 2 Split%', hint: "Co-Agent 2 broker split % (informational)" },
+  { header: 'Co-Agent 2 GCI', hint: "Co-Agent 2 gross commission portion before company split ($, informational)" },
+  { header: 'Co-Agent 3', hint: 'Co-listing agent 3 name (informational)' },
+  { header: 'Co-Agent 3 Split%', hint: "Co-Agent 3 broker split % (informational)" },
+  { header: 'Co-Agent 3 GCI', hint: "Co-Agent 3 gross commission portion before company split ($, informational)" },
+  { header: 'Expense Credits', hint: 'Credits paid to save a deal (informational, not deducted from calculations)' },
   { header: 'Mortgage Company', hint: 'Lender name (optional)' },
   { header: 'Title Company', hint: 'Title/escrow company (optional)' },
 ];
@@ -550,11 +595,10 @@ export default function BulkImportPage() {
   const handleImport = async () => {
     if (!user) return;
     setImporting(true);
-    setImportProgress(10);
+    setImportProgress(5);
 
     try {
       const token = await user.getIdToken();
-      setImportProgress(20);
 
       const validRows = parsedRows
         .filter((r) => r.__errors.length === 0)
@@ -566,26 +610,46 @@ export default function BulkImportPage() {
         return;
       }
 
-      setImportProgress(40);
-
-      const res = await fetch('/api/admin/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ rows: validRows }),
-      });
-
-      setImportProgress(80);
-      const data = await res.json();
-      setImportProgress(100);
-
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'Import failed');
+      const CHUNK_SIZE = 500;
+      const chunks: typeof validRows[] = [];
+      for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
+        chunks.push(validRows.slice(i, i + CHUNK_SIZE));
       }
 
-      setImportResult(data);
+      const accumulated = {
+        imported: 0,
+        failed: 0,
+        fuzzyMatchedAgents: [] as any[],
+        autoCreatedAgents: [] as any[],
+        errors: [] as any[],
+      };
+
+      for (let i = 0; i < chunks.length; i++) {
+        const res = await fetch('/api/admin/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ rows: chunks[i] }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || `Chunk ${i + 1} failed`);
+        }
+
+        accumulated.imported += data.imported ?? 0;
+        accumulated.failed += data.failed ?? 0;
+        accumulated.fuzzyMatchedAgents.push(...(data.fuzzyMatchedAgents ?? []));
+        accumulated.autoCreatedAgents.push(...(data.autoCreatedAgents ?? []));
+        accumulated.errors.push(...(data.errors ?? []));
+
+        setImportProgress(Math.round(((i + 1) / chunks.length) * 100));
+      }
+
+      setImportResult({ ok: true, ...accumulated });
       setStep('result');
     } catch (err: any) {
       setPageError(err.message || 'Import failed. Please try again.');
@@ -879,6 +943,7 @@ export default function BulkImportPage() {
                             >
                               <option value="">— skip this column —</option>
                               <option value="agentName">Agent Name *</option>
+                              <option value="team">Team</option>
                               <option value="closingType">Deal Type (Buyer/Listing/Lease/Referral)</option>
                               <option value="status">Status *</option>
                               <option value="dealType">Type of Closing (Residential/Land/Commercial)</option>
@@ -899,6 +964,26 @@ export default function BulkImportPage() {
                               <option value="brokerGci">Broker GCI</option>
                               <option value="agentPct">Agent %</option>
                               <option value="agentDollar">Agent $ (Primary GCI)</option>
+                              <option value="referral">Referral</option>
+                              <option value="teamMember1">Team Member 1</option>
+                              <option value="teamMember1Pct">Team Member 1 Split%</option>
+                              <option value="teamMember1Gci">Team Member 1 GCI</option>
+                              <option value="teamMember2">Team Member 2</option>
+                              <option value="teamMember2Pct">Team Member 2 Split%</option>
+                              <option value="teamMember2Gci">Team Member 2 GCI</option>
+                              <option value="teamMember3">Team Member 3</option>
+                              <option value="teamMember3Pct">Team Member 3 Split%</option>
+                              <option value="teamMember3Gci">Team Member 3 GCI</option>
+                              <option value="coAgent1">Co-Agent 1</option>
+                              <option value="coAgent1Pct">Co-Agent 1 Split%</option>
+                              <option value="coAgent1Gci">Co-Agent 1 GCI</option>
+                              <option value="coAgent2">Co-Agent 2</option>
+                              <option value="coAgent2Pct">Co-Agent 2 Split%</option>
+                              <option value="coAgent2Gci">Co-Agent 2 GCI</option>
+                              <option value="coAgent3">Co-Agent 3</option>
+                              <option value="coAgent3Pct">Co-Agent 3 Split%</option>
+                              <option value="coAgent3Gci">Co-Agent 3 GCI</option>
+                              <option value="expenseCredits">Expense Credits</option>
                               <option value="mortgageCompany">Mortgage Company</option>
                               <option value="titleCompany">Title Company</option>
                             </select>
@@ -1218,7 +1303,7 @@ export default function BulkImportPage() {
           {importing && (
             <Card>
               <CardContent className="pt-6">
-                <p className="text-sm font-medium mb-2">Importing {validRows.length} transactions…</p>
+                <p className="text-sm font-medium mb-2">Importing {validRows.length} transaction{validRows.length !== 1 ? 's' : ''}…{validRows.length > 500 ? ` (${Math.ceil(validRows.length / 500)} batches)` : ''}</p>
                 <Progress value={importProgress} className="h-2" />
                 <p className="text-xs text-muted-foreground mt-1">{importProgress}% complete</p>
               </CardContent>

@@ -12,6 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/firebase";
+import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { defaultAssumptions } from "@/lib/plan-assumptions";
 import type { BusinessPlan, PlanAssumptions, PlanTargets } from "@/lib/types";
 import {
@@ -160,28 +161,31 @@ const PlanResultCard = ({
 type PlanGetResponse = { ok: boolean; plan?: any; error?: string };
 type PlanPostResponse = { ok: boolean; plan?: any; error?: string };
 
-async function fetchPlan(year: string, token: string): Promise<PlanGetResponse> {
-  const res = await fetch(`/api/plan?year=${encodeURIComponent(year)}`, {
+async function fetchPlan(year: string, token: string, viewAs?: string | null): Promise<PlanGetResponse> {
+  const params = new URLSearchParams({ year });
+  if (viewAs) params.set('viewAs', viewAs);
+  const res = await fetch(`/api/plan?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
   return res.json();
 }
 
-async function savePlan(year: string, plan: any, token: string): Promise<PlanPostResponse> {
+async function savePlan(year: string, plan: any, token: string, viewAs?: string | null): Promise<PlanPostResponse> {
   const res = await fetch(`/api/plan`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ year, plan }),
+    body: JSON.stringify({ year, plan, ...(viewAs ? { viewAs } : {}) }),
   });
   return res.json();
 }
 
 export default function BusinessPlanPage() {
   const { user, loading: userLoading } = useUser();
+  const { effectiveUid, isImpersonating, impersonatedAgent } = useEffectiveUser();
   const { toast } = useToast();
 
   const [year, setYear] = useState("");
@@ -247,7 +251,7 @@ export default function BusinessPlanPage() {
         }
 
         const token = await user.getIdToken();
-        const json = await fetchPlan(year, token);
+        const json = await fetchPlan(year, token, isImpersonating ? effectiveUid : null);
 
         // If no plan exists, server returns ok:true with plan:{} — keep defaults
         if (json?.ok && json.plan && typeof json.plan === "object" && Object.keys(json.plan).length > 0) {
@@ -321,7 +325,7 @@ export default function BusinessPlanPage() {
       const finalCalculatedPlan = calculatePlan(data.annualIncomeGoal, assumptions);
 
       const planToSave: BusinessPlan = {
-        userId: user.uid,
+        userId: effectiveUid ?? user.uid,
         year: parseInt(year, 10),
         annualIncomeGoal: data.annualIncomeGoal,
         planStartDate: data.planStartDate || undefined,
@@ -332,7 +336,7 @@ export default function BusinessPlanPage() {
       };
 
       const token = await user.getIdToken();
-      const json = await savePlan(year, planToSave, token);
+      const json = await savePlan(year, planToSave, token, isImpersonating ? effectiveUid : null);
 
       if (!json?.ok) {
         throw new Error(json?.error ?? "Failed to save plan");

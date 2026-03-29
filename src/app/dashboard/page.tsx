@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useUser } from '@/firebase';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics, Transaction, Opportunity } from '@/lib/types';
-import type { MonthlyData, CategoryMetrics } from '@/lib/types/brokerCommandMetrics';
+import type { MonthlyData, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -13,6 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
@@ -35,7 +36,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,13 @@ function fmtNum(value: number) {
 const fmtNumNull = (num: number | null | undefined) => num != null ? num.toLocaleString() : '—';
 function gradeTone(g: string) { return g === 'A' ? 'text-green-600' : g === 'B' ? 'text-primary' : g === 'C' ? 'text-yellow-600' : g === 'D' ? 'text-orange-600' : 'text-red-600'; }
 function gradeBg(g: string) { return g === 'A' ? 'bg-green-500/10 border-green-500/30' : g === 'B' ? 'bg-primary/5 border-primary/30' : g === 'C' ? 'bg-yellow-500/10 border-yellow-500/30' : g === 'D' ? 'bg-orange-500/10 border-orange-500/30' : 'bg-red-500/10 border-red-500/30'; }
+function letterGrade(pct: number): { letter: string; color: string } {
+  if (pct >= 90) return { letter: 'A', color: 'text-green-600' };
+  if (pct >= 80) return { letter: 'B', color: 'text-blue-600' };
+  if (pct >= 70) return { letter: 'C', color: 'text-yellow-600' };
+  if (pct >= 60) return { letter: 'D', color: 'text-orange-600' };
+  return { letter: 'F', color: 'text-red-600' };
+}
 const formatCurrencyLocal = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
 const getTimelineBucket = (dateStr?: string | null): string => { if (!dateStr) return '—'; try { const days = differenceInDays(parseISO(dateStr), new Date()); if (days < 0) return 'Past'; if (days < 30) return 'Under 30 days'; if (days < 60) return '30–60 days'; if (days < 90) return '60–90 days'; return '90+ days'; } catch { return '—'; } };
 const formatDate = (dateStr?: string | null) => { if (!dateStr) return '—'; try { return format(parseISO(dateStr), 'MMM d, yyyy'); } catch { return dateStr; } };
@@ -81,32 +90,44 @@ const incomeChartConfig: ChartConfig = {
   pendingNetIncome: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   incomeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareIncome: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedNetIncome: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 const volumeChartConfig: ChartConfig = {
   closedVolume: { label: 'Closed Volume', color: 'hsl(var(--chart-2))' },
   pendingVolume: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   volumeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareVolume: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedVolume: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 const salesChartConfig: ChartConfig = {
   closedCount: { label: 'Closed Sales', color: 'hsl(var(--chart-1))' },
   pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareCount: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projectedCount: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
+
+// ── Multi-year color palette ─────────────────────────────────────────────────
+const YEAR_COLORS = [
+  '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
+];
 
 // ── Performance types ───────────────────────────────────────────────────────
 
 type AgentMetricsResponse = {
   overview: {
     year: number;
-    totals: { totalGCI: number; grossMargin: number; grossMarginPct: number; transactionFees: number; closedVolume: number; pendingVolume: number; closedCount: number; pendingCount: number; netIncome: number; pendingNetIncome: number; };
+    // Agent-safe totals: commission split fields (totalGCI, grossMargin, etc.) are
+    // stripped server-side for non-admin callers. Only net income is returned.
+    totals: { closedVolume: number; pendingVolume: number; closedCount: number; pendingCount: number; netIncome: number; pendingNetIncome: number; totalGCI?: number; grossMargin?: number; grossMarginPct?: number; transactionFees?: number; };
     months: MonthlyData[];
     categoryBreakdown: { closed: CategoryMetrics; pending: CategoryMetrics };
+    sourceBreakdown?: SourceBreakdown;
   };
-  prevYearStats?: { year: number; totalVolume: number; totalSales: number; totalGCI: number; totalGrossMargin: number; avgSalePrice: number; avgGCI: number; avgGrossMargin: number; avgMarginPct: number; avgCommissionPct: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number; netIncome?: number }[]; };
+  prevYearStats?: { year: number; totalVolume: number; totalSales: number; avgSalePrice: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number }[]; totalGCI?: number; totalGrossMargin?: number; avgGCI?: number; avgGrossMargin?: number; avgMarginPct?: number; avgCommissionPct?: number; };
   availableYears?: number[];
-  comparisonData?: { year: number; months: { grossMargin: number; closedVolume: number; closedCount: number; totalGCI: number; netIncome: number }[] } | null;
+  comparisonData?: { year: number; months: { closedVolume: number; closedCount: number; netIncome: number; grossMargin?: number; totalGCI?: number }[] } | null;
   agentView: { view: string; viewLabel: string; isTeamLeader: boolean; availableTeams: { teamId: string; teamName: string }[]; monthlyNetIncome: number[]; monthlyPendingNetIncome: number[]; netIncome: number; pendingNetIncome: number; goalSegment: string; };
 };
 
@@ -133,14 +154,15 @@ type AgentPrevYearStats = {
   year: number;
   totalVolume: number;
   totalSales: number;
-  totalGCI: number;
-  totalGrossMargin: number;
   avgSalePrice: number;
-  avgGCI: number;
-  avgGrossMargin: number;
-  avgMarginPct: number;
-  avgCommissionPct: number;
   seasonality: { month: number; salesPct: number; volumePct: number }[];
+  // Admin-only fields (stripped from agent responses)
+  totalGCI?: number;
+  totalGrossMargin?: number;
+  avgGCI?: number;
+  avgGrossMargin?: number;
+  avgMarginPct?: number;
+  avgCommissionPct?: number;
 };
 
 function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
@@ -324,7 +346,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Net Income</span>
-                    <p className="font-semibold">{fmtCurrency(prevYearStats.totalGrossMargin)}</p>
+                    <p className="font-semibold">{fmtCurrency((prevYearStats.totalGrossMargin ?? 0))}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Volume</span>
@@ -340,7 +362,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Avg Net/Deal</span>
-                    <p className="font-semibold">{fmtCurrency(prevYearStats.avgGrossMargin)}</p>
+                    <p className="font-semibold">{fmtCurrency((prevYearStats.avgGrossMargin ?? 0))}</p>
                   </div>
                 </div>
               </div>
@@ -355,7 +377,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {[5, 10, 15, 20, 25, 30, 40, 50].map(pct => {
-                    const targetIncome = Math.round(prevYearStats.totalGrossMargin * (1 + pct / 100));
+                    const targetIncome = Math.round((prevYearStats.totalGrossMargin ?? 0) * (1 + pct / 100));
                     const isActive = yearlyIncome && Math.abs(parseFloat(yearlyIncome) - targetIncome) < 100;
                     return (
                       <button key={pct} type="button" onClick={() => {
@@ -376,10 +398,10 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                     <span className="text-xs text-muted-foreground">%</span>
                   </div>
                 </div>
-                {yearlyIncome && prevYearStats.totalGrossMargin > 0 && (
+                {yearlyIncome && (prevYearStats.totalGrossMargin ?? 0) > 0 && (
                   <p className="text-xs text-blue-600">
-                    {fmtCurrency(prevYearStats.totalGrossMargin)} → {fmtCurrency(parseFloat(yearlyIncome))}
-                    {' '}({((parseFloat(yearlyIncome) / prevYearStats.totalGrossMargin - 1) * 100).toFixed(1)}% increase)
+                    {fmtCurrency((prevYearStats.totalGrossMargin ?? 0))} → {fmtCurrency(parseFloat(yearlyIncome))}
+                    {' '}({((parseFloat(yearlyIncome) / (prevYearStats.totalGrossMargin ?? 0) - 1) * 100).toFixed(1)}% increase)
                   </p>
                 )}
               </div>
@@ -396,7 +418,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="agent-yearly-income" className="text-xs">Net Income Goal ($)</Label>
-                  <Input id="agent-yearly-income" type="number" value={yearlyIncome} onChange={e => handleIncomeChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${fmtCurrency(prevYearStats.totalGrossMargin)}` : 'e.g. 120000'} />
+                  <Input id="agent-yearly-income" type="number" value={yearlyIncome} onChange={e => handleIncomeChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${fmtCurrency((prevYearStats.totalGrossMargin ?? 0))}` : 'e.g. 120000'} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="agent-yearly-volume" className="text-xs">Volume Goal ($)</Label>
@@ -558,13 +580,25 @@ export default function AgentDashboardPageWrapper() {
 
 function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
+  const { isImpersonating, impersonatedAgent, startImpersonation } = useEffectiveUser();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
-  // "View as Agent" impersonation (admin only)
-  const viewAsParam = searchParams.get('viewAs');
-  const viewAsName = searchParams.get('viewAsName');
+  // Bootstrap impersonation from URL params (links from admin pages)
   const isAdmin = user?.uid === ADMIN_UID;
-  const viewAs = (isAdmin && viewAsParam) ? viewAsParam : null;
+  useEffect(() => {
+    const viewAsParam = searchParams.get('viewAs');
+    const viewAsName = searchParams.get('viewAsName');
+    if (isAdmin && viewAsParam && viewAsName) {
+      startImpersonation({ uid: viewAsParam, name: decodeURIComponent(viewAsName) });
+      // Remove URL params so they don't persist on refresh
+      router.replace('/dashboard');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, searchParams]);
+
+  // Effective agent to view (impersonated uid or own uid)
+  const viewAs = isImpersonating && impersonatedAgent ? impersonatedAgent.uid : null;
 
   // Overview data
   const [data, setData] = useState<{ dashboard: AgentDashboardData | null; plan: BusinessPlan | null; ytdMetrics: YtdValueMetrics | null } | null>(null);
@@ -579,6 +613,7 @@ function AgentDashboardPage() {
   const [compareYear, setCompareYear] = useState<number | null>(null);
   const [perfData, setPerfData] = useState<AgentMetricsResponse | null>(null);
   const [perfLoading, setPerfLoading] = useState(true);
+  const [perfError, setPerfError] = useState<string | null>(null);
 
   const year = new Date().getFullYear();
 
@@ -622,6 +657,7 @@ function AgentDashboardPage() {
   const fetchPerf = useCallback(async () => {
     if (!user) return;
     setPerfLoading(true);
+    setPerfError(null);
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(perfYear), view: perfView });
@@ -630,7 +666,7 @@ function AgentDashboardPage() {
       const res = await fetch(`/api/agent/command-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || `Request failed (${res.status})`); }
       setPerfData(await res.json());
-    } catch (e: any) { console.error('[perf]', e); }
+    } catch (e: any) { console.error('[perf]', e); setPerfError(e.message); }
     finally { setPerfLoading(false); }
   }, [user, perfYear, perfView, compareYear, viewAs]);
 
@@ -644,33 +680,12 @@ function AgentDashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* ── Impersonation Banner ──────────────────────────────────────────── */}
-      {viewAs && (
-        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Users className="h-5 w-5 text-amber-600" />
-            <div>
-              <p className="font-semibold text-amber-800">
-                Viewing as: {viewAsName || viewAs}
-              </p>
-              <p className="text-xs text-amber-600">You are viewing this agent&apos;s dashboard as admin</p>
-            </div>
-          </div>
-          <a
-            href="/dashboard/admin/agents"
-            className="rounded-md bg-amber-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
-          >
-            ← Back to Agents
-          </a>
-        </div>
-      )}
-
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          {viewAs && viewAsName ? `${viewAsName}'s Dashboard` : 'Agent Dashboard'}
+          {isImpersonating && impersonatedAgent ? `${impersonatedAgent.name}'s Dashboard` : 'Agent Dashboard'}
         </h1>
         <p className="text-muted-foreground">
-          {viewAs ? `Performance summary for ${year}.` : `Your performance summary for ${year}.`}
+          {isImpersonating ? `Performance summary for ${year}.` : `Your performance summary for ${year}.`}
         </p>
       </div>
 
@@ -680,6 +695,7 @@ function AgentDashboardPage() {
       <MyPerformanceSection
         perfData={perfData}
         perfLoading={perfLoading}
+        perfError={perfError}
         dashboard={dashboard ?? null}
         year={perfYear}
         setYear={setPerfYear}
@@ -701,7 +717,7 @@ function AgentDashboardPage() {
         <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>No Data</AlertTitle><AlertDescription>Dashboard data for {year} not found.</AlertDescription></Alert>
       ) : (
         <>
-          <ReportCardSection dashboard={dashboard} />
+          <ReportCardSection dashboard={dashboard} perfData={perfData} perfYear={perfYear} />
 
           {/* ════════════════════════════════════════════════════════════════
               4. KPIs — All 6 with uniform activity-tracker style
@@ -714,13 +730,24 @@ function AgentDashboardPage() {
           <ChartsSection
             perfData={perfData}
             perfLoading={perfLoading}
+            perfError={perfError}
             year={perfYear}
             compareYear={compareYear}
             setCompareYear={setCompareYear}
           />
 
           {/* ════════════════════════════════════════════════════════════════
-              6. SET MONTHLY GOALS
+              5b. MULTI-YEAR PRODUCTION COMPARISON
+             ════════════════════════════════════════════════════════════════ */}
+          <AgentMultiYearComparison view={perfView} viewAs={viewAs} />
+
+          {/* ════════════════════════════════════════════════════════════════
+              6. CATEGORY & SOURCE BREAKDOWN
+             ════════════════════════════════════════════════════════════════ */}
+          {perfLoading ? <Skeleton className="h-64 w-full" /> : perfData ? <CategoryBreakdownSection perfData={perfData} year={perfYear} /> : null}
+
+          {/* ════════════════════════════════════════════════════════════════
+              7. SET MONTHLY GOALS
              ════════════════════════════════════════════════════════════════ */}
           {perfData?.overview && (
             <GoalsEditor
@@ -733,20 +760,16 @@ function AgentDashboardPage() {
           )}
 
           {/* ════════════════════════════════════════════════════════════════
-              7. PIPELINE TABLES
-             ════════════════════════════════════════════════════════════════ */}
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">My Pipeline</h2>
-            <p className="text-sm text-muted-foreground">Active opportunities, pending deals, and closed transactions for {year}.</p>
-          </div>
-          <OpportunitiesTable opportunities={opportunities} />
-          <PendingTable transactions={transactions} />
-          <ClosedTable transactions={transactions} year={year} />
-
-          {/* ════════════════════════════════════════════════════════════════
               8. RECRUITING INCENTIVE TRACKER
              ════════════════════════════════════════════════════════════════ */}
           <RecruitingIncentiveTracker />
+
+          {/* ════════════════════════════════════════════════════════════════
+              9. PIPELINE TABLES
+             ════════════════════════════════════════════════════════════════ */}
+          <OpportunitiesTable opportunities={opportunities} />
+          <PendingTable transactions={transactions} />
+          <ClosedTable transactions={transactions} year={year} />
         </>
       )}
     </div>
@@ -757,13 +780,14 @@ function AgentDashboardPage() {
 // 1. MY PERFORMANCE SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MyPerformanceSection({ perfData, perfLoading, dashboard, year, setYear, view, setView }: {
-  perfData: AgentMetricsResponse | null; perfLoading: boolean;
+function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, year, setYear, view, setView }: {
+  perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   dashboard: AgentDashboardData | null;
   year: number; setYear: (y: number) => void;
   view: 'personal' | 'team'; setView: (v: 'personal' | 'team') => void;
 }) {
   if (perfLoading) return <div className="space-y-4"><Skeleton className="h-10 w-1/3" /><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24" />)}</div></div>;
+  if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Performance data unavailable</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
   if (!perfData?.overview) return null;
 
   const { overview, agentView, prevYearStats } = perfData;
@@ -771,10 +795,40 @@ function MyPerformanceSection({ perfData, perfLoading, dashboard, year, setYear,
   const { isTeamLeader, availableTeams } = agentView;
 
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
-  const avgCommPct = totals.closedVolume > 0 ? (totals.totalGCI / totals.closedVolume) * 100 : 0;
   const avgNetPerDeal = totals.closedCount > 0 ? totals.netIncome / totals.closedCount : 0;
+
+  // YTD-prorated goal logic (apples-to-apples: compare YTD actuals to YTD goal)
+  const todayPerf = new Date();
+  const currentYearPerf = todayPerf.getFullYear();
+  const isCurrentYearPerf = year === currentYearPerf;
+  const daysInYearPerf = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
+  const daysElapsedPerf = Math.floor((todayPerf.getTime() - new Date(year, 0, 1).getTime()) / 86400000) + 1;
+  const ytdFractionPerf = isCurrentYearPerf ? Math.min(1, daysElapsedPerf / daysInYearPerf) : 1;
+  const currentMonthIdxPerf = isCurrentYearPerf ? todayPerf.getMonth() : 11;
+
   const yearlyIncomeGoal = overview.months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
-  const gradeVsGoal = yearlyIncomeGoal ? Math.round((totals.netIncome / yearlyIncomeGoal) * 100) : null;
+  const yearlyVolumeGoal = overview.months.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) || null;
+  const yearlySalesGoal = overview.months.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) || null;
+  const ytdIncomeGoal = yearlyIncomeGoal ? Math.round(yearlyIncomeGoal * ytdFractionPerf) : null;
+  const ytdVolumeGoal = yearlyVolumeGoal ? Math.round(yearlyVolumeGoal * ytdFractionPerf) : null;
+  const ytdSalesGoal = yearlySalesGoal ? Math.round(yearlySalesGoal * ytdFractionPerf * 10) / 10 : null;
+  const gradeVsGoal = ytdIncomeGoal ? Math.round((totals.netIncome / ytdIncomeGoal) * 100) : null;
+  const gradeVsVolume = ytdVolumeGoal ? Math.round((totals.closedVolume / ytdVolumeGoal) * 100) : null;
+  const gradeVsSales = ytdSalesGoal ? Math.round((totals.closedCount / ytdSalesGoal) * 100) : null;
+
+  // Projection (seasonality-based for current year, straight-line fallback)
+  const projFull = (() => {
+    if (!isCurrentYearPerf) return null;
+    const mn = agentView.monthlyNetIncome;
+    const goalVals = overview.months.map(m => m.grossMarginGoal ?? 0);
+    const yearlyGoal = goalVals.reduce((s, v) => s + v, 0);
+    const ytdActual = mn.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0);
+    const ytdGoalShare = yearlyGoal > 0
+      ? goalVals.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0) / yearlyGoal
+      : (currentMonthIdxPerf + 1) / 12;
+    return ytdGoalShare > 0 ? Math.round(ytdActual / ytdGoalShare) : Math.round(ytdActual * 12 / (currentMonthIdxPerf + 1));
+  })();
+  const projLabel = yearlyIncomeGoal && yearlyIncomeGoal > 0 ? 'Seasonality-Based' : 'Straight-Line';
 
   // $ per engagement & $ per appointment from overview dashboard data
   const perEngagement = dashboard?.stats?.engagementValue ?? 0;
@@ -807,17 +861,58 @@ function MyPerformanceSection({ perfData, perfLoading, dashboard, year, setYear,
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricTile title="Net Income (Closed)" value={fmtCurrencyCompact(totals.netIncome)} subtitle={`${fmtNumNull(totals.closedCount)} closings · ${gradeVsGoal ? `${gradeVsGoal}% of goal` : 'No goal set'}`} icon={DollarSign} highlight />
+          <MetricTile title="Net Income (Closed)" value={fmtCurrencyCompact(totals.netIncome)} subtitle={`${fmtNumNull(totals.closedCount)} closings · ${ytdIncomeGoal ? `${gradeVsGoal}% of YTD goal` : 'No goal set'}`} icon={DollarSign} highlight />
           <MetricTile title="Pending Income" value={fmtCurrencyCompact(totals.pendingNetIncome)} subtitle={`${fmtNumNull(totals.pendingCount)} pending deals`} icon={Clock} />
           <MetricTile title="Closed Volume" value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={`Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
           <MetricTile title="Avg Sale Price" value={fmtCurrencyCompact(avgSalePrice)} subtitle={prevYearStats ? `vs ${fmtCurrencyCompact(prevYearStats.avgSalePrice)} prev year` : '—'} icon={DollarSign} />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-          <MetricTile title="Total GCI" value={fmtCurrencyCompact(totals.totalGCI)} subtitle={`Avg Commission: ${avgCommPct > 0 ? `${avgCommPct.toFixed(2)}%` : '—'}`} icon={Target} />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
           <MetricTileWithDelta title="$ per Engagement" value={fmtCurrencyCompact(perEngagement)} previous={prevPerEngagement} icon={MessageSquare} />
           <MetricTileWithDelta title="$ per Appointment" value={fmtCurrencyCompact(perAppointment)} previous={prevPerAppointment} icon={CalendarCheck2} />
           <MetricTileWithDelta title="Avg Net per Deal" value={fmtCurrencyCompact(avgNetPerDeal)} previous={prevAvgNetPerDeal} icon={DollarSign} />
         </div>
+
+        {/* ── Grade Cards ─────────────────────────────────────────────────────── */}
+        {(gradeVsGoal || gradeVsVolume || gradeVsSales || projFull) && (
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {gradeVsGoal != null && (() => { const g = letterGrade(gradeVsGoal); return (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Net Income vs YTD Goal' : 'Net Income vs Goal'}</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{fmtCurrencyCompact(totals.netIncome, true)} <span className="text-muted-foreground font-normal text-xs">/ {fmtCurrencyCompact(ytdIncomeGoal!, true)}</span></p>
+                    {projFull && isCurrentYearPerf && <p className="text-xs text-amber-600 mt-0.5">Proj. full year: {fmtCurrencyCompact(projFull, true)} <span className="text-muted-foreground">({projLabel})</span></p>}
+                  </div>
+                  <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                </div>
+              </div>
+            ); })()}
+            {gradeVsVolume != null && (() => { const g = letterGrade(gradeVsVolume); return (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Volume vs YTD Goal' : 'Volume vs Goal'}</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{fmtCurrencyCompact(totals.closedVolume, true)} <span className="text-muted-foreground font-normal text-xs">/ {fmtCurrencyCompact(ytdVolumeGoal!, true)}</span></p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{gradeVsVolume}% of YTD goal</p>
+                  </div>
+                  <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                </div>
+              </div>
+            ); })()}
+            {gradeVsSales != null && (() => { const g = letterGrade(gradeVsSales); return (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Sales vs YTD Goal' : 'Sales vs Goal'}</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{totals.closedCount} closings <span className="text-muted-foreground font-normal text-xs">/ {ytdSalesGoal} goal</span></p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{gradeVsSales}% of YTD goal</p>
+                  </div>
+                  <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                </div>
+              </div>
+            ); })()}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -862,58 +957,63 @@ function MetricTileWithDelta({ title, value, previous, icon: Icon }: { title: st
 // 2. TIER / CAP PROGRESS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const tierColors = [
-  { bar: 'bg-slate-400', text: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-300' },
-  { bar: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-300' },
-  { bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-300' },
-  { bar: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-300' },
-  { bar: 'bg-purple-500', text: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-300' },
-  { bar: 'bg-rose-500', text: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-300' },
+// ── Tier color palette (hex values for inline SVG/gradient use)
+const TIER_PALETTE = [
+  { hex: '#2563eb', light: '#eff6ff', text: '#1e40af', ring: 'ring-blue-400/40',    label: 'blue'    },
+  { hex: '#16a34a', light: '#f0fdf4', text: '#14532d', ring: 'ring-green-400/40',   label: 'green'   },
+  { hex: '#eab308', light: '#fefce8', text: '#713f12', ring: 'ring-yellow-400/40',  label: 'yellow'  },
+  { hex: '#ea580c', light: '#fff7ed', text: '#7c2d12', ring: 'ring-orange-400/40',  label: 'orange'  },
+  { hex: '#9333ea', light: '#faf5ff', text: '#581c87', ring: 'ring-purple-400/40',  label: 'purple'  },
+  { hex: '#e11d48', light: '#fff1f2', text: '#881337', ring: 'ring-rose-400/40',    label: 'rose'    },
 ];
 
 function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const tp = dashboard.tierProgress;
 
-  // Format start / anniversary dates (declared early so it's available in both branches)
-  const fmtDateLocal = (d: string | null | undefined) => {
+  const fmtDate = (d: string | null | undefined) => {
     if (!d) return null;
-    try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; }
+    try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return d; }
   };
 
+  // ── Empty / unconfigured state ─────────────────────────────────────────
   if (!tp || tp.tiers.length === 0) {
-    const debugInfo = (tp as any)?._debug;
+    const dbg = (tp as any)?._debug;
     return (
-      <Card>
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200" />
         <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
               <CardDescription>No commission tiers configured — contact your admin.</CardDescription>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {tp?.effectiveStartDate && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                  <CalendarDays className="h-3 w-3" />
-                  <span>Started {fmtDateLocal(tp.effectiveStartDate)}</span>
-                </div>
-              )}
-              {tp?.daysUntilReset != null && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                  <Clock className="h-3 w-3" />
-                  <span>{tp.daysUntilReset} days until reset{tp.anniversaryDate ? ` (${fmtDateLocal(tp.anniversaryDate)})` : ''}</span>
-                </div>
-              )}
-            </div>
           </div>
           {tp && (tp.grossGCIYTD > 0 || tp.pendingGrossGCI > 0) && (
             <p className="text-sm mt-2 text-muted-foreground">
-              Gross GCI: {fmtCurrency(tp.grossGCIYTD)} closed{tp.pendingGrossGCI > 0 && ` + ${fmtCurrency(tp.pendingGrossGCI)} pending`}
+              Gross GCI: <span className="font-semibold text-foreground">{fmtCurrency(tp.grossGCIYTD)}</span>
+              {tp.pendingGrossGCI > 0 && <> + {fmtCurrency(tp.pendingGrossGCI)} pending</>}
             </p>
           )}
-          {debugInfo && (
-            <p className="text-xs mt-2 text-muted-foreground/60">
-              Debug: profile={debugInfo.profileFound ? 'found' : 'NOT FOUND'}, type={debugInfo.agentType ?? 'null'},
-              tiers={debugInfo.tiersOnProfile}, teamId={debugInfo.primaryTeamId ?? 'none'}, role={debugInfo.teamRole ?? 'none'}
+          <div className="flex flex-wrap gap-2 mt-2">
+            {tp?.effectiveStartDate && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-1">
+                <CalendarDays className="h-3 w-3" /> Started {fmtDate(tp.effectiveStartDate)}
+              </span>
+            )}
+            {tp?.daysUntilReset != null && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-1">
+                <Clock className="h-3 w-3" /> {tp.daysUntilReset}d until reset
+              </span>
+            )}
+          </div>
+          {dbg && (
+            <p className="text-[10px] mt-2 text-muted-foreground/50 font-mono">
+              debug · profile:{dbg.profileFound ? '✓' : '✗'} type:{dbg.agentType ?? '—'} tiers:{dbg.tiersOnProfile}
+              {dbg.teamId ? ` teamId:${dbg.primaryTeamId}` : ''} role:{dbg.teamRole ?? '—'}
+              {dbg.teamMemberCompMode ? ` compMode:${dbg.teamMemberCompMode}` : ''}
+              {dbg.overrideBandsCount != null ? ` overrideBands:${dbg.overrideBandsCount}` : ''}
             </p>
           )}
         </CardHeader>
@@ -921,147 +1021,248 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
     );
   }
 
-  const { tiers, grossGCIYTD, pendingGrossGCI, currentTierIndex, currentTierName, nextTierName, nextTierThreshold, capReached, effectiveStartDate, anniversaryDate, daysUntilReset } = tp;
+  const { tiers, grossGCIYTD, pendingGrossGCI, currentTierIndex, currentTierName,
+          nextTierThreshold, capReached, effectiveStartDate, anniversaryDate, daysUntilReset, planName } = tp;
 
-  const fmtDate = fmtDateLocal;
-
-  // Calculate the max value for the full bar (highest tier boundary or current GCI whichever is larger)
-  const highestBound = tiers.reduce((max, t) => {
-    const to = t.toCompanyDollar ?? t.fromCompanyDollar;
-    return Math.max(max, to);
-  }, 0);
-  const maxBarValue = Math.max(highestBound, grossGCIYTD + pendingGrossGCI) * 1.05;
-
-  const closedPct = maxBarValue > 0 ? Math.min(100, (grossGCIYTD / maxBarValue) * 100) : 0;
-  const pendingPct = maxBarValue > 0 ? Math.min(100 - closedPct, (pendingGrossGCI / maxBarValue) * 100) : 0;
+  const activePalette = TIER_PALETTE[currentTierIndex % TIER_PALETTE.length];
   const remainToNext = nextTierThreshold != null ? Math.max(0, nextTierThreshold - grossGCIYTD) : 0;
-  const currentColor = tierColors[currentTierIndex % tierColors.length];
+
+  // ── Bar geometry ───────────────────────────────────────────────────────
+  // Extend the last (uncapped) tier by 30% beyond current GCI or a minimum buffer
+  const lastTier = tiers[tiers.length - 1];
+  const lastMax = lastTier.toCompanyDollar
+    ?? Math.max(lastTier.fromCompanyDollar * 1.5, grossGCIYTD * 1.25, lastTier.fromCompanyDollar + 25000);
+  const totalRange = lastMax;
+
+  // Compute each tier's left% and width%
+  const tierSegments = tiers.map((t, i) => {
+    const from = t.fromCompanyDollar;
+    const to = i < tiers.length - 1 ? (tiers[i + 1].fromCompanyDollar) : lastMax;
+    const leftPct = (from / totalRange) * 100;
+    const widthPct = ((to - from) / totalRange) * 100;
+    return { leftPct, widthPct, from, to };
+  });
+
+  // Position marker for current GCI
+  const markerPct = Math.min((grossGCIYTD / totalRange) * 100, 99.5);
+  // Position of pending GCI marker
+  const pendingMarkerPct = pendingGrossGCI > 0
+    ? Math.min(((grossGCIYTD + pendingGrossGCI) / totalRange) * 100, 99.5)
+    : null;
+
+  const hoveredTier = hoveredIdx !== null ? tiers[hoveredIdx] : null;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <Card className="overflow-hidden">
+      {/* Accent bar — color matches active tier */}
+      <div className="h-1" style={{ background: `linear-gradient(to right, ${activePalette.hex}88, ${activePalette.hex})` }} />
+
+      <CardContent className="pt-5 pb-5 space-y-5">
+        {/* ── TOP ROW ──────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
-            <CardDescription className="mt-0.5">
-              Gross $GCI generated — {fmtCurrency(grossGCIYTD)} closed
-              {pendingGrossGCI > 0 && ` + ${fmtCurrency(pendingGrossGCI)} pending`}
-            </CardDescription>
+            <h3 className="text-base font-bold tracking-tight">Commission Tier Progress</h3>
+            {planName && (
+              <p className="text-xs text-muted-foreground mt-0.5">{planName}</p>
+            )}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Start date + anniversary info */}
-            {effectiveStartDate && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                <CalendarDays className="h-3 w-3" />
-                <span>Started {fmtDate(effectiveStartDate)}</span>
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Active tier badge */}
+            <span
+              className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full border"
+              style={{ background: activePalette.light, color: activePalette.text, borderColor: activePalette.hex + '55' }}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ background: activePalette.hex }} />
+              {currentTierName}
+              <span className="font-normal opacity-70">· {tiers[currentTierIndex].agentSplitPercent}% agent</span>
+            </span>
+            {capReached && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+                ★ Cap Reached
+              </span>
             )}
-            {daysUntilReset != null && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                <Clock className="h-3 w-3" />
-                <span>{daysUntilReset} days until reset{anniversaryDate ? ` (${fmtDate(anniversaryDate)})` : ''}</span>
-              </div>
-            )}
-            <div className={cn('px-3 py-1.5 rounded-full text-sm font-bold border', currentColor.bg, currentColor.border, currentColor.text)}>
-              {currentTierName} · {tiers[currentTierIndex].agentSplitPercent}%/{tiers[currentTierIndex].companySplitPercent}%
-            </div>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Progress bar */}
-        <div className="relative">
-          <div className="h-8 rounded-full bg-muted/40 overflow-hidden relative border">
-            {/* Closed GCI fill */}
-            <div
-              className={cn('absolute inset-y-0 left-0 rounded-l-full transition-all duration-700', currentColor.bar)}
-              style={{ width: `${closedPct}%` }}
-            />
-            {/* Pending GCI fill (striped) */}
-            {pendingPct > 0 && (
+
+        {/* ── MAIN PROGRESS BAR ────────────────────────────────────────── */}
+        <div className="space-y-1">
+          {/* Hover tooltip above bar */}
+          <div className="h-8 relative">
+            {hoveredTier && hoveredIdx !== null && (
               <div
-                className={cn('absolute inset-y-0 opacity-40 transition-all duration-700', currentColor.bar)}
-                style={{
-                  left: `${closedPct}%`,
-                  width: `${pendingPct}%`,
-                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.3) 4px, rgba(255,255,255,0.3) 8px)',
-                }}
+                className="absolute bottom-1 z-10 -translate-x-1/2 pointer-events-none"
+                style={{ left: `${tierSegments[hoveredIdx].leftPct + tierSegments[hoveredIdx].widthPct / 2}%` }}
+              >
+                <div
+                  className="text-white text-xs rounded-lg px-2.5 py-1.5 shadow-lg whitespace-nowrap"
+                  style={{ background: TIER_PALETTE[hoveredIdx % TIER_PALETTE.length].hex }}
+                >
+                  <div className="font-bold">{hoveredTier.tierName || `Tier ${hoveredIdx + 1}`}</div>
+                  <div className="opacity-90">
+                    {fmtCurrencyCompact(tierSegments[hoveredIdx].from, true)}
+                    {' → '}
+                    {hoveredTier.toCompanyDollar != null
+                      ? fmtCurrencyCompact(tierSegments[hoveredIdx].to, true)
+                      : 'No cap'}
+                  </div>
+                  <div className="opacity-90">{hoveredTier.agentSplitPercent}% / {hoveredTier.companySplitPercent}%</div>
+                </div>
+                {/* Caret */}
+                <div className="w-2 h-2 rotate-45 mx-auto -mt-1 rounded-sm"
+                     style={{ background: TIER_PALETTE[hoveredIdx % TIER_PALETTE.length].hex }} />
+              </div>
+            )}
+          </div>
+
+          {/* The bar */}
+          <div className="relative h-10 rounded-xl overflow-visible">
+            {/* Tier segments */}
+            <div className="absolute inset-0 flex rounded-xl overflow-hidden border border-border/40">
+              {tierSegments.map((seg, idx) => {
+                const p = TIER_PALETTE[idx % TIER_PALETTE.length];
+                const isActive = idx === currentTierIndex;
+                const isPast = idx < currentTierIndex;
+                const opacity = isPast ? '1' : isActive ? '1' : '0.25';
+                return (
+                  <div
+                    key={idx}
+                    className="h-full relative cursor-pointer transition-all duration-150 select-none flex-shrink-0"
+                    style={{
+                      width: `${seg.widthPct}%`,
+                      background: isPast || isActive
+                        ? `linear-gradient(135deg, ${p.hex}dd, ${p.hex})`
+                        : `${p.hex}22`,
+                      opacity,
+                      borderRight: idx < tiers.length - 1 ? '2px solid rgba(255,255,255,0.35)' : 'none',
+                      boxShadow: isActive ? `inset 0 0 0 2px ${p.hex}88, inset 0 -3px 0 0 rgba(0,0,0,0.15)` : undefined,
+                    }}
+                    onMouseEnter={() => setHoveredIdx(idx)}
+                    onMouseLeave={() => setHoveredIdx(null)}
+                  >
+                    {/* Tier label inside segment (hidden if too narrow) */}
+                    {seg.widthPct > 12 && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-[10px] font-bold text-white drop-shadow-sm leading-tight">
+                          {tiers[idx].tierName || `T${idx + 1}`}
+                        </span>
+                        <span className="text-[9px] text-white/80 leading-tight">
+                          {tiers[idx].agentSplitPercent}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pending GCI ghost marker */}
+            {pendingMarkerPct !== null && pendingMarkerPct > markerPct && (
+              <div
+                className="absolute top-0 bottom-0 w-0.5 opacity-40 pointer-events-none"
+                style={{ left: `${pendingMarkerPct}%`, background: '#f59e0b', zIndex: 3 }}
               />
             )}
-            {/* Tier boundary markers */}
-            {tiers.map((tier, idx) => {
-              if (idx === 0) return null;
-              const markerPct = maxBarValue > 0 ? (tier.fromCompanyDollar / maxBarValue) * 100 : 0;
-              if (markerPct > 100) return null;
-              const tc = tierColors[idx % tierColors.length];
-              return (
-                <div key={idx} className="absolute inset-y-0 flex flex-col items-center" style={{ left: `${markerPct}%` }}>
-                  <div className={cn('w-0.5 h-full', idx <= currentTierIndex ? tc.bar : 'bg-muted-foreground/30')} />
-                </div>
-              );
-            })}
-            {/* Current GCI label on bar */}
-            <div className="absolute inset-0 flex items-center px-3">
-              <span className="text-xs font-bold text-white drop-shadow-sm">
-                {fmtCurrency(grossGCIYTD)}
-              </span>
+
+            {/* ── Position marker (current GCI) ── */}
+            <div
+              className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none"
+              style={{ left: `${markerPct}%`, zIndex: 4, transform: 'translateX(-50%)' }}
+            >
+              {/* Vertical line */}
+              <div className="w-0.5 h-full bg-white drop-shadow-md" />
+              {/* Diamond dot at top */}
+              <div
+                className="absolute -top-2.5 w-4 h-4 rotate-45 border-2 border-white shadow-md"
+                style={{ background: activePalette.hex }}
+              />
             </div>
           </div>
 
-          {/* Tier labels below bar */}
-          <div className="relative h-6 mt-1">
+          {/* ── Threshold labels below bar ── */}
+          <div className="relative h-5 mt-1">
             {tiers.map((tier, idx) => {
-              const startPct = maxBarValue > 0 ? (tier.fromCompanyDollar / maxBarValue) * 100 : 0;
-              if (startPct > 100) return null;
-              const tc = tierColors[idx % tierColors.length];
+              const seg = tierSegments[idx];
+              if (seg.leftPct > 97) return null;
+              const isActive = idx === currentTierIndex;
+              const p = TIER_PALETTE[idx % TIER_PALETTE.length];
               return (
-                <div key={idx} className="absolute text-center" style={{ left: `${startPct}%`, transform: 'translateX(-50%)' }}>
-                  <span className={cn('text-[10px] font-semibold whitespace-nowrap', idx === currentTierIndex ? tc.text : 'text-muted-foreground')}>
+                <div
+                  key={idx}
+                  className="absolute text-center"
+                  style={{ left: `${seg.leftPct}%`, transform: 'translateX(-50%)' }}
+                >
+                  <span
+                    className="text-[10px] font-semibold whitespace-nowrap"
+                    style={{ color: isActive ? p.hex : undefined }}
+                  >
                     {fmtCurrencyCompact(tier.fromCompanyDollar, true)}
                   </span>
                 </div>
               );
             })}
+            {/* Cap label at right end */}
+            {lastTier.toCompanyDollar == null && (
+              <div className="absolute right-0 text-[10px] text-muted-foreground/60">No cap</div>
+            )}
           </div>
         </div>
 
-        {/* Tier cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-          {tiers.map((tier, idx) => {
-            const tc = tierColors[idx % tierColors.length];
-            const isActive = idx === currentTierIndex;
-            return (
-              <div key={idx} className={cn(
-                'rounded-lg border p-2.5 transition-all',
-                isActive ? `${tc.bg} ${tc.border} ring-2 ring-offset-1` : 'bg-muted/20 border-muted opacity-60',
-                isActive && `ring-${tc.bar.replace('bg-', '')}/30`
-              )}>
-                <div className="flex items-center gap-1.5">
-                  <div className={cn('w-2.5 h-2.5 rounded-full', tc.bar)} />
-                  <span className={cn('text-xs font-bold', isActive ? tc.text : 'text-muted-foreground')}>{tier.tierName || `Tier ${idx + 1}`}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {tier.agentSplitPercent}% / {tier.companySplitPercent}%
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {fmtCurrencyCompact(tier.fromCompanyDollar, true)}
-                  {tier.toCompanyDollar != null ? ` – ${fmtCurrencyCompact(tier.toCompanyDollar, true)}` : '+'}
-                </p>
-              </div>
-            );
-          })}
+        {/* ── PROGRESS STATS ROW ────────────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Current Progress</p>
+            <p className="text-lg font-bold">{fmtCurrency(grossGCIYTD)}</p>
+            {pendingGrossGCI > 0 && (
+              <p className="text-[11px] text-amber-600 font-medium">+ {fmtCurrency(pendingGrossGCI)} pending</p>
+            )}
+          </div>
+          <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Next Tier At</p>
+            {capReached ? (
+              <p className="text-lg font-bold text-emerald-600">Max Tier ★</p>
+            ) : nextTierThreshold != null ? (
+              <p className="text-lg font-bold">{fmtCurrency(nextTierThreshold)}</p>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">—</p>
+            )}
+            {!capReached && tp.nextTierName && (
+              <p className="text-[11px] text-muted-foreground">{tp.nextTierName}</p>
+            )}
+          </div>
+          <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Remaining</p>
+            {capReached ? (
+              <p className="text-lg font-bold text-emerald-600">Capped</p>
+            ) : remainToNext > 0 ? (
+              <p className="text-lg font-bold" style={{ color: activePalette.hex }}>{fmtCurrency(remainToNext)}</p>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">—</p>
+            )}
+            {!capReached && remainToNext > 0 && (
+              <p className="text-[11px] text-muted-foreground">to next tier</p>
+            )}
+          </div>
         </div>
 
-        {/* Status line */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
-          {capReached ? (
-            <span className="font-semibold text-emerald-600">Cap reached — max tier active</span>
-          ) : nextTierName ? (
-            <span><span className="font-semibold">{fmtCurrency(remainToNext)}</span> more $GCI to reach <span className="font-semibold">{nextTierName}</span></span>
-          ) : (
-            <span>Active tier: {currentTierName}</span>
+        {/* ── FOOTER META ROW ──────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-1 border-t text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="font-semibold text-foreground">Gross GCI</span>
+            {fmtCurrency(grossGCIYTD)}
+          </span>
+          {effectiveStartDate && (
+            <span className="flex items-center gap-1">
+              <CalendarDays className="h-3 w-3" />
+              Started {fmtDate(effectiveStartDate)}
+            </span>
           )}
-          <span>YTD Gross $GCI: <span className="font-bold text-foreground">{fmtCurrency(grossGCIYTD)}</span></span>
+          {daysUntilReset != null && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {daysUntilReset} days until reset
+              {anniversaryDate ? ` (${fmtDate(anniversaryDate)})` : ''}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -1113,13 +1314,41 @@ function HeroCard({ title, grade, primary, secondary, performancePct, icon: Icon
   );
 }
 
-function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
-  const ytdIncomeGoal = dashboard.expectedYTDIncomeGoal;
-  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
-  const incomePct = ytdIncomeGoal > 0 ? Math.round((dashboard.netEarned / ytdIncomeGoal) * 100) : 0;
+function ReportCardSection({ dashboard, perfData, perfYear }: {
+  dashboard: AgentDashboardData;
+  perfData: AgentMetricsResponse | null;
+  perfYear: number;
+}) {
+  // Use perfData for income/volume/sales so grades are consistent with MyPerformanceSection and ChartsSection.
+  // Fall back to dashboard fields only when perfData hasn't loaded yet.
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const isCurrentYearRC = perfYear === currentYear;
+  const daysInYearRC = (perfYear % 4 === 0 && (perfYear % 100 !== 0 || perfYear % 400 === 0)) ? 366 : 365;
+  const daysElapsedRC = Math.floor((today.getTime() - new Date(perfYear, 0, 1).getTime()) / 86400000) + 1;
+  const ytdFractionRC = isCurrentYearRC ? Math.min(1, daysElapsedRC / daysInYearRC) : 1;
+
+  const rcTotals = perfData?.overview?.totals;
+  const rcMonths = perfData?.overview?.months;
+
+  // Compute YTD goals from monthly goal data (same formula as MyPerformanceSection)
+  const rcYearlyIncomeGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) : 0;
+  const rcYearlyVolumeGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) : 0;
+  const rcYearlySalesGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) : 0;
+
+  // Use perfData values when available, fall back to dashboard
+  const netEarned = rcTotals ? rcTotals.netIncome : dashboard.netEarned;
+  const netPending = rcTotals ? rcTotals.pendingNetIncome : dashboard.netPending;
+  const ytdTotalPotential = netEarned + netPending;
+  const ytdIncomeGoal = rcYearlyIncomeGoal > 0
+    ? Math.round(rcYearlyIncomeGoal * ytdFractionRC)
+    : dashboard.expectedYTDIncomeGoal;
+
+  const incomeDelta = ytdIncomeGoal > 0 ? netEarned - ytdIncomeGoal : 0;
+  const incomePct = ytdIncomeGoal > 0 ? Math.round((netEarned / ytdIncomeGoal) * 100) : 0;
   const incomeDeltaPct = ytdIncomeGoal > 0 ? Math.round((incomeDelta / ytdIncomeGoal) * 100) : 0;
-  const pipelinePct = ytdIncomeGoal > 0 ? Math.round((dashboard.ytdTotalPotential / ytdIncomeGoal) * 100) : 0;
-  const pipelineDeltaPct = ytdIncomeGoal > 0 ? Math.round(((dashboard.ytdTotalPotential - ytdIncomeGoal) / ytdIncomeGoal) * 100) : 0;
+  const pipelinePct = ytdIncomeGoal > 0 ? Math.round((ytdTotalPotential / ytdIncomeGoal) * 100) : 0;
+  const pipelineDeltaPct = ytdIncomeGoal > 0 ? Math.round(((ytdTotalPotential - ytdIncomeGoal) / ytdIncomeGoal) * 100) : 0;
   const vm = dashboard.volumeMetrics;
   const engGoal = dashboard.engagementGoalToDate ?? dashboard.kpis?.engagements?.target ?? 0;
   const engActual = dashboard.kpis?.engagements?.actual ?? 0;
@@ -1139,21 +1368,21 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
       {/* Row 1: Income */}
       <div className="grid gap-4 md:grid-cols-2">
         <HeroCard
-          title="Net Income YTD" grade={dashboard.incomeGrade} primary={fmtCurrency(dashboard.netEarned)}
+          title="Net Income YTD" grade={ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade} primary={fmtCurrency(netEarned)}
           performancePct={ytdIncomeGoal > 0 ? incomePct : undefined}
           secondary={ytdIncomeGoal > 0 ? paceText(incomeDeltaPct, fmtCurrency(ytdIncomeGoal)) : 'No income goal set'}
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
         <HeroCard
-          title="Pipeline Net Income" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)}
+          title="Pipeline Net Income" grade={ytdIncomeGoal > 0 ? letterGrade(pipelinePct).letter : dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(ytdTotalPotential)}
           performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
           secondary={ytdIncomeGoal > 0
             ? (() => {
                 const projGoal = vm?.projectedIncomeGoal ?? ytdIncomeGoal;
-                const projPct = projGoal > 0 ? Math.round(((dashboard.ytdTotalPotential - projGoal) / projGoal) * 100) : 0;
-                return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` · ${fmtCurrency(projGoal)} projected goal · ${fmtCurrency(dashboard.netPending)} pending`;
+                const projPct = projGoal > 0 ? Math.round(((ytdTotalPotential - projGoal) / projGoal) * 100) : 0;
+                return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` · ${fmtCurrency(projGoal)} projected goal · ${fmtCurrency(netPending)} pending`;
               })()
-            : `${fmtCurrency(dashboard.netPending)} pending · closed + pipeline`}
+            : `${fmtCurrency(netPending)} pending · closed + pipeline`}
           icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
       </div>
@@ -1324,40 +1553,194 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
 // 5. CHARTS SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ChartsSection({ perfData, perfLoading, year, compareYear, setCompareYear }: {
-  perfData: AgentMetricsResponse | null; perfLoading: boolean;
+function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, setCompareYear }: {
+  perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   year: number; compareYear: number | null; setCompareYear: (y: number | null) => void;
 }) {
-  if (perfLoading || !perfData?.overview) return <Skeleton className="h-80" />;
+  const [showProjected, setShowProjected] = useState(false);
+  const [showGoals, setShowGoals] = useState(true);
+
+  if (perfLoading) return <Skeleton className="h-80" />;
+  if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Failed to load performance data</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
+  if (!perfData?.overview) return <Skeleton className="h-80" />;
 
   const { overview, agentView } = perfData;
   const { months } = overview;
   const { monthlyNetIncome, monthlyPendingNetIncome } = agentView;
 
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const isCurrentYear = year === currentYear;
+  const currentMonthIdx = isCurrentYear ? today.getMonth() : 11;
+
+  // Helper: compute projected future months from YTD actuals + goal seasonality
+  function computeProjection(actualArr: number[], goalArr: (number | null)[]): (number | null)[] {
+    if (!isCurrentYear) return actualArr.map(() => null);
+    const numGoals: number[] = goalArr.map(v => v ?? 0);
+    const yearlyGoal: number = numGoals.reduce((s: number, v: number) => s + v, 0);
+    const ytdActual: number = actualArr.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0);
+    const ytdGoalShare: number = yearlyGoal > 0
+      ? numGoals.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0) / yearlyGoal
+      : (currentMonthIdx + 1) / 12;
+    const projFull = ytdGoalShare > 0 ? ytdActual / ytdGoalShare : ytdActual * (12 / (currentMonthIdx + 1));
+    return actualArr.map((_, i) => {
+      if (i <= currentMonthIdx) return null;
+      const share = yearlyGoal > 0 ? numGoals[i] / yearlyGoal : 1 / 12;
+      return Math.round(projFull * share);
+    });
+  }
+
+  const incomeGoalArr = months.map(m => m.grossMarginGoal);
+  const volumeGoalArr = months.map(m => m.volumeGoal);
+  const salesGoalArr = months.map(m => m.salesCountGoal);
+  const hasIncomeGoal = incomeGoalArr.some(v => (v ?? 0) > 0);
+
+  const projNetIncome = computeProjection(monthlyNetIncome, incomeGoalArr);
+  const projVolume = computeProjection(months.map(m => m.closedVolume), volumeGoalArr);
+  const projSales = computeProjection(months.map(m => m.closedCount), salesGoalArr);
+  const projectionLabel = hasIncomeGoal ? 'Seasonality-Based Projection' : 'Straight-Line Projection';
+
+  // Full-year projections for summary banner
+  const fullYearProjection = (() => {
+    if (!isCurrentYear) return null;
+    const completedMonths = months.slice(0, currentMonthIdx + 1);
+    const calcFull = (actuals: number[], goalKey: 'grossMarginGoal' | 'volumeGoal' | 'salesCountGoal') => {
+      const ytd = actuals.reduce((s, v) => s + v, 0);
+      const yearlyGoal = months.reduce((s, m) => s + (m[goalKey] ?? 0), 0);
+      const share = yearlyGoal > 0 ? completedMonths.reduce((s, m) => s + (m[goalKey] ?? 0), 0) / yearlyGoal : (currentMonthIdx + 1) / 12;
+      return share > 0 ? Math.round(ytd / share) : Math.round(ytd * 12 / (currentMonthIdx + 1));
+    };
+    return {
+      netIncome: calcFull(monthlyNetIncome.slice(0, currentMonthIdx + 1), 'grossMarginGoal'),
+      volume: calcFull(completedMonths.map(m => m.closedVolume), 'volumeGoal'),
+      sales: calcFull(completedMonths.map(m => m.closedCount), 'salesCountGoal'),
+    };
+  })();
+
+  // YTD grades for all three charts
+  const ytdMonthsCount = currentMonthIdx + 1;
+  const ytdNetIncomeActual: number = monthlyNetIncome.slice(0, ytdMonthsCount).reduce((s: number, v: number) => s + v, 0);
+  const ytdNetIncomeGoal: number = incomeGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
+  const gradeNetIncome = ytdNetIncomeGoal > 0 ? Math.round((ytdNetIncomeActual / ytdNetIncomeGoal) * 100) : null;
+
+  const ytdVolumeActual: number = months.slice(0, ytdMonthsCount).reduce((s: number, m) => s + m.closedVolume, 0);
+  const ytdVolumeGoal: number = volumeGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
+  const gradeVolume = ytdVolumeGoal > 0 ? Math.round((ytdVolumeActual / ytdVolumeGoal) * 100) : null;
+
+  const ytdSalesActual: number = months.slice(0, ytdMonthsCount).reduce((s: number, m) => s + m.closedCount, 0);
+  const ytdSalesGoal: number = salesGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
+  const gradeSales = ytdSalesGoal > 0 ? Math.round((ytdSalesActual / ytdSalesGoal) * 100) : null;
+
+  const ctrlRow = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+      <button type="button" onClick={() => setShowGoals(g => !g)}
+        className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showGoals ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+        Goals
+      </button>
+      {isCurrentYear && (
+        <button type="button" onClick={() => setShowProjected(p => !p)}
+          className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+          📈 Projected
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      {showProjected && isCurrentYear && (
+        <p className="text-xs text-amber-600 font-medium -mb-2">
+          📈 {projectionLabel} — forward months extrapolated from YTD pace
+        </p>
+      )}
+
       {/* CHART 1: Monthly Net Income */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+            <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
+            {ctrlRow}
           </div>
+          {gradeNetIncome && (() => { const g = letterGrade(gradeNetIncome); return (
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+                </p>
+                <p className="text-sm font-semibold">
+                  {fmtCurrencyCompact(ytdNetIncomeActual, true)} <span className="text-muted-foreground font-normal">/ {fmtCurrencyCompact(ytdNetIncomeGoal, true)} goal</span>
+                </p>
+                {compareYear && perfData.comparisonData && (() => {
+                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                  const diff = ytdNetIncomeActual - compYTD;
+                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
+                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
+                })()}
+              </div>
+              <div className="flex items-center gap-2 text-right">
+                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                <span className={`text-xl font-bold ${g.color}`}>{gradeNetIncome}%</span>
+              </div>
+            </div>
+          ); })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={incomeChartConfig} className="h-[350px] w-full">
-            <BarChart data={months.map((m, i) => ({ label: m.label, netIncome: monthlyNetIncome[i] || 0, pendingNetIncome: monthlyPendingNetIncome[i] || 0, incomeGoal: m.grossMarginGoal, compareIncome: perfData.comparisonData?.months?.[i]?.netIncome ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({
+              label: m.label,
+              netIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyNetIncome[i] || 0),
+              pendingNetIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyPendingNetIncome[i] || 0),
+              incomeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal) : null,
+              compareIncome: compareYear ? (perfData.comparisonData?.months?.[i]?.netIncome ?? null) : null,
+              projectedNetIncome: showProjected ? (projNetIncome[i] ?? null) : null,
+            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { netIncome: `${year} Income`, pendingNetIncome: 'Pending', incomeGoal: 'Goal', compareIncome: `${compareYear ?? ''} Income` }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { netIncome: `${year} Income`, pendingNetIncome: 'Pending', incomeGoal: 'Goal', compareIncome: `${compareYear ?? ''} Income`, projectedNetIncome: 'Projected' }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="netIncome" fill="var(--color-netIncome)" radius={[4, 4, 0, 0]} name={`${year}`} />
               {compareYear && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingNetIncome" fill="var(--color-pendingNetIncome)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
+              {showGoals && <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedNetIncome" fill="var(--color-projectedNetIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
+          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && perfData.comparisonData && (() => {
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                const diff = ytdNetIncomeActual - compNetYTD;
+                const pctChange = compNetYTD > 0 ? (diff / compNetYTD * 100) : 0;
+                const yoyPct = compNetYTD > 0 ? Math.round((ytdNetIncomeActual / compNetYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return (
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Margin vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{fmtCurrencyCompact(compVolYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{fmtNumNull(compSalesYTD)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {showProjected && fullYearProjection && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1365,24 +1748,89 @@ function ChartsSection({ perfData, perfLoading, year, compareYear, setCompareYea
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+            <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
+            {ctrlRow}
           </div>
+          {gradeVolume && (() => { const g = letterGrade(gradeVolume); return (
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+                </p>
+                <p className="text-sm font-semibold">
+                  {fmtCurrencyCompact(ytdVolumeActual, true)} <span className="text-muted-foreground font-normal">/ {fmtCurrencyCompact(ytdVolumeGoal, true)} goal</span>
+                </p>
+                {compareYear && perfData.comparisonData && (() => {
+                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                  const diff = ytdVolumeActual - compYTD;
+                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
+                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
+                })()}
+              </div>
+              <div className="flex items-center gap-2 text-right">
+                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                <span className={`text-xl font-bold ${g.color}`}>{gradeVolume}%</span>
+              </div>
+            </div>
+          ); })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({ ...m, compareVolume: perfData.comparisonData?.months?.[i]?.closedVolume ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({
+              ...m,
+              closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
+              pendingVolume: isCurrentYear && i > currentMonthIdx ? null : m.pendingVolume,
+              volumeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal) : null,
+              compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
+              projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
+            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedVolume: `${year} Closed`, pendingVolume: 'Pending', volumeGoal: 'Goal', compareVolume: `${compareYear ?? ''} Volume` }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedVolume: `${year} Closed`, pendingVolume: 'Pending', volumeGoal: 'Goal', compareVolume: `${compareYear ?? ''} Volume`, projectedVolume: 'Projected' }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
               {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
+              {showGoals && <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
+          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && perfData.comparisonData && (() => {
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const ytdActualVol = months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const diff = ytdActualVol - compVolYTD;
+                const pctChange = compVolYTD > 0 ? (diff / compVolYTD * 100) : 0;
+                const yoyPct = compVolYTD > 0 ? Math.round((ytdActualVol / compVolYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return (
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Volume vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{fmtCurrencyCompact(compNetYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{fmtNumNull(compSalesYTD)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {showProjected && fullYearProjection && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1390,27 +1838,497 @@ function ChartsSection({ perfData, perfLoading, year, compareYear, setCompareYea
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}</CardDescription></div>
-            <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
+            <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
+            {ctrlRow}
           </div>
+          {gradeSales && (() => { const g = letterGrade(gradeSales); return (
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+                </p>
+                <p className="text-sm font-semibold">
+                  {ytdSalesActual} sales <span className="text-muted-foreground font-normal">/ {ytdSalesGoal} goal</span>
+                </p>
+                {compareYear && perfData.comparisonData && (() => {
+                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                  const diff = ytdSalesActual - compYTD;
+                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
+                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{diff} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
+                })()}
+              </div>
+              <div className="flex items-center gap-2 text-right">
+                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                <span className={`text-xl font-bold ${g.color}`}>{gradeSales}%</span>
+              </div>
+            </div>
+          ); })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({ ...m, compareCount: perfData.comparisonData?.months?.[i]?.closedCount ?? null }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => ({
+              ...m,
+              closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
+              pendingCount: isCurrentYear && i > currentMonthIdx ? null : m.pendingCount,
+              salesCountGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal) : null,
+              compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
+              projectedCount: showProjected ? (projSales[i] ?? null) : null,
+            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedCount: `${year} Closed`, pendingCount: 'Pending', salesCountGoal: 'Goal', compareCount: `${compareYear ?? ''} Sales` }; return [fmtNumNull(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedCount: `${year} Closed`, pendingCount: 'Pending', salesCountGoal: 'Goal', compareCount: `${compareYear ?? ''} Sales`, projectedCount: 'Projected' }; return [fmtNumNull(Number(v)), labels[name as string] ?? name]; }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
               {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
-              <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />
+              {showGoals && <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
+              {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
+          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && perfData.comparisonData && (() => {
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const ytdActualSales = months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const diff = ytdActualSales - compSalesYTD;
+                const pctChange = compSalesYTD > 0 ? (diff / compSalesYTD * 100) : 0;
+                const yoyPct = compSalesYTD > 0 ? Math.round((ytdActualSales / compSalesYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return (
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Sales vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtNumNull(diff)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{fmtCurrencyCompact(compNetYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{fmtCurrencyCompact(compVolYTD, true)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {showProjected && fullYearProjection && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5b. MULTI-YEAR PRODUCTION COMPARISON (Agent-scoped)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4'];
+
+type AgentMultiYearData = {
+  year: number;
+  months: { month: number; label: string; netIncome: number; volume: number; sales: number; gci: number }[];
+  totals: { netIncome: number; volume: number; sales: number; gci: number };
+};
+
+function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team'; viewAs: string | null }) {
+  const { user } = useUser();
+  const [allYears, setAllYears] = useState<AgentMultiYearData[]>([]);
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
+  const [metric, setMetric] = useState<'netIncome' | 'volume' | 'sales'>('netIncome');
+  const [chartView, setChartView] = useState<'month' | 'quarter' | 'year'>('month');
+  const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('ytd');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const params = new URLSearchParams({ view });
+        if (viewAs) params.set('viewAs', viewAs);
+        const res = await fetch(`/api/agent/multi-year-compare?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.ok && data.years) {
+          setAllYears(data.years);
+          const yrs = data.years.map((y: AgentMultiYearData) => y.year);
+          setSelectedYears(yrs.length > 5 ? yrs.slice(-5) : yrs);
+        }
+      } catch (err) {
+        console.error('[agent/multi-year]', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user, view, viewAs]);
+
+  const toggleYear = (yr: number) => setSelectedYears(prev =>
+    prev.includes(yr) ? prev.filter(y => y !== yr) : [...prev, yr]
+  );
+
+  const todayMY = new Date();
+  const currentYearMY = todayMY.getFullYear();
+  const currentMonthIdxMY = todayMY.getMonth();
+
+  const getMonthLimit = (yrNum: number) => {
+    if (compareMode === 'ytd') return currentMonthIdxMY;
+    if (yrNum === currentYearMY) return currentMonthIdxMY;
+    return 11;
+  };
+
+  const metricLabel = { netIncome: 'Net Income', volume: 'Dollar Volume', sales: 'Number of Sales' }[metric];
+  const fmt = (val: number) => metric === 'sales' ? val.toLocaleString() : fmtCurrencyCompact(val, true);
+
+  const chartData = (() => {
+    const filtered = allYears.filter(y => selectedYears.includes(y.year));
+    if (chartView === 'month') {
+      return Array.from({ length: 12 }, (_, i) => {
+        const pt: Record<string, any> = { label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i] };
+        for (const yr of filtered) {
+          pt[String(yr.year)] = i > getMonthLimit(yr.year) ? null : (yr.months[i]?.[metric] ?? 0);
+        }
+        return pt;
+      });
+    }
+    if (chartView === 'quarter') {
+      return Array.from({ length: 4 }, (_, q) => {
+        const pt: Record<string, any> = { label: QUARTER_LABELS[q] };
+        for (const yr of filtered) {
+          const limit = getMonthLimit(yr.year);
+          const qMos = yr.months.slice(q * 3, Math.min(q * 3 + 3, limit + 1));
+          pt[String(yr.year)] = qMos.length > 0 ? qMos.reduce((s, m) => s + (m[metric] ?? 0), 0) : null;
+        }
+        return pt;
+      });
+    }
+    return filtered.map(yr => {
+      const limit = getMonthLimit(yr.year);
+      const val = compareMode === 'ytd' || yr.year === currentYearMY
+        ? yr.months.slice(0, limit + 1).reduce((s, m) => s + (m[metric] ?? 0), 0)
+        : yr.totals[metric] ?? 0;
+      return { label: String(yr.year), value: val };
+    });
+  })();
+
+  if (loading) return <Skeleton className="h-[500px] w-full" />;
+  if (allYears.length < 2) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" /> Multi-Year Production Comparison
+            </CardTitle>
+            <CardDescription>Compare {metricLabel.toLowerCase()} across years — agent only</CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Metric selector */}
+            <Select value={metric} onValueChange={(v: any) => setMetric(v)}>
+              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="netIncome">Net Income</SelectItem>
+                <SelectItem value="volume">Dollar Volume</SelectItem>
+                <SelectItem value="sales">Number of Sales</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* View toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              {(['month', 'quarter', 'year'] as const).map(v => (
+                <button key={v} type="button" onClick={() => setChartView(v)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${chartView === v ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+                  {v === 'month' ? 'Monthly' : v === 'quarter' ? 'Quarterly' : 'Yearly'}
+                </button>
+              ))}
+            </div>
+            {/* YTD / Full toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
+              {(['full', 'ytd'] as const).map(m => (
+                <button key={m} type="button" onClick={() => setCompareMode(m)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${compareMode === m ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+                  {m === 'full' ? 'Full Year' : `YTD (thru ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][currentMonthIdxMY]})`}
+                </button>
+              ))}
+            </div>
+            {/* Year pills */}
+            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+              <span className="text-xs text-muted-foreground mr-1">Years:</span>
+              {allYears.map((yr, idx) => (
+                <button key={yr.year} type="button" onClick={() => toggleYear(yr.year)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${selectedYears.includes(yr.year) ? 'text-white border-transparent' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
+                  style={selectedYears.includes(yr.year) ? { backgroundColor: YEAR_COLORS[idx % YEAR_COLORS.length] } : undefined}>
+                  {yr.year}
+                </button>
+              ))}
+              <button type="button" onClick={() => setSelectedYears(allYears.map(y => y.year))} className="px-2 py-1 text-xs text-blue-600 hover:underline">All</button>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={400}>
+          {chartView === 'year' ? (
+            <BarChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis tickFormatter={fmt} />
+              <Tooltip formatter={(val: number) => [fmt(val), metricLabel]} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} name={metricLabel}>
+                {chartData.map((entry: any, idx: number) => {
+                  const yrIdx = allYears.findIndex(y => String(y.year) === entry.label);
+                  return <Cell key={idx} fill={YEAR_COLORS[(yrIdx >= 0 ? yrIdx : idx) % YEAR_COLORS.length]} />;
+                })}
+              </Bar>
+            </BarChart>
+          ) : (
+            <BarChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis tickFormatter={fmt} />
+              <Tooltip formatter={(val: number, name: string) => [fmt(val), name]} />
+              <Legend />
+              {allYears.filter(yr => selectedYears.includes(yr.year)).map((yr) => {
+                const colorIdx = allYears.findIndex(y => y.year === yr.year);
+                return (
+                  <Bar key={yr.year} dataKey={String(yr.year)} fill={YEAR_COLORS[colorIdx % YEAR_COLORS.length]} radius={[4, 4, 0, 0]} name={String(yr.year)} />
+                );
+              })}
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+
+        {/* Summary table */}
+        <div className="mt-6 border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">Year</th>
+                <th className="px-4 py-2 text-right font-medium">Net Income</th>
+                <th className="px-4 py-2 text-right font-medium">Volume</th>
+                <th className="px-4 py-2 text-right font-medium">Sales</th>
+                <th className="px-4 py-2 text-right font-medium">YoY Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allYears.filter(yr => selectedYears.includes(yr.year)).sort((a, b) => b.year - a.year).map((yr, idx, arr) => {
+                const ytdCutoff = currentMonthIdxMY + 1;
+                const ytdVal = yr.months.slice(0, ytdCutoff).reduce((s, m) => s + m[metric], 0);
+                const prev = arr[idx + 1];
+                const prevYtdVal = prev ? prev.months.slice(0, ytdCutoff).reduce((s, m) => s + m[metric], 0) : null;
+                const change = prevYtdVal && prevYtdVal > 0 ? ((ytdVal - prevYtdVal) / prevYtdVal * 100) : null;
+                const limit = getMonthLimit(yr.year);
+                const displayVal = compareMode === 'ytd' || yr.year === currentYearMY
+                  ? yr.months.slice(0, limit + 1).reduce((s, m) => s + m[metric], 0)
+                  : yr.totals[metric] ?? 0;
+                const colorIdx = allYears.findIndex(y => y.year === yr.year);
+                return (
+                  <tr key={yr.year} className="border-t">
+                    <td className="px-4 py-2 font-medium flex items-center gap-2">
+                      <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: YEAR_COLORS[colorIdx % YEAR_COLORS.length] }} />
+                      {yr.year}{compareMode === 'ytd' && <span className="text-xs text-muted-foreground ml-1">YTD</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(yr.months.slice(0, limit + 1).reduce((s, m) => s + m.netIncome, 0), true)}</td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(yr.months.slice(0, limit + 1).reduce((s, m) => s + m.volume, 0), true)}</td>
+                    <td className="px-4 py-2 text-right">{yr.months.slice(0, limit + 1).reduce((s, m) => s + m.sales, 0).toLocaleString()}</td>
+                    <td className={`px-4 py-2 text-right font-medium ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
+                      {change !== null ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. CATEGORY & SOURCE BREAKDOWN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CAT_LABELS: Record<string, string> = {
+  residential_sale: 'Residential Sale',
+  commercial_sale: 'Commercial Sale',
+  commercial_lease: 'Commercial Lease',
+  land: 'Land',
+  rental: 'Rental / Lease',
+};
+const CAT_KEYS = ['residential_sale', 'commercial_sale', 'commercial_lease', 'land', 'rental'] as const;
+const CAT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
+const SOURCE_LABELS: Record<string, string> = {
+  boomtown: 'Boomtown', referral: 'Referral', sphere: 'Sphere of Influence',
+  sign_call: 'Sign Call', company_gen: 'Company Generated', social: 'Social Media',
+  open_house: 'Open House', fsbo: 'FSBO', expired_listing: 'Expired Listing', other: 'Other',
+};
+const SOURCE_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6'];
+
+function CategoryBreakdownSection({ perfData, year }: {
+  perfData: AgentMetricsResponse;
+  year: number;
+}) {
+  const { categoryBreakdown, sourceBreakdown } = perfData.overview;
+
+  const catSalesData = CAT_KEYS
+    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].count, color: CAT_COLORS[i] }))
+    .filter(d => d.value > 0);
+
+  if (catSalesData.length === 0) return null;
+
+  const catVolumeData = CAT_KEYS
+    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].volume, color: CAT_COLORS[i] }))
+    .filter(d => d.value > 0);
+  const catNetIncomeData = CAT_KEYS
+    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].netRevenue, color: CAT_COLORS[i] }))
+    .filter(d => d.value > 0);
+
+  const sourceEntries = Object.entries(sourceBreakdown?.closed ?? {})
+    .sort((a, b) => b[1].count - a[1].count);
+  const sourceSalesData = sourceEntries
+    .filter(([, v]) => v.count > 0)
+    .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.count, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+  const sourceVolumeData = sourceEntries
+    .filter(([, v]) => v.volume > 0)
+    .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.volume, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+  const sourceNetIncomeData = sourceEntries
+    .filter(([, v]) => v.netRevenue > 0)
+    .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.netRevenue, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+
+  const renderPie = (data: { name: string; value: number; color: string }[], formatter: (v: number) => string, title: string) => (
+    <div className="flex flex-col items-center">
+      <p className="text-sm font-semibold mb-2 text-center">{title}</p>
+      <ResponsiveContainer width="100%" height={220}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}
+            label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
+            {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+          </Pie>
+          <Tooltip formatter={(val: any) => formatter(Number(val))} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1">
+        {data.map((d, i) => (
+          <span key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+            {d.name}: {formatter(d.value)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Category Breakdown — {year}</CardTitle>
+        <CardDescription>Closed transactions by property type — net income, sales count, and dollar volume</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-8">
+        {/* Category pie charts */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {renderPie(catNetIncomeData, v => fmtCurrencyCompact(v, true), 'Net Income by Type')}
+          {renderPie(catSalesData, v => `${v} sale${v !== 1 ? 's' : ''}`, 'Sales Count by Type')}
+          {renderPie(catVolumeData, v => fmtCurrencyCompact(v, true), 'Dollar Volume by Type')}
+        </div>
+
+        {/* Category detail table */}
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">Category</th>
+                <th className="px-4 py-2 text-right font-medium">Closed</th>
+                <th className="px-4 py-2 text-right font-medium">Volume</th>
+                <th className="px-4 py-2 text-right font-medium">Net Income</th>
+                <th className="px-4 py-2 text-right font-medium">Pending</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CAT_KEYS.map((k, i) => {
+                const c = categoryBreakdown.closed[k];
+                const p = categoryBreakdown.pending[k];
+                if (c.count === 0 && p.count === 0) return null;
+                return (
+                  <tr key={k} className="border-t">
+                    <td className="px-4 py-2 flex items-center gap-2">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CAT_COLORS[i] }} />
+                      {CAT_LABELS[k]}
+                    </td>
+                    <td className="px-4 py-2 text-right">{c.count}</td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.volume, true)}</td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.netRevenue, true)}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">
+                      {p.count > 0 ? `${p.count} (${fmtCurrencyCompact(p.volume, true)})` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Source of business breakdown */}
+        {sourceSalesData.length > 0 && (
+          <>
+            <div>
+              <p className="font-semibold text-sm">Breakdown by Lead Source</p>
+              <p className="text-xs text-muted-foreground">Closed transactions grouped by how the lead originated</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {renderPie(sourceNetIncomeData, v => fmtCurrencyCompact(v, true), 'Net Income by Source')}
+              {renderPie(sourceSalesData, v => `${v} sale${v !== 1 ? 's' : ''}`, 'Sales by Source')}
+              {renderPie(sourceVolumeData, v => fmtCurrencyCompact(v, true), 'Volume by Source')}
+            </div>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium">Lead Source</th>
+                    <th className="px-4 py-2 text-right font-medium">Closed</th>
+                    <th className="px-4 py-2 text-right font-medium">Volume</th>
+                    <th className="px-4 py-2 text-right font-medium">Net Income</th>
+                    <th className="px-4 py-2 text-right font-medium">Pending</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceEntries.map(([k, c], i) => {
+                    const p = sourceBreakdown?.pending?.[k];
+                    return (
+                      <tr key={k} className="border-t">
+                        <td className="px-4 py-2 flex items-center gap-2">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SOURCE_COLORS[i % SOURCE_COLORS.length] }} />
+                          {SOURCE_LABELS[k] ?? k}
+                        </td>
+                        <td className="px-4 py-2 text-right">{c.count}</td>
+                        <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.volume, true)}</td>
+                        <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.netRevenue, true)}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">
+                          {p && p.count > 0 ? `${p.count} (${fmtCurrencyCompact(p.volume, true)})` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1434,8 +2352,8 @@ function PendingTable({ transactions }: { transactions: Transaction[] }) {
   return (
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Pending / Under Contract</CardTitle><CardDescription>Deals in progress — not yet closed.</CardDescription></CardHeader>
       <CardContent>{pending.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">No pending transactions.</p>) : (
-        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Client</TableHead><TableHead>Contract Date</TableHead><TableHead>Est. Close</TableHead><TableHead className="text-right">Deal Value</TableHead><TableHead className="text-right">Proj. Net</TableHead></TableRow></TableHeader>
-          <TableBody>{pending.map(t => { const projNet = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{t.clientName ?? '—'}</TableCell><TableCell>{formatDate(t.contractDate)}</TableCell><TableCell><span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>{(t.closedDate || t.closingDate) && <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
+        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Client</TableHead><TableHead>Contract Date</TableHead><TableHead>Est. Close</TableHead><TableHead className="text-right">Sale Price</TableHead><TableHead className="text-right">Projected Net Income</TableHead></TableRow></TableHeader>
+          <TableBody>{pending.map(t => { const projNet = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{t.clientName ?? '—'}</TableCell><TableCell>{formatDate(t.contractDate)}</TableCell><TableCell><span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>{(t.closedDate || t.closingDate) && <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
       )}</CardContent></Card>
   );
 }
@@ -1445,8 +2363,8 @@ function ClosedTable({ transactions, year }: { transactions: Transaction[]; year
   return (
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileCheck2 className="h-5 w-5" /> Closed Transactions — {year}</CardTitle><CardDescription>All transactions you closed this calendar year.</CardDescription></CardHeader>
       <CardContent>{closed.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">No closed transactions for {year}.</p>) : (
-        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Closed Date</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Deal Value</TableHead><TableHead className="text-right">Gross Comm.</TableHead><TableHead className="text-right">Net to Agent</TableHead></TableRow></TableHeader>
-          <TableBody>{closed.map(t => { const net = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0; const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{formatDate(t.closedDate ?? t.closingDate)}</TableCell><TableCell>{t.transactionType ? <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge> : '—'}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right">{gross ? formatCurrencyLocal(gross) : '—'}</TableCell><TableCell className="text-right font-semibold">{net ? formatCurrencyLocal(net) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
+        <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Closed Date</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Sale Price</TableHead><TableHead className="text-right">Your Net Income</TableHead></TableRow></TableHeader>
+          <TableBody>{closed.map(t => { const net = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{formatDate(t.closedDate ?? t.closingDate)}</TableCell><TableCell>{t.transactionType ? <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge> : '—'}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{net ? formatCurrencyLocal(net) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
       )}</CardContent></Card>
   );
 }

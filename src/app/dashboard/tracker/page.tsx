@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/firebase';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -71,6 +72,7 @@ function isSameMonth(a: string, year: number, monthIndex: number): boolean {
 
 export default function DailyTrackerPage() {
   const { user, loading: userLoading } = useUser();
+  const { effectiveUid, isImpersonating } = useEffectiveUser();
   const { toast } = useToast();
 
   const [selectedDate, setSelectedDate] = useState<string>(() => ymd(new Date()));
@@ -134,7 +136,8 @@ export default function DailyTrackerPage() {
       setApptLoading(true);
       setError(null);
       try {
-        const res = await authedFetch(`/api/appointments?year=${monthYear.year}&month=${monthYear.monthIndex + 1}`);
+        const viewAsParam = isImpersonating && effectiveUid ? `&viewAs=${effectiveUid}` : '';
+        const res = await authedFetch(`/api/appointments?year=${monthYear.year}&month=${monthYear.monthIndex + 1}${viewAsParam}`);
         const json = await res.json();
 
         if (!res.ok || !json?.ok) {
@@ -175,7 +178,8 @@ export default function DailyTrackerPage() {
       if (!user) return;
       setError(null);
       try {
-        const res = await authedFetch(`/api/daily-activity?date=${selectedDate}`);
+        const viewAsParam = isImpersonating && effectiveUid ? `&viewAs=${effectiveUid}` : '';
+        const res = await authedFetch(`/api/daily-activity?date=${selectedDate}${viewAsParam}`);
         const json = await res.json();
 
         if (!res.ok || !json?.ok) {
@@ -199,7 +203,8 @@ export default function DailyTrackerPage() {
       setError(null);
       try {
         const { start, end } = monthStartEnd;
-        const res = await authedFetch(`/api/daily-activity/range?start=${start}&end=${end}`);
+        const viewAsParam = isImpersonating && effectiveUid ? `&viewAs=${effectiveUid}` : '';
+        const res = await authedFetch(`/api/daily-activity/range?start=${start}&end=${end}${viewAsParam}`);
         const json = await res.json();
 
         if (!res.ok || !json?.ok) {
@@ -236,6 +241,7 @@ export default function DailyTrackerPage() {
         body: JSON.stringify({
           date: selectedDate,
           dailyActivity: activity,
+          ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}),
         }),
       });
       const json = await res.json();
@@ -252,7 +258,8 @@ export default function DailyTrackerPage() {
 
       // refresh month (so completion badges update)
       const { start, end } = monthStartEnd;
-      const rangeRes = await authedFetch(`/api/daily-activity/range?start=${start}&end=${end}`);
+      const viewAsParam2 = isImpersonating && effectiveUid ? `&viewAs=${effectiveUid}` : '';
+      const rangeRes = await authedFetch(`/api/daily-activity/range?start=${start}&end=${end}${viewAsParam2}`);
       const rangeJson = await rangeRes.json();
       const normalized: RangeDay[] = Object.entries(rangeJson.activities || {}).map(([date, activityData]) => ({
             date: date,
@@ -316,6 +323,7 @@ export default function DailyTrackerPage() {
             status: draft.status,
             notes: draft.notes || null,
             scheduledAt: draft.time ? new Date(`${draft.date}T${draft.time}`).toISOString() : new Date(`${draft.date}T00:00:00`).toISOString(),
+            ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}),
         };
         return authedFetch('/api/appointments', {
             method: 'POST',
@@ -373,6 +381,7 @@ export default function DailyTrackerPage() {
           status: appt.status || 'scheduled',
           notes: appt.notes || null,
           scheduledAt: appt.time ? new Date(`${appt.date}T${appt.time}`).toISOString() : null,
+          ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}),
         }),
       });
       const json = await res.json();

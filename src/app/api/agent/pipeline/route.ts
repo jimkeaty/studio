@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
     const token = authHeader.slice('Bearer '.length);
     const decoded = await adminAuth.verifyIdToken(token);
     const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+    const isAdminCaller = decoded.uid === ADMIN_UID;
 
     const { searchParams } = new URL(req.url);
     // Allow admin to view any agent's pipeline via ?viewAs=agentId
@@ -72,6 +73,7 @@ export async function GET(req: NextRequest) {
     // Resolve all possible agentId values for this agent (slug + Firebase UID)
     const agentIds = await resolveQueryIds(uid);
 
+<<<<<<< HEAD
     // Fetch transactions for all resolved IDs and merge results
     const allTxMap = new Map<string, any>();
     await Promise.all(
@@ -97,6 +99,38 @@ export async function GET(req: NextRequest) {
       const bTime = new Date(b.createdAt || 0).getTime() || 0;
       return bTime - aTime;
     });
+=======
+    // Strip commission split fields for non-admin callers.
+    // Agents only see their net income; all gross commission, broker retained,
+    // and split percentage fields are removed at the API layer.
+    const COMMISSION_FIELDS = [
+      'splitSnapshot', 'commission', 'brokerProfit', 'gci',
+      'agentPct', 'brokerPct', 'grossCommission', 'companyRetained',
+      'agentSplitPercent', 'companySplitPercent',
+    ];
+
+    function sanitizeForAgent(tx: any): any {
+      if (isAdminCaller) return tx;
+      const safe: any = {};
+      for (const [k, v] of Object.entries(tx)) {
+        if (COMMISSION_FIELDS.includes(k)) continue;
+        safe[k] = v;
+      }
+      // Re-attach only the agent's own net income (not the full splitSnapshot)
+      const snap = tx.splitSnapshot as any;
+      const netIncome = snap?.agentNetCommission ?? tx.netCommission ?? null;
+      if (netIncome !== null) safe.netIncome = netIncome;
+      return safe;
+    }
+
+    const allTx = txSnap.docs
+      .map(d => sanitizeForAgent({ id: d.id, ...serializeFirestore(d.data() || {}) }))
+      .sort((a, b) => {
+        const aTime = new Date(a.createdAt || 0).getTime() || 0;
+        const bTime = new Date(b.createdAt || 0).getTime() || 0;
+        return bTime - aTime;
+      });
+>>>>>>> e521ea7d07e7991cf882f3b4d7c4f300f9f8b39a
 
     const pendingTransactions = allTx.filter((t: any) =>
       t.status === 'pending' || t.status === 'under_contract'

@@ -34,8 +34,7 @@ export async function GET(req: NextRequest) {
   try {
     const token = bearer(req);
     if (!token) return jsonError(401, 'Missing token');
-    const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden');
+    await adminAuth.verifyIdToken(token); // any authenticated user can list competitions
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
@@ -127,8 +126,8 @@ export async function POST(req: NextRequest) {
       // Commentary & Audio
       commentaryPack: body.commentaryPack || 'generic',
       audioPack: body.audioPack || 'none',
-      audioEnabled: body.audioEnabled ?? false,
-      commentaryEnabled: body.commentaryEnabled ?? false,
+      audioEnabled: body.audioEnabled ?? true,
+      commentaryEnabled: body.commentaryEnabled ?? true,
 
       // Presentation
       autoRefreshSeconds: body.autoRefreshSeconds ?? 30,

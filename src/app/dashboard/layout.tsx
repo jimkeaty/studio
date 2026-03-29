@@ -4,19 +4,59 @@ import type { ReactNode } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Header } from '@/components/dashboard/header';
 import { SidebarNav } from '@/components/dashboard/sidebar-nav';
+import { ImpersonationProvider, useImpersonation } from '@/contexts/ImpersonationContext';
+import { useUser } from '@/firebase';
+import { Button } from '@/components/ui/button';
+import { UserX } from 'lucide-react';
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+function ImpersonationBanner() {
+  const { isImpersonating, agent, stopImpersonation } = useImpersonation();
+  if (!isImpersonating || !agent) return null;
+
+  return (
+    <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-amber-950">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <UserX className="h-4 w-4 shrink-0" />
+        <span>
+          Viewing portal as <strong>{agent.name}</strong> — changes you make will affect this agent&apos;s data.
+        </span>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="border-amber-800 bg-amber-50 text-amber-950 hover:bg-amber-100 shrink-0"
+        onClick={stopImpersonation}
+      >
+        Exit
+      </Button>
+    </div>
+  );
+}
+
+function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-muted/40">
         <SidebarNav />
         <div className="flex flex-1 flex-col">
           <Header />
+          <ImpersonationBanner />
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             {children}
           </main>
         </div>
       </div>
     </SidebarProvider>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const { user } = useUser();
+  const getToken = user ? () => user.getIdToken() : undefined;
+
+  return (
+    <ImpersonationProvider adminUid={user?.uid ?? null} getToken={getToken}>
+      <DashboardShell>{children}</DashboardShell>
+    </ImpersonationProvider>
   );
 }

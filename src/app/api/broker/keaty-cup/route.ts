@@ -92,8 +92,7 @@ export async function GET(req: NextRequest) {
   try {
     const token = bearer(req);
     if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 401 });
-    const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    await adminAuth.verifyIdToken(token); // any authenticated user can view Keaty Cup standings
 
     const { searchParams } = new URL(req.url);
     const yearNum = Number(searchParams.get('year')) || new Date().getFullYear();

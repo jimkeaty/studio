@@ -24,6 +24,7 @@ interface Transaction {
   commission?: number;
   transactionType: string;
   transactionFee?: number;
+  dealSource?: string;
   year: number;
   splitSnapshot?: {
     grossCommission?: number;
@@ -47,7 +48,7 @@ function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): 
 }
 
 function emptyCategory(): Metric {
-  return { count: 0, netRevenue: 0 };
+  return { count: 0, netRevenue: 0, volume: 0 };
 }
 
 function emptyCategoryMetrics(): CategoryMetrics {
@@ -219,6 +220,7 @@ export async function GET(req: NextRequest) {
       totalGCI: 0,
       grossMargin: 0,
       grossMarginPct: 0,
+      agentNetCommission: 0,
       transactionFees: 0,
       closedVolume: 0,
       pendingVolume: 0,
@@ -231,6 +233,18 @@ export async function GET(req: NextRequest) {
       pending: emptyCategoryMetrics(),
     };
 
+    const sourceBreakdown: { closed: Record<string, { count: number; volume: number; netRevenue: number }>; pending: Record<string, { count: number; volume: number; netRevenue: number }> } = {
+      closed: {},
+      pending: {},
+    };
+
+    const addToSource = (bucket: typeof sourceBreakdown.closed, src: string, volume: number, netRevenue: number) => {
+      if (!bucket[src]) bucket[src] = { count: 0, volume: 0, netRevenue: 0 };
+      bucket[src].count += 1;
+      bucket[src].volume += volume;
+      bucket[src].netRevenue += netRevenue;
+    };
+
     // 6. Process each transaction
     for (const t of transactions) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
@@ -239,6 +253,7 @@ export async function GET(req: NextRequest) {
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
+      const srcKey = (t.dealSource || 'other').toLowerCase();
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -260,6 +275,7 @@ export async function GET(req: NextRequest) {
         // Yearly totals
         totals.totalGCI += gci;
         totals.grossMargin += companyRetained;
+        totals.agentNetCommission += Math.max(0, gci - companyRetained);
         totals.transactionFees += txFee;
         totals.closedVolume += dealValue;
         totals.closedCount += 1;
@@ -267,6 +283,10 @@ export async function GET(req: NextRequest) {
         // Category
         categoryBreakdown.closed[catKey].count += 1;
         categoryBreakdown.closed[catKey].netRevenue += companyRetained;
+        categoryBreakdown.closed[catKey].volume += dealValue;
+
+        // Source
+        addToSource(sourceBreakdown.closed, srcKey, dealValue, companyRetained);
 
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         const contractDate = parseDate(t.contractDate);
@@ -285,6 +305,10 @@ export async function GET(req: NextRequest) {
         // Category
         categoryBreakdown.pending[catKey].count += 1;
         categoryBreakdown.pending[catKey].netRevenue += companyRetained;
+        categoryBreakdown.pending[catKey].volume += dealValue;
+
+        // Source
+        addToSource(sourceBreakdown.pending, srcKey, dealValue, companyRetained);
       }
     }
 
@@ -391,6 +415,7 @@ export async function GET(req: NextRequest) {
       totals,
       months,
       categoryBreakdown,
+      sourceBreakdown,
     };
 
     const result: BrokerCommandMetrics = {

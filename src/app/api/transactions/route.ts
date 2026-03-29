@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
       ...(body.dealSource ? { dealSource: body.dealSource } : {}),
       ...(body.listPrice ? { listPrice: toNumber(body.listPrice) } : {}),
       ...(body.commissionPercent ? { commissionPercent: toNumber(body.commissionPercent) } : {}),
+      ...(body.commissionBasePrice ? { commissionBasePrice: toNumber(body.commissionBasePrice) } : {}),
       ...(body.transactionFee ? { transactionFee: toNumber(body.transactionFee) } : {}),
       ...(body.earnestMoney ? { earnestMoney: toNumber(body.earnestMoney) } : {}),
       ...(body.listingDate ? { listingDate: body.listingDate } : {}),

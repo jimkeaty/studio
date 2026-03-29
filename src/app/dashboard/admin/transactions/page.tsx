@@ -47,6 +47,7 @@ export default function AdminTransactionLedgerPage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'under_contract' | 'closed'>('all');
+  const [agentFilter, setAgentFilter] = useState('all');
 
   // Edit sheet state
   const [editTx, setEditTx] = useState<Transaction | null>(null);
@@ -199,11 +200,16 @@ export default function AdminTransactionLedgerPage() {
     return <Alert variant="destructive"><AlertTitle>Access Denied</AlertTitle><AlertDescription>Admin only.</AlertDescription></Alert>;
   }
 
+  const agentNames = Array.from(new Set(
+    transactions.map(t => t.agentDisplayName ?? t.agentName ?? '').filter(Boolean)
+  )).sort();
+
   const filtered = transactions.filter(t => {
     const txYear = t.year ? String(t.year) : (t.closedDate ?? (t as any).closingDate ?? t.contractDate ?? '').slice(0, 4);
     const yearMatch = yearFilter === 'all' || txYear === yearFilter;
     const statusMatch = statusFilter === 'all' || t.status === statusFilter;
-    return yearMatch && statusMatch;
+    const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? t.agentName ?? '') === agentFilter;
+    return yearMatch && statusMatch && agentMatch;
   });
 
   const totalGross = filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0);
@@ -283,6 +289,16 @@ export default function AdminTransactionLedgerPage() {
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="under_contract">Under Contract</SelectItem>
                 <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground">Agent</span>
+            <Select value={agentFilter} onValueChange={setAgentFilter}>
+              <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                {agentNames.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
