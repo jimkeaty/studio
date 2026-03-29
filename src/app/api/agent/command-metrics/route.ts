@@ -94,9 +94,24 @@ export async function GET(req: NextRequest) {
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
 
     // ── Load agent profile ────────────────────────────────────────────────
-    const profileSnap = await adminDb.collection('agentProfiles')
+    // uid may be a slug (e.g. 'ashley-lombas') when admin uses viewAs, or a Firebase UID.
+    // Try slug lookup first; if that fails, try direct document lookup by UID.
+    let profileSnap = await adminDb.collection('agentProfiles')
       .where('agentId', '==', uid).limit(1).get();
+    let profileDocId: string | null = profileSnap.empty ? null : profileSnap.docs[0].id;
+    if (profileSnap.empty) {
+      // uid might already be a Firebase UID — try direct doc lookup
+      const directDoc = await adminDb.collection('agentProfiles').doc(uid).get();
+      if (directDoc.exists) {
+        profileDocId = directDoc.id;
+        profileSnap = { empty: false, docs: [directDoc] } as any;
+      }
+    }
     const profile = profileSnap.empty ? null : profileSnap.docs[0].data();
+    // The canonical Firebase UID for this agent — used as the goal segment key.
+    // This ensures goals saved by the agent (keyed by their UID) are always found
+    // regardless of whether viewAs was passed as a slug or a UID.
+    const agentFirebaseUid = profileDocId ?? uid;
 
     const isTeamLeader = profile?.teamRole === 'leader' && !!profile?.primaryTeamId;
     const teamId = profile?.primaryTeamId || null;
@@ -159,8 +174,10 @@ export async function GET(req: NextRequest) {
         .filter((y): y is number => y !== null && !isNaN(y))
     )].filter(y => y !== year).sort((a, b) => b - a);
 
-    // ── Fetch goals ───────────────────────────────────────────────────────
-    const goalSegment = view === 'team' && teamId ? teamId : `agent_${uid}`;
+     // ── Fetch goals ────────────────────────────────────────────────────
+    // Use agentFirebaseUid (the profile doc ID) so goals are always found regardless
+    // of whether viewAs was a slug or a Firebase UID.
+    const goalSegment = view === 'team' && teamId ? teamId : `agent_${agentFirebaseUid}`;
     const goalsSnap = await adminDb.collection('brokerCommandGoals')
       .where('year', '==', year).where('segment', '==', goalSegment).get();
     const goalsMap = new Map<number, { grossMarginGoal: number | null; volumeGoal: number | null; salesCountGoal: number | null }>();
