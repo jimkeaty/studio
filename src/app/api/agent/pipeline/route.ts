@@ -73,33 +73,6 @@ export async function GET(req: NextRequest) {
     // Resolve all possible agentId values for this agent (slug + Firebase UID)
     const agentIds = await resolveQueryIds(uid);
 
-<<<<<<< HEAD
-    // Fetch transactions for all resolved IDs and merge results
-    const allTxMap = new Map<string, any>();
-    await Promise.all(
-      agentIds.map(async (agentId) => {
-        try {
-          const snap = await adminDb
-            .collection('transactions')
-            .where('agentId', '==', agentId)
-            .get();
-          snap.docs.forEach(d => {
-            if (!allTxMap.has(d.id)) {
-              allTxMap.set(d.id, { id: d.id, ...serializeFirestore(d.data() || {}) });
-            }
-          });
-        } catch (err: any) {
-          console.warn(`[api/agent/pipeline] Failed to fetch transactions for agentId=${agentId}:`, err.message);
-        }
-      })
-    );
-
-    const allTx = Array.from(allTxMap.values()).sort((a, b) => {
-      const aTime = new Date(a.createdAt || 0).getTime() || 0;
-      const bTime = new Date(b.createdAt || 0).getTime() || 0;
-      return bTime - aTime;
-    });
-=======
     // Strip commission split fields for non-admin callers.
     // Agents only see their net income; all gross commission, broker retained,
     // and split percentage fields are removed at the API layer.
@@ -108,7 +81,6 @@ export async function GET(req: NextRequest) {
       'agentPct', 'brokerPct', 'grossCommission', 'companyRetained',
       'agentSplitPercent', 'companySplitPercent',
     ];
-
     function sanitizeForAgent(tx: any): any {
       if (isAdminCaller) return tx;
       const safe: any = {};
@@ -123,14 +95,31 @@ export async function GET(req: NextRequest) {
       return safe;
     }
 
-    const allTx = txSnap.docs
-      .map(d => sanitizeForAgent({ id: d.id, ...serializeFirestore(d.data() || {}) }))
-      .sort((a, b) => {
-        const aTime = new Date(a.createdAt || 0).getTime() || 0;
-        const bTime = new Date(b.createdAt || 0).getTime() || 0;
-        return bTime - aTime;
-      });
->>>>>>> e521ea7d07e7991cf882f3b4d7c4f300f9f8b39a
+    // Fetch transactions for all resolved IDs and merge results
+    const allTxMap = new Map<string, any>();
+    await Promise.all(
+      agentIds.map(async (agentId) => {
+        try {
+          const snap = await adminDb
+            .collection('transactions')
+            .where('agentId', '==', agentId)
+            .get();
+          snap.docs.forEach(d => {
+            if (!allTxMap.has(d.id)) {
+              allTxMap.set(d.id, sanitizeForAgent({ id: d.id, ...serializeFirestore(d.data() || {}) }));
+            }
+          });
+        } catch (err: any) {
+          console.warn(`[api/agent/pipeline] Failed to fetch transactions for agentId=${agentId}:`, err.message);
+        }
+      })
+    );
+
+    const allTx = Array.from(allTxMap.values()).sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime() || 0;
+      const bTime = new Date(b.createdAt || 0).getTime() || 0;
+      return bTime - aTime;
+    });
 
     const pendingTransactions = allTx.filter((t: any) =>
       t.status === 'pending' || t.status === 'under_contract'

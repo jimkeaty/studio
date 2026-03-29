@@ -760,16 +760,20 @@ function AgentDashboardPage() {
           )}
 
           {/* ════════════════════════════════════════════════════════════════
-              8. RECRUITING INCENTIVE TRACKER
+              8. PIPELINE TABLES
              ════════════════════════════════════════════════════════════════ */}
-          <RecruitingIncentiveTracker />
-
-          {/* ════════════════════════════════════════════════════════════════
-              9. PIPELINE TABLES
-             ════════════════════════════════════════════════════════════════ */}
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">My Pipeline</h2>
+            <p className="text-sm text-muted-foreground">Active opportunities, pending deals, and closed transactions for {year}.</p>
+          </div>
           <OpportunitiesTable opportunities={opportunities} />
           <PendingTable transactions={transactions} />
           <ClosedTable transactions={transactions} year={year} />
+
+          {/* ════════════════════════════════════════════════════════════════
+              9. RECRUITING INCENTIVE TRACKER
+             ════════════════════════════════════════════════════════════════ */}
+          <RecruitingIncentiveTracker />
         </>
       )}
     </div>
