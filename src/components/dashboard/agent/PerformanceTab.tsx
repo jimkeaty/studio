@@ -32,6 +32,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertCircle } from 'lucide-react';
 import type { MonthlyData, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
+import { ActivityHistoryCard } from './ActivityHistoryCard';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -1302,6 +1303,9 @@ export function PerformanceTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Activity History (imported tracking data) ───────────────────────── */}
+      <ActivityHistoryCard />
 
       {/* ── Goals Editor ───────────────────────────────────────────────────── */}
       <GoalsEditor

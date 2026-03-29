@@ -70,6 +70,7 @@ const adminMenuItems = [
   { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
   { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
   { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
+  { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
   { href: '/dashboard/admin/competitions', label: 'Competition Center', icon: Gamepad2 },
   { href: '/dashboard/admin/keaty-cup', label: 'Keaty Cup', icon: Trophy },
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
