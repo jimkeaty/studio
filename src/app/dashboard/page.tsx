@@ -35,7 +35,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -558,13 +559,25 @@ export default function AgentDashboardPageWrapper() {
 
 function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
+  const { isImpersonating, impersonatedAgent, startImpersonation } = useEffectiveUser();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
-  // "View as Agent" impersonation (admin only)
-  const viewAsParam = searchParams.get('viewAs');
-  const viewAsName = searchParams.get('viewAsName');
+  // Bootstrap impersonation from URL params (links from admin pages)
   const isAdmin = user?.uid === ADMIN_UID;
-  const viewAs = (isAdmin && viewAsParam) ? viewAsParam : null;
+  useEffect(() => {
+    const viewAsParam = searchParams.get('viewAs');
+    const viewAsName = searchParams.get('viewAsName');
+    if (isAdmin && viewAsParam && viewAsName) {
+      startImpersonation({ uid: viewAsParam, name: decodeURIComponent(viewAsName) });
+      // Remove URL params so they don't persist on refresh
+      router.replace('/dashboard');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, searchParams]);
+
+  // Effective agent to view (impersonated uid or own uid)
+  const viewAs = isImpersonating && impersonatedAgent ? impersonatedAgent.uid : null;
 
   // Overview data
   const [data, setData] = useState<{ dashboard: AgentDashboardData | null; plan: BusinessPlan | null; ytdMetrics: YtdValueMetrics | null } | null>(null);
@@ -644,33 +657,12 @@ function AgentDashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* ── Impersonation Banner ──────────────────────────────────────────── */}
-      {viewAs && (
-        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Users className="h-5 w-5 text-amber-600" />
-            <div>
-              <p className="font-semibold text-amber-800">
-                Viewing as: {viewAsName || viewAs}
-              </p>
-              <p className="text-xs text-amber-600">You are viewing this agent&apos;s dashboard as admin</p>
-            </div>
-          </div>
-          <a
-            href="/dashboard/admin/agents"
-            className="rounded-md bg-amber-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
-          >
-            ← Back to Agents
-          </a>
-        </div>
-      )}
-
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          {viewAs && viewAsName ? `${viewAsName}'s Dashboard` : 'Agent Dashboard'}
+          {isImpersonating && impersonatedAgent ? `${impersonatedAgent.name}'s Dashboard` : 'Agent Dashboard'}
         </h1>
         <p className="text-muted-foreground">
-          {viewAs ? `Performance summary for ${year}.` : `Your performance summary for ${year}.`}
+          {isImpersonating ? `Performance summary for ${year}.` : `Your performance summary for ${year}.`}
         </p>
       </div>
 

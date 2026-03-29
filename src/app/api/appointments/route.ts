@@ -1,6 +1,8 @@
 // src/app/api/appointments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+
+const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 import { FieldValue, Query } from 'firebase-admin/firestore';
 import { differenceInDays, startOfMonth, endOfMonth, format } from 'date-fns';
 
@@ -60,11 +62,13 @@ function isDateEditable(dateStr: string, role: string): boolean {
  */
 export async function GET(req: NextRequest) {
   try {
-    const { uid } = await requireUser(req);
+    const { uid: callerUid } = await requireUser(req);
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date');
     const year = searchParams.get('year');
     const month = searchParams.get('month');
+    const viewAs = searchParams.get('viewAs');
+    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
 
     let q: Query = adminDb.collection('appointments').where('agentId', '==', uid);
 
@@ -115,7 +119,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const { uid, role } = await requireUser(req);
+    const { uid: callerUid, role } = await requireUser(req);
 
     let body: any;
     try {
@@ -124,17 +128,22 @@ export async function POST(req: NextRequest) {
       return jsonError(400, 'Invalid or missing JSON body');
     }
 
+    // Admin can create appointment for any agent via body.viewAs
+    const viewAs = body?.viewAs;
+    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
+    const effectiveRole = callerUid === ADMIN_UID ? 'admin' : role;
+
     if (!body.date || !body.contactName || !body.category || !body.status) {
       return jsonError(400, 'Missing required fields');
     }
-    
-    if (!isDateEditable(body.date, role)) {
+
+    if (!isDateEditable(body.date, effectiveRole)) {
         return jsonError(403, 'Edits are locked after 45 days.', 'edit_window_expired');
     }
-    
+
     const dataToSave = {
       agentId: uid,
-      createdByUid: uid,
+      createdByUid: callerUid,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       date: body.date,

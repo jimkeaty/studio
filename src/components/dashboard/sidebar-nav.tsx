@@ -38,6 +38,7 @@ import {
   UserCog,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
@@ -87,6 +88,7 @@ export function SidebarNav() {
   const pathname = usePathname();
   const { user } = useUser();
   const isAdmin = user?.uid === ADMIN_UID;
+  const { isImpersonating } = useImpersonation();
   const [branding, setBranding] = useState<BrandingData | null>(null);
 
   const visibleAgentItems = agentMenuItems;
@@ -154,48 +156,52 @@ export function SidebarNav() {
           ))}
         </SidebarMenu>
 
-        <SidebarSeparator className="my-2" />
+        {!isImpersonating && (
+          <>
+            <SidebarSeparator className="my-2" />
 
-        <SidebarMenu>
-          <p className="px-2 text-xs font-semibold text-muted-foreground/80">Admin</p>
-          {adminMenuItems.map((item) => (
-            <SidebarMenuItem key={item.href}>
-              <Link href={item.href}>
-                <SidebarMenuButton
-                  isActive={
-                    item.href === '/dashboard/broker'
-                      ? pathname === item.href
-                      : pathname === item.href || pathname.startsWith(`${item.href}/`)
-                  }
-                  tooltip={item.label}
-                  className="justify-start"
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-muted-foreground/80">Admin</p>
+              {adminMenuItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <Link href={item.href}>
+                    <SidebarMenuButton
+                      isActive={
+                        item.href === '/dashboard/broker'
+                          ? pathname === item.href
+                          : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                      }
+                      tooltip={item.label}
+                      className="justify-start"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
 
-        <SidebarSeparator className="my-2" />
+            <SidebarSeparator className="my-2" />
 
-        <SidebarMenu>
-          <p className="px-2 text-xs font-semibold text-muted-foreground/80">TV Modes</p>
-          {tvModeItems.map((item) => (
-            <SidebarMenuItem key={item.href}>
-              <Link href={item.href} target="_blank">
-                <SidebarMenuButton
-                  tooltip={item.label}
-                  className="justify-start"
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-muted-foreground/80">TV Modes</p>
+              {tvModeItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <Link href={item.href} target="_blank">
+                    <SidebarMenuButton
+                      tooltip={item.label}
+                      className="justify-start"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-2">

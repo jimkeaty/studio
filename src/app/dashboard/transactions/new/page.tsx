@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -214,6 +215,7 @@ function Grid3({ children }: { children: React.ReactNode }) {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AddTransactionPage() {
   const { user, loading: userLoading } = useUser();
+  const { effectiveUid, effectiveName, isImpersonating } = useEffectiveUser();
   const { toast } = useToast();
   const [submitted, setSubmitted] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
@@ -270,12 +272,17 @@ export default function AddTransactionPage() {
     load();
   }, [user, isAdmin]);
 
-  // Agent: pre-fill their own agentId from profile
+  // Agent: pre-fill their own agentId from profile; admin impersonating pre-fills the agent's
   useEffect(() => {
-    if (!user || isAdmin) return;
-    form.setValue('agentId', user.uid);
-    form.setValue('agentDisplayName', user.displayName || user.email || user.uid);
-  }, [user, isAdmin]);
+    if (!user) return;
+    if (isImpersonating && effectiveUid && effectiveName) {
+      form.setValue('agentId', effectiveUid);
+      form.setValue('agentDisplayName', effectiveName);
+    } else if (!isAdmin) {
+      form.setValue('agentId', user.uid);
+      form.setValue('agentDisplayName', user.displayName || user.email || user.uid);
+    }
+  }, [user, isAdmin, isImpersonating, effectiveUid, effectiveName]);
 
   // Helper: toggle inspection type checkbox
   const toggleInspectionType = (type: string) => {
