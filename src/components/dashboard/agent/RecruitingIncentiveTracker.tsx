@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useUser } from "@/firebase";
-import type { DownlineMember } from "@/lib/types";
+import type { DownlineMember } from "@/lib/types/incentives";
 import {
   Card,
   CardContent,
@@ -164,7 +164,7 @@ export function RecruitingIncentiveTracker() {
           throw new Error(msg);
         }
 
-        setDownline(json.downline || []);
+        setDownline((json as Extract<RecruitingApiResponse, { ok: true }>).downline || []);
       } catch (e: any) {
         console.error("Recruiting Tracker UI Error:", e?.message || e);
         setError("An unexpected error occurred while loading recruiting data.");
@@ -306,9 +306,9 @@ export function RecruitingIncentiveTracker() {
                   <TableRow key={member.agentId}>
                     <TableCell className="font-medium">
                       {member.displayName || member.agentId}
-                      {member.referrerId ? (
+                      {member.tier === 2 && (member as any).referrerDisplayName ? (
                         <div className="text-xs text-muted-foreground">
-                          Referred by: {member.referrerId}
+                          via {(member as any).referrerDisplayName}
                         </div>
                       ) : null}
                     </TableCell>
