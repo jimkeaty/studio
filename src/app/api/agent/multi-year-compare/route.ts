@@ -46,9 +46,10 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-
+    const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
     const { searchParams } = new URL(req.url);
+    const viewAs = searchParams.get('viewAs');
+    const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
     const view = searchParams.get('view') || 'personal';
 
     // ── Determine which agent IDs to include ─────────────────────────────────

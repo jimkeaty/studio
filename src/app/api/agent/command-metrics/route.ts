@@ -125,30 +125,38 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Fetch transactions ────────────────────────────────────────────────
-    const prevYear = year - 1;
-    const fetchYears = [year, prevYear];
-    if (compareYear && !fetchYears.includes(compareYear)) fetchYears.push(compareYear);
-
-    const snapResults = await Promise.all(
-      fetchYears.map(y => adminDb.collection('transactions').where('year', '==', y).get())
+    // Query by agentId (not year field) so transactions missing the year field are included.
+    // Firestore IN batched at 30 per query.
+    const agentIdList = [...agentIds];
+    const allTxSnaps = await Promise.all(
+      Array.from({ length: Math.ceil(agentIdList.length / 30) }, (_, i) =>
+        adminDb.collection('transactions')
+          .where('agentId', 'in', agentIdList.slice(i * 30, i * 30 + 30))
+          .get()
+      )
     );
+    const allAgentTx: Transaction[] = allTxSnaps.flatMap(s => s.docs.map(d => d.data() as Transaction));
 
-    const filterByAgents = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) =>
-      docs.map(d => d.data() as Transaction).filter(t => agentIds.has(t.agentId));
+    // Derive each transaction's year from the year field (if present) or from closedDate/contractDate
+    const getTxYear = (t: Transaction): number | null => {
+      if (t.year && typeof t.year === 'number') return t.year;
+      const cd = parseDate(t.closedDate) ?? parseDate(t.contractDate);
+      return cd ? cd.getFullYear() : null;
+    };
 
-    const transactions = filterByAgents(snapResults[0].docs);
-    const prevTransactions = filterByAgents(snapResults[1].docs);
+    const prevYear = year - 1;
+    const transactions = allAgentTx.filter(t => getTxYear(t) === year);
+    const prevTransactions = allAgentTx.filter(t => getTxYear(t) === prevYear);
     const compareTransactions = compareYear
-      ? filterByAgents(snapResults[fetchYears.indexOf(compareYear)]?.docs || [])
+      ? allAgentTx.filter(t => getTxYear(t) === compareYear)
       : [];
 
-    // Available years
-    const allYearsSnap = await adminDb.collection('transactions')
-      .where('status', '==', 'closed').select('year', 'agentId').get();
+    // Available years — derived from allAgentTx (already fetched above), no extra query needed
     const availableYears = [...new Set(
-      allYearsSnap.docs
-        .filter(d => agentIds.has(d.data().agentId as string))
-        .map(d => d.data().year as number)
+      allAgentTx
+        .filter(t => t.status === 'closed')
+        .map(t => getTxYear(t))
+        .filter((y): y is number => y !== null && !isNaN(y))
     )].filter(y => y !== year).sort((a, b) => b - a);
 
     // ── Fetch goals ───────────────────────────────────────────────────────
@@ -182,6 +190,7 @@ export async function GET(req: NextRequest) {
       totalGCI: 0, grossMargin: 0, grossMarginPct: 0, transactionFees: 0,
       closedVolume: 0, pendingVolume: 0, closedCount: 0, pendingCount: 0,
       // Agent-specific: net income (what agent takes home)
+      agentNetCommission: 0, // alias for netIncome — satisfies BrokerCommandOverview type
       netIncome: 0, pendingNetIncome: 0,
     };
 
@@ -222,6 +231,7 @@ export async function GET(req: NextRequest) {
         totals.closedVolume += dealValue;
         totals.closedCount += 1;
         totals.netIncome += agentNet;
+        totals.agentNetCommission += agentNet;
 
         categoryBreakdown.closed[catKey].count += 1;
         categoryBreakdown.closed[catKey].netRevenue += agentNet;

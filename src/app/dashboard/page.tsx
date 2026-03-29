@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useUser } from '@/firebase';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics, Transaction, Opportunity } from '@/lib/types';
-import type { MonthlyData, CategoryMetrics } from '@/lib/types/brokerCommandMetrics';
+import type { MonthlyData, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -13,6 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
@@ -104,6 +105,7 @@ type AgentMetricsResponse = {
     totals: { totalGCI: number; grossMargin: number; grossMarginPct: number; transactionFees: number; closedVolume: number; pendingVolume: number; closedCount: number; pendingCount: number; netIncome: number; pendingNetIncome: number; };
     months: MonthlyData[];
     categoryBreakdown: { closed: CategoryMetrics; pending: CategoryMetrics };
+    sourceBreakdown?: SourceBreakdown;
   };
   prevYearStats?: { year: number; totalVolume: number; totalSales: number; totalGCI: number; totalGrossMargin: number; avgSalePrice: number; avgGCI: number; avgGrossMargin: number; avgMarginPct: number; avgCommissionPct: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number; netIncome?: number }[]; };
   availableYears?: number[];
@@ -592,6 +594,7 @@ function AgentDashboardPage() {
   const [compareYear, setCompareYear] = useState<number | null>(null);
   const [perfData, setPerfData] = useState<AgentMetricsResponse | null>(null);
   const [perfLoading, setPerfLoading] = useState(true);
+  const [perfError, setPerfError] = useState<string | null>(null);
 
   const year = new Date().getFullYear();
 
@@ -635,6 +638,7 @@ function AgentDashboardPage() {
   const fetchPerf = useCallback(async () => {
     if (!user) return;
     setPerfLoading(true);
+    setPerfError(null);
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(perfYear), view: perfView });
@@ -643,7 +647,7 @@ function AgentDashboardPage() {
       const res = await fetch(`/api/agent/command-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || `Request failed (${res.status})`); }
       setPerfData(await res.json());
-    } catch (e: any) { console.error('[perf]', e); }
+    } catch (e: any) { console.error('[perf]', e); setPerfError(e.message); }
     finally { setPerfLoading(false); }
   }, [user, perfYear, perfView, compareYear, viewAs]);
 
@@ -672,6 +676,7 @@ function AgentDashboardPage() {
       <MyPerformanceSection
         perfData={perfData}
         perfLoading={perfLoading}
+        perfError={perfError}
         dashboard={dashboard ?? null}
         year={perfYear}
         setYear={setPerfYear}
@@ -706,13 +711,19 @@ function AgentDashboardPage() {
           <ChartsSection
             perfData={perfData}
             perfLoading={perfLoading}
+            perfError={perfError}
             year={perfYear}
             compareYear={compareYear}
             setCompareYear={setCompareYear}
           />
 
           {/* ════════════════════════════════════════════════════════════════
-              6. SET MONTHLY GOALS
+              6. CATEGORY & SOURCE BREAKDOWN
+             ════════════════════════════════════════════════════════════════ */}
+          {perfData && <CategoryBreakdownSection perfData={perfData} year={perfYear} />}
+
+          {/* ════════════════════════════════════════════════════════════════
+              7. SET MONTHLY GOALS
              ════════════════════════════════════════════════════════════════ */}
           {perfData?.overview && (
             <GoalsEditor
@@ -725,12 +736,12 @@ function AgentDashboardPage() {
           )}
 
           {/* ════════════════════════════════════════════════════════════════
-              7. RECRUITING INCENTIVE TRACKER
+              8. RECRUITING INCENTIVE TRACKER
              ════════════════════════════════════════════════════════════════ */}
           <RecruitingIncentiveTracker />
 
           {/* ════════════════════════════════════════════════════════════════
-              8. PIPELINE TABLES
+              9. PIPELINE TABLES
              ════════════════════════════════════════════════════════════════ */}
           <OpportunitiesTable opportunities={opportunities} />
           <PendingTable transactions={transactions} />
@@ -745,13 +756,14 @@ function AgentDashboardPage() {
 // 1. MY PERFORMANCE SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MyPerformanceSection({ perfData, perfLoading, dashboard, year, setYear, view, setView }: {
-  perfData: AgentMetricsResponse | null; perfLoading: boolean;
+function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, year, setYear, view, setView }: {
+  perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   dashboard: AgentDashboardData | null;
   year: number; setYear: (y: number) => void;
   view: 'personal' | 'team'; setView: (v: 'personal' | 'team') => void;
 }) {
   if (perfLoading) return <div className="space-y-4"><Skeleton className="h-10 w-1/3" /><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24" />)}</div></div>;
+  if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Performance data unavailable</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
   if (!perfData?.overview) return null;
 
   const { overview, agentView, prevYearStats } = perfData;
@@ -1418,11 +1430,13 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
 // 5. CHARTS SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ChartsSection({ perfData, perfLoading, year, compareYear, setCompareYear }: {
-  perfData: AgentMetricsResponse | null; perfLoading: boolean;
+function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, setCompareYear }: {
+  perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   year: number; compareYear: number | null; setCompareYear: (y: number | null) => void;
 }) {
-  if (perfLoading || !perfData?.overview) return <Skeleton className="h-80" />;
+  if (perfLoading) return <Skeleton className="h-80" />;
+  if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Failed to load performance data</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
+  if (!perfData?.overview) return <Skeleton className="h-80" />;
 
   const { overview, agentView } = perfData;
   const { months } = overview;
@@ -1505,6 +1519,181 @@ function ChartsSection({ perfData, perfLoading, year, compareYear, setCompareYea
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. CATEGORY & SOURCE BREAKDOWN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CAT_LABELS: Record<string, string> = {
+  residential_sale: 'Residential Sale',
+  commercial_sale: 'Commercial Sale',
+  commercial_lease: 'Commercial Lease',
+  land: 'Land',
+  rental: 'Rental / Lease',
+};
+const CAT_KEYS = ['residential_sale', 'commercial_sale', 'commercial_lease', 'land', 'rental'] as const;
+const CAT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
+const SOURCE_LABELS: Record<string, string> = {
+  boomtown: 'Boomtown', referral: 'Referral', sphere: 'Sphere of Influence',
+  sign_call: 'Sign Call', company_gen: 'Company Generated', social: 'Social Media',
+  open_house: 'Open House', fsbo: 'FSBO', expired_listing: 'Expired Listing', other: 'Other',
+};
+const SOURCE_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6'];
+
+function CategoryBreakdownSection({ perfData, year }: {
+  perfData: AgentMetricsResponse;
+  year: number;
+}) {
+  const { categoryBreakdown, sourceBreakdown } = perfData.overview;
+
+  const catSalesData = CAT_KEYS
+    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].count, color: CAT_COLORS[i] }))
+    .filter(d => d.value > 0);
+
+  if (catSalesData.length === 0) return null;
+
+  const catVolumeData = CAT_KEYS
+    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].volume, color: CAT_COLORS[i] }))
+    .filter(d => d.value > 0);
+  const catNetIncomeData = CAT_KEYS
+    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].netRevenue, color: CAT_COLORS[i] }))
+    .filter(d => d.value > 0);
+
+  const sourceEntries = Object.entries(sourceBreakdown?.closed ?? {})
+    .sort((a, b) => b[1].count - a[1].count);
+  const sourceSalesData = sourceEntries
+    .filter(([, v]) => v.count > 0)
+    .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.count, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+  const sourceVolumeData = sourceEntries
+    .filter(([, v]) => v.volume > 0)
+    .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.volume, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+  const sourceNetIncomeData = sourceEntries
+    .filter(([, v]) => v.netRevenue > 0)
+    .map(([k, v], i) => ({ name: SOURCE_LABELS[k] ?? k, value: v.netRevenue, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+
+  const renderPie = (data: { name: string; value: number; color: string }[], formatter: (v: number) => string, title: string) => (
+    <div className="flex flex-col items-center">
+      <p className="text-sm font-semibold mb-2 text-center">{title}</p>
+      <ResponsiveContainer width="100%" height={220}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}
+            label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
+            {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+          </Pie>
+          <Tooltip formatter={(val: any) => formatter(Number(val))} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1">
+        {data.map((d, i) => (
+          <span key={i} className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+            {d.name}: {formatter(d.value)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Category Breakdown — {year}</CardTitle>
+        <CardDescription>Closed transactions by property type — net income, sales count, and dollar volume</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-8">
+        {/* Category pie charts */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {renderPie(catNetIncomeData, v => fmtCurrencyCompact(v, true), 'Net Income by Type')}
+          {renderPie(catSalesData, v => `${v} sale${v !== 1 ? 's' : ''}`, 'Sales Count by Type')}
+          {renderPie(catVolumeData, v => fmtCurrencyCompact(v, true), 'Dollar Volume by Type')}
+        </div>
+
+        {/* Category detail table */}
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">Category</th>
+                <th className="px-4 py-2 text-right font-medium">Closed</th>
+                <th className="px-4 py-2 text-right font-medium">Volume</th>
+                <th className="px-4 py-2 text-right font-medium">Net Income</th>
+                <th className="px-4 py-2 text-right font-medium">Pending</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CAT_KEYS.map((k, i) => {
+                const c = categoryBreakdown.closed[k];
+                const p = categoryBreakdown.pending[k];
+                if (c.count === 0 && p.count === 0) return null;
+                return (
+                  <tr key={k} className="border-t">
+                    <td className="px-4 py-2 flex items-center gap-2">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CAT_COLORS[i] }} />
+                      {CAT_LABELS[k]}
+                    </td>
+                    <td className="px-4 py-2 text-right">{c.count}</td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.volume, true)}</td>
+                    <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.netRevenue, true)}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">
+                      {p.count > 0 ? `${p.count} (${fmtCurrencyCompact(p.volume, true)})` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Source of business breakdown */}
+        {sourceSalesData.length > 0 && (
+          <>
+            <div>
+              <p className="font-semibold text-sm">Breakdown by Lead Source</p>
+              <p className="text-xs text-muted-foreground">Closed transactions grouped by how the lead originated</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {renderPie(sourceNetIncomeData, v => fmtCurrencyCompact(v, true), 'Net Income by Source')}
+              {renderPie(sourceSalesData, v => `${v} sale${v !== 1 ? 's' : ''}`, 'Sales by Source')}
+              {renderPie(sourceVolumeData, v => fmtCurrencyCompact(v, true), 'Volume by Source')}
+            </div>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium">Lead Source</th>
+                    <th className="px-4 py-2 text-right font-medium">Closed</th>
+                    <th className="px-4 py-2 text-right font-medium">Volume</th>
+                    <th className="px-4 py-2 text-right font-medium">Net Income</th>
+                    <th className="px-4 py-2 text-right font-medium">Pending</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceEntries.map(([k, c], i) => {
+                    const p = sourceBreakdown?.pending?.[k];
+                    return (
+                      <tr key={k} className="border-t">
+                        <td className="px-4 py-2 flex items-center gap-2">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SOURCE_COLORS[i % SOURCE_COLORS.length] }} />
+                          {SOURCE_LABELS[k] ?? k}
+                        </td>
+                        <td className="px-4 py-2 text-right">{c.count}</td>
+                        <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.volume, true)}</td>
+                        <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.netRevenue, true)}</td>
+                        <td className="px-4 py-2 text-right text-muted-foreground">
+                          {p && p.count > 0 ? `${p.count} (${fmtCurrencyCompact(p.volume, true)})` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

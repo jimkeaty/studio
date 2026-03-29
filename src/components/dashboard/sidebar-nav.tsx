@@ -60,6 +60,17 @@ const agentMenuItems = [
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
 ];
 
+// Shown to all users — community & entertainment
+const communityMenuItems = [
+  { href: '/dashboard/admin/competitions', label: 'Competition Center', icon: Gamepad2 },
+  { href: '/dashboard/admin/keaty-cup', label: 'Keaty Cup', icon: Trophy },
+];
+
+const tvModeMenuItems = [
+  { href: '/leaderboard', label: 'Leaderboard TV', icon: BarChart3 },
+  { href: '/new-activity', label: 'Activity Board TV', icon: Newspaper },
+];
+
 const adminMenuItems = [
   { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
   { href: '/dashboard/admin/recruiting', label: 'Recruiting & Dev', icon: UserPlus },
@@ -79,10 +90,6 @@ const adminMenuItems = [
   { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
 ];
 
-const tvModeItems = [
-  { href: '/leaderboard', label: 'Leaderboard TV Mode', icon: BarChart3 },
-  { href: '/new-activity', label: 'New Activity TV Mode', icon: Newspaper },
-];
 
 export function SidebarNav() {
   const pathname = usePathname();
@@ -156,6 +163,39 @@ export function SidebarNav() {
           ))}
         </SidebarMenu>
 
+        {/* Community — visible to all users */}
+        <SidebarSeparator className="my-2" />
+        <SidebarMenu>
+          <p className="px-2 text-xs font-semibold text-muted-foreground/80">Community</p>
+          {communityMenuItems.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <Link href={item.href}>
+                <SidebarMenuButton
+                  isActive={pathname === item.href || pathname.startsWith(`${item.href}/`)}
+                  tooltip={item.label}
+                  className="justify-start"
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+          ))}
+          {tvModeMenuItems.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <Link href={item.href} target="_blank">
+                <SidebarMenuButton
+                  tooltip={item.label}
+                  className="justify-start"
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+
         {!isImpersonating && (
           <>
             <SidebarSeparator className="my-2" />
@@ -171,25 +211,6 @@ export function SidebarNav() {
                           ? pathname === item.href
                           : pathname === item.href || pathname.startsWith(`${item.href}/`)
                       }
-                      tooltip={item.label}
-                      className="justify-start"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-
-            <SidebarSeparator className="my-2" />
-
-            <SidebarMenu>
-              <p className="px-2 text-xs font-semibold text-muted-foreground/80">TV Modes</p>
-              {tvModeItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} target="_blank">
-                    <SidebarMenuButton
                       tooltip={item.label}
                       className="justify-start"
                     >

@@ -1507,16 +1507,6 @@ export default function CompetitionDetailPage() {
     );
   }
 
-  if (user.uid !== ADMIN_UID) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Access Denied</AlertTitle>
-        <AlertDescription>You do not have admin access.</AlertDescription>
-      </Alert>
-    );
-  }
-
   if (error) {
     return (
       <Alert variant="destructive">
