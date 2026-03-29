@@ -23,6 +23,7 @@ interface Transaction {
   commission?: number;
   transactionType: string;
   transactionFee?: number;
+  dealSource?: string;
   year: number;
   splitSnapshot?: {
     grossCommission?: number;
@@ -30,6 +31,19 @@ interface Transaction {
     agentNetCommission?: number;
     primaryTeamId?: string | null;
   };
+}
+
+type SourceBucket = { count: number; volume: number; netRevenue: number };
+function addToSource(
+  bucket: Record<string, SourceBucket>,
+  src: string,
+  volume: number,
+  netRevenue: number
+) {
+  if (!bucket[src]) bucket[src] = { count: 0, volume: 0, netRevenue: 0 };
+  bucket[src].count += 1;
+  bucket[src].volume += volume;
+  bucket[src].netRevenue += netRevenue;
 }
 
 function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): Date | null {
@@ -172,6 +186,9 @@ export async function GET(req: NextRequest) {
     };
 
     const categoryBreakdown = { closed: emptyCategoryMetrics(), pending: emptyCategoryMetrics() };
+    const sourceBreakdown: { closed: Record<string, SourceBucket>; pending: Record<string, SourceBucket> } = {
+      closed: {}, pending: {},
+    };
 
     // Also track monthly net income for agents
     const monthlyNetIncome: number[] = new Array(12).fill(0);
@@ -185,6 +202,7 @@ export async function GET(req: NextRequest) {
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
+      const srcKey = (t.dealSource || 'other').toLowerCase();
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -207,6 +225,7 @@ export async function GET(req: NextRequest) {
 
         categoryBreakdown.closed[catKey].count += 1;
         categoryBreakdown.closed[catKey].netRevenue += agentNet;
+        addToSource(sourceBreakdown.closed, srcKey, dealValue, agentNet);
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         const contractDate = parseDate(t.contractDate);
         const mi = contractDate && contractDate.getFullYear() === year ? contractDate.getMonth() : null;
@@ -223,6 +242,7 @@ export async function GET(req: NextRequest) {
 
         categoryBreakdown.pending[catKey].count += 1;
         categoryBreakdown.pending[catKey].netRevenue += agentNet;
+        addToSource(sourceBreakdown.pending, srcKey, dealValue, agentNet);
       }
     }
 
@@ -315,7 +335,7 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Response ──────────────────────────────────────────────────────────
-    const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown };
+    const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown };
 
     return NextResponse.json({
       overview,
