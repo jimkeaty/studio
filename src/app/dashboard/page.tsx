@@ -1553,6 +1553,7 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
   );
 }
 
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 5. CHARTS SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1576,6 +1577,8 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const currentYear = today.getFullYear();
   const isCurrentYear = year === currentYear;
   const currentMonthIdx = isCurrentYear ? today.getMonth() : 11;
+  const todayMonthLabel = today.toLocaleString('default', { month: 'long' });
+  const todayMonthShort = today.toLocaleString('default', { month: 'short' });
 
   // Helper: compute projected future months from YTD actuals + goal seasonality
   function computeProjection(actualArr: number[], goalArr: (number | null)[]): (number | null)[] {
@@ -1621,7 +1624,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
     };
   })();
 
-  // YTD grades for all three charts
+  // YTD actuals and grades for all three charts
   const ytdMonthsCount = currentMonthIdx + 1;
   const ytdNetIncomeActual: number = monthlyNetIncome.slice(0, ytdMonthsCount).reduce((s: number, v: number) => s + v, 0);
   const ytdNetIncomeGoal: number = incomeGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
@@ -1634,6 +1637,32 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const ytdSalesActual: number = months.slice(0, ytdMonthsCount).reduce((s: number, m) => s + m.closedCount, 0);
   const ytdSalesGoal: number = salesGoalArr.slice(0, ytdMonthsCount).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
   const gradeSales = ytdSalesGoal > 0 ? Math.round((ytdSalesActual / ytdSalesGoal) * 100) : null;
+
+  // Reusable grade badge style helper
+  function gradeBadgeClass(letter: string) {
+    if (letter === 'A') return 'bg-green-500/15 border-green-500/40 text-green-600';
+    if (letter === 'B') return 'bg-blue-500/15 border-blue-500/40 text-blue-600';
+    if (letter === 'C') return 'bg-yellow-500/15 border-yellow-500/40 text-yellow-600';
+    if (letter === 'D') return 'bg-orange-500/15 border-orange-500/40 text-orange-600';
+    return 'bg-red-500/15 border-red-500/40 text-red-600';
+  }
+  function gradeBannerBg(letter: string) {
+    if (letter === 'A') return 'bg-green-500/8 border-green-500/30';
+    if (letter === 'B') return 'bg-blue-500/8 border-blue-500/30';
+    if (letter === 'C') return 'bg-yellow-500/8 border-yellow-500/30';
+    if (letter === 'D') return 'bg-orange-500/8 border-orange-500/30';
+    return 'bg-red-500/8 border-red-500/30';
+  }
+
+  // YTD period label for compare banners
+  const ytdPeriodLabel = isCurrentYear ? `Jan–${todayMonthShort}` : 'Full Year';
+  const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+
+  // Comparison year YTD values (same Jan–today slice)
+  const compData = compareYear && perfData.comparisonData ? perfData.comparisonData.months : null;
+  const compNetYTD = compData ? compData.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0) : 0;
+  const compVolYTD = compData ? compData.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0) : 0;
+  const compSalesYTD = compData ? compData.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0) : 0;
 
   const ctrlRow = (
     <div className="flex items-center gap-2 flex-wrap">
@@ -1659,33 +1688,27 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         </p>
       )}
 
-      {/* CHART 1: Monthly Net Income */}
+      {/* ── CHART 1: Monthly Net Income ──────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
-          {gradeNetIncome && (() => { const g = letterGrade(gradeNetIncome); return (
-            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
-              <div className="space-y-0.5">
-                <p className="text-xs font-medium text-muted-foreground">
-                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+          {/* YTD vs Goal grade banner — top of chart */}
+          {gradeNetIncome != null && (() => { const g = letterGrade(gradeNetIncome); return (
+            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${gradeBannerBg(g.letter)}`}>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {isCurrentYear ? `Net Income YTD — Jan through ${todayMonthLabel}` : `Net Income — Full Year ${year}`}
                 </p>
-                <p className="text-sm font-semibold">
-                  {fmtCurrencyCompact(ytdNetIncomeActual, true)} <span className="text-muted-foreground font-normal">/ {fmtCurrencyCompact(ytdNetIncomeGoal, true)} goal</span>
-                </p>
-                {compareYear && perfData.comparisonData && (() => {
-                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.netIncome ?? 0), 0);
-                  const diff = ytdNetIncomeActual - compYTD;
-                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
-                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
-                })()}
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-2xl font-black">{fmtCurrencyCompact(ytdNetIncomeActual, true)}</span>
+                  <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdNetIncomeGoal, true)} goal</span>
+                  <span className={`text-sm font-bold ${g.color}`}>{gradeNetIncome}% of goal</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-right">
-                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
-                <span className={`text-xl font-bold ${g.color}`}>{gradeNetIncome}%</span>
-              </div>
+              <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
             </div>
           ); })()}
         </CardHeader>
@@ -1711,33 +1734,41 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               {showProjected && <Bar dataKey="projectedNetIncome" fill="var(--color-projectedNetIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
-          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
-            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
-              {compareYear && perfData.comparisonData && (() => {
-                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
-                const ytdLabel = isCurrentYear ? ' YTD' : '';
-                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
-                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
-                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+          {/* Below-chart: YoY comparison banner + projection */}
+          {(compData || (showProjected && fullYearProjection)) && (
+            <div className="mt-4 space-y-3 border-t pt-4">
+              {compData && (() => {
                 const diff = ytdNetIncomeActual - compNetYTD;
                 const pctChange = compNetYTD > 0 ? (diff / compNetYTD * 100) : 0;
                 const yoyPct = compNetYTD > 0 ? Math.round((ytdNetIncomeActual / compNetYTD) * 100) : 0;
                 const yoyGrade = letterGrade(yoyPct);
                 return (
-                  <div className="grid grid-cols-4 gap-4 items-start">
-                    <div><span className="text-muted-foreground">Margin vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
-                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{fmtCurrencyCompact(compVolYTD, true)}</p></div>
-                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{fmtNumNull(compSalesYTD)}</p></div>
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
-                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
-                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                  <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${gradeBannerBg(yoyGrade.letter)}`}>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        vs {compareYear} ({ytdPeriodLabel}) — Net Income
+                      </p>
+                      <div className="flex items-baseline gap-3 flex-wrap">
+                        <span className="text-lg font-black">{fmtCurrencyCompact(compNetYTD, true)}</span>
+                        <span className="text-xs text-muted-foreground">in {compareYear}</span>
+                        <span className={`text-sm font-bold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>{compareYear} Volume: <strong className="text-foreground">{fmtCurrencyCompact(compVolYTD, true)}</strong></span>
+                        <span>{compareYear} Sales: <strong className="text-foreground">{fmtNumNull(compSalesYTD)}</strong></span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 shrink-0">
+                      <div className={`flex items-center justify-center h-14 w-14 rounded-xl text-3xl font-black border-2 ${gradeBadgeClass(yoyGrade.letter)}`}>{yoyGrade.letter}</div>
+                      <span className={`text-xs font-bold ${yoyGrade.color}`}>{yoyPct}% YoY</span>
                     </div>
                   </div>
                 );
               })()}
               {showProjected && fullYearProjection && (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-4 text-sm">
                   <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
@@ -1748,33 +1779,27 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         </CardContent>
       </Card>
 
-      {/* CHART 2: Monthly Volume */}
+      {/* ── CHART 2: Monthly Dollar Volume ───────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
-          {gradeVolume && (() => { const g = letterGrade(gradeVolume); return (
-            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
-              <div className="space-y-0.5">
-                <p className="text-xs font-medium text-muted-foreground">
-                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+          {/* YTD vs Goal grade banner — top of chart */}
+          {gradeVolume != null && (() => { const g = letterGrade(gradeVolume); return (
+            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${gradeBannerBg(g.letter)}`}>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {isCurrentYear ? `Dollar Volume YTD — Jan through ${todayMonthLabel}` : `Dollar Volume — Full Year ${year}`}
                 </p>
-                <p className="text-sm font-semibold">
-                  {fmtCurrencyCompact(ytdVolumeActual, true)} <span className="text-muted-foreground font-normal">/ {fmtCurrencyCompact(ytdVolumeGoal, true)} goal</span>
-                </p>
-                {compareYear && perfData.comparisonData && (() => {
-                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
-                  const diff = ytdVolumeActual - compYTD;
-                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
-                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
-                })()}
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-2xl font-black">{fmtCurrencyCompact(ytdVolumeActual, true)}</span>
+                  <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdVolumeGoal, true)} goal</span>
+                  <span className={`text-sm font-bold ${g.color}`}>{gradeVolume}% of goal</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-right">
-                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
-                <span className={`text-xl font-bold ${g.color}`}>{gradeVolume}%</span>
-              </div>
+              <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
             </div>
           ); })()}
         </CardHeader>
@@ -1800,34 +1825,41 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
-          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
-            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
-              {compareYear && perfData.comparisonData && (() => {
-                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
-                const ytdLabel = isCurrentYear ? ' YTD' : '';
-                const ytdActualVol = months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
-                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
-                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
-                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
-                const diff = ytdActualVol - compVolYTD;
+          {/* Below-chart: YoY comparison banner + projection */}
+          {(compData || (showProjected && fullYearProjection)) && (
+            <div className="mt-4 space-y-3 border-t pt-4">
+              {compData && (() => {
+                const diff = ytdVolumeActual - compVolYTD;
                 const pctChange = compVolYTD > 0 ? (diff / compVolYTD * 100) : 0;
-                const yoyPct = compVolYTD > 0 ? Math.round((ytdActualVol / compVolYTD) * 100) : 0;
+                const yoyPct = compVolYTD > 0 ? Math.round((ytdVolumeActual / compVolYTD) * 100) : 0;
                 const yoyGrade = letterGrade(yoyPct);
                 return (
-                  <div className="grid grid-cols-4 gap-4 items-start">
-                    <div><span className="text-muted-foreground">Volume vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
-                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{fmtCurrencyCompact(compNetYTD, true)}</p></div>
-                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{fmtNumNull(compSalesYTD)}</p></div>
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
-                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
-                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                  <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${gradeBannerBg(yoyGrade.letter)}`}>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        vs {compareYear} ({ytdPeriodLabel}) — Dollar Volume
+                      </p>
+                      <div className="flex items-baseline gap-3 flex-wrap">
+                        <span className="text-lg font-black">{fmtCurrencyCompact(compVolYTD, true)}</span>
+                        <span className="text-xs text-muted-foreground">in {compareYear}</span>
+                        <span className={`text-sm font-bold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>{compareYear} Income: <strong className="text-foreground">{fmtCurrencyCompact(compNetYTD, true)}</strong></span>
+                        <span>{compareYear} Sales: <strong className="text-foreground">{fmtNumNull(compSalesYTD)}</strong></span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 shrink-0">
+                      <div className={`flex items-center justify-center h-14 w-14 rounded-xl text-3xl font-black border-2 ${gradeBadgeClass(yoyGrade.letter)}`}>{yoyGrade.letter}</div>
+                      <span className={`text-xs font-bold ${yoyGrade.color}`}>{yoyPct}% YoY</span>
                     </div>
                   </div>
                 );
               })()}
               {showProjected && fullYearProjection && (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-4 text-sm">
                   <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
@@ -1838,33 +1870,27 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         </CardContent>
       </Card>
 
-      {/* CHART 3: Monthly Sales */}
+      {/* ── CHART 3: Monthly Number of Sales ─────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
-          {gradeSales && (() => { const g = letterGrade(gradeSales); return (
-            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
-              <div className="space-y-0.5">
-                <p className="text-xs font-medium text-muted-foreground">
-                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+          {/* YTD vs Goal grade banner — top of chart */}
+          {gradeSales != null && (() => { const g = letterGrade(gradeSales); return (
+            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${gradeBannerBg(g.letter)}`}>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {isCurrentYear ? `Sales YTD — Jan through ${todayMonthLabel}` : `Sales — Full Year ${year}`}
                 </p>
-                <p className="text-sm font-semibold">
-                  {ytdSalesActual} sales <span className="text-muted-foreground font-normal">/ {ytdSalesGoal} goal</span>
-                </p>
-                {compareYear && perfData.comparisonData && (() => {
-                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.closedCount ?? 0), 0);
-                  const diff = ytdSalesActual - compYTD;
-                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
-                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{diff} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
-                })()}
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-2xl font-black">{ytdSalesActual} sales</span>
+                  <span className="text-sm text-muted-foreground">/ {ytdSalesGoal} goal</span>
+                  <span className={`text-sm font-bold ${g.color}`}>{gradeSales}% of goal</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-right">
-                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
-                <span className={`text-xl font-bold ${g.color}`}>{gradeSales}%</span>
-              </div>
+              <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
             </div>
           ); })()}
         </CardHeader>
@@ -1890,34 +1916,41 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
-          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
-            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
-              {compareYear && perfData.comparisonData && (() => {
-                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
-                const ytdLabel = isCurrentYear ? ' YTD' : '';
-                const ytdActualSales = months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
-                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
-                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
-                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
-                const diff = ytdActualSales - compSalesYTD;
+          {/* Below-chart: YoY comparison banner + projection */}
+          {(compData || (showProjected && fullYearProjection)) && (
+            <div className="mt-4 space-y-3 border-t pt-4">
+              {compData && (() => {
+                const diff = ytdSalesActual - compSalesYTD;
                 const pctChange = compSalesYTD > 0 ? (diff / compSalesYTD * 100) : 0;
-                const yoyPct = compSalesYTD > 0 ? Math.round((ytdActualSales / compSalesYTD) * 100) : 0;
+                const yoyPct = compSalesYTD > 0 ? Math.round((ytdSalesActual / compSalesYTD) * 100) : 0;
                 const yoyGrade = letterGrade(yoyPct);
                 return (
-                  <div className="grid grid-cols-4 gap-4 items-start">
-                    <div><span className="text-muted-foreground">Sales vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtNumNull(diff)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
-                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{fmtCurrencyCompact(compNetYTD, true)}</p></div>
-                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{fmtCurrencyCompact(compVolYTD, true)}</p></div>
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
-                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
-                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                  <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${gradeBannerBg(yoyGrade.letter)}`}>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        vs {compareYear} ({ytdPeriodLabel}) — Number of Sales
+                      </p>
+                      <div className="flex items-baseline gap-3 flex-wrap">
+                        <span className="text-lg font-black">{compSalesYTD} sales</span>
+                        <span className="text-xs text-muted-foreground">in {compareYear}</span>
+                        <span className={`text-sm font-bold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {diff >= 0 ? '+' : ''}{fmtNumNull(diff)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>{compareYear} Income: <strong className="text-foreground">{fmtCurrencyCompact(compNetYTD, true)}</strong></span>
+                        <span>{compareYear} Volume: <strong className="text-foreground">{fmtCurrencyCompact(compVolYTD, true)}</strong></span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 shrink-0">
+                      <div className={`flex items-center justify-center h-14 w-14 rounded-xl text-3xl font-black border-2 ${gradeBadgeClass(yoyGrade.letter)}`}>{yoyGrade.letter}</div>
+                      <span className={`text-xs font-bold ${yoyGrade.color}`}>{yoyPct}% YoY</span>
                     </div>
                   </div>
                 );
               })()}
               {showProjected && fullYearProjection && (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-4 text-sm">
                   <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
@@ -1927,10 +1960,9 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // 5b. MULTI-YEAR PRODUCTION COMPARISON (Agent-scoped)
 // ═══════════════════════════════════════════════════════════════════════════════
