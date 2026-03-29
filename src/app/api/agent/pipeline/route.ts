@@ -22,6 +22,39 @@ function serializeFirestore(val: any): any {
   return val;
 }
 
+/**
+ * Resolve the agentId to use for Firestore queries.
+ *
+ * Transactions store `agentId` as the slug (e.g. "ashley-lombas") when entered
+ * via the admin form (which uses agentProfiles doc IDs), but as the Firebase UID
+ * when entered by the agent themselves.
+ *
+ * This function tries both the raw uid AND the slug from the agentProfile so we
+ * always find the right transactions regardless of which path created them.
+ */
+async function resolveQueryIds(uid: string): Promise<string[]> {
+  const ids = new Set<string>([uid]);
+  try {
+    // Strategy 1: uid IS the agentProfile doc ID (slug)
+    const byDocId = await adminDb.collection('agentProfiles').doc(uid).get();
+    if (byDocId.exists) {
+      const data = byDocId.data() || {};
+      if (data.agentId) ids.add(String(data.agentId));
+    }
+    // Strategy 2: agentProfile has a field agentId matching uid
+    const byField = await adminDb.collection('agentProfiles')
+      .where('agentId', '==', uid)
+      .limit(1)
+      .get();
+    if (!byField.empty) {
+      ids.add(byField.docs[0].id); // also add the doc ID (slug)
+    }
+  } catch (err: any) {
+    console.warn('[api/agent/pipeline] resolveQueryIds failed:', err.message);
+  }
+  return Array.from(ids);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
@@ -36,20 +69,34 @@ export async function GET(req: NextRequest) {
     const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
 
-    // Fetch all agent transactions
-    // Note: no orderBy to avoid requiring a composite index
-    const txSnap = await adminDb
-      .collection('transactions')
-      .where('agentId', '==', uid)
-      .get();
+    // Resolve all possible agentId values for this agent (slug + Firebase UID)
+    const agentIds = await resolveQueryIds(uid);
 
-    const allTx = txSnap.docs
-      .map(d => ({ id: d.id, ...serializeFirestore(d.data() || {}) }))
-      .sort((a, b) => {
-        const aTime = new Date(a.createdAt || 0).getTime() || 0;
-        const bTime = new Date(b.createdAt || 0).getTime() || 0;
-        return bTime - aTime;
-      });
+    // Fetch transactions for all resolved IDs and merge results
+    const allTxMap = new Map<string, any>();
+    await Promise.all(
+      agentIds.map(async (agentId) => {
+        try {
+          const snap = await adminDb
+            .collection('transactions')
+            .where('agentId', '==', agentId)
+            .get();
+          snap.docs.forEach(d => {
+            if (!allTxMap.has(d.id)) {
+              allTxMap.set(d.id, { id: d.id, ...serializeFirestore(d.data() || {}) });
+            }
+          });
+        } catch (err: any) {
+          console.warn(`[api/agent/pipeline] Failed to fetch transactions for agentId=${agentId}:`, err.message);
+        }
+      })
+    );
+
+    const allTx = Array.from(allTxMap.values()).sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime() || 0;
+      const bTime = new Date(b.createdAt || 0).getTime() || 0;
+      return bTime - aTime;
+    });
 
     const pendingTransactions = allTx.filter((t: any) =>
       t.status === 'pending' || t.status === 'under_contract'
@@ -65,14 +112,20 @@ export async function GET(req: NextRequest) {
     // Fetch active opportunities (single-field query + client filter to avoid composite index)
     let opportunities: any[] = [];
     try {
-      const oppSnap = await adminDb
-        .collection('opportunities')
-        .where('agentId', '==', uid)
-        .get();
-
-      opportunities = oppSnap.docs
-        .map(d => ({ id: d.id, ...serializeFirestore(d.data() || {}) }))
-        .filter((o: any) => o.isActive === true);
+      const oppResults = await Promise.all(
+        agentIds.map(agentId =>
+          adminDb.collection('opportunities').where('agentId', '==', agentId).get()
+        )
+      );
+      const oppMap = new Map<string, any>();
+      oppResults.forEach(snap => {
+        snap.docs.forEach(d => {
+          if (!oppMap.has(d.id)) {
+            oppMap.set(d.id, { id: d.id, ...serializeFirestore(d.data() || {}) });
+          }
+        });
+      });
+      opportunities = Array.from(oppMap.values()).filter((o: any) => o.isActive === true);
     } catch (oppErr: any) {
       console.warn('[api/agent/pipeline] Failed to fetch opportunities:', oppErr.message);
     }
