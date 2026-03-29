@@ -21,13 +21,16 @@ const BANNED_PATTERNS_CLIENT_ONLY = [
 ];
 
 function isServerSafe(rel) {
+  // Normalize to forward slashes for cross-platform compatibility
+  const r = rel.replace(/\\/g, "/");
+
   // API routes are server-safe
-  if (rel.startsWith("src/app/api/")) return true;
+  if (r.startsWith("src/app/api/")) return true;
 
   // Explicit server-only libs allowed to use admin SDK patterns
-  if (rel.startsWith("src/lib/firebaseAdmin")) return true;
-  if (rel.startsWith("src/lib/firebase/admin")) return true;
-  if (rel.startsWith("src/lib/overrides")) return true;
+  if (r.startsWith("src/lib/firebaseAdmin")) return true;
+  if (r.startsWith("src/lib/firebase/admin")) return true;
+  if (r.startsWith("src/lib/overrides")) return true;
 
   return false;
 }

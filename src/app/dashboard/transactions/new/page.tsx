@@ -747,21 +747,29 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Sale Price ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
-            <Grid3>
-              <FormField control={form.control} name="commissionPercent" render={({ field }) => (
-                <FormItem><FormLabel>Commission %</FormLabel><FormControl><Input type="number" step="0.01" placeholder="3" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="gci" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>GCI ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                  <FormDescription>Gross Commission Income</FormDescription>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="transactionFee" render={({ field }) => (
-                <FormItem><FormLabel>Transaction Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid3>
+            {isAdmin ? (
+              <Grid3>
+                <FormField control={form.control} name="commissionPercent" render={({ field }) => (
+                  <FormItem><FormLabel>Commission %</FormLabel><FormControl><Input type="number" step="0.01" placeholder="3" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="gci" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>GCI ($)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                    <FormDescription>Gross Commission Income</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="transactionFee" render={({ field }) => (
+                  <FormItem><FormLabel>Transaction Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid3>
+            ) : (
+              <div className="max-w-xs">
+                <FormField control={form.control} name="transactionFee" render={({ field }) => (
+                  <FormItem><FormLabel>Transaction Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
+                )} />
+              </div>
+            )}
 
             {isAdmin && (
               <>
@@ -1041,60 +1049,62 @@ export default function AddTransactionPage() {
             )}
           </Section>
 
-          {/* ── Section 9: Commission Paid by Seller ──────────────────────── */}
-          <Section title="Commission Paid by Seller">
-            <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Price Commission Is Based On (Sale Price Less Seller Concessions if any)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    step="1"
-                    placeholder="Auto-filled from Sale Price"
-                    {...field}
-                    onChange={(e) => {
-                      cbpManuallyEdited.current = true;
-                      field.onChange(e);
-                    }}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Defaults to Sale Price. Edit this if the seller is giving concessions and commissions are based on a lower amount (e.g. $300k sale with $20k concessions → enter $280k here).
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <Separator />
-            <div className="space-y-4">
-              <div className="flex items-end gap-4">
-                <div className="flex-1 max-w-xs">
-                  <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
+          {/* ── Section 9: Commission Paid by Seller — Admin only ─────────── */}
+          {isAdmin && (
+            <Section title="Commission Paid by Seller">
+              <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Price Commission Is Based On (Sale Price Less Seller Concessions if any)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="1"
+                      placeholder="Auto-filled from Sale Price"
+                      {...field}
+                      onChange={(e) => {
+                        cbpManuallyEdited.current = true;
+                        field.onChange(e);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Defaults to Sale Price. Edit this if the seller is giving concessions and commissions are based on a lower amount (e.g. $300k sale with $20k concessions → enter $280k here).
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <Separator />
+              <div className="space-y-4">
+                <div className="flex items-end gap-4">
+                  <div className="flex-1 max-w-xs">
+                    <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Amount seller(s) is paying the listing agent ($)</FormLabel>
+                        <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                      </FormItem>
+                    )} />
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-sm pb-2">
+                    <input
+                      type="checkbox"
+                      checked={form.watch('sellerPayingListingAgentUnknown') || false}
+                      onChange={(e) => form.setValue('sellerPayingListingAgentUnknown', e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    Unknown / Confirm with listing agent
+                  </label>
+                </div>
+                <div className="max-w-xs">
+                  <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Amount seller(s) is paying the listing agent ($)</FormLabel>
+                      <FormLabel>Amount seller(s) is paying the buyer&apos;s agent ($)</FormLabel>
                       <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
                     </FormItem>
                   )} />
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer text-sm pb-2">
-                  <input
-                    type="checkbox"
-                    checked={form.watch('sellerPayingListingAgentUnknown') || false}
-                    onChange={(e) => form.setValue('sellerPayingListingAgentUnknown', e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  Unknown / Confirm with listing agent
-                </label>
               </div>
-              <div className="max-w-xs">
-                <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Amount seller(s) is paying the buyer&apos;s agent ($)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                  </FormItem>
-                )} />
-              </div>
-            </div>
-          </Section>
+            </Section>
+          )}
 
           {/* ── Section 10: Buyer Closing Cost Paid by Seller ─────────────── */}
           <Section title="Buyer Closing Cost Paid by Seller">

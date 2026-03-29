@@ -717,7 +717,7 @@ function AgentDashboardPage() {
         <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>No Data</AlertTitle><AlertDescription>Dashboard data for {year} not found.</AlertDescription></Alert>
       ) : (
         <>
-          <ReportCardSection dashboard={dashboard} />
+          <ReportCardSection dashboard={dashboard} perfData={perfData} perfYear={perfYear} />
 
           {/* ════════════════════════════════════════════════════════════════
               4. KPIs — All 6 with uniform activity-tracker style
@@ -744,7 +744,7 @@ function AgentDashboardPage() {
           {/* ════════════════════════════════════════════════════════════════
               6. CATEGORY & SOURCE BREAKDOWN
              ════════════════════════════════════════════════════════════════ */}
-          {perfData && <CategoryBreakdownSection perfData={perfData} year={perfYear} />}
+          {perfLoading ? <Skeleton className="h-64 w-full" /> : perfData ? <CategoryBreakdownSection perfData={perfData} year={perfYear} /> : null}
 
           {/* ════════════════════════════════════════════════════════════════
               7. SET MONTHLY GOALS
@@ -1314,13 +1314,41 @@ function HeroCard({ title, grade, primary, secondary, performancePct, icon: Icon
   );
 }
 
-function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
-  const ytdIncomeGoal = dashboard.expectedYTDIncomeGoal;
-  const incomeDelta = dashboard.incomeDeltaToGoal ?? 0;
-  const incomePct = ytdIncomeGoal > 0 ? Math.round((dashboard.netEarned / ytdIncomeGoal) * 100) : 0;
+function ReportCardSection({ dashboard, perfData, perfYear }: {
+  dashboard: AgentDashboardData;
+  perfData: AgentMetricsResponse | null;
+  perfYear: number;
+}) {
+  // Use perfData for income/volume/sales so grades are consistent with MyPerformanceSection and ChartsSection.
+  // Fall back to dashboard fields only when perfData hasn't loaded yet.
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const isCurrentYearRC = perfYear === currentYear;
+  const daysInYearRC = (perfYear % 4 === 0 && (perfYear % 100 !== 0 || perfYear % 400 === 0)) ? 366 : 365;
+  const daysElapsedRC = Math.floor((today.getTime() - new Date(perfYear, 0, 1).getTime()) / 86400000) + 1;
+  const ytdFractionRC = isCurrentYearRC ? Math.min(1, daysElapsedRC / daysInYearRC) : 1;
+
+  const rcTotals = perfData?.overview?.totals;
+  const rcMonths = perfData?.overview?.months;
+
+  // Compute YTD goals from monthly goal data (same formula as MyPerformanceSection)
+  const rcYearlyIncomeGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) : 0;
+  const rcYearlyVolumeGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) : 0;
+  const rcYearlySalesGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) : 0;
+
+  // Use perfData values when available, fall back to dashboard
+  const netEarned = rcTotals ? rcTotals.netIncome : dashboard.netEarned;
+  const netPending = rcTotals ? rcTotals.pendingNetIncome : dashboard.netPending;
+  const ytdTotalPotential = netEarned + netPending;
+  const ytdIncomeGoal = rcYearlyIncomeGoal > 0
+    ? Math.round(rcYearlyIncomeGoal * ytdFractionRC)
+    : dashboard.expectedYTDIncomeGoal;
+
+  const incomeDelta = ytdIncomeGoal > 0 ? netEarned - ytdIncomeGoal : 0;
+  const incomePct = ytdIncomeGoal > 0 ? Math.round((netEarned / ytdIncomeGoal) * 100) : 0;
   const incomeDeltaPct = ytdIncomeGoal > 0 ? Math.round((incomeDelta / ytdIncomeGoal) * 100) : 0;
-  const pipelinePct = ytdIncomeGoal > 0 ? Math.round((dashboard.ytdTotalPotential / ytdIncomeGoal) * 100) : 0;
-  const pipelineDeltaPct = ytdIncomeGoal > 0 ? Math.round(((dashboard.ytdTotalPotential - ytdIncomeGoal) / ytdIncomeGoal) * 100) : 0;
+  const pipelinePct = ytdIncomeGoal > 0 ? Math.round((ytdTotalPotential / ytdIncomeGoal) * 100) : 0;
+  const pipelineDeltaPct = ytdIncomeGoal > 0 ? Math.round(((ytdTotalPotential - ytdIncomeGoal) / ytdIncomeGoal) * 100) : 0;
   const vm = dashboard.volumeMetrics;
   const engGoal = dashboard.engagementGoalToDate ?? dashboard.kpis?.engagements?.target ?? 0;
   const engActual = dashboard.kpis?.engagements?.actual ?? 0;
@@ -1340,21 +1368,21 @@ function ReportCardSection({ dashboard }: { dashboard: AgentDashboardData }) {
       {/* Row 1: Income */}
       <div className="grid gap-4 md:grid-cols-2">
         <HeroCard
-          title="Net Income YTD" grade={dashboard.incomeGrade} primary={fmtCurrency(dashboard.netEarned)}
+          title="Net Income YTD" grade={ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade} primary={fmtCurrency(netEarned)}
           performancePct={ytdIncomeGoal > 0 ? incomePct : undefined}
           secondary={ytdIncomeGoal > 0 ? paceText(incomeDeltaPct, fmtCurrency(ytdIncomeGoal)) : 'No income goal set'}
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
         <HeroCard
-          title="Pipeline Net Income" grade={dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(dashboard.ytdTotalPotential)}
+          title="Pipeline Net Income" grade={ytdIncomeGoal > 0 ? letterGrade(pipelinePct).letter : dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(ytdTotalPotential)}
           performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
           secondary={ytdIncomeGoal > 0
             ? (() => {
                 const projGoal = vm?.projectedIncomeGoal ?? ytdIncomeGoal;
-                const projPct = projGoal > 0 ? Math.round(((dashboard.ytdTotalPotential - projGoal) / projGoal) * 100) : 0;
-                return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` · ${fmtCurrency(projGoal)} projected goal · ${fmtCurrency(dashboard.netPending)} pending`;
+                const projPct = projGoal > 0 ? Math.round(((ytdTotalPotential - projGoal) / projGoal) * 100) : 0;
+                return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` · ${fmtCurrency(projGoal)} projected goal · ${fmtCurrency(netPending)} pending`;
               })()
-            : `${fmtCurrency(dashboard.netPending)} pending · closed + pipeline`}
+            : `${fmtCurrency(netPending)} pending · closed + pipeline`}
           icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
       </div>
@@ -1572,6 +1600,28 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const projSales = computeProjection(months.map(m => m.closedCount), salesGoalArr);
   const projectionLabel = hasIncomeGoal ? 'Seasonality-Based Projection' : 'Straight-Line Projection';
 
+  // Full-year projections for summary banner
+  const fullYearProjection = (() => {
+    if (!isCurrentYear) return null;
+    const completedMonths = months.slice(0, currentMonthIdx + 1);
+    const calcFull = (actuals: number[], goalKey: 'grossMarginGoal' | 'volumeGoal' | 'salesCountGoal') => {
+      const ytd = actuals.reduce((s, v) => s + v, 0);
+      const yearlyGoal = months.reduce((s, m) => s + (m[goalKey] ?? 0), 0);
+      const share = yearlyGoal > 0 ? completedMonths.reduce((s, m) => s + (m[goalKey] ?? 0), 0) / yearlyGoal : (currentMonthIdx + 1) / 12;
+      return share > 0 ? Math.round(ytd / share) : Math.round(ytd * 12 / (currentMonthIdx + 1));
+    };
+    return {
+      netIncome: calcFull(monthlyNetIncome.slice(0, currentMonthIdx + 1), 'grossMarginGoal'),
+      volume: calcFull(completedMonths.map(m => m.closedVolume), 'volumeGoal'),
+      sales: calcFull(completedMonths.map(m => m.closedCount), 'salesCountGoal'),
+    };
+  })();
+
+  // YTD grade for net income
+  const ytdNetIncomeActual: number = monthlyNetIncome.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0);
+  const ytdNetIncomeGoal: number = incomeGoalArr.slice(0, currentMonthIdx + 1).reduce((s: number, v: number | null) => s + (v ?? 0), 0);
+  const gradeNetIncome = ytdNetIncomeGoal > 0 ? Math.round((ytdNetIncomeActual / ytdNetIncomeGoal) * 100) : null;
+
   const ctrlRow = (
     <div className="flex items-center gap-2 flex-wrap">
       <CompareSelector value={compareYear} onChange={setCompareYear} years={perfData.availableYears ?? []} />
@@ -1603,6 +1653,28 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
             <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
+          {gradeNetIncome && (() => { const g = letterGrade(gradeNetIncome); return (
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {isCurrentYear ? 'YTD Grade (as of today)' : 'Full Year Grade'}
+                </p>
+                <p className="text-sm font-semibold">
+                  {fmtCurrencyCompact(ytdNetIncomeActual, true)} <span className="text-muted-foreground font-normal">/ {fmtCurrencyCompact(ytdNetIncomeGoal, true)} goal</span>
+                </p>
+                {compareYear && perfData.comparisonData && (() => {
+                  const compYTD = perfData.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                  const diff = ytdNetIncomeActual - compYTD;
+                  const pct = compYTD > 0 ? (diff / compYTD * 100) : 0;
+                  return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
+                })()}
+              </div>
+              <div className="flex items-center gap-2 text-right">
+                <span className={`text-5xl font-black leading-none ${g.color}`}>{g.letter}</span>
+                <span className={`text-xl font-bold ${g.color}`}>{gradeNetIncome}%</span>
+              </div>
+            </div>
+          ); })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={incomeChartConfig} className="h-[350px] w-full">
@@ -1626,6 +1698,40 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               {showProjected && <Bar dataKey="projectedNetIncome" fill="var(--color-projectedNetIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
+          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && perfData.comparisonData && (() => {
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                const diff = ytdNetIncomeActual - compNetYTD;
+                const pctChange = compNetYTD > 0 ? (diff / compNetYTD * 100) : 0;
+                const yoyPct = compNetYTD > 0 ? Math.round((ytdNetIncomeActual / compNetYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return (
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Margin vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{fmtCurrencyCompact(compVolYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{fmtNumNull(compSalesYTD)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {showProjected && fullYearProjection && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1659,6 +1765,41 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
+          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && perfData.comparisonData && (() => {
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const ytdActualVol = months.slice(0, ytdMonths).reduce((s, m) => s + m.closedVolume, 0);
+                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const diff = ytdActualVol - compVolYTD;
+                const pctChange = compVolYTD > 0 ? (diff / compVolYTD * 100) : 0;
+                const yoyPct = compVolYTD > 0 ? Math.round((ytdActualVol / compVolYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return (
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Volume vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtCurrencyCompact(diff, true)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{fmtCurrencyCompact(compNetYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Sales</span><p className="font-semibold">{fmtNumNull(compSalesYTD)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {showProjected && fullYearProjection && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1692,6 +1833,41 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
           </ChartContainer>
+          {(compareYear && perfData.comparisonData || showProjected && fullYearProjection) && (
+            <div className="mt-4 space-y-3 border-t pt-4 text-sm">
+              {compareYear && perfData.comparisonData && (() => {
+                const ytdMonths = isCurrentYear ? currentMonthIdx + 1 : 12;
+                const ytdLabel = isCurrentYear ? ' YTD' : '';
+                const ytdActualSales = months.slice(0, ytdMonths).reduce((s, m) => s + m.closedCount, 0);
+                const compSalesYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedCount ?? 0), 0);
+                const compVolYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.closedVolume ?? 0), 0);
+                const compNetYTD = perfData.comparisonData.months.slice(0, ytdMonths).reduce((s, m) => s + (m.netIncome ?? 0), 0);
+                const diff = ytdActualSales - compSalesYTD;
+                const pctChange = compSalesYTD > 0 ? (diff / compSalesYTD * 100) : 0;
+                const yoyPct = compSalesYTD > 0 ? Math.round((ytdActualSales / compSalesYTD) * 100) : 0;
+                const yoyGrade = letterGrade(yoyPct);
+                return (
+                  <div className="grid grid-cols-4 gap-4 items-start">
+                    <div><span className="text-muted-foreground">Sales vs {compareYear}{ytdLabel}</span><p className={`font-semibold ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{fmtNumNull(diff)} ({pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%)</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Income</span><p className="font-semibold">{fmtCurrencyCompact(compNetYTD, true)}</p></div>
+                    <div><span className="text-muted-foreground">{compareYear}{ytdLabel} Volume</span><p className="font-semibold">{fmtCurrencyCompact(compVolYTD, true)}</p></div>
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground mr-1">YoY</span>
+                      <span className={`text-3xl font-black leading-none ${yoyGrade.color}`}>{yoyGrade.letter}</span>
+                      <span className={`text-base font-bold ${yoyGrade.color}`}>{yoyPct}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {showProjected && fullYearProjection && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
+                  <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
