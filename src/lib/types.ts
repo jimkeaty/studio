@@ -222,6 +222,7 @@ export interface AgentDashboardData {
     effectiveStartDate: string | null; // agent start date
     anniversaryDate: string | null;   // next anniversary (tier reset) date
     daysUntilReset: number | null;    // days until anniversary/tier reset
+    planName?: string | null;         // human-readable name of the commission plan
   };
 
   // Volume & deals grading

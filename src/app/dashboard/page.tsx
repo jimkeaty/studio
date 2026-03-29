@@ -858,58 +858,63 @@ function MetricTileWithDelta({ title, value, previous, icon: Icon }: { title: st
 // 2. TIER / CAP PROGRESS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const tierColors = [
-  { bar: 'bg-slate-400', text: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-300' },
-  { bar: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-300' },
-  { bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-300' },
-  { bar: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-300' },
-  { bar: 'bg-purple-500', text: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-300' },
-  { bar: 'bg-rose-500', text: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-300' },
+// ── Tier color palette (hex values for inline SVG/gradient use)
+const TIER_PALETTE = [
+  { hex: '#64748b', light: '#f1f5f9', text: '#334155', ring: 'ring-slate-400/40',   label: 'slate'   },
+  { hex: '#3b82f6', light: '#eff6ff', text: '#1d4ed8', ring: 'ring-blue-400/40',    label: 'blue'    },
+  { hex: '#10b981', light: '#ecfdf5', text: '#065f46', ring: 'ring-emerald-400/40', label: 'emerald' },
+  { hex: '#f59e0b', light: '#fffbeb', text: '#92400e', ring: 'ring-amber-400/40',   label: 'amber'   },
+  { hex: '#8b5cf6', light: '#f5f3ff', text: '#5b21b6', ring: 'ring-violet-400/40', label: 'violet'  },
+  { hex: '#ef4444', light: '#fef2f2', text: '#991b1b', ring: 'ring-red-400/40',    label: 'red'     },
 ];
 
 function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const tp = dashboard.tierProgress;
 
-  // Format start / anniversary dates (declared early so it's available in both branches)
-  const fmtDateLocal = (d: string | null | undefined) => {
+  const fmtDate = (d: string | null | undefined) => {
     if (!d) return null;
-    try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; }
+    try { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return d; }
   };
 
+  // ── Empty / unconfigured state ─────────────────────────────────────────
   if (!tp || tp.tiers.length === 0) {
-    const debugInfo = (tp as any)?._debug;
+    const dbg = (tp as any)?._debug;
     return (
-      <Card>
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200" />
         <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
               <CardDescription>No commission tiers configured — contact your admin.</CardDescription>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {tp?.effectiveStartDate && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                  <CalendarDays className="h-3 w-3" />
-                  <span>Started {fmtDateLocal(tp.effectiveStartDate)}</span>
-                </div>
-              )}
-              {tp?.daysUntilReset != null && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                  <Clock className="h-3 w-3" />
-                  <span>{tp.daysUntilReset} days until reset{tp.anniversaryDate ? ` (${fmtDateLocal(tp.anniversaryDate)})` : ''}</span>
-                </div>
-              )}
-            </div>
           </div>
           {tp && (tp.grossGCIYTD > 0 || tp.pendingGrossGCI > 0) && (
             <p className="text-sm mt-2 text-muted-foreground">
-              Gross GCI: {fmtCurrency(tp.grossGCIYTD)} closed{tp.pendingGrossGCI > 0 && ` + ${fmtCurrency(tp.pendingGrossGCI)} pending`}
+              Gross GCI: <span className="font-semibold text-foreground">{fmtCurrency(tp.grossGCIYTD)}</span>
+              {tp.pendingGrossGCI > 0 && <> + {fmtCurrency(tp.pendingGrossGCI)} pending</>}
             </p>
           )}
-          {debugInfo && (
-            <p className="text-xs mt-2 text-muted-foreground/60">
-              Debug: profile={debugInfo.profileFound ? 'found' : 'NOT FOUND'}, type={debugInfo.agentType ?? 'null'},
-              tiers={debugInfo.tiersOnProfile}, teamId={debugInfo.primaryTeamId ?? 'none'}, role={debugInfo.teamRole ?? 'none'}
+          <div className="flex flex-wrap gap-2 mt-2">
+            {tp?.effectiveStartDate && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-1">
+                <CalendarDays className="h-3 w-3" /> Started {fmtDate(tp.effectiveStartDate)}
+              </span>
+            )}
+            {tp?.daysUntilReset != null && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-1">
+                <Clock className="h-3 w-3" /> {tp.daysUntilReset}d until reset
+              </span>
+            )}
+          </div>
+          {dbg && (
+            <p className="text-[10px] mt-2 text-muted-foreground/50 font-mono">
+              debug · profile:{dbg.profileFound ? '✓' : '✗'} type:{dbg.agentType ?? '—'} tiers:{dbg.tiersOnProfile}
+              {dbg.teamId ? ` teamId:${dbg.primaryTeamId}` : ''} role:{dbg.teamRole ?? '—'}
+              {dbg.teamMemberCompMode ? ` compMode:${dbg.teamMemberCompMode}` : ''}
+              {dbg.overrideBandsCount != null ? ` overrideBands:${dbg.overrideBandsCount}` : ''}
             </p>
           )}
         </CardHeader>
@@ -917,147 +922,248 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
     );
   }
 
-  const { tiers, grossGCIYTD, pendingGrossGCI, currentTierIndex, currentTierName, nextTierName, nextTierThreshold, capReached, effectiveStartDate, anniversaryDate, daysUntilReset } = tp;
+  const { tiers, grossGCIYTD, pendingGrossGCI, currentTierIndex, currentTierName,
+          nextTierThreshold, capReached, effectiveStartDate, anniversaryDate, daysUntilReset, planName } = tp;
 
-  const fmtDate = fmtDateLocal;
-
-  // Calculate the max value for the full bar (highest tier boundary or current GCI whichever is larger)
-  const highestBound = tiers.reduce((max, t) => {
-    const to = t.toCompanyDollar ?? t.fromCompanyDollar;
-    return Math.max(max, to);
-  }, 0);
-  const maxBarValue = Math.max(highestBound, grossGCIYTD + pendingGrossGCI) * 1.05;
-
-  const closedPct = maxBarValue > 0 ? Math.min(100, (grossGCIYTD / maxBarValue) * 100) : 0;
-  const pendingPct = maxBarValue > 0 ? Math.min(100 - closedPct, (pendingGrossGCI / maxBarValue) * 100) : 0;
+  const activePalette = TIER_PALETTE[currentTierIndex % TIER_PALETTE.length];
   const remainToNext = nextTierThreshold != null ? Math.max(0, nextTierThreshold - grossGCIYTD) : 0;
-  const currentColor = tierColors[currentTierIndex % tierColors.length];
+
+  // ── Bar geometry ───────────────────────────────────────────────────────
+  // Extend the last (uncapped) tier by 30% beyond current GCI or a minimum buffer
+  const lastTier = tiers[tiers.length - 1];
+  const lastMax = lastTier.toCompanyDollar
+    ?? Math.max(lastTier.fromCompanyDollar * 1.5, grossGCIYTD * 1.25, lastTier.fromCompanyDollar + 25000);
+  const totalRange = lastMax;
+
+  // Compute each tier's left% and width%
+  const tierSegments = tiers.map((t, i) => {
+    const from = t.fromCompanyDollar;
+    const to = i < tiers.length - 1 ? (tiers[i + 1].fromCompanyDollar) : lastMax;
+    const leftPct = (from / totalRange) * 100;
+    const widthPct = ((to - from) / totalRange) * 100;
+    return { leftPct, widthPct, from, to };
+  });
+
+  // Position marker for current GCI
+  const markerPct = Math.min((grossGCIYTD / totalRange) * 100, 99.5);
+  // Position of pending GCI marker
+  const pendingMarkerPct = pendingGrossGCI > 0
+    ? Math.min(((grossGCIYTD + pendingGrossGCI) / totalRange) * 100, 99.5)
+    : null;
+
+  const hoveredTier = hoveredIdx !== null ? tiers[hoveredIdx] : null;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <Card className="overflow-hidden">
+      {/* Accent bar — color matches active tier */}
+      <div className="h-1" style={{ background: `linear-gradient(to right, ${activePalette.hex}88, ${activePalette.hex})` }} />
+
+      <CardContent className="pt-5 pb-5 space-y-5">
+        {/* ── TOP ROW ──────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base font-semibold">Commission Tier Progress</CardTitle>
-            <CardDescription className="mt-0.5">
-              Gross $GCI generated — {fmtCurrency(grossGCIYTD)} closed
-              {pendingGrossGCI > 0 && ` + ${fmtCurrency(pendingGrossGCI)} pending`}
-            </CardDescription>
+            <h3 className="text-base font-bold tracking-tight">Commission Tier Progress</h3>
+            {planName && (
+              <p className="text-xs text-muted-foreground mt-0.5">{planName}</p>
+            )}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Start date + anniversary info */}
-            {effectiveStartDate && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                <CalendarDays className="h-3 w-3" />
-                <span>Started {fmtDate(effectiveStartDate)}</span>
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Active tier badge */}
+            <span
+              className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full border"
+              style={{ background: activePalette.light, color: activePalette.text, borderColor: activePalette.hex + '55' }}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ background: activePalette.hex }} />
+              {currentTierName}
+              <span className="font-normal opacity-70">· {tiers[currentTierIndex].agentSplitPercent}% agent</span>
+            </span>
+            {capReached && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+                ★ Cap Reached
+              </span>
             )}
-            {daysUntilReset != null && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2.5 py-1">
-                <Clock className="h-3 w-3" />
-                <span>{daysUntilReset} days until reset{anniversaryDate ? ` (${fmtDate(anniversaryDate)})` : ''}</span>
-              </div>
-            )}
-            <div className={cn('px-3 py-1.5 rounded-full text-sm font-bold border', currentColor.bg, currentColor.border, currentColor.text)}>
-              {currentTierName} · {tiers[currentTierIndex].agentSplitPercent}%/{tiers[currentTierIndex].companySplitPercent}%
-            </div>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Progress bar */}
-        <div className="relative">
-          <div className="h-8 rounded-full bg-muted/40 overflow-hidden relative border">
-            {/* Closed GCI fill */}
-            <div
-              className={cn('absolute inset-y-0 left-0 rounded-l-full transition-all duration-700', currentColor.bar)}
-              style={{ width: `${closedPct}%` }}
-            />
-            {/* Pending GCI fill (striped) */}
-            {pendingPct > 0 && (
+
+        {/* ── MAIN PROGRESS BAR ────────────────────────────────────────── */}
+        <div className="space-y-1">
+          {/* Hover tooltip above bar */}
+          <div className="h-8 relative">
+            {hoveredTier && hoveredIdx !== null && (
               <div
-                className={cn('absolute inset-y-0 opacity-40 transition-all duration-700', currentColor.bar)}
-                style={{
-                  left: `${closedPct}%`,
-                  width: `${pendingPct}%`,
-                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.3) 4px, rgba(255,255,255,0.3) 8px)',
-                }}
+                className="absolute bottom-1 z-10 -translate-x-1/2 pointer-events-none"
+                style={{ left: `${tierSegments[hoveredIdx].leftPct + tierSegments[hoveredIdx].widthPct / 2}%` }}
+              >
+                <div
+                  className="text-white text-xs rounded-lg px-2.5 py-1.5 shadow-lg whitespace-nowrap"
+                  style={{ background: TIER_PALETTE[hoveredIdx % TIER_PALETTE.length].hex }}
+                >
+                  <div className="font-bold">{hoveredTier.tierName || `Tier ${hoveredIdx + 1}`}</div>
+                  <div className="opacity-90">
+                    {fmtCurrencyCompact(tierSegments[hoveredIdx].from, true)}
+                    {' → '}
+                    {hoveredTier.toCompanyDollar != null
+                      ? fmtCurrencyCompact(tierSegments[hoveredIdx].to, true)
+                      : 'No cap'}
+                  </div>
+                  <div className="opacity-90">{hoveredTier.agentSplitPercent}% / {hoveredTier.companySplitPercent}%</div>
+                </div>
+                {/* Caret */}
+                <div className="w-2 h-2 rotate-45 mx-auto -mt-1 rounded-sm"
+                     style={{ background: TIER_PALETTE[hoveredIdx % TIER_PALETTE.length].hex }} />
+              </div>
+            )}
+          </div>
+
+          {/* The bar */}
+          <div className="relative h-10 rounded-xl overflow-visible">
+            {/* Tier segments */}
+            <div className="absolute inset-0 flex rounded-xl overflow-hidden border border-border/40">
+              {tierSegments.map((seg, idx) => {
+                const p = TIER_PALETTE[idx % TIER_PALETTE.length];
+                const isActive = idx === currentTierIndex;
+                const isPast = idx < currentTierIndex;
+                const opacity = isPast ? '1' : isActive ? '1' : '0.25';
+                return (
+                  <div
+                    key={idx}
+                    className="h-full relative cursor-pointer transition-all duration-150 select-none flex-shrink-0"
+                    style={{
+                      width: `${seg.widthPct}%`,
+                      background: isPast || isActive
+                        ? `linear-gradient(135deg, ${p.hex}dd, ${p.hex})`
+                        : `${p.hex}22`,
+                      opacity,
+                      borderRight: idx < tiers.length - 1 ? '2px solid rgba(255,255,255,0.35)' : 'none',
+                      boxShadow: isActive ? `inset 0 0 0 2px ${p.hex}88, inset 0 -3px 0 0 rgba(0,0,0,0.15)` : undefined,
+                    }}
+                    onMouseEnter={() => setHoveredIdx(idx)}
+                    onMouseLeave={() => setHoveredIdx(null)}
+                  >
+                    {/* Tier label inside segment (hidden if too narrow) */}
+                    {seg.widthPct > 12 && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-[10px] font-bold text-white drop-shadow-sm leading-tight">
+                          {tiers[idx].tierName || `T${idx + 1}`}
+                        </span>
+                        <span className="text-[9px] text-white/80 leading-tight">
+                          {tiers[idx].agentSplitPercent}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pending GCI ghost marker */}
+            {pendingMarkerPct !== null && pendingMarkerPct > markerPct && (
+              <div
+                className="absolute top-0 bottom-0 w-0.5 opacity-40 pointer-events-none"
+                style={{ left: `${pendingMarkerPct}%`, background: '#f59e0b', zIndex: 3 }}
               />
             )}
-            {/* Tier boundary markers */}
-            {tiers.map((tier, idx) => {
-              if (idx === 0) return null;
-              const markerPct = maxBarValue > 0 ? (tier.fromCompanyDollar / maxBarValue) * 100 : 0;
-              if (markerPct > 100) return null;
-              const tc = tierColors[idx % tierColors.length];
-              return (
-                <div key={idx} className="absolute inset-y-0 flex flex-col items-center" style={{ left: `${markerPct}%` }}>
-                  <div className={cn('w-0.5 h-full', idx <= currentTierIndex ? tc.bar : 'bg-muted-foreground/30')} />
-                </div>
-              );
-            })}
-            {/* Current GCI label on bar */}
-            <div className="absolute inset-0 flex items-center px-3">
-              <span className="text-xs font-bold text-white drop-shadow-sm">
-                {fmtCurrency(grossGCIYTD)}
-              </span>
+
+            {/* ── Position marker (current GCI) ── */}
+            <div
+              className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none"
+              style={{ left: `${markerPct}%`, zIndex: 4, transform: 'translateX(-50%)' }}
+            >
+              {/* Vertical line */}
+              <div className="w-0.5 h-full bg-white drop-shadow-md" />
+              {/* Diamond dot at top */}
+              <div
+                className="absolute -top-2.5 w-4 h-4 rotate-45 border-2 border-white shadow-md"
+                style={{ background: activePalette.hex }}
+              />
             </div>
           </div>
 
-          {/* Tier labels below bar */}
-          <div className="relative h-6 mt-1">
+          {/* ── Threshold labels below bar ── */}
+          <div className="relative h-5 mt-1">
             {tiers.map((tier, idx) => {
-              const startPct = maxBarValue > 0 ? (tier.fromCompanyDollar / maxBarValue) * 100 : 0;
-              if (startPct > 100) return null;
-              const tc = tierColors[idx % tierColors.length];
+              const seg = tierSegments[idx];
+              if (seg.leftPct > 97) return null;
+              const isActive = idx === currentTierIndex;
+              const p = TIER_PALETTE[idx % TIER_PALETTE.length];
               return (
-                <div key={idx} className="absolute text-center" style={{ left: `${startPct}%`, transform: 'translateX(-50%)' }}>
-                  <span className={cn('text-[10px] font-semibold whitespace-nowrap', idx === currentTierIndex ? tc.text : 'text-muted-foreground')}>
+                <div
+                  key={idx}
+                  className="absolute text-center"
+                  style={{ left: `${seg.leftPct}%`, transform: 'translateX(-50%)' }}
+                >
+                  <span
+                    className="text-[10px] font-semibold whitespace-nowrap"
+                    style={{ color: isActive ? p.hex : undefined }}
+                  >
                     {fmtCurrencyCompact(tier.fromCompanyDollar, true)}
                   </span>
                 </div>
               );
             })}
+            {/* Cap label at right end */}
+            {lastTier.toCompanyDollar == null && (
+              <div className="absolute right-0 text-[10px] text-muted-foreground/60">No cap</div>
+            )}
           </div>
         </div>
 
-        {/* Tier cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-          {tiers.map((tier, idx) => {
-            const tc = tierColors[idx % tierColors.length];
-            const isActive = idx === currentTierIndex;
-            return (
-              <div key={idx} className={cn(
-                'rounded-lg border p-2.5 transition-all',
-                isActive ? `${tc.bg} ${tc.border} ring-2 ring-offset-1` : 'bg-muted/20 border-muted opacity-60',
-                isActive && `ring-${tc.bar.replace('bg-', '')}/30`
-              )}>
-                <div className="flex items-center gap-1.5">
-                  <div className={cn('w-2.5 h-2.5 rounded-full', tc.bar)} />
-                  <span className={cn('text-xs font-bold', isActive ? tc.text : 'text-muted-foreground')}>{tier.tierName || `Tier ${idx + 1}`}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {tier.agentSplitPercent}% / {tier.companySplitPercent}%
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {fmtCurrencyCompact(tier.fromCompanyDollar, true)}
-                  {tier.toCompanyDollar != null ? ` – ${fmtCurrencyCompact(tier.toCompanyDollar, true)}` : '+'}
-                </p>
-              </div>
-            );
-          })}
+        {/* ── PROGRESS STATS ROW ────────────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Current Progress</p>
+            <p className="text-lg font-bold">{fmtCurrency(grossGCIYTD)}</p>
+            {pendingGrossGCI > 0 && (
+              <p className="text-[11px] text-amber-600 font-medium">+ {fmtCurrency(pendingGrossGCI)} pending</p>
+            )}
+          </div>
+          <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Next Tier At</p>
+            {capReached ? (
+              <p className="text-lg font-bold text-emerald-600">Max Tier ★</p>
+            ) : nextTierThreshold != null ? (
+              <p className="text-lg font-bold">{fmtCurrency(nextTierThreshold)}</p>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">—</p>
+            )}
+            {!capReached && tp.nextTierName && (
+              <p className="text-[11px] text-muted-foreground">{tp.nextTierName}</p>
+            )}
+          </div>
+          <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Remaining</p>
+            {capReached ? (
+              <p className="text-lg font-bold text-emerald-600">Capped</p>
+            ) : remainToNext > 0 ? (
+              <p className="text-lg font-bold" style={{ color: activePalette.hex }}>{fmtCurrency(remainToNext)}</p>
+            ) : (
+              <p className="text-lg font-bold text-muted-foreground">—</p>
+            )}
+            {!capReached && remainToNext > 0 && (
+              <p className="text-[11px] text-muted-foreground">to next tier</p>
+            )}
+          </div>
         </div>
 
-        {/* Status line */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
-          {capReached ? (
-            <span className="font-semibold text-emerald-600">Cap reached — max tier active</span>
-          ) : nextTierName ? (
-            <span><span className="font-semibold">{fmtCurrency(remainToNext)}</span> more $GCI to reach <span className="font-semibold">{nextTierName}</span></span>
-          ) : (
-            <span>Active tier: {currentTierName}</span>
+        {/* ── FOOTER META ROW ──────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-1 border-t text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="font-semibold text-foreground">Gross GCI</span>
+            {fmtCurrency(grossGCIYTD)}
+          </span>
+          {effectiveStartDate && (
+            <span className="flex items-center gap-1">
+              <CalendarDays className="h-3 w-3" />
+              Started {fmtDate(effectiveStartDate)}
+            </span>
           )}
-          <span>YTD Gross $GCI: <span className="font-bold text-foreground">{fmtCurrency(grossGCIYTD)}</span></span>
+          {daysUntilReset != null && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {daysUntilReset} days until reset
+              {anniversaryDate ? ` (${fmtDate(anniversaryDate)})` : ''}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>
