@@ -1,6 +1,7 @@
 // Temporary debug endpoint to check tier data — DELETE after debugging
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'No token' }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return NextResponse.json({ error: 'Admin only' }, { status: 403 });
+    if (!(await isAdminLike(decoded.uid))) return NextResponse.json({ error: 'Admin only' }, { status: 403 });
 
     const { searchParams } = new URL(req.url);
     const agentId = searchParams.get('agentId') || '';
