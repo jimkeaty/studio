@@ -581,7 +581,7 @@ export default function AgentDashboardPageWrapper() {
 
 function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
-  const { isImpersonating, impersonatedAgent, startImpersonation } = useEffectiveUser();
+  const { isImpersonating, impersonatedAgent, startImpersonation, impersonationReady } = useEffectiveUser();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -634,9 +634,9 @@ function AgentDashboardPage() {
       } catch (err: any) { setError(err.message); console.error(err); }
       finally { setLoading(false); }
     };
-    if (!userLoading && user) load();
+    if (!userLoading && user && impersonationReady) load();
     else if (!userLoading && !user) setLoading(false);
-  }, [user, userLoading, year, viewAs]);
+  }, [user, userLoading, year, viewAs, impersonationReady]);
 
   // Load pipeline
   useEffect(() => {
@@ -651,8 +651,8 @@ function AgentDashboardPage() {
         if (d.ok) { setTransactions(d.transactions ?? []); setOpportunities(d.opportunities ?? []); }
       } catch (err) { console.error('[pipeline]', err); }
     };
-    if (!userLoading && user) load();
-  }, [user, userLoading, year, viewAs]);
+    if (!userLoading && user && impersonationReady) load();
+  }, [user, userLoading, year, viewAs, impersonationReady]);
 
   // Load performance data
   const fetchPerf = useCallback(async () => {
