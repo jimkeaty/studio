@@ -587,6 +587,15 @@ function AgentDashboardPage() {
 
   // Bootstrap impersonation from URL params (links from admin pages)
   const isAdmin = user?.uid === ADMIN_UID;
+
+  // bootstrapPending: true when URL has viewAs params that haven't been consumed yet.
+  // All data fetches are gated on !bootstrapPending so they never fire with viewAs=null
+  // on the first render when the admin navigates from an admin page to an agent dashboard.
+  const hasViewAsParam = typeof window !== 'undefined'
+    ? (new URLSearchParams(window.location.search)).get('viewAs') !== null
+    : searchParams.get('viewAs') !== null;
+  const [bootstrapPending, setBootstrapPending] = React.useState(hasViewAsParam);
+
   useEffect(() => {
     const viewAsParam = searchParams.get('viewAs');
     const viewAsName = searchParams.get('viewAsName');
@@ -595,6 +604,9 @@ function AgentDashboardPage() {
       // Remove URL params so they don't persist on refresh
       router.replace('/dashboard');
     }
+    // Always clear bootstrapPending after this effect runs — whether or not
+    // viewAs params were present. This unblocks all data fetches.
+    setBootstrapPending(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, searchParams]);
 
@@ -634,9 +646,9 @@ function AgentDashboardPage() {
       } catch (err: any) { setError(err.message); console.error(err); }
       finally { setLoading(false); }
     };
-    if (!userLoading && user && impersonationReady) load();
+    if (!userLoading && user && impersonationReady && !bootstrapPending) load();
     else if (!userLoading && !user) setLoading(false);
-  }, [user, userLoading, year, viewAs, impersonationReady]);
+  }, [user, userLoading, year, viewAs, impersonationReady, bootstrapPending]);
 
   // Load pipeline
   useEffect(() => {
@@ -651,17 +663,17 @@ function AgentDashboardPage() {
         if (d.ok) { setTransactions(d.transactions ?? []); setOpportunities(d.opportunities ?? []); }
       } catch (err) { console.error('[pipeline]', err); }
     };
-    if (!userLoading && user && impersonationReady) load();
-  }, [user, userLoading, year, viewAs, impersonationReady]);
+    if (!userLoading && user && impersonationReady && !bootstrapPending) load();
+  }, [user, userLoading, year, viewAs, impersonationReady, bootstrapPending]);
 
   // Load performance data
   const fetchPerf = useCallback(async () => {
     // Wait for impersonation to be restored from sessionStorage before firing.
     // Without this guard, on refresh the first render fires fetchPerf with viewAs=null
     // (impersonation not yet restored), so command-metrics queries the wrong agent.
-    if (!user || !impersonationReady) {
+    if (!user || !impersonationReady || bootstrapPending) {
       // Don't leave the skeleton hanging — clear loading so UI is not frozen.
-      // The real fetch will fire once impersonationReady flips to true.
+      // The real fetch will fire once impersonationReady flips to true and bootstrapPending clears.
       if (!user) setPerfLoading(false);
       return;
     }
@@ -677,7 +689,7 @@ function AgentDashboardPage() {
       setPerfData(await res.json());
     } catch (e: any) { console.error('[perf]', e); setPerfError(e.message); }
     finally { setPerfLoading(false); }
-  }, [user, impersonationReady, perfYear, perfView, compareYear, viewAs]);
+  }, [user, impersonationReady, bootstrapPending, perfYear, perfView, compareYear, viewAs]);
 
   useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
