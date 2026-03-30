@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden: Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
     // ---------- Parse type query param ----------
     const url = new URL(req.url);
