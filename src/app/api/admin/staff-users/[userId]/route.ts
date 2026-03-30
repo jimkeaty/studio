@@ -34,11 +34,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (!(field in body)) continue;
       if (field === 'role') {
         const validRoles = ['office_admin', 'tc_admin', 'tc'];
-        if (!validRoles.includes(body.role)) return jsonError(400, \`Invalid role: \${body.role}\`);
+        if (!validRoles.includes(body.role)) return jsonError(400, `Invalid role: ${body.role}`);
       }
       if (field === 'status') {
         const validStatuses = ['active', 'inactive'];
-        if (!validStatuses.includes(body.status)) return jsonError(400, \`Invalid status: \${body.status}\`);
+        if (!validStatuses.includes(body.status)) return jsonError(400, `Invalid status: ${body.status}`);
         // Sync Firebase Auth disabled state
         const { firebaseUid } = doc.data()!;
         if (firebaseUid) {

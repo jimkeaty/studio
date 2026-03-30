@@ -92,7 +92,7 @@ export default function StaffUsersPage() {
     try {
       const token = await user.getIdToken();
       const res = await fetch('/api/admin/staff-users', {
-        headers: { Authorization: \`Bearer \${token}\` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Failed to load staff users');
@@ -119,11 +119,11 @@ export default function StaffUsersPage() {
     setError(null);
     try {
       const token = await user.getIdToken();
-      const url = editingId ? \`/api/admin/staff-users/\${editingId}\` : '/api/admin/staff-users';
+      const url = editingId ? `/api/admin/staff-users/${editingId}` : '/api/admin/staff-users';
       const method = editingId ? 'PATCH' : 'POST';
       const res = await fetch(url, {
         method,
-        headers: { Authorization: \`Bearer \${token}\`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
       const data = await res.json();
@@ -133,7 +133,7 @@ export default function StaffUsersPage() {
       setForm(emptyForm);
       await fetchUsers();
       if (!editingId) {
-        showSuccess(\`\${form.displayName} has been added. A password setup email has been sent to \${form.email}.\`);
+        showSuccess(`${form.displayName} has been added. A password setup email has been sent to ${form.email}.`);
       } else {
         showSuccess('Staff user updated successfully.');
       }
@@ -148,15 +148,15 @@ export default function StaffUsersPage() {
     if (!user) return;
     try {
       const token = await user.getIdToken();
-      const res = await fetch(\`/api/admin/staff-users/\${staffUser.id}\`, {
+      const res = await fetch(`/api/admin/staff-users/${staffUser.id}`, {
         method: 'DELETE',
-        headers: { Authorization: \`Bearer \${token}\` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Failed to deactivate');
       setDeactivateTarget(null);
       await fetchUsers();
-      showSuccess(\`\${staffUser.displayName} has been deactivated.\`);
+      showSuccess(`${staffUser.displayName} has been deactivated.`);
     } catch (err: any) {
       setError(err.message);
     }
@@ -166,15 +166,15 @@ export default function StaffUsersPage() {
     if (!user) return;
     try {
       const token = await user.getIdToken();
-      const res = await fetch(\`/api/admin/staff-users/\${staffUser.id}\`, {
+      const res = await fetch(`/api/admin/staff-users/${staffUser.id}`, {
         method: 'PATCH',
-        headers: { Authorization: \`Bearer \${token}\`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'active' }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Failed to reactivate');
       await fetchUsers();
-      showSuccess(\`\${staffUser.displayName} has been reactivated.\`);
+      showSuccess(`${staffUser.displayName} has been reactivated.`);
     } catch (err: any) {
       setError(err.message);
     }
