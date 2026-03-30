@@ -33,6 +33,13 @@ export type SourceBreakdown = {
   pending: Record<string, SourceMetric>;
 };
 
+// ── Side breakdown: Buyer / Seller / Renter / Dual / Referral ────────────
+export type SideBucket = { count: number; volume: number; netRevenue: number };
+export type SideBreakdown = {
+  closed: Record<string, SideBucket>;
+  pending: Record<string, SideBucket>;
+};
+
 // ── Monthly data point for the 12-month charts ──────────────────────────────
 
 export type MonthlyData = {
@@ -88,6 +95,8 @@ export type BrokerCommandOverview = {
 
   // Source breakdown (broker dashboard only)
   sourceBreakdown?: SourceBreakdown;
+  // Side breakdown: Buyer / Seller / Renter / Dual / Referral
+  sideBreakdown?: SideBreakdown;
 };
 
 // Legacy type kept for backward compatibility

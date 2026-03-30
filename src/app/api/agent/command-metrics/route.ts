@@ -24,6 +24,7 @@ interface Transaction {
   transactionType: string;
   transactionFee?: number;
   dealSource?: string;
+  closingType?: string;  // 'buyer' | 'listing' | 'referral' | 'dual'
   year: number;
   splitSnapshot?: {
     grossCommission?: number;
@@ -215,6 +216,27 @@ export async function GET(req: NextRequest) {
     const sourceBreakdown: { closed: Record<string, SourceBucket>; pending: Record<string, SourceBucket> } = {
       closed: {}, pending: {},
     };
+    // Side breakdown: Buyer / Seller / Renter / Dual / Referral
+    type SideBucket = { count: number; volume: number; netRevenue: number };
+    const sideBreakdown: { closed: Record<string, SideBucket>; pending: Record<string, SideBucket> } = {
+      closed: {}, pending: {},
+    };
+    function addToSide(bucket: Record<string, SideBucket>, key: string, volume: number, net: number) {
+      if (!bucket[key]) bucket[key] = { count: 0, volume: 0, netRevenue: 0 };
+      bucket[key].count += 1;
+      bucket[key].volume += volume;
+      bucket[key].netRevenue += net;
+    }
+    function getSideKey(t: Transaction): string {
+      const ct = (t.closingType || '').toLowerCase();
+      const txType = (t.transactionType || '').toLowerCase();
+      if (txType === 'rental' || txType === 'commercial_lease') return 'renter';
+      if (ct === 'buyer') return 'buyer';
+      if (ct === 'listing') return 'seller';
+      if (ct === 'dual') return 'dual';
+      if (ct === 'referral') return 'referral';
+      return 'other';
+    }
 
     // Also track monthly net income for agents
     const monthlyNetIncome: number[] = new Array(12).fill(0);
@@ -253,6 +275,7 @@ export async function GET(req: NextRequest) {
         categoryBreakdown.closed[catKey].count += 1;
         categoryBreakdown.closed[catKey].netRevenue += agentNet;
         addToSource(sourceBreakdown.closed, srcKey, dealValue, agentNet);
+        addToSide(sideBreakdown.closed, getSideKey(t), dealValue, agentNet);
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         const contractDate = parseDate(t.contractDate);
         const mi = contractDate && contractDate.getFullYear() === year ? contractDate.getMonth() : null;
@@ -270,6 +293,7 @@ export async function GET(req: NextRequest) {
         categoryBreakdown.pending[catKey].count += 1;
         categoryBreakdown.pending[catKey].netRevenue += agentNet;
         addToSource(sourceBreakdown.pending, srcKey, dealValue, agentNet);
+        addToSide(sideBreakdown.pending, getSideKey(t), dealValue, agentNet);
       }
     }
 
@@ -363,7 +387,7 @@ export async function GET(req: NextRequest) {
 
     // ── Response ──────────────────────────────────────────────────────────
     const isAdminCaller = decoded.uid === ADMIN_UID;
-    const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown };
+    const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown, sideBreakdown };
 
     // ── Strip commission split data for non-admin callers ─────────────────
     // Agents only receive their net income; all gross commission / broker
@@ -414,6 +438,7 @@ export async function GET(req: NextRequest) {
       months: stripCommissionFromMonths(months),
       categoryBreakdown, // netRevenue here = agent net, fine to include
       sourceBreakdown,   // netRevenue here = agent net, fine to include
+      sideBreakdown,     // netRevenue here = agent net, fine to include
     };
 
     return NextResponse.json({

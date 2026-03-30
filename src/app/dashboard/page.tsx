@@ -2260,23 +2260,39 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 const SOURCE_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6'];
 
+// Buyer/Seller/Renter side breakdown constants
+const SIDE_ORDER = ['buyer', 'seller', 'renter', 'dual', 'referral', 'other'] as const;
+const SIDE_LABELS: Record<string, string> = {
+  buyer: 'Buyer',
+  seller: 'Seller',
+  renter: 'Renter',
+  dual: 'Dual',
+  referral: 'Referral',
+  other: 'Other',
+};
+const SIDE_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#64748b'];
+
 function CategoryBreakdownSection({ perfData, year }: {
   perfData: AgentMetricsResponse;
   year: number;
 }) {
-  const { categoryBreakdown, sourceBreakdown } = perfData.overview;
+  const { sideBreakdown, sourceBreakdown } = perfData.overview as any;
 
-  const catSalesData = CAT_KEYS
-    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].count, color: CAT_COLORS[i] }))
+  // Build side breakdown data from Buyer/Seller/Renter
+  const closedSide = sideBreakdown?.closed ?? {};
+  const pendingSide = sideBreakdown?.pending ?? {};
+
+  const sideSalesData = SIDE_ORDER
+    .map((k, i) => ({ key: k, name: SIDE_LABELS[k], value: (closedSide[k]?.count ?? 0), color: SIDE_COLORS[i] }))
     .filter(d => d.value > 0);
 
-  if (catSalesData.length === 0) return null;
+  if (sideSalesData.length === 0) return null;
 
-  const catVolumeData = CAT_KEYS
-    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].volume, color: CAT_COLORS[i] }))
+  const sideVolumeData = SIDE_ORDER
+    .map((k, i) => ({ key: k, name: SIDE_LABELS[k], value: (closedSide[k]?.volume ?? 0), color: SIDE_COLORS[i] }))
     .filter(d => d.value > 0);
-  const catNetIncomeData = CAT_KEYS
-    .map((k, i) => ({ name: CAT_LABELS[k], value: categoryBreakdown.closed[k].netRevenue, color: CAT_COLORS[i] }))
+  const sideNetIncomeData = SIDE_ORDER
+    .map((k, i) => ({ key: k, name: SIDE_LABELS[k], value: (closedSide[k]?.netRevenue ?? 0), color: SIDE_COLORS[i] }))
     .filter(d => d.value > 0);
 
   const sourceEntries = Object.entries(sourceBreakdown?.closed ?? {})
@@ -2321,19 +2337,19 @@ function CategoryBreakdownSection({ perfData, year }: {
         <CardDescription>Closed transactions by property type — net income, sales count, and dollar volume</CardDescription>
       </CardHeader>
       <CardContent className="space-y-8">
-        {/* Category pie charts */}
+        {/* Side (Buyer/Seller/Renter) pie charts */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {renderPie(catNetIncomeData, v => fmtCurrencyCompact(v, true), 'Net Income by Type')}
-          {renderPie(catSalesData, v => `${v} sale${v !== 1 ? 's' : ''}`, 'Sales Count by Type')}
-          {renderPie(catVolumeData, v => fmtCurrencyCompact(v, true), 'Dollar Volume by Type')}
+          {renderPie(sideNetIncomeData, v => fmtCurrencyCompact(v, true), 'Net Income by Type')}
+          {renderPie(sideSalesData, v => `${v} sale${v !== 1 ? 's' : ''}`, 'Sales Count by Type')}
+          {renderPie(sideVolumeData, v => fmtCurrencyCompact(v, true), 'Dollar Volume by Type')}
         </div>
 
-        {/* Category detail table */}
+        {/* Side detail table */}
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-4 py-2 text-left font-medium">Category</th>
+                <th className="px-4 py-2 text-left font-medium">Type</th>
                 <th className="px-4 py-2 text-right font-medium">Closed</th>
                 <th className="px-4 py-2 text-right font-medium">Volume</th>
                 <th className="px-4 py-2 text-right font-medium">Net Income</th>
@@ -2341,15 +2357,15 @@ function CategoryBreakdownSection({ perfData, year }: {
               </tr>
             </thead>
             <tbody>
-              {CAT_KEYS.map((k, i) => {
-                const c = categoryBreakdown.closed[k];
-                const p = categoryBreakdown.pending[k];
+              {SIDE_ORDER.map((k, i) => {
+                const c = closedSide[k] ?? { count: 0, volume: 0, netRevenue: 0 };
+                const p = pendingSide[k] ?? { count: 0, volume: 0, netRevenue: 0 };
                 if (c.count === 0 && p.count === 0) return null;
                 return (
                   <tr key={k} className="border-t">
                     <td className="px-4 py-2 flex items-center gap-2">
-                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CAT_COLORS[i] }} />
-                      {CAT_LABELS[k]}
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SIDE_COLORS[i] }} />
+                      {SIDE_LABELS[k]}
                     </td>
                     <td className="px-4 py-2 text-right">{c.count}</td>
                     <td className="px-4 py-2 text-right">{fmtCurrencyCompact(c.volume, true)}</td>
