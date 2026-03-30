@@ -656,7 +656,15 @@ function AgentDashboardPage() {
 
   // Load performance data
   const fetchPerf = useCallback(async () => {
-    if (!user) return;
+    // Wait for impersonation to be restored from sessionStorage before firing.
+    // Without this guard, on refresh the first render fires fetchPerf with viewAs=null
+    // (impersonation not yet restored), so command-metrics queries the wrong agent.
+    if (!user || !impersonationReady) {
+      // Don't leave the skeleton hanging — clear loading so UI is not frozen.
+      // The real fetch will fire once impersonationReady flips to true.
+      if (!user) setPerfLoading(false);
+      return;
+    }
     setPerfLoading(true);
     setPerfError(null);
     try {
@@ -669,7 +677,7 @@ function AgentDashboardPage() {
       setPerfData(await res.json());
     } catch (e: any) { console.error('[perf]', e); setPerfError(e.message); }
     finally { setPerfLoading(false); }
-  }, [user, perfYear, perfView, compareYear, viewAs]);
+  }, [user, impersonationReady, perfYear, perfView, compareYear, viewAs]);
 
   useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
