@@ -2,6 +2,7 @@
 // POST /api/admin/import — bulk CSV import of historical transactions
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import { FieldValue } from 'firebase-admin/firestore';
 import { fuzzyLookupAgent, DEFAULT_SIMILARITY_THRESHOLD } from '@/lib/agents/fuzzyMatch';
 import { resolveGCI } from '@/lib/commissions';
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized: Missing token');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.email !== ADMIN_EMAIL) {
+    if (!(await isAdminLike(decoded.uid))) {
       return jsonError(403, 'Forbidden: Admin only');
     }
 
