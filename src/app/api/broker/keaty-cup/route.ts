@@ -286,7 +286,7 @@ export async function POST(req: NextRequest) {
     const token = bearer(req);
     if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 401 });
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!(await isAdminLike(decoded.uid))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
     const year = num(body.year) || new Date().getFullYear();
