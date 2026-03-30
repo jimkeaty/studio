@@ -2,6 +2,7 @@
 // POST /api/admin/tc — create a new TC intake (agent submits to TC queue)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden: Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
     const url = new URL(req.url);
     const statusFilter = url.searchParams.get('status'); // optional
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden: Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
     const body = await req.json();
 
