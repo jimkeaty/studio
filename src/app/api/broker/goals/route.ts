@@ -4,6 +4,7 @@
 // Team leaders: can set goals for their team segment (teamId)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
     const segment = searchParams.get('segment') || 'TOTAL';
 
     // Non-admin can only read their own or their team's goals
-    const isAdmin = decoded.uid === ADMIN_UID;
+    const isAdmin = (await isAdminLike(decoded.uid));
     if (!isAdmin) {
       const allowed =
         segment === `agent_${decoded.uid}` ||
