@@ -3,6 +3,7 @@
 // Body: { rows: ActivityImportRow[], batchId: string }
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import { fuzzyLookupAgent, DEFAULT_SIMILARITY_THRESHOLD } from '@/lib/agents/fuzzyMatch';
 import type { ActivityImportRow, ActivityRecord } from '@/lib/types/activityTracking';
 
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized: Missing token');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden: Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
     const body = await req.json();
     const rows: ActivityImportRow[] = body.rows ?? [];
@@ -328,7 +329,7 @@ export async function DELETE(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized: Missing token');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden: Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
     const { searchParams } = new URL(req.url);
     const batchId = searchParams.get('batchId');
