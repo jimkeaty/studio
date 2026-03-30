@@ -270,6 +270,7 @@ export async function GET(req: NextRequest) {
       txQueryIdList.map(async (agentIdVal) => {
         try {
           const snap = await adminDb.collection("transactions").where("agentId","==",agentIdVal).where("year","==",yearNum).get();
+          snap.docs.forEach(d => { if (!txDocMap.has(d.id)) txDocMap.set(d.id, d.data() || {}); });
         } catch(e) { console.warn('[dashboard] tx query failed for '+agentIdVal, e); }
       })
     );
