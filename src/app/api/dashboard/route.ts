@@ -198,10 +198,8 @@ export async function GET(req: NextRequest) {
     // Unwrap profile result — now returns { data, docId } to get the Firebase UID
     const agentProfileDocId: string | null = (agentProfileData as any)?.docId ?? null;
     const agentFirebaseUid: string = agentProfileDocId ?? uid;
-    // Re-alias so all existing agentProfileData.x references still work
-    const agentProfileDataUnwrapped = (agentProfileData as any)?.data ?? agentProfileData;
-    // Override agentProfileData to point to the unwrapped data object
-    (agentProfileData as any) = agentProfileDataUnwrapped;
+    // Unwrap to get actual profile fields
+    const agentProfile: any = (agentProfileData as any)?.data ?? agentProfileData ?? null;
 
     const plan = (planSnap.exists ? (planSnap.data() ?? {}) : {}) as Partial<BusinessPlan>;
 
@@ -251,7 +249,8 @@ export async function GET(req: NextRequest) {
     // Query both to avoid missing deals.
     const txQueryIds = new Set([uid]);
     if (agentProfileDocId && agentProfileDocId !== uid) txQueryIds.add(agentProfileDocId);
-    if (agentProfile?.agentId && agentProfile.agentId !== uid) txQueryIds.add(String(agentProfile.agentId));
+    const _ap: any = (agentProfileData as any)?.data ?? agentProfileData ?? null;
+    if (_ap?.agentId && _ap.agentId !== uid) txQueryIds.add(String(_ap.agentId));
     const txQueryIdList = Array.from(txQueryIds);
 
     const txDocMap = new Map();
