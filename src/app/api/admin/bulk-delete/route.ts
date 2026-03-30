@@ -2,6 +2,7 @@
 // POST /api/admin/bulk-delete — bulk delete transactions with filters
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
     const token = authHeader.slice('Bearer '.length).trim();
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.email !== ADMIN_EMAIL) {
+    if (!(await isAdminLike(decoded.uid))) {
       return NextResponse.json({ error: 'Forbidden: Admin only' }, { status: 403 });
     }
 
