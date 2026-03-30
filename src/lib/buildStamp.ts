@@ -1,4 +1,4 @@
 // AUTO-GENERATED at build time. Do not edit by hand.
-export const BUILD_STAMP = "77a1b5a-main";
-export const BUILD_STAMP_FULL = "77a1b5a2817519d756978f9c73c70e54879dc416";
+export const BUILD_STAMP = "1b5d3bd-main";
+export const BUILD_STAMP_FULL = "1b5d3bdff7df148086e9d48558e50d7453d8e2e5";
 export const BUILD_BRANCH = "main";
