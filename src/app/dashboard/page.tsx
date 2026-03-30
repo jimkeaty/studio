@@ -588,29 +588,44 @@ function AgentDashboardPage() {
   // Bootstrap impersonation from URL params (links from admin pages)
   const isAdmin = user?.uid === ADMIN_UID;
 
-  // bootstrapPending: blocks all data fetches until the URL-param bootstrap useEffect
-  // has run and called startImpersonation() if needed. This prevents the race condition
-  // where fetches fire before viewAs is set when admin navigates to an agent dashboard.
+  // bootstrapPending: blocks all data fetches until viewAs is fully resolved.
   //
-  // IMPORTANT: Must initialize to TRUE (not computed from URL params).
-  // In Next.js App Router, useState initializes on the SERVER where window/searchParams
-  // are unavailable, so any URL-param check would return false and the guard would never
-  // activate. By always starting true, we guarantee fetches wait for the useEffect.
+  // Two-phase approach to avoid a cross-component React batching race:
+  //   Phase 1 (bootstrapEffect): calls startImpersonation() if URL params present,
+  //     sets needsImpersonation ref. If no impersonation needed, clears immediately.
+  //   Phase 2 (impersonationConfirmEffect): watches isImpersonating — once it flips
+  //     true (confirming the ImpersonationContext state update has propagated),
+  //     clears bootstrapPending. This guarantees viewAs !== null before any fetch.
+  //
+  // Without this two-phase approach, bootstrapPending and agent state updates may
+  // not batch together across component boundaries, causing a fetch with viewAs=null.
   const [bootstrapPending, setBootstrapPending] = React.useState(true);
+  const needsImpersonationRef = React.useRef(false);
 
+  // Phase 1: consume URL params and start impersonation if needed
   useEffect(() => {
     const viewAsParam = searchParams.get('viewAs');
     const viewAsName = searchParams.get('viewAsName');
     if (isAdmin && viewAsParam && viewAsName) {
+      needsImpersonationRef.current = true;
       startImpersonation({ uid: viewAsParam, name: decodeURIComponent(viewAsName) });
       // Remove URL params so they don't persist on refresh
       router.replace('/dashboard');
+      // Do NOT clear bootstrapPending here — wait for Phase 2 to confirm agent is set
+    } else {
+      // No impersonation needed — clear immediately so fetches can proceed
+      needsImpersonationRef.current = false;
+      setBootstrapPending(false);
     }
-    // Clear bootstrapPending after this effect runs — whether or not viewAs params
-    // were present. This unblocks all data fetches with the correct viewAs value.
-    setBootstrapPending(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, searchParams]);
+
+  // Phase 2: once isImpersonating confirms the agent state has propagated, unblock fetches
+  useEffect(() => {
+    if (needsImpersonationRef.current && isImpersonating) {
+      setBootstrapPending(false);
+    }
+  }, [isImpersonating]);
 
   // Effective agent to view (impersonated uid or own uid)
   const viewAs = isImpersonating && impersonatedAgent ? impersonatedAgent.uid : null;
