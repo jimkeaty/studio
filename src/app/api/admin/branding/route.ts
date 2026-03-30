@@ -37,7 +37,7 @@ async function verifyAdmin(req: NextRequest) {
   if (!token) return null;
   try {
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return null;
+    if (!(await isAdminLike(decoded.uid))) return null;
     return decoded;
   } catch {
     return null;
