@@ -588,13 +588,15 @@ function AgentDashboardPage() {
   // Bootstrap impersonation from URL params (links from admin pages)
   const isAdmin = user?.uid === ADMIN_UID;
 
-  // bootstrapPending: true when URL has viewAs params that haven't been consumed yet.
-  // All data fetches are gated on !bootstrapPending so they never fire with viewAs=null
-  // on the first render when the admin navigates from an admin page to an agent dashboard.
-  const hasViewAsParam = typeof window !== 'undefined'
-    ? (new URLSearchParams(window.location.search)).get('viewAs') !== null
-    : searchParams.get('viewAs') !== null;
-  const [bootstrapPending, setBootstrapPending] = React.useState(hasViewAsParam);
+  // bootstrapPending: blocks all data fetches until the URL-param bootstrap useEffect
+  // has run and called startImpersonation() if needed. This prevents the race condition
+  // where fetches fire before viewAs is set when admin navigates to an agent dashboard.
+  //
+  // IMPORTANT: Must initialize to TRUE (not computed from URL params).
+  // In Next.js App Router, useState initializes on the SERVER where window/searchParams
+  // are unavailable, so any URL-param check would return false and the guard would never
+  // activate. By always starting true, we guarantee fetches wait for the useEffect.
+  const [bootstrapPending, setBootstrapPending] = React.useState(true);
 
   useEffect(() => {
     const viewAsParam = searchParams.get('viewAs');
@@ -604,8 +606,8 @@ function AgentDashboardPage() {
       // Remove URL params so they don't persist on refresh
       router.replace('/dashboard');
     }
-    // Always clear bootstrapPending after this effect runs — whether or not
-    // viewAs params were present. This unblocks all data fetches.
+    // Clear bootstrapPending after this effect runs — whether or not viewAs params
+    // were present. This unblocks all data fetches with the correct viewAs value.
     setBootstrapPending(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, searchParams]);
