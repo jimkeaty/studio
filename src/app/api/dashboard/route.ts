@@ -399,8 +399,8 @@ export async function GET(req: NextRequest) {
 
     // ── Grace period from agent profile (fetched in Phase 1) ───────────
     let isMetricsGracePeriod = false;
-    if (agentProfileData?.gracePeriodEnabled === true) {
-      const startDate = toDate(agentProfileData.startDate);
+    if (agentProfile?.gracePeriodEnabled === true) {
+      const startDate = toDate(agentProfile.startDate);
       if (startDate) {
         const daysSinceStart = Math.floor((todayUtc.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
         isMetricsGracePeriod = daysSinceStart <= 90;
@@ -642,8 +642,8 @@ export async function GET(req: NextRequest) {
     let resolvedPlanName: string | null = null;
 
     // 1) Try individual tiers from profile (defaultPlanType === 'individual')
-    if (Array.isArray(agentProfileData?.tiers) && agentProfileData.tiers.length > 0) {
-      resolvedTiers = agentProfileData.tiers.map((t: any, i: number) => ({
+    if (Array.isArray(agentProfile?.tiers) && agentProfile.tiers.length > 0) {
+      resolvedTiers = agentProfile.tiers.map((t: any, i: number) => ({
         tierName: t.tierName || `Tier ${i + 1}`,
         fromCompanyDollar: asNumber(t.fromCompanyDollar),
         toCompanyDollar: t.toCompanyDollar != null ? asNumber(t.toCompanyDollar) : null,
@@ -658,13 +658,13 @@ export async function GET(req: NextRequest) {
     //    This takes priority over the memberPlans collection lookup.
     if (
       resolvedTiers.length === 0 &&
-      agentProfileData?.primaryTeamId &&
-      agentProfileData?.teamRole === 'member' &&
-      agentProfileData?.teamMemberCompMode === 'custom' &&
-      Array.isArray(agentProfileData?.teamMemberOverrideBands) &&
-      agentProfileData.teamMemberOverrideBands.length > 0
+      agentProfile?.primaryTeamId &&
+      agentProfile?.teamRole === 'member' &&
+      agentProfile?.teamMemberCompMode === 'custom' &&
+      Array.isArray(agentProfile?.teamMemberOverrideBands) &&
+      agentProfile.teamMemberOverrideBands.length > 0
     ) {
-      resolvedTiers = agentProfileData.teamMemberOverrideBands.map((b: any, i: number) => ({
+      resolvedTiers = agentProfile.teamMemberOverrideBands.map((b: any, i: number) => ({
         tierName: b.tierName || `Tier ${i + 1}`,
         fromCompanyDollar: asNumber(b.fromCompanyDollar),
         toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
@@ -675,10 +675,10 @@ export async function GET(req: NextRequest) {
     }
 
     // 3) If still no tiers, try team plan bands (for team leaders/members)
-    if (resolvedTiers.length === 0 && agentProfileData?.primaryTeamId) {
+    if (resolvedTiers.length === 0 && agentProfile?.primaryTeamId) {
       try {
-        const teamId = agentProfileData.primaryTeamId;
-        const teamRole = agentProfileData.teamRole; // 'leader' | 'member'
+        const teamId = agentProfile.primaryTeamId;
+        const teamRole = agentProfile.teamRole; // 'leader' | 'member'
 
         // Find the team to get teamPlanId
         const teamSnap = await adminDb.collection('teams').doc(teamId).get();
@@ -702,7 +702,7 @@ export async function GET(req: NextRequest) {
               }));
             } else if (teamRole === 'member') {
               // Check memberPlans collection for a named custom plan
-              const agentIdForMember = agentProfileData.agentId || uid;
+              const agentIdForMember = agentProfile.agentId || uid;
               const memberPlanSnap = await adminDb.collection('memberPlans')
                 .where('agentId', '==', agentIdForMember)
                 .where('teamId', '==', teamId)
@@ -737,12 +737,12 @@ export async function GET(req: NextRequest) {
         console.warn('[dashboard] Failed to load team plan tiers:', teamErr);
       }
     }
-    console.log(`[dashboard] tiers resolved: ${resolvedTiers.length}, planName: ${resolvedPlanName}, grossGCI: ${grossGCIYTD.toFixed(2)}, teamMemberCompMode: ${agentProfileData?.teamMemberCompMode ?? 'n/a'}, overrideBands: ${Array.isArray(agentProfileData?.teamMemberOverrideBands) ? agentProfileData.teamMemberOverrideBands.length : 0}`);
+    console.log(`[dashboard] tiers resolved: ${resolvedTiers.length}, planName: ${resolvedPlanName}, grossGCI: ${grossGCIYTD.toFixed(2)}, teamMemberCompMode: ${agentProfile?.teamMemberCompMode ?? 'n/a'}, overrideBands: ${Array.isArray(agentProfile?.teamMemberOverrideBands) ? agentProfile.teamMemberOverrideBands.length : 0}`);
 
     // Start date + anniversary (tier reset) date — always compute regardless of tiers
-    const agentStartDate = agentProfileData?.startDate || null;
-    const annivMonth = asNumber(agentProfileData?.anniversaryMonth);
-    const annivDay = asNumber(agentProfileData?.anniversaryDay);
+    const agentStartDate = agentProfile?.startDate || null;
+    const annivMonth = asNumber(agentProfile?.anniversaryMonth);
+    const annivDay = asNumber(agentProfile?.anniversaryDay);
     let anniversaryDate: string | null = null;
     let daysUntilReset: number | null = null;
 
@@ -822,13 +822,13 @@ export async function GET(req: NextRequest) {
         planName: null,
         // Diagnostic: why tiers weren't resolved
         _debug: {
-          profileFound: !!agentProfileData,
-          agentType: agentProfileData?.agentType ?? null,
-          tiersOnProfile: Array.isArray(agentProfileData?.tiers) ? agentProfileData.tiers.length : 0,
-          primaryTeamId: agentProfileData?.primaryTeamId ?? null,
-          teamRole: agentProfileData?.teamRole ?? null,
-          teamMemberCompMode: agentProfileData?.teamMemberCompMode ?? null,
-          overrideBandsCount: Array.isArray(agentProfileData?.teamMemberOverrideBands) ? agentProfileData.teamMemberOverrideBands.length : 0,
+          profileFound: !!agentProfile,
+          agentType: agentProfile?.agentType ?? null,
+          tiersOnProfile: Array.isArray(agentProfile?.tiers) ? agentProfile.tiers.length : 0,
+          primaryTeamId: agentProfile?.primaryTeamId ?? null,
+          teamRole: agentProfile?.teamRole ?? null,
+          teamMemberCompMode: agentProfile?.teamMemberCompMode ?? null,
+          overrideBandsCount: Array.isArray(agentProfile?.teamMemberOverrideBands) ? agentProfile.teamMemberOverrideBands.length : 0,
         },
       } as any;
     }
