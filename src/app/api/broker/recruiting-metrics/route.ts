@@ -3,6 +3,7 @@
 // POST: save monthly recruiting tracking data
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import { format } from 'date-fns';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     if (!decoded) return jsonError(401, 'Unauthorized');
     // Allow admin + team leaders
     // For now, just require admin
-    if (decoded.uid !== ADMIN_UID) {
+    if (!(await isAdminLike(decoded.uid))) {
       // Check if team leader
       const profileSnap = await adminDb.collection('agentProfiles')
         .where('agentId', '==', decoded.uid).limit(1).get();
@@ -247,7 +248,7 @@ export async function POST(req: NextRequest) {
   try {
     const decoded = await requireAuth(req);
     if (!decoded) return jsonError(401, 'Unauthorized');
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Admin only');
 
     const body = await req.json();
     const { action } = body;
