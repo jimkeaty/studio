@@ -305,6 +305,17 @@ export async function GET(req: NextRequest) {
     totals.grossMarginPct = totals.totalGCI > 0
       ? Math.round((totals.grossMargin / totals.totalGCI) * 10000) / 100 : 0;
 
+    // ── All-time side breakdown (all closed transactions, all years) ──────
+    const allTimeSideBreakdown: { closed: Record<string, SideBucket> } = { closed: {} };
+    for (const t of allAgentTx) {
+      if (t.status !== 'closed') continue;
+      const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
+      const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
+      const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
+      const dealValue = t.dealValue ?? 0;
+      addToSide(allTimeSideBreakdown.closed, getSideKey(t), dealValue, agentNet);
+    }
+
     // ── Previous year stats ───────────────────────────────────────────────
     let prevTotalVolume = 0, prevTotalCount = 0, prevTotalGCI = 0, prevTotalNet = 0;
     const prevMonthly = Array.from({ length: 12 }, () => ({
@@ -439,6 +450,7 @@ export async function GET(req: NextRequest) {
       categoryBreakdown, // netRevenue here = agent net, fine to include
       sourceBreakdown,   // netRevenue here = agent net, fine to include
       sideBreakdown,     // netRevenue here = agent net, fine to include
+      allTimeSideBreakdown,
     };
 
     return NextResponse.json({

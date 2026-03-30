@@ -1,6 +1,5 @@
 'use client';
-
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useUser } from '@/firebase';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics, Transaction, Opportunity } from '@/lib/types';
 import type { MonthlyData, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
@@ -2276,11 +2275,23 @@ function CategoryBreakdownSection({ perfData, year }: {
   perfData: AgentMetricsResponse;
   year: number;
 }) {
+  const [catYear, setCatYear] = useState<number | 'all'>(year);
+  // Sync catYear when the parent year changes (but only if user hasn't picked 'all')
+  const prevYearRef = React.useRef(year);
+  React.useEffect(() => {
+    if (prevYearRef.current !== year && catYear !== 'all') setCatYear(year);
+    prevYearRef.current = year;
+  }, [year, catYear]);
+
   const { sideBreakdown, sourceBreakdown } = perfData.overview as any;
+  const allTimeSideBreakdown = (perfData as any).overview?.allTimeSideBreakdown;
+
+  // Use all-time data when 'all' is selected, otherwise use the current year's sideBreakdown
+  const activeSideBreakdown = catYear === 'all' ? allTimeSideBreakdown : sideBreakdown;
 
   // Build side breakdown data from Buyer/Seller/Renter
-  const closedSide = sideBreakdown?.closed ?? {};
-  const pendingSide = sideBreakdown?.pending ?? {};
+  const closedSide = activeSideBreakdown?.closed ?? {};
+  const pendingSide = catYear === 'all' ? {} : (sideBreakdown?.pending ?? {});
 
   const sideSalesData = SIDE_ORDER
     .map((k, i) => ({ key: k, name: SIDE_LABELS[k], value: (closedSide[k]?.count ?? 0), color: SIDE_COLORS[i] }))
@@ -2330,11 +2341,27 @@ function CategoryBreakdownSection({ perfData, year }: {
     </div>
   );
 
+  const allYears = [year, ...(perfData.availableYears ?? [])].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => b - a);
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Category Breakdown — {year}</CardTitle>
-        <CardDescription>Closed transactions by property type — net income, sales count, and dollar volume</CardDescription>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle>Category Breakdown — {catYear === 'all' ? 'All Time' : catYear}</CardTitle>
+            <CardDescription>Closed transactions by side (Buyer / Seller / Renter) — net income, sales count, and dollar volume</CardDescription>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={catYear}
+              onChange={e => setCatYear(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10))}
+              className="px-3 py-1.5 rounded-md text-sm border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">All Time</option>
+              {allYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-8">
         {/* Side (Buyer/Seller/Renter) pie charts */}
