@@ -158,18 +158,21 @@ export async function GET(req: NextRequest) {
     // ── Phase 1: Fetch plan + agent profile in parallel ────────────────
     const [planSnap, agentProfileData] = await Promise.all([
       planDocRef(adminDb, uid, year).get(),
-      (async () => {
+(async () => {
         try {
-          // Strategy 1: uid IS the agentId (doc ID)
+          // Strategy 1: uid IS the Firebase UID (doc ID)
           const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
-          if (profileByIdSnap.exists) return profileByIdSnap.data();
+          if (profileByIdSnap.exists) return { data: profileByIdSnap.data(), docId: profileByIdSnap.id };
 
-          // Strategy 2: Search by agentId field
+          // Strategy 2: Search by agentId slug field
           const profileByAgentIdSnap = await adminDb.collection('agentProfiles')
             .where('agentId', '==', uid)
             .limit(1)
             .get();
-          if (!profileByAgentIdSnap.empty) return profileByAgentIdSnap.docs[0].data();
+          if (!profileByAgentIdSnap.empty) {
+            const d = profileByAgentIdSnap.docs[0];
+            return { data: d.data(), docId: d.id };
+          }
 
           // Strategy 3: Match by email from auth token
           const email = decoded.email || '';
@@ -178,7 +181,10 @@ export async function GET(req: NextRequest) {
               .where('email', '==', email)
               .limit(1)
               .get();
-            if (!profileByEmailSnap.empty) return profileByEmailSnap.docs[0].data();
+            if (!profileByEmailSnap.empty) {
+              const d = profileByEmailSnap.docs[0];
+              return { data: d.data(), docId: d.id };
+            }
           }
 
           return null;
@@ -188,6 +194,14 @@ export async function GET(req: NextRequest) {
         }
       })(),
     ]);
+
+    // Unwrap profile result — now returns { data, docId } to get the Firebase UID
+    const agentProfileDocId: string | null = (agentProfileData as any)?.docId ?? null;
+    const agentFirebaseUid: string = agentProfileDocId ?? uid;
+    // Re-alias so all existing agentProfileData.x references still work
+    const agentProfileDataUnwrapped = (agentProfileData as any)?.data ?? agentProfileData;
+    // Override agentProfileData to point to the unwrapped data object
+    (agentProfileData as any) = agentProfileDataUnwrapped;
 
     const plan = (planSnap.exists ? (planSnap.data() ?? {}) : {}) as Partial<BusinessPlan>;
 
@@ -230,7 +244,8 @@ export async function GET(req: NextRequest) {
     const engagementGoalToDate = Number((dailyEngagementTarget * elapsedWorkdays).toFixed(2));
 
     // ── Phase 2: Fetch transactions, daily activity, and goals in parallel ─
-    const goalSegment = `agent_${uid}`;
+    // Use the resolved Firebase UID (not the slug) for goal segment lookup
+    const goalSegment = `agent_${agentFirebaseUid}`;
     const [txSnap, activitySnap, goalsSnap] = await Promise.all([
       adminDb
         .collection("transactions")
