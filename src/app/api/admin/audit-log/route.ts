@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ ok: false, error: 'Missing token' }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) {
+    if (!(await isAdminLike(decoded.uid))) {
       return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
     }
 
