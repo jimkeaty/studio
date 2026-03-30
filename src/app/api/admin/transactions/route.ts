@@ -3,6 +3,7 @@
 // DELETE /api/admin/transactions — delete a single transaction by id
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const ADMIN_EMAIL = 'jim@keatyrealestate.com';
 
@@ -29,7 +30,7 @@ async function verifyAdmin(req: NextRequest) {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice('Bearer '.length);
   const decoded = await adminAuth.verifyIdToken(token);
-  if (decoded.email !== ADMIN_EMAIL) return null;
+  if (!(await isAdminLike(decoded.uid))) return null;
   return decoded;
 }
 
