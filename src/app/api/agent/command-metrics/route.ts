@@ -332,9 +332,11 @@ export async function GET(req: NextRequest) {
 
     for (const t of prevTransactions) {
       if (t.status !== 'closed') continue;
+      // Use getTxYear() for year check (handles year field + closedDate fallback)
+      if (getTxYear(t) !== prevYear) continue;
       const closedDate = parseDate(t.closedDate);
-      if (!closedDate || closedDate.getFullYear() !== prevYear) continue;
-      const m = closedDate.getMonth();
+      // Fall back to month 0 (Jan) when closedDate is missing — still counts toward totals
+      const m = closedDate ? closedDate.getMonth() : 0;
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
