@@ -95,20 +95,45 @@ export async function GET(req: NextRequest) {
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
 
     // ── Load agent profile ────────────────────────────────────────────────
-    // uid may be a slug (e.g. 'ashley-lombas') when admin uses viewAs, or a Firebase UID.
-    // Try slug lookup first; if that fails, try direct document lookup by UID.
-    let profileSnap = await adminDb.collection('agentProfiles')
-      .where('agentId', '==', uid).limit(1).get();
-    let profileDocId: string | null = profileSnap.empty ? null : profileSnap.docs[0].id;
-    if (profileSnap.empty) {
-      // uid might already be a Firebase UID — try direct doc lookup
-      const directDoc = await adminDb.collection('agentProfiles').doc(uid).get();
-      if (directDoc.exists) {
-        profileDocId = directDoc.id;
-        profileSnap = { empty: false, docs: [directDoc] } as any;
+    // uid may be a Firebase UID (direct agent login) or a slug (admin viewAs).
+    // Use the same 3-strategy lookup as the dashboard route to handle all cases:
+    //   1. Direct doc lookup by uid (fastest — works when uid IS the Firebase UID)
+    //   2. Query by agentId slug field (works when admin passes a slug via viewAs)
+    //   3. Query by email from auth token (fallback for first-login before profile is cached)
+    let profileDocId: string | null = null;
+    let profileData: any = null;
+
+    // Strategy 1: uid IS the Firebase UID (doc ID) — most common for direct agent logins
+    const profileByIdDoc = await adminDb.collection('agentProfiles').doc(uid).get();
+    if (profileByIdDoc.exists) {
+      profileDocId = profileByIdDoc.id;
+      profileData = profileByIdDoc.data();
+    }
+
+    // Strategy 2: uid is a slug — search by agentId field (admin viewAs path)
+    if (!profileDocId) {
+      const profileBySlugSnap = await adminDb.collection('agentProfiles')
+        .where('agentId', '==', uid).limit(1).get();
+      if (!profileBySlugSnap.empty) {
+        profileDocId = profileBySlugSnap.docs[0].id;
+        profileData = profileBySlugSnap.docs[0].data();
       }
     }
-    const profile = profileSnap.empty ? null : profileSnap.docs[0].data();
+
+    // Strategy 3: look up by email from the auth token — always works on first login
+    if (!profileDocId) {
+      const email = decoded.email || '';
+      if (email) {
+        const profileByEmailSnap = await adminDb.collection('agentProfiles')
+          .where('email', '==', email).limit(1).get();
+        if (!profileByEmailSnap.empty) {
+          profileDocId = profileByEmailSnap.docs[0].id;
+          profileData = profileByEmailSnap.docs[0].data();
+        }
+      }
+    }
+
+    const profile = profileData ?? null;
     // The canonical Firebase UID for this agent — used as the goal segment key.
     // This ensures goals saved by the agent (keyed by their UID) are always found
     // regardless of whether viewAs was passed as a slug or a UID.
