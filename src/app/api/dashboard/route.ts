@@ -246,12 +246,16 @@ export async function GET(req: NextRequest) {
     // ── Phase 2: Fetch transactions, daily activity, and goals in parallel ─
     // Use the resolved Firebase UID (not the slug) for goal segment lookup
     const goalSegment = `agent_${agentFirebaseUid}`;
-    const [txSnap, activitySnap, goalsSnap] = await Promise.all([
-      adminDb
-        .collection("transactions")
-        .where("agentId", "==", uid)
-        .where("year", "==", yearNum)
-        .get(),
+
+    // Transactions may be stored under Firebase UID OR agent slug (imported via admin).
+    // Query both to avoid missing deals.
+    const txQueryIds = new Set([uid]);
+    if (agentProfileDocId && agentProfileDocId !== uid) txQueryIds.add(agentProfileDocId);
+    if (agentProfile?.agentId && agentProfile.agentId !== uid) txQueryIds.add(String(agentProfile.agentId));
+    const txQueryIdList = Array.from(txQueryIds);
+
+    const txDocMap = new Map();
+    const [activitySnap, goalsSnap] = await Promise.all([
       adminDb
         .collection("daily_activity")
         .where("agentId", "==", uid)
@@ -263,6 +267,14 @@ export async function GET(req: NextRequest) {
         .where("segment", "==", goalSegment)
         .get(),
     ]);
+    await Promise.all(
+      txQueryIdList.map(async (agentIdVal) => {
+        try {
+          const snap = await adminDb.collection("transactions").where("agentId","==",agentIdVal).where("year","==",yearNum).get();
+        } catch(e) { console.warn('[dashboard] tx query failed for '+agentIdVal, e); }
+      })
+    );
+    const txDocs = Array.from(txDocMap.values());
 
     let netEarned = 0;
     let netPending = 0;
@@ -288,8 +300,7 @@ export async function GET(req: NextRequest) {
     let pendingGrossGCI = 0;
     let latestPendingCloseMonth = 0; // 1-based month of the latest pending expected close
 
-    for (const doc of txSnap.docs) {
-      const t = doc.data() || {};
+    for (const t of txDocs) {
       const status = String(t.status || "").trim();
       const net = getTransactionNet(t);
       const dealValue = asNumber(t.dealValue);
