@@ -672,9 +672,10 @@ function AgentDashboardPage() {
     // Without this guard, on refresh the first render fires fetchPerf with viewAs=null
     // (impersonation not yet restored), so command-metrics queries the wrong agent.
     if (!user || !impersonationReady || bootstrapPending) {
-      // Don't leave the skeleton hanging — clear loading so UI is not frozen.
-      // The real fetch will fire once impersonationReady flips to true and bootstrapPending clears.
-      if (!user) setPerfLoading(false);
+      // Not ready yet — keep the skeleton showing (do NOT set perfLoading=false here).
+      // The real fetch will fire once all conditions are met.
+      // Only clear loading if we know for certain there's no user (logged out).
+      if (!user && !bootstrapPending) setPerfLoading(false);
       return;
     }
     setPerfLoading(true);
