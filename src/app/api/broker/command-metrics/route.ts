@@ -1,6 +1,7 @@
 // src/app/api/broker/command-metrics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import type admin from 'firebase-admin';
 import { format } from 'date-fns';
 import type {
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Missing token' }, { status: 401 });
     }
     const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    if (decoded.uid !== ADMIN_UID) {
+    if (!(await isAdminLike(decoded.uid))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
