@@ -12,9 +12,7 @@ function extractBearerToken(req: NextRequest): string | null {
   return authHeader.split('Bearer ')[1]?.trim() || null;
 }
 
-const ADMIN_EMAILS = new Set([
-  'jim@keatyrealestate.com',
-]);
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,7 +24,7 @@ export async function POST(req: NextRequest) {
     const callerEmail = decoded.email || '';
 
     // 2) Authorize caller
-    if (!ADMIN_EMAILS.has(callerEmail)) {
+    if (!(await isAdminLike(decoded.uid))) {
       return jsonError(403, 'Forbidden: This action is restricted to administrators.');
     }
 
