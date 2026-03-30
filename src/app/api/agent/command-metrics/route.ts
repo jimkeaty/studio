@@ -129,10 +129,18 @@ export async function GET(req: NextRequest) {
         .where('primaryTeamId', '==', teamId).get();
       agentIds = new Set(membersSnap.docs.map(d => d.data().agentId as string));
       agentIds.add(uid); // Include leader
+      // Also include the resolved Firebase UID so transactions stored under either ID are found
+      if (agentFirebaseUid && agentFirebaseUid !== uid) agentIds.add(agentFirebaseUid);
       viewLabel = teamName || 'My Team';
     } else {
-      // Personal view
+      // Personal view — include both the passed uid (may be a slug) AND the resolved Firebase UID.
+      // Transactions may be stored under either the slug (bulk import) or the Firebase UID (manual entry).
       agentIds = new Set([uid]);
+      if (agentFirebaseUid && agentFirebaseUid !== uid) agentIds.add(agentFirebaseUid);
+      // Also include the agentId slug field from the profile in case it differs from uid
+      if (profile?.agentId && profile.agentId !== uid && profile.agentId !== agentFirebaseUid) {
+        agentIds.add(String(profile.agentId));
+      }
     }
 
     // If team leader, let them know team view is available
