@@ -30,35 +30,42 @@ export function ImpersonationProvider({
   adminUid: string | null;
   getToken?: () => Promise<string>;
 }) {
-  const [agent, setAgent] = useState<ImpersonatedAgent | null>(null);
-  const [impersonationReady, setImpersonationReady] = useState(false);
-  // Track whether we've already attempted to restore from sessionStorage.
-  // We must wait until adminUid is confirmed (not null) before checking,
-  // because Firebase auth loads asynchronously and adminUid starts as null.
-  const restoredRef = useRef(false);
-  // Restore impersonation session from sessionStorage after Firebase auth confirms the user.
-  useEffect(() => {
-    // Only attempt restore once, and only after we know the real adminUid.
-    if (restoredRef.current) return;
-    if (adminUid === null) return; // Firebase auth still loading — wait for next render
-    restoredRef.current = true;
-    if (adminUid !== ADMIN_UID) {
-      // Not admin — no impersonation to restore, but mark ready immediately
-      setImpersonationReady(true);
-      return;
-    }
+  // Synchronously restore impersonation session from sessionStorage at mount time.
+  // This avoids a render cycle where impersonationReady is false and data fetches
+  // are blocked, causing a flash of wrong data (0/F grades) on first load.
+  //
+  // We read sessionStorage synchronously in the useState initializer:
+  //   - If a valid session exists → restore it immediately, mark ready
+  //   - If no session exists → no impersonation to restore, mark ready immediately
+  //
+  // The adminUid check is still needed to prevent non-admins from impersonating,
+  // but we no longer need to wait for it to mark impersonationReady.
+  const [agent, setAgent] = useState<ImpersonatedAgent | null>(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as ImpersonatedAgent;
-        if (parsed?.uid && parsed?.name) setAgent(parsed);
+        if (parsed?.uid && parsed?.name) return parsed;
       }
-    } catch {
-      // ignore
-    }
-    // Mark ready after restore attempt (whether or not we found a session)
+    } catch { /* ignore */ }
+    return null;
+  });
+
+  // impersonationReady: true immediately on client (we restored synchronously above).
+  // On server (SSR), starts false and is set true on mount via useEffect below.
+  const [impersonationReady, setImpersonationReady] = useState<boolean>(
+    typeof window !== 'undefined' // true on client, false during SSR
+  );
+
+  // On SSR hydration: mark ready after mount (client-side only)
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    // Already ready on client from synchronous init above — just ensure it's set
     setImpersonationReady(true);
-  }, [adminUid]);
+  }, []);
   const startImpersonation = useCallback(
     (next: ImpersonatedAgent) => {
       if (adminUid !== ADMIN_UID) return;
