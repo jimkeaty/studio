@@ -1,30 +1,26 @@
 'use client';
-
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
-
 const STORAGE_KEY = 'impersonation_session';
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-
 export interface ImpersonatedAgent {
   uid: string;
   name: string;
   avatarUrl?: string;
 }
-
 interface ImpersonationState {
   agent: ImpersonatedAgent | null;
   isImpersonating: boolean;
+  impersonationReady: boolean;
   startImpersonation: (agent: ImpersonatedAgent) => void;
   stopImpersonation: () => void;
 }
-
 const ImpersonationContext = createContext<ImpersonationState>({
   agent: null,
   isImpersonating: false,
+  impersonationReady: false,
   startImpersonation: () => {},
   stopImpersonation: () => {},
 });
-
 export function ImpersonationProvider({
   children,
   adminUid,
@@ -35,18 +31,22 @@ export function ImpersonationProvider({
   getToken?: () => Promise<string>;
 }) {
   const [agent, setAgent] = useState<ImpersonatedAgent | null>(null);
+  const [impersonationReady, setImpersonationReady] = useState(false);
   // Track whether we've already attempted to restore from sessionStorage.
   // We must wait until adminUid is confirmed (not null) before checking,
   // because Firebase auth loads asynchronously and adminUid starts as null.
   const restoredRef = useRef(false);
-
   // Restore impersonation session from sessionStorage after Firebase auth confirms the user.
   useEffect(() => {
     // Only attempt restore once, and only after we know the real adminUid.
     if (restoredRef.current) return;
     if (adminUid === null) return; // Firebase auth still loading — wait for next render
     restoredRef.current = true;
-    if (adminUid !== ADMIN_UID) return; // Not admin — no impersonation to restore
+    if (adminUid !== ADMIN_UID) {
+      // Not admin — no impersonation to restore, but mark ready immediately
+      setImpersonationReady(true);
+      return;
+    }
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -56,8 +56,9 @@ export function ImpersonationProvider({
     } catch {
       // ignore
     }
+    // Mark ready after restore attempt (whether or not we found a session)
+    setImpersonationReady(true);
   }, [adminUid]);
-
   const startImpersonation = useCallback(
     (next: ImpersonatedAgent) => {
       if (adminUid !== ADMIN_UID) return;
@@ -82,7 +83,6 @@ export function ImpersonationProvider({
     },
     [adminUid, getToken]
   );
-
   const stopImpersonation = useCallback(() => {
     const prev = agent;
     setAgent(null);
@@ -104,12 +104,12 @@ export function ImpersonationProvider({
         .catch(() => {});
     }
   }, [agent, getToken]);
-
   return (
     <ImpersonationContext.Provider
       value={{
         agent,
         isImpersonating: agent !== null,
+        impersonationReady,
         startImpersonation,
         stopImpersonation,
       }}
@@ -118,7 +118,6 @@ export function ImpersonationProvider({
     </ImpersonationContext.Provider>
   );
 }
-
 export function useImpersonation() {
   return useContext(ImpersonationContext);
 }
