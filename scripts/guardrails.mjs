@@ -32,6 +32,9 @@ function isServerSafe(rel) {
   if (r.startsWith("src/lib/firebase/admin")) return true;
   if (r.startsWith("src/lib/overrides")) return true;
 
+  // Server-only auth helpers (all have 'server-only' import at top)
+  if (r.startsWith("src/lib/auth/")) return true;
+
   return false;
 }
 
