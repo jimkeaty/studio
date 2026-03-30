@@ -68,6 +68,19 @@ function fmtDateRange(start: string, end: string) {
 export default function CompetitionCenterPage() {
   const { user, loading: userLoading } = useUser();
   const isAdmin = user?.uid === ADMIN_UID;
+  const [isStaffAdmin, setIsStaffAdmin] = useState(false);
+  useEffect(() => {
+    if (!user || user.uid === ADMIN_UID) return;
+    let cancelled = false;
+    user.getIdToken().then((token) => {
+      fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled && d.ok) setIsStaffAdmin(true); })
+        .catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, [user]);
+  const hasAdminAccess = hasAdminAccess || isStaffAdmin;
 
   // ── Data state ──────────────────────────────────────────────────────────
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -245,10 +258,10 @@ export default function CompetitionCenterPage() {
           </div>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Competition Center</h1>
-            <p className="text-muted-foreground">{isAdmin ? 'Create and manage competitions across themes' : 'View active competitions and your standings'}</p>
+            <p className="text-muted-foreground">{hasAdminAccess ? 'Create and manage competitions across themes' : 'View active competitions and your standings'}</p>
           </div>
         </div>
-        {isAdmin && (
+        {hasAdminAccess && (
           <Button
             onClick={() => { setShowCreate(true); setSelectedTheme(null); setFormData({}); setCreateError(null); }}
             size="lg"
@@ -302,8 +315,8 @@ export default function CompetitionCenterPage() {
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Trophy className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-1">No Competitions Yet</h3>
-            <p className="text-muted-foreground text-sm mb-4">{isAdmin ? 'Create your first competition to get started.' : 'No competitions have been set up yet.'}</p>
-            {isAdmin && (
+            <p className="text-muted-foreground text-sm mb-4">{hasAdminAccess ? 'Create your first competition to get started.' : 'No competitions have been set up yet.'}</p>
+            {hasAdminAccess && (
               <Button onClick={() => { setShowCreate(true); setSelectedTheme(null); setFormData({}); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Competition
@@ -363,7 +376,7 @@ export default function CompetitionCenterPage() {
                         </div>
 
                         {/* Right: Status toggle (admin only) */}
-                        {isAdmin && (
+                        {hasAdminAccess && (
                           <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.preventDefault()}>
                             {comp.config.status !== 'archived' && (
                               <Button
@@ -406,7 +419,7 @@ export default function CompetitionCenterPage() {
       )}
 
       {/* ── Create Competition Dialog (admin only) ───────────────────────── */}
-      <Dialog open={isAdmin && showCreate} onOpenChange={setShowCreate}>
+      <Dialog open={hasAdminAccess && showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
