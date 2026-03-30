@@ -718,7 +718,7 @@ function AgentDashboardPage() {
         <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>No Data</AlertTitle><AlertDescription>Dashboard data for {year} not found.</AlertDescription></Alert>
       ) : (
         <>
-          <ReportCardSection dashboard={dashboard} perfData={perfData} perfYear={perfYear} />
+          <ReportCardSection dashboard={dashboard} perfData={perfData} perfYear={perfYear} perfLoading={perfLoading} />
 
           {/* ════════════════════════════════════════════════════════════════
               4. KPIs — All 6 with uniform activity-tracker style
@@ -1319,11 +1319,26 @@ function HeroCard({ title, grade, primary, secondary, performancePct, icon: Icon
   );
 }
 
-function ReportCardSection({ dashboard, perfData, perfYear }: {
+function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
   dashboard: AgentDashboardData;
   perfData: AgentMetricsResponse | null;
   perfYear: number;
+  perfLoading: boolean;
 }) {
+  // Wait for perfData before rendering grades — prevents F-grade flash while command-metrics API is still loading.
+  if (perfLoading) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-lg font-semibold">Report Card</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40" />)}
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40" />)}
+        </div>
+      </div>
+    );
+  }
   // Use perfData for income/volume/sales so grades are consistent with MyPerformanceSection and ChartsSection.
   // Fall back to dashboard fields only when perfData hasn't loaded yet.
   const today = new Date();
