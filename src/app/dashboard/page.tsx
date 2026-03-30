@@ -1354,7 +1354,15 @@ function ReportCardSection({ dashboard, perfData, perfYear }: {
   const incomeDeltaPct = ytdIncomeGoal > 0 ? Math.round((incomeDelta / ytdIncomeGoal) * 100) : 0;
   const pipelinePct = ytdIncomeGoal > 0 ? Math.round((ytdTotalPotential / ytdIncomeGoal) * 100) : 0;
   const pipelineDeltaPct = ytdIncomeGoal > 0 ? Math.round(((ytdTotalPotential - ytdIncomeGoal) / ytdIncomeGoal) * 100) : 0;
-  const vm = dashboard.volumeMetrics;
+  const vm = dashboard.volumeMetrics ?? {
+    closedVolume: 0, pendingVolume: 0, totalVolume: 0, volumeGoal: null,
+    volumeGrade: 'F', volumePerformance: 0,
+    projectedVolumeGrade: 'F', projectedVolumePerformance: 0,
+    closedDeals: dashboard.kpis?.closings?.actual ?? 0, pendingDeals: 0,
+    dealsGoal: null, dealsGrade: 'F', dealsPerformance: 0,
+    projectedDealsGrade: 'F', projectedDealsPerformance: 0,
+    projectedVolumeGoal: null, projectedDealsGoal: null, projectedIncomeGoal: null,
+  };
   const engGoal = dashboard.engagementGoalToDate ?? dashboard.kpis?.engagements?.target ?? 0;
   const engActual = dashboard.kpis?.engagements?.actual ?? 0;
   const engPct = engGoal > 0 ? Math.round((engActual / engGoal) * 100) : 0;
@@ -1393,8 +1401,7 @@ function ReportCardSection({ dashboard, perfData, perfYear }: {
       </div>
 
       {/* Row 2: Deals & Volume */}
-      {vm && (
-        <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
           <HeroCard
             title="Deals Closed" grade={vm.dealsGrade} primary={`${vm.closedDeals} closed`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.dealsPerformance) : undefined}
@@ -1433,8 +1440,7 @@ function ReportCardSection({ dashboard, perfData, perfYear }: {
               : `${fmtCurrency(vm.pendingVolume)} pending · Closed + pending volume`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
-        </div>
-      )}
+      </div>
     </div>
   );
 }
