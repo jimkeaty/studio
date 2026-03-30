@@ -3,6 +3,7 @@
 // Also supports: checklist workflow, TC assignment, status updates (tcIntakes)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { resolveGCI } from '@/lib/commissions';
 
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID && decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
 
     const { id } = await params;
     const result = await findIntake(id);
@@ -116,7 +117,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID && decoded.email !== ADMIN_EMAIL) return jsonError(403, 'Forbidden');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
 
     const { id } = await params;
     const body = await req.json();
