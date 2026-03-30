@@ -57,6 +57,19 @@ export default function TcProfilesPage() {
   const [form, setForm] = useState(emptyForm);
 
   const isAdmin = user?.uid === ADMIN_UID;
+  const [isStaffAdmin, setIsStaffAdmin] = useState(false);
+  useEffect(() => {
+    if (!user || user.uid === ADMIN_UID) return;
+    let cancelled = false;
+    user.getIdToken().then((token) => {
+      fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled && d.ok) setIsStaffAdmin(true); })
+        .catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, [user]);
+  const hasAdminAccess = hasAdminAccess || isStaffAdmin;
 
   const fetchProfiles = useCallback(async () => {
     if (!user) return;
@@ -78,8 +91,8 @@ export default function TcProfilesPage() {
   }, [user]);
 
   useEffect(() => {
-    if (user && isAdmin) fetchProfiles();
-  }, [user, isAdmin, fetchProfiles]);
+    if (user && hasAdminAccess) fetchProfiles();
+  }, [user, hasAdminAccess, fetchProfiles]);
 
   const handleSave = async () => {
     if (!user || !form.displayName.trim() || !form.email.trim()) return;
@@ -174,7 +187,7 @@ export default function TcProfilesPage() {
     setDialogOpen(true);
   };
 
-  if (!isAdmin) {
+  if (!hasAdminAccess) {
     return (
       <div className="p-6">
         <Card>
