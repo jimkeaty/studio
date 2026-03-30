@@ -88,6 +88,7 @@ const adminMenuItems = [
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
   { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
   { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
+  { href: '/dashboard/admin/staff-users', label: 'Staff Users', icon: Users2 },
 ];
 
 
@@ -95,6 +96,19 @@ export function SidebarNav() {
   const pathname = usePathname();
   const { user } = useUser();
   const isAdmin = user?.uid === ADMIN_UID;
+  const [isStaffAdmin, setIsStaffAdmin] = useState(false);
+  useEffect(() => {
+    if (!user || user.uid === ADMIN_UID) return;
+    let cancelled = false;
+    user.getIdToken().then((token) => {
+      fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled && d.ok) setIsStaffAdmin(true); })
+        .catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, [user]);
+  const showAdminMenu = isAdmin || isStaffAdmin;
   const { isImpersonating } = useImpersonation();
   const [branding, setBranding] = useState<BrandingData | null>(null);
 
@@ -196,7 +210,7 @@ export function SidebarNav() {
           ))}
         </SidebarMenu>
 
-        {!isImpersonating && (
+        {!isImpersonating && showAdminMenu && (
           <>
             <SidebarSeparator className="my-2" />
 
