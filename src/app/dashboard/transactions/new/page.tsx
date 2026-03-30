@@ -225,7 +225,10 @@ export default function AddTransactionPage() {
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
 
-  const isAdmin = user?.uid === ADMIN_UID;
+  // When admin is impersonating an agent, treat the form as agent-mode
+  // so commission split fields are hidden (same experience as the real agent).
+  const isAdminUser = user?.uid === ADMIN_UID;
+  const isAdmin = isAdminUser && !isImpersonating;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),

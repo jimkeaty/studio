@@ -1,5 +1,5 @@
 // GET + POST /api/broker/goals — manage monthly goals
-// Admin: can set goals for any segment (TOTAL, team IDs)
+// Admin: can set goals for any segment (TOTAL, team IDs, agent_*)
 // Agents: can set goals for their own segment (agent_{uid})
 // Team leaders: can set goals for their team segment (teamId)
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,15 +23,26 @@ async function requireAuth(req: NextRequest) {
 
 // Check if user can write to the given segment
 async function canWriteSegment(uid: string, segment: string): Promise<boolean> {
-  // Admin can write anything
+  // Admin can write anything — including agent_* segments when impersonating
   if (uid === ADMIN_UID) return true;
 
-  // Agents can write their own segment
+  // Agents can write their own segment (keyed by Firebase UID)
   if (segment === `agent_${uid}`) return true;
 
-  // Team leaders can write their team's segment
-  const profileSnap = await adminDb.collection('agentProfiles')
+  // Look up the agent's profile to find their canonical Firebase UID.
+  // An agent's segment may be keyed by their profile doc ID (Firebase UID)
+  // rather than their agentId slug — allow if it matches.
+  const profileBySlug = await adminDb.collection('agentProfiles')
     .where('agentId', '==', uid).limit(1).get();
+  if (!profileBySlug.empty) {
+    const profileUid = profileBySlug.docs[0].id;
+    if (segment === `agent_${profileUid}`) return true;
+  }
+
+  // Team leaders can write their team's segment
+  const profileSnap = profileBySlug.empty
+    ? await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get()
+    : profileBySlug;
   if (!profileSnap.empty) {
     const profile = profileSnap.docs[0].data();
     if (profile.teamRole === 'leader' && profile.primaryTeamId === segment) {

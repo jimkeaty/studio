@@ -432,9 +432,16 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                   <Input id="agent-yearly-sales" type="number" value={yearlySales} onChange={e => handleSalesChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${prevYearStats.totalSales}` : 'e.g. 20'} />
                 </div>
               </div>
-              <Button variant="default" onClick={distribute} disabled={!yearlyIncome && !yearlyVolume && !yearlySales}>
-                <Target className="mr-2 h-4 w-4" /> Distribute Across Months
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="default" onClick={distribute} disabled={!yearlyIncome && !yearlyVolume && !yearlySales}>
+                  <Target className="mr-2 h-4 w-4" /> Distribute Across Months
+                </Button>
+                {hasPrevData && (
+                  <Button variant="outline" onClick={() => { resetSeasonalityToPrev(); setTimeout(distribute, 50); }} className="gap-2">
+                    <BarChart3 className="h-4 w-4" /> Use {prevYearStats.year} Seasonality
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Editable Seasonality Weights */}
@@ -450,11 +457,6 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                     </Button>
                   </CollapsibleTrigger>
                   <div className="flex gap-2">
-                    {hasPrevData && (
-                      <Button variant="default" onClick={() => { resetSeasonalityToPrev(); setTimeout(distribute, 50); }} className="gap-2">
-                        <BarChart3 className="h-4 w-4" /> Use {prevYearStats.year} Seasonality
-                      </Button>
-                    )}
                     <Button variant="outline" size="sm" onClick={() => { resetSeasonality(); setTimeout(distribute, 50); }} className="text-xs h-7">
                       Even Split
                     </Button>
@@ -1695,22 +1697,37 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
             <div><CardTitle>Monthly Net Income</CardTitle><CardDescription>Income after broker split — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
-          {/* YTD vs Goal grade banner — top of chart */}
-          {gradeNetIncome != null && (() => { const g = letterGrade(gradeNetIncome); return (
-            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${gradeBannerBg(g.letter)}`}>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {isCurrentYear ? `Net Income YTD — Jan through ${todayMonthLabel}` : `Net Income — Full Year ${year}`}
-                </p>
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-2xl font-black">{fmtCurrencyCompact(ytdNetIncomeActual, true)}</span>
-                  <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdNetIncomeGoal, true)} goal</span>
-                  <span className={`text-sm font-bold ${g.color}`}>{gradeNetIncome}% of goal</span>
+          {/* YTD vs Goal grade banner — top of chart (always visible) */}
+          {(() => {
+            const hasGoal = gradeNetIncome != null;
+            const g = hasGoal ? letterGrade(gradeNetIncome!) : null;
+            const bannerClass = g ? gradeBannerBg(g.letter) : 'bg-muted/40 border-border';
+            return (
+              <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${bannerClass}`}>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {isCurrentYear ? `Net Income YTD — Jan through ${todayMonthLabel}` : `Net Income — Full Year ${year}`}
+                  </p>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-2xl font-black">{fmtCurrencyCompact(ytdNetIncomeActual, true)}</span>
+                    {hasGoal && g ? (
+                      <>
+                        <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdNetIncomeGoal, true)} goal</span>
+                        <span className={`text-sm font-bold ${g.color}`}>{gradeNetIncome}% of goal</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">Set goals in Business Plan to track progress</span>
+                    )}
+                  </div>
                 </div>
+                {hasGoal && g ? (
+                  <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
+                ) : (
+                  <div className="flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 bg-muted/60 border-border text-muted-foreground">—</div>
+                )}
               </div>
-              <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
-            </div>
-          ); })()}
+            );
+          })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={incomeChartConfig} className="h-[350px] w-full">
@@ -1786,22 +1803,37 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
             <div><CardTitle>Monthly Dollar Volume</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
-          {/* YTD vs Goal grade banner — top of chart */}
-          {gradeVolume != null && (() => { const g = letterGrade(gradeVolume); return (
-            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${gradeBannerBg(g.letter)}`}>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {isCurrentYear ? `Dollar Volume YTD — Jan through ${todayMonthLabel}` : `Dollar Volume — Full Year ${year}`}
-                </p>
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-2xl font-black">{fmtCurrencyCompact(ytdVolumeActual, true)}</span>
-                  <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdVolumeGoal, true)} goal</span>
-                  <span className={`text-sm font-bold ${g.color}`}>{gradeVolume}% of goal</span>
+          {/* YTD vs Goal grade banner — top of chart (always visible) */}
+          {(() => {
+            const hasGoal = gradeVolume != null;
+            const g = hasGoal ? letterGrade(gradeVolume!) : null;
+            const bannerClass = g ? gradeBannerBg(g.letter) : 'bg-muted/40 border-border';
+            return (
+              <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${bannerClass}`}>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {isCurrentYear ? `Dollar Volume YTD — Jan through ${todayMonthLabel}` : `Dollar Volume — Full Year ${year}`}
+                  </p>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-2xl font-black">{fmtCurrencyCompact(ytdVolumeActual, true)}</span>
+                    {hasGoal && g ? (
+                      <>
+                        <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdVolumeGoal, true)} goal</span>
+                        <span className={`text-sm font-bold ${g.color}`}>{gradeVolume}% of goal</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">Set goals in Business Plan to track progress</span>
+                    )}
+                  </div>
                 </div>
+                {hasGoal && g ? (
+                  <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
+                ) : (
+                  <div className="flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 bg-muted/60 border-border text-muted-foreground">—</div>
+                )}
               </div>
-              <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
-            </div>
-          ); })()}
+            );
+          })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
@@ -1877,22 +1909,37 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
             <div><CardTitle>Monthly Number of Sales</CardTitle><CardDescription>Closed and pending — {year}{compareYear ? ` vs ${compareYear}` : ''}{showProjected ? ' + Projected' : ''}</CardDescription></div>
             {ctrlRow}
           </div>
-          {/* YTD vs Goal grade banner — top of chart */}
-          {gradeSales != null && (() => { const g = letterGrade(gradeSales); return (
-            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${gradeBannerBg(g.letter)}`}>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {isCurrentYear ? `Sales YTD — Jan through ${todayMonthLabel}` : `Sales — Full Year ${year}`}
-                </p>
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-2xl font-black">{ytdSalesActual} sales</span>
-                  <span className="text-sm text-muted-foreground">/ {ytdSalesGoal} goal</span>
-                  <span className={`text-sm font-bold ${g.color}`}>{gradeSales}% of goal</span>
+          {/* YTD vs Goal grade banner — top of chart (always visible) */}
+          {(() => {
+            const hasGoal = gradeSales != null;
+            const g = hasGoal ? letterGrade(gradeSales!) : null;
+            const bannerClass = g ? gradeBannerBg(g.letter) : 'bg-muted/40 border-border';
+            return (
+              <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${bannerClass}`}>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {isCurrentYear ? `Sales YTD — Jan through ${todayMonthLabel}` : `Sales — Full Year ${year}`}
+                  </p>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-2xl font-black">{ytdSalesActual} sales</span>
+                    {hasGoal && g ? (
+                      <>
+                        <span className="text-sm text-muted-foreground">/ {ytdSalesGoal} goal</span>
+                        <span className={`text-sm font-bold ${g.color}`}>{gradeSales}% of goal</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">Set goals in Business Plan to track progress</span>
+                    )}
+                  </div>
                 </div>
+                {hasGoal && g ? (
+                  <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
+                ) : (
+                  <div className="flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 bg-muted/60 border-border text-muted-foreground">—</div>
+                )}
               </div>
-              <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
-            </div>
-          ); })()}
+            );
+          })()}
         </CardHeader>
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
