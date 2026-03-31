@@ -8,6 +8,7 @@ import {
   getTeamDefaultTiers,
   getTeamDefaultTransactionFee,
   TEAM_GROUP_OPTIONS,
+  TEAM_NAME_TO_GROUP,
   type CommissionTierTemplate,
 } from '@/lib/commissions/teamTemplates';
 
@@ -25,8 +26,6 @@ export type AgentTierFormValue = {
   toCompanyDollar: number | null;
   agentSplitPercent: number;
   companySplitPercent: number;
-  transactionFee: number | null;
-  capAmount: number | null;
   notes: string;
 };
 
@@ -100,8 +99,6 @@ function templateToFormTier(t: CommissionTierTemplate): AgentTierFormValue {
     toCompanyDollar: t.toCompanyDollar,
     agentSplitPercent: t.agentSplitPercent,
     companySplitPercent: t.companySplitPercent,
-    transactionFee: t.transactionFee,
-    capAmount: t.capAmount,
     notes: t.notes || '',
   };
 }
@@ -139,8 +136,6 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
 function cloneTiers(tiers: AgentTierFormValue[]) {
   return tiers.map((tier) => ({
     ...tier,
-    transactionFee: tier.transactionFee ?? null,
-    capAmount: tier.capAmount ?? null,
     notes: tier.notes || '',
   }));
 }
@@ -192,8 +187,6 @@ function createEmptyTier(nextIndex: number): AgentTierFormValue {
     toCompanyDollar: null,
     agentSplitPercent: 0,
     companySplitPercent: 0,
-    transactionFee: null,
-    capAmount: null,
     notes: '',
   };
 }
@@ -491,11 +484,21 @@ export default function AgentProfileForm({
   }
 
   function updatePrimaryTeamId(nextTeamId: string) {
-    setValues((prev) => ({
-      ...prev,
-      primaryTeamId: nextTeamId,
-      defaultPlanId: '',
-    }));
+    setValues((prev) => {
+      // Auto-detect team group from the selected team's teamId
+      const mappedGroup = TEAM_NAME_TO_GROUP[nextTeamId] || prev.teamGroup;
+      const isDefault = prev.commissionMode === 'team_default';
+      return {
+        ...prev,
+        primaryTeamId: nextTeamId,
+        defaultPlanId: '',
+        teamGroup: mappedGroup,
+        tiers: isDefault ? getDefaultTiersForTeamGroup(mappedGroup) : prev.tiers,
+        defaultTransactionFee: isDefault
+          ? getTeamDefaultTransactionFee(mappedGroup)
+          : prev.defaultTransactionFee,
+      };
+    });
   }
 
   async function handleCreateTeam() {
@@ -712,14 +715,8 @@ export default function AgentProfileForm({
               : Number(tier.toCompanyDollar),
           agentSplitPercent: Number(tier.agentSplitPercent || 0),
           companySplitPercent: Number(tier.companySplitPercent || 0),
-          transactionFee:
-            tier.transactionFee === null || tier.transactionFee === undefined || String(tier.transactionFee) === ''
-              ? null
-              : Number(tier.transactionFee),
-          capAmount:
-            tier.capAmount === null || tier.capAmount === undefined || String(tier.capAmount) === ''
-              ? null
-              : Number(tier.capAmount),
+          transactionFee: null,
+          capAmount: null,
           notes: tier.notes || null,
         })),
         defaultTransactionFee:
@@ -1376,16 +1373,17 @@ export default function AgentProfileForm({
               + Add Tier
             </button>
           </div>
+          <p className="mb-3 text-xs text-gray-500">
+            Tier thresholds represent <strong>Total GCI into the company</strong> (before agent/company split).
+          </p>
           <table className="min-w-full border-collapse text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="border px-3 py-2 text-left">Tier Name</th>
-                <th className="border px-3 py-2 text-left">From Company $</th>
-                <th className="border px-3 py-2 text-left">To Company $</th>
+                <th className="border px-3 py-2 text-left">From GCI $</th>
+                <th className="border px-3 py-2 text-left">To GCI $</th>
                 <th className="border px-3 py-2 text-left">Agent %</th>
                 <th className="border px-3 py-2 text-left">Company %</th>
-                <th className="border px-3 py-2 text-left">Txn Fee $</th>
-                <th className="border px-3 py-2 text-left">Cap $</th>
                 <th className="border px-3 py-2 text-left">Notes</th>
                 <th className="border px-3 py-2 text-left">Action</th>
               </tr>
@@ -1443,36 +1441,6 @@ export default function AgentProfileForm({
                       onChange={(e) =>
                         handleTierEdit(index, 'companySplitPercent', Number(e.target.value))
                       }
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      type="number"
-                      value={tier.transactionFee ?? ''}
-                      onChange={(e) =>
-                        handleTierEdit(
-                          index,
-                          'transactionFee',
-                          e.target.value === '' ? null : Number(e.target.value)
-                        )
-                      }
-                      placeholder="—"
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      type="number"
-                      value={tier.capAmount ?? ''}
-                      onChange={(e) =>
-                        handleTierEdit(
-                          index,
-                          'capAmount',
-                          e.target.value === '' ? null : Number(e.target.value)
-                        )
-                      }
-                      placeholder="—"
                     />
                   </td>
                   <td className="border px-3 py-2">

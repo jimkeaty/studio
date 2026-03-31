@@ -5,16 +5,20 @@
  *
  * Each template is an array of AgentTier-shaped objects.
  * The admin can always override by switching to 'custom' mode.
+ *
+ * Tier thresholds represent Total GCI into the company (before agent/company split).
+ * fromCompanyDollar / toCompanyDollar are the persisted field names for backward
+ * compatibility, but the UI labels them as "From GCI" / "To GCI".
  */
 
 export type CommissionTierTemplate = {
   tierName: string;
+  /** Total GCI into the company — lower bound of this tier */
   fromCompanyDollar: number;
+  /** Total GCI into the company — upper bound (null = no cap) */
   toCompanyDollar: number | null;
   agentSplitPercent: number;
   companySplitPercent: number;
-  transactionFee: number | null;
-  capAmount: number | null;
   notes: string;
 };
 
@@ -28,8 +32,6 @@ const STANDARD_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 45000,
     agentSplitPercent: 55,
     companySplitPercent: 45,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -38,8 +40,6 @@ const STANDARD_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 90000,
     agentSplitPercent: 60,
     companySplitPercent: 40,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -48,8 +48,6 @@ const STANDARD_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 180000,
     agentSplitPercent: 70,
     companySplitPercent: 30,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -58,8 +56,6 @@ const STANDARD_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 240000,
     agentSplitPercent: 80,
     companySplitPercent: 20,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -68,8 +64,6 @@ const STANDARD_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: null,
     agentSplitPercent: 90,
     companySplitPercent: 10,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
 ];
@@ -84,8 +78,6 @@ const REFERRAL_GROUP_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: null,
     agentSplitPercent: 50,
     companySplitPercent: 50,
-    transactionFee: 0,
-    capAmount: null,
     notes: 'Flat referral split',
   },
 ];
@@ -100,8 +92,6 @@ const CGL_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: null,
     agentSplitPercent: 40,
     companySplitPercent: 60,
-    transactionFee: 395,
-    capAmount: null,
     notes: 'Company generated lead split',
   },
 ];
@@ -116,8 +106,6 @@ const SGL_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 45000,
     agentSplitPercent: 60,
     companySplitPercent: 40,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -126,8 +114,6 @@ const SGL_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 90000,
     agentSplitPercent: 65,
     companySplitPercent: 35,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -136,8 +122,6 @@ const SGL_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 180000,
     agentSplitPercent: 75,
     companySplitPercent: 25,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -146,8 +130,6 @@ const SGL_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: null,
     agentSplitPercent: 85,
     companySplitPercent: 15,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
 ];
@@ -162,8 +144,6 @@ const CHARLES_DITCH_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 60000,
     agentSplitPercent: 50,
     companySplitPercent: 50,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -172,8 +152,6 @@ const CHARLES_DITCH_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: 120000,
     agentSplitPercent: 60,
     companySplitPercent: 40,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
   {
@@ -182,8 +160,6 @@ const CHARLES_DITCH_TIERS: CommissionTierTemplate[] = [
     toCompanyDollar: null,
     agentSplitPercent: 70,
     companySplitPercent: 30,
-    transactionFee: 395,
-    capAmount: null,
     notes: '',
   },
 ];
@@ -233,3 +209,13 @@ export const TEAM_GROUP_OPTIONS = [
   { value: 'charles_ditch_team', label: 'Charles Ditch Team' },
   { value: 'independent', label: 'Independent' },
 ] as const;
+
+/**
+ * Map from team name (as stored in teams collection) to team group slug.
+ * Used to auto-populate teamGroup when a primary team is selected.
+ */
+export const TEAM_NAME_TO_GROUP: Record<string, string> = {
+  'cgl-team': 'cgl',
+  'sgl-team': 'sgl',
+  'charles-ditch-team': 'charles_ditch_team',
+};
