@@ -698,8 +698,12 @@ function AgentDashboardPage() {
     if (!user || !impersonationReady || bootstrapPending) {
       // Not ready yet — keep the skeleton showing (do NOT set perfLoading=false here).
       // The real fetch will fire once all conditions are met.
-      // Only clear loading if we know for certain there's no user (logged out).
-      if (!user && !bootstrapPending) setPerfLoading(false);
+      // Only clear loading if we know for certain the user is logged out:
+      // userLoading=false confirms Firebase auth has resolved with no user.
+      // Without the userLoading check, this fires immediately on first render
+      // (user=null, bootstrapPending=false) before auth resolves, setting
+      // perfLoading=false with no data — causing the F-grade flash.
+      if (!user && !userLoading && !bootstrapPending) setPerfLoading(false);
       return;
     }
     setPerfLoading(true);
@@ -714,7 +718,7 @@ function AgentDashboardPage() {
       setPerfData(await res.json());
     } catch (e: any) { console.error('[perf]', e); setPerfError(e.message); }
     finally { setPerfLoading(false); }
-  }, [user, impersonationReady, bootstrapPending, perfYear, perfView, compareYear, viewAs]);
+  }, [user, userLoading, impersonationReady, bootstrapPending, perfYear, perfView, compareYear, viewAs]);
 
   useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
