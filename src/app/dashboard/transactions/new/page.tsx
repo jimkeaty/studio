@@ -1080,27 +1080,46 @@ export default function AddTransactionPage() {
               </div>
             </div>
 
-            {/* Agent Net — visible to agents only (read-only, auto-calculated from tier) */}
+            {/* Agent view: Gross Commission % + Agent Net $ only (read-only) */}
             {!isAdmin && (
-              <div className="rounded-md border border-border bg-muted/40 px-4 py-3 max-w-xs">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Your Estimated Net</p>
-                <FormField control={form.control} name="agentDollar" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Agent Net $</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="Auto-calculated"
-                        readOnly
-                        className="bg-background cursor-default"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>Calculated from your commission profile and tier.</FormDescription>
-                  </FormItem>
-                )} />
-              </div>
+              <>
+                <Separator />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-lg">
+                  <FormField control={form.control} name="commissionPercent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gross Commission %</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="3"
+                          readOnly
+                          className="bg-background cursor-default"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>% of Commission Base Price</FormDescription>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="agentDollar" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Agent Net $</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Auto-calculated"
+                          readOnly
+                          className="bg-background cursor-default"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>Calculated from your commission profile and tier.</FormDescription>
+                    </FormItem>
+                  )} />
+                </div>
+              </>
             )}
 
             {/* GCI & Commission % — admin only */}

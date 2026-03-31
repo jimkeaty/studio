@@ -1152,137 +1152,183 @@ export default function EditTransactionPage() {
               </div>
             </div>
 
-            {/* GCI & Commission % */}
-            <Separator />
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
-            <Grid3>
-              <FormField control={form.control} name="commissionPercent" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Gross Commission %</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number" step="0.01" placeholder="3"
-                      {...field}
-                      onChange={(e) => {
-                        commPctManuallyEdited.current = true;
-                        field.onChange(e);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>Auto-filled from seller-paying % above</FormDescription>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="gci" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>GCI ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                  <FormDescription>Gross Commission Income</FormDescription>
-                </FormItem>
-              )} />
-            </Grid3>
+            {/* Agent view: Gross Commission % + Agent Net $ only (read-only) */}
+            {!isAdmin && (
+              <>
+                <Separator />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-lg">
+                  <FormField control={form.control} name="commissionPercent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gross Commission %</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="3"
+                          readOnly
+                          className="bg-background cursor-default"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>% of Commission Base Price</FormDescription>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="agentDollar" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Agent Net $</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Auto-calculated"
+                          readOnly
+                          className="bg-background cursor-default"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>Calculated from your commission profile and tier.</FormDescription>
+                    </FormItem>
+                  )} />
+                </div>
+              </>
+            )}
 
-            {/* Commission Split */}
-            <Separator />
-            {/* Auto-calculation status banner */}
-            {agentCommission && (
-              <div className={`rounded-md border px-4 py-3 text-sm ${
-                activeTier
-                  ? 'border-green-200 bg-green-50 text-green-800'
-                  : commissionLoading
-                    ? 'border-blue-200 bg-blue-50 text-blue-800'
-                    : 'border-amber-200 bg-amber-50 text-amber-800'
-              }`}>
-                {commissionLoading ? (
-                  <span>Loading commission structure...</span>
-                ) : activeTier ? (
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span>
-                      <strong>Auto-calculated</strong> using tier &quot;{activeTier.tierName}&quot; &mdash;
-                      Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
-                      {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee}`}
-                    </span>
-                    {commissionManualOverride.current && (
-                      <Badge variant="outline" className="text-amber-700 border-amber-300">Manual Override</Badge>
+            {/* GCI & Commission % — admin only */}
+            {isAdmin && (
+              <>
+                <Separator />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
+                <Grid3>
+                  <FormField control={form.control} name="commissionPercent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gross Commission %</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number" step="0.01" placeholder="3"
+                          {...field}
+                          onChange={(e) => {
+                            commPctManuallyEdited.current = true;
+                            field.onChange(e);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>Auto-filled from seller-paying % above</FormDescription>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="gci" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GCI ($)</FormLabel>
+                      <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                      <FormDescription>Gross Commission Income</FormDescription>
+                    </FormItem>
+                  )} />
+                </Grid3>
+
+                {/* Commission Split */}
+                <Separator />
+                {/* Auto-calculation status banner */}
+                {agentCommission && (
+                  <div className={`rounded-md border px-4 py-3 text-sm ${
+                    activeTier
+                      ? 'border-green-200 bg-green-50 text-green-800'
+                      : commissionLoading
+                        ? 'border-blue-200 bg-blue-50 text-blue-800'
+                        : 'border-amber-200 bg-amber-50 text-amber-800'
+                  }`}>
+                    {commissionLoading ? (
+                      <span>Loading commission structure...</span>
+                    ) : activeTier ? (
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span>
+                          <strong>Auto-calculated</strong> using tier &quot;{activeTier.tierName}&quot; &mdash;
+                          Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
+                          {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee}`}
+                        </span>
+                        {commissionManualOverride.current && (
+                          <Badge variant="outline" className="text-amber-700 border-amber-300">Manual Override</Badge>
+                        )}
+                      </div>
+                    ) : (
+                      <span>
+                        Commission structure loaded ({agentCommission.tiers.length} tier{agentCommission.tiers.length !== 1 ? 's' : ''}).
+                        {Number(watchedGCI) > 0 ? ' No matching tier for this GCI amount.' : ' Enter GCI to auto-calculate split.'}
+                      </span>
                     )}
                   </div>
-                ) : (
-                  <span>
-                    Commission structure loaded ({agentCommission.tiers.length} tier{agentCommission.tiers.length !== 1 ? 's' : ''}).
-                    {Number(watchedGCI) > 0 ? ' No matching tier for this GCI amount.' : ' Enter GCI to auto-calculate split.'}
-                  </span>
                 )}
-              </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Broker / Agent Split</p>
+                  {agentCommission && commissionManualOverride.current && (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-blue-600 hover:underline"
+                      onClick={() => {
+                        commissionManualOverride.current = false;
+                        const gci = Number(form.getValues('gci')) || 0;
+                        if (gci > 0 && agentCommission) {
+                          const tier = findActiveTier(agentCommission.tiers, gci);
+                          setActiveTier(tier);
+                          if (tier) {
+                            form.setValue('agentPct', tier.agentSplitPercent as any);
+                            form.setValue('brokerPct', tier.companySplitPercent as any);
+                            form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+                            form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+                            const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
+                            if (txFee > 0) form.setValue('transactionFee', txFee as any);
+                          }
+                        }
+                      }}
+                    >
+                      Re-calculate from agent profile
+                    </button>
+                  )}
+                </div>
+                <Grid2>
+                  <FormField control={form.control} name="brokerPct" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Broker %</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="30" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="brokerGci" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Broker GCI ($)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="agentPct" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Agent %</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="70" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="agentDollar" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Agent Net $</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                      <FormDescription>Auto-calculated from agent profile. Edit to override.</FormDescription>
+                    </FormItem>
+                  )} />
+                </Grid2>
+              </>
             )}
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Broker / Agent Split</p>
-              {agentCommission && commissionManualOverride.current && (
-                <button
-                  type="button"
-                  className="text-xs font-medium text-blue-600 hover:underline"
-                  onClick={() => {
-                    commissionManualOverride.current = false;
-                    const gci = Number(form.getValues('gci')) || 0;
-                    if (gci > 0 && agentCommission) {
-                      const tier = findActiveTier(agentCommission.tiers, gci);
-                      setActiveTier(tier);
-                      if (tier) {
-                        form.setValue('agentPct', tier.agentSplitPercent as any);
-                        form.setValue('brokerPct', tier.companySplitPercent as any);
-                        form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-                        form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
-                        const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-                        if (txFee > 0) form.setValue('transactionFee', txFee as any);
-                      }
-                    }
-                  }}
-                >
-                  Re-calculate from agent profile
-                </button>
-              )}
-            </div>
-            <Grid2>
-              <FormField control={form.control} name="brokerPct" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Broker %</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="30" {...field}
-                      onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                    />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="brokerGci" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Broker GCI ($)</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0" {...field}
-                      onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                    />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="agentPct" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Agent %</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="70" {...field}
-                      onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                    />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="agentDollar" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Agent Net $</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0" {...field}
-                      onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                    />
-                  </FormControl>
-                  <FormDescription>Auto-calculated from agent profile. Edit to override.</FormDescription>
-                </FormItem>
-              )} />
-            </Grid2>
           </Section>
 
           {/* ── Additional Info ───────────────────────────────── */}
