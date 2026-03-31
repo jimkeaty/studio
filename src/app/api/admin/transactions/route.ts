@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
 
 // Allowed fields that can be updated
 const UPDATABLE_FIELDS = new Set([
+  'agentId', 'agentDisplayName',
   'status', 'transactionType', 'closingType', 'dealType',
   'address', 'clientName', 'dealValue', 'commission',
   'commissionPercent', 'transactionFee', 'earnestMoney',
@@ -140,14 +141,21 @@ export async function PATCH(req: NextRequest) {
       };
     }
 
+     // If agentId is changing (transfer), capture the old agentId first
+    let oldAgentId: string | null = null;
+    if (updates.agentId) {
+      const existingSnap = await adminDb.collection('transactions').doc(id).get();
+      const existingData = existingSnap.data() as any;
+      if (existingData?.agentId && existingData.agentId !== updates.agentId) {
+        oldAgentId = String(existingData.agentId).trim();
+      }
+    }
+
     updates.updatedAt = new Date();
-
     await adminDb.collection('transactions').doc(id).update(updates);
-
     // Fetch the updated doc to return
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
     const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });
-
     // Rebuild rollup so leaderboards stay in sync
     try {
       const txData = updatedSnap.data() as any;
@@ -155,6 +163,10 @@ export async function PATCH(req: NextRequest) {
       const txYear = Number(txData?.year || updates.year || new Date().getFullYear());
       if (agentId && txYear) {
         await rebuildAgentRollup(adminDb, agentId, txYear);
+      }
+      // If transferred, also rebuild the OLD agent's rollup
+      if (oldAgentId && txYear) {
+        await rebuildAgentRollup(adminDb, oldAgentId, txYear);
       }
     } catch (rollupErr: any) {
       console.warn('[api/admin/transactions PATCH] Rollup rebuild failed (non-fatal):', rollupErr?.message);
