@@ -83,12 +83,19 @@ type TeamPlanLeaderBand = {
   companyPercent: number;
 };
 
+type TeamPlanMemberBand = {
+  fromCompanyDollar: number;
+  toCompanyDollar: number | null;
+  memberPercent: number;
+};
+
 type TeamPlanOption = {
   teamPlanId: string;
   teamId: string;
   planName: string;
   status?: string;
   leaderStructureBands?: TeamPlanLeaderBand[];
+  memberDefaultBands?: TeamPlanMemberBand[];
 };
 
 type MemberPlanOption = {
@@ -123,6 +130,17 @@ function teamPlanBandsToFormTiers(bands: TeamPlanLeaderBand[]): AgentTierFormVal
     toCompanyDollar: band.toCompanyDollar,
     agentSplitPercent: band.leaderPercent,
     companySplitPercent: band.companyPercent,
+    notes: '',
+  }));
+}
+
+/** Convert a team plan's memberDefaultBands into TeamMemberTierFormValue[] */
+function teamPlanMemberBandsToFormTiers(bands: TeamPlanMemberBand[]): TeamMemberTierFormValue[] {
+  return bands.map((band, i) => ({
+    tierName: `Tier ${i + 1}`,
+    fromCompanyDollar: band.fromCompanyDollar,
+    toCompanyDollar: band.toCompanyDollar,
+    memberPercent: band.memberPercent,
     notes: '',
   }));
 }
@@ -574,6 +592,77 @@ export default function AgentProfileForm({
     // --- Path C: fall back to hardcoded team group template ---
     return getDefaultTiersForTeamGroup(teamGroupSlug);
   }
+
+  /**
+   * Resolve the best member default bands for a given team.
+   * Uses the same lookup pattern as resolveTeamDefaultTiers but for memberDefaultBands.
+   * Returns TeamMemberTierFormValue[] or empty array if none found.
+   */
+  function resolveTeamMemberDefaultBands(teamId: string, teamGroupSlug: string): TeamMemberTierFormValue[] {
+    const teamIdLower = teamId.toLowerCase();
+
+    // Helper to find plan and extract memberDefaultBands
+    function extractMemberBands(plan: TeamPlanOption | undefined): TeamMemberTierFormValue[] | null {
+      if (plan?.memberDefaultBands && plan.memberDefaultBands.length > 0) {
+        return teamPlanMemberBandsToFormTiers(plan.memberDefaultBands);
+      }
+      return null;
+    }
+
+    // --- Path A: specific team selected → look up its plan ---
+    if (teamId) {
+      const team = teams.find((t) => t.teamId.toLowerCase() === teamIdLower);
+      if (team?.teamPlanId) {
+        const planIdLower = team.teamPlanId.toLowerCase();
+        const plan = teamPlans.find((p) => p.teamPlanId.toLowerCase() === planIdLower);
+        const bands = extractMemberBands(plan);
+        if (bands) return bands;
+        // Prefix match
+        const planByPrefix = teamPlans.find(
+          (p) => p.teamPlanId.toLowerCase().startsWith(planIdLower) && p.teamId.toLowerCase() === teamIdLower
+        );
+        const bands2 = extractMemberBands(planByPrefix);
+        if (bands2) return bands2;
+      }
+      // Direct match by teamId
+      const planByTeamId = teamPlans.find((p) => p.teamId.toLowerCase() === teamIdLower);
+      const bands3 = extractMemberBands(planByTeamId);
+      if (bands3) return bands3;
+    }
+
+    // --- Path B: no specific team → find any team plan whose team maps to this group ---
+    if (teamGroupSlug) {
+      const groupTeamIds = new Set<string>();
+      for (const [tid, grp] of Object.entries(TEAM_NAME_TO_GROUP)) {
+        if (grp === teamGroupSlug) groupTeamIds.add(tid.toLowerCase());
+      }
+      for (const t of teams) {
+        if ((t as any).teamGroup === teamGroupSlug) groupTeamIds.add(t.teamId.toLowerCase());
+      }
+      for (const plan of teamPlans) {
+        if (plan.status === 'inactive') continue;
+        const planTeamIdLower = plan.teamId.toLowerCase();
+        if (groupTeamIds.has(planTeamIdLower)) {
+          const bands = extractMemberBands(plan);
+          if (bands) return bands;
+        }
+        const planNameSlug = plan.planName?.toLowerCase().replace(/[\s-]+/g, '_') || '';
+        if (planNameSlug === teamGroupSlug || planNameSlug.includes(teamGroupSlug.replace(/_/g, ' ').toLowerCase())) {
+          const bands = extractMemberBands(plan);
+          if (bands) return bands;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  /** Resolved member default bands for the current team selection (read-only preview) */
+  const resolvedMemberDefaults = useMemo(
+    () => resolveTeamMemberDefaultBands(values.primaryTeamId || '', values.teamGroup),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [values.primaryTeamId, values.teamGroup, teams, teamPlans]
+  );
 
   function updatePrimaryTeamId(nextTeamId: string) {
     setValues((prev) => {
@@ -1344,9 +1433,44 @@ export default function AgentProfileForm({
                     </div>
 
                     {values.teamMemberCompMode === 'teamDefault' ? (
-                      <p className="mt-4 text-sm text-green-700">
-                        This agent will use the selected team’s default member payout ladder.
-                      </p>
+                      <div className="mt-4">
+                        {resolvedMemberDefaults.length > 0 ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                                Team Default Member Tiers
+                              </span>
+                            </div>
+                            <div className="overflow-x-auto rounded-md border">
+                              <table className="min-w-full text-sm">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Tier</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">From GCI $</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">To GCI $</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Member %</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                  {resolvedMemberDefaults.map((tier, i) => (
+                                    <tr key={i} className="bg-white">
+                                      <td className="px-3 py-2 font-medium">{tier.tierName}</td>
+                                      <td className="px-3 py-2">${tier.fromCompanyDollar.toLocaleString()}</td>
+                                      <td className="px-3 py-2">{tier.toCompanyDollar != null ? `$${tier.toCompanyDollar.toLocaleString()}` : 'No Cap'}</td>
+                                      <td className="px-3 py-2 font-semibold">{tier.memberPercent}%</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <p className="text-xs text-gray-500">These tiers are defined in the team plan. Edit them in the Team Plans tab.</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-amber-700">
+                            No member default tiers found for this team plan. You may want to set up member tiers in the Team Plans tab, or use custom tiers below.
+                          </p>
+                        )}
+                      </div>
                     ) : (
                       <div className="mt-4 space-y-4">
                         <div className="flex items-center justify-between">
