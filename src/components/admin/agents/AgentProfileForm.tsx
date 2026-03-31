@@ -517,12 +517,17 @@ export default function AgentProfileForm({
    */
   function resolveTeamDefaultTiers(teamId: string, teamGroupSlug: string): AgentTierFormValue[] {
     const teamIdLower = teamId.toLowerCase();
+    console.log('[resolveTeamDefaultTiers] teamId:', teamId, 'teamGroupSlug:', teamGroupSlug);
+    console.log('[resolveTeamDefaultTiers] teams count:', teams.length, 'teamPlans count:', teamPlans.length);
+    console.log('[resolveTeamDefaultTiers] teamPlans:', JSON.stringify(teamPlans.map(p => ({ teamPlanId: p.teamPlanId, teamId: p.teamId, hasBands: !!(p.leaderStructureBands?.length) }))));
     // 1. Find the team to get its teamPlanId
     const team = teams.find((t) => t.teamId.toLowerCase() === teamIdLower);
+    console.log('[resolveTeamDefaultTiers] found team:', team ? { teamId: team.teamId, teamPlanId: team.teamPlanId } : 'NOT FOUND');
     if (team?.teamPlanId) {
       const planIdLower = team.teamPlanId.toLowerCase();
       // 2a. Exact match by teamPlanId
       const plan = teamPlans.find((p) => p.teamPlanId.toLowerCase() === planIdLower);
+      console.log('[resolveTeamDefaultTiers] 2a plan match:', plan ? { teamPlanId: plan.teamPlanId, hasBands: !!(plan.leaderStructureBands?.length), bandsCount: plan.leaderStructureBands?.length } : 'NOT FOUND');
       if (plan?.leaderStructureBands && plan.leaderStructureBands.length > 0) {
         return teamPlanBandsToFormTiers(plan.leaderStructureBands);
       }
