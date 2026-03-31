@@ -601,9 +601,16 @@ function AgentDashboardPage() {
   // not batch together across component boundaries, causing a fetch with viewAs=null.
   const [bootstrapPending, setBootstrapPending] = React.useState(true);
   const needsImpersonationRef = React.useRef(false);
+  // Prevents Phase 1 from re-running after router.replace clears the URL params.
+  // Without this guard, the second render (with empty searchParams) hits the else
+  // branch and calls setBootstrapPending(false) before Phase 2 can confirm impersonation,
+  // causing fetchPerf to fire with viewAs=null and briefly showing F grades.
+  const bootstrapFiredRef = React.useRef(false);
 
   // Phase 1: consume URL params and start impersonation if needed
   useEffect(() => {
+    if (bootstrapFiredRef.current) return; // only fire once
+    bootstrapFiredRef.current = true;
     const viewAsParam = searchParams.get('viewAs');
     const viewAsName = searchParams.get('viewAsName');
     if (isAdmin && viewAsParam && viewAsName) {
