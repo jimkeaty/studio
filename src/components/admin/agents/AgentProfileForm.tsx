@@ -76,11 +76,19 @@ type TeamOption = {
   status?: string;
 };
 
+type TeamPlanLeaderBand = {
+  fromCompanyDollar: number;
+  toCompanyDollar: number | null;
+  leaderPercent: number;
+  companyPercent: number;
+};
+
 type TeamPlanOption = {
   teamPlanId: string;
   teamId: string;
   planName: string;
   status?: string;
+  leaderStructureBands?: TeamPlanLeaderBand[];
 };
 
 type MemberPlanOption = {
@@ -105,6 +113,18 @@ function templateToFormTier(t: CommissionTierTemplate): AgentTierFormValue {
 
 function getDefaultTiersForTeamGroup(teamGroup: string): AgentTierFormValue[] {
   return getTeamDefaultTiers(teamGroup).map(templateToFormTier);
+}
+
+/** Convert a team plan's leaderStructureBands into agent tier form values */
+function teamPlanBandsToFormTiers(bands: TeamPlanLeaderBand[]): AgentTierFormValue[] {
+  return bands.map((band, i) => ({
+    tierName: `Tier ${i + 1}`,
+    fromCompanyDollar: band.fromCompanyDollar,
+    toCompanyDollar: band.toCompanyDollar,
+    agentSplitPercent: band.leaderPercent,
+    companySplitPercent: band.companyPercent,
+    notes: '',
+  }));
 }
 
 const DEFAULT_VALUES: AgentProfileFormValues = {
@@ -424,10 +444,15 @@ export default function AgentProfileForm({
   function updateTeamGroup(nextGroup: string) {
     setValues((prev) => {
       const isDefault = prev.commissionMode === 'team_default';
+      const tiers = isDefault
+        ? (prev.primaryTeamId
+            ? resolveTeamDefaultTiers(prev.primaryTeamId, nextGroup)
+            : getDefaultTiersForTeamGroup(nextGroup))
+        : prev.tiers;
       return {
         ...prev,
         teamGroup: nextGroup,
-        tiers: isDefault ? getDefaultTiersForTeamGroup(nextGroup) : prev.tiers,
+        tiers,
         defaultTransactionFee: isDefault
           ? getTeamDefaultTransactionFee(nextGroup)
           : prev.defaultTransactionFee,
@@ -439,10 +464,13 @@ export default function AgentProfileForm({
   function updateCommissionMode(nextMode: CommissionMode) {
     setValues((prev) => {
       if (nextMode === 'team_default') {
+        const tiers = prev.primaryTeamId
+          ? resolveTeamDefaultTiers(prev.primaryTeamId, prev.teamGroup)
+          : getDefaultTiersForTeamGroup(prev.teamGroup);
         return {
           ...prev,
           commissionMode: 'team_default',
-          tiers: getDefaultTiersForTeamGroup(prev.teamGroup),
+          tiers,
           defaultTransactionFee: getTeamDefaultTransactionFee(prev.teamGroup),
         };
       }
@@ -483,6 +511,29 @@ export default function AgentProfileForm({
     }));
   }
 
+  /**
+   * Resolve the best default tiers for a given team.
+   * Priority: team plan's leaderStructureBands → hardcoded team group template.
+   */
+  function resolveTeamDefaultTiers(teamId: string, teamGroupSlug: string): AgentTierFormValue[] {
+    // 1. Find the team to get its teamPlanId
+    const team = teams.find((t) => t.teamId === teamId);
+    if (team?.teamPlanId) {
+      // 2. Find the team plan
+      const plan = teamPlans.find((p) => p.teamPlanId === team.teamPlanId);
+      if (plan?.leaderStructureBands && plan.leaderStructureBands.length > 0) {
+        return teamPlanBandsToFormTiers(plan.leaderStructureBands);
+      }
+    }
+    // 3. Also try matching by teamId directly
+    const planByTeamId = teamPlans.find((p) => p.teamId === teamId);
+    if (planByTeamId?.leaderStructureBands && planByTeamId.leaderStructureBands.length > 0) {
+      return teamPlanBandsToFormTiers(planByTeamId.leaderStructureBands);
+    }
+    // 4. Fall back to hardcoded team group template
+    return getDefaultTiersForTeamGroup(teamGroupSlug);
+  }
+
   function updatePrimaryTeamId(nextTeamId: string) {
     setValues((prev) => {
       // Auto-detect team group from the selected team's teamId
@@ -493,7 +544,7 @@ export default function AgentProfileForm({
         primaryTeamId: nextTeamId,
         defaultPlanId: '',
         teamGroup: mappedGroup,
-        tiers: isDefault ? getDefaultTiersForTeamGroup(mappedGroup) : prev.tiers,
+        tiers: isDefault ? resolveTeamDefaultTiers(nextTeamId, mappedGroup) : prev.tiers,
         defaultTransactionFee: isDefault
           ? getTeamDefaultTransactionFee(mappedGroup)
           : prev.defaultTransactionFee,
@@ -632,15 +683,20 @@ export default function AgentProfileForm({
   }
 
   function resetToDefaults() {
-    setValues((prev) => ({
-      ...prev,
-      progressionMetric: 'companyDollar',
-      teamRole: getDefaultTeamRole(prev.agentType),
-      defaultPlanType: getDefaultPlanType(prev.agentType, prev.teamRole),
-      commissionMode: 'team_default' as CommissionMode,
-      tiers: getDefaultTiersForTeamGroup(prev.teamGroup),
-      defaultTransactionFee: getTeamDefaultTransactionFee(prev.teamGroup),
-    }));
+    setValues((prev) => {
+      const tiers = prev.primaryTeamId
+        ? resolveTeamDefaultTiers(prev.primaryTeamId, prev.teamGroup)
+        : getDefaultTiersForTeamGroup(prev.teamGroup);
+      return {
+        ...prev,
+        progressionMetric: 'companyDollar',
+        teamRole: getDefaultTeamRole(prev.agentType),
+        defaultPlanType: getDefaultPlanType(prev.agentType, prev.teamRole),
+        commissionMode: 'team_default' as CommissionMode,
+        tiers,
+        defaultTransactionFee: getTeamDefaultTransactionFee(prev.teamGroup),
+      };
+    });
   }
 
   const [similarAgents, setSimilarAgents] = useState<{ agentId: string; displayName: string; similarity: number }[]>([]);
@@ -1351,7 +1407,7 @@ export default function AgentProfileForm({
               Commission Tiers
               {values.commissionMode === 'team_default' && (
                 <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                  Team Default
+                  Team Default{selectedTeam ? ` — ${selectedTeam.teamName}` : ''}
                 </span>
               )}
               {values.commissionMode === 'custom' && (
