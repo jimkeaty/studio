@@ -13,21 +13,17 @@ function fallbackDisplayName(agentId: string) {
 
 function toDate(value: any): Date | null {
   if (!value) return null;
-
   if (typeof value?.toDate === "function") {
     const d = value.toDate();
     return isNaN(d.getTime()) ? null : d;
   }
-
   if (typeof value === "string") {
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   }
-
   if (value instanceof Date) {
     return isNaN(value.getTime()) ? null : value;
   }
-
   return null;
 }
 
@@ -87,25 +83,17 @@ export async function GET(req: NextRequest) {
     cutoff.setDate(cutoff.getDate() - lookbackDays);
 
     const [transactionsSnap, agentNameMap] = await Promise.all([
-      db.collection("transactions").limit(5).get(),
+      db.collection("transactions").where("year", "==", year).get(),
       getAgentNameMap(db, year),
     ]);
 
-    if (searchParams.get("debug") === "1") {
-      return NextResponse.json({
-        ok: true,
-        year,
-        count: transactionsSnap.size,
-        samples: transactionsSnap.docs.slice(0, 3).map((doc: any) => ({
-          id: doc.id,
-          data: doc.data(),
-        })),
-      });
-    }
-
-
     const newListings: any[] = [];
     const newContracts: any[] = [];
+
+    // YTD totals
+    let ytdVolume = 0;
+    let ytdSales = 0;
+    let ytdAgentCommissions = 0;
 
     for (const doc of transactionsSnap.docs) {
       const t = doc.data() || {};
@@ -118,20 +106,31 @@ export async function GET(req: NextRequest) {
 
       const addressShort = shortAddress(
         t.address ||
-        t.propertyAddress ||
-        t.streetAddress ||
-        t.transactionType ||
-        "Transaction"
+          t.propertyAddress ||
+          t.streetAddress ||
+          "Transaction"
       );
-      const price = toMoney(t.dealValue ?? t.price ?? t.salePrice ?? t.netCommission);
+      const price = toMoney(t.dealValue ?? t.price ?? t.salePrice);
+      const status = String(t.status || "").toLowerCase();
 
       const closedDateRaw = t.closedDate || t.closingDate || null;
-      const contractDateRaw = t.contractDate || t.pendingDate || t.underContractDate || null;
+      const contractDateRaw =
+        t.contractDate || t.pendingDate || t.underContractDate || null;
 
       const closedDate = toDate(closedDateRaw);
       const contractDate = toDate(contractDateRaw);
 
-      if (closedDate && closedDate >= cutoff) {
+      // YTD totals for closed transactions
+      if (status === "closed") {
+        ytdVolume += price;
+        ytdSales += 1;
+        ytdAgentCommissions += toMoney(
+          t.splitSnapshot?.agentNetCommission ?? t.commission
+        );
+      }
+
+      // Recent listings (closed within lookback)
+      if (closedDate && closedDate >= cutoff && status === "closed") {
         newListings.push({
           id: `${doc.id}_closed`,
           date: toYmd(closedDateRaw),
@@ -141,8 +140,9 @@ export async function GET(req: NextRequest) {
         });
       }
 
+      // Recent contracts (pending within lookback)
       if (
-        (t.status === "pending" || t.status === "under_contract") &&
+        (status === "pending" || status === "under_contract") &&
         contractDate &&
         contractDate >= cutoff
       ) {
@@ -166,6 +166,11 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
       newListings: newListings.slice(0, showTopN),
       newContracts: newContracts.slice(0, showTopN),
+      ytdTotals: {
+        totalVolume: ytdVolume,
+        totalSales: ytdSales,
+        totalAgentCommissions: ytdAgentCommissions,
+      },
     });
   } catch (e: any) {
     return NextResponse.json(

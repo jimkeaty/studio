@@ -338,8 +338,9 @@ export async function GET(req: NextRequest) {
     totals.grossMarginPct = totals.totalGCI > 0
       ? Math.round((totals.grossMargin / totals.totalGCI) * 10000) / 100 : 0;
 
-    // ── All-time side breakdown (all closed transactions, all years) ──────
+    // ── All-time side + source breakdown (all closed transactions, all years) ──
     const allTimeSideBreakdown: { closed: Record<string, SideBucket> } = { closed: {} };
+    const allTimeSourceBreakdown: { closed: Record<string, SourceBucket> } = { closed: {} };
     for (const t of allAgentTx) {
       if (t.status !== 'closed') continue;
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
@@ -347,6 +348,8 @@ export async function GET(req: NextRequest) {
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
       const dealValue = t.dealValue ?? 0;
       addToSide(allTimeSideBreakdown.closed, getSideKey(t), dealValue, agentNet);
+      const srcKey = (t.dealSource || 'other').toLowerCase();
+      addToSource(allTimeSourceBreakdown.closed, srcKey, dealValue, agentNet);
     }
 
     // ── Previous year stats ───────────────────────────────────────────────
@@ -486,6 +489,7 @@ export async function GET(req: NextRequest) {
       sourceBreakdown,   // netRevenue here = agent net, fine to include
       sideBreakdown,     // netRevenue here = agent net, fine to include
       allTimeSideBreakdown,
+      allTimeSourceBreakdown,
     };
 
     return NextResponse.json({

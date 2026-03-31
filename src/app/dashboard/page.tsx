@@ -909,8 +909,10 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
               </Tabs>
             )}
             <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-              <SelectContent>{[...Array(5)].map((_, i) => { const y = new Date().getFullYear() - i; return <SelectItem key={y} value={String(y)}>{y}</SelectItem>; })}</SelectContent>
+              <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {[...Array(5)].map((_, i) => { const y = new Date().getFullYear() - i; return <SelectItem key={y} value={String(y)}>{y}</SelectItem>; })}
+              </SelectContent>
             </Select>
           </div>
         </div>
@@ -2357,9 +2359,11 @@ function CategoryBreakdownSection({ perfData, year }: {
 
   const { sideBreakdown, sourceBreakdown } = perfData.overview as any;
   const allTimeSideBreakdown = (perfData as any).overview?.allTimeSideBreakdown;
+  const allTimeSourceBreakdown = (perfData as any).overview?.allTimeSourceBreakdown;
 
-  // Use all-time data when 'all' is selected, otherwise use the current year's sideBreakdown
+  // Use all-time data when 'all' is selected, otherwise use the current year's data
   const activeSideBreakdown = catYear === 'all' ? allTimeSideBreakdown : sideBreakdown;
+  const activeSourceBreakdown = catYear === 'all' ? allTimeSourceBreakdown : sourceBreakdown;
 
   // Build side breakdown data from Buyer/Seller/Renter
   const closedSide = activeSideBreakdown?.closed ?? {};
@@ -2379,7 +2383,7 @@ function CategoryBreakdownSection({ perfData, year }: {
     .filter(d => d.value > 0);
 
   type SourceMetricEntry = [string, { count: number; volume: number; netRevenue: number }];
-  const sourceEntries = (Object.entries(sourceBreakdown?.closed ?? {}) as SourceMetricEntry[])
+  const sourceEntries = (Object.entries(activeSourceBreakdown?.closed ?? {}) as SourceMetricEntry[])
     .sort((a, b) => b[1].count - a[1].count);
   const sourceSalesData = sourceEntries
     .filter(([, v]) => v.count > 0)

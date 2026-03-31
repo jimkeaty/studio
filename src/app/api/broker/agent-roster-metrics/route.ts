@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
 
     // ── 1. Get all active agent profiles ──────────────────────────────────
     let profileQuery: FirebaseFirestore.Query = adminDb.collection('agentProfiles')
-      .where('status', '==', 'active');
+      .where('status', 'in', ['active', 'grace_period']);
     if (teamFilter) {
       profileQuery = profileQuery.where('primaryTeamId', '==', teamFilter);
     }
@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
     for (const doc of allProfileSnap.docs) {
       if (!profileMap.has(doc.id)) {
         const d = doc.data();
-        if (!d.status || d.status === 'active') {
+        if (!d.status || d.status === 'active' || d.status === 'grace_period') {
           profileMap.set(doc.id, { id: doc.id, ...d });
         }
       }

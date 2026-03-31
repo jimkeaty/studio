@@ -25,6 +25,8 @@ type DailyActivity = {
   appointmentsHeldCount: number;
   contractsWrittenCount: number;
   notes?: string;
+  startTime?: string; // HH:mm
+  endTime?: string;   // HH:mm
 };
 
 type RangeDay = {
@@ -63,7 +65,19 @@ function parseActivity(raw: any): DailyActivity {
     appointmentsHeldCount: Number(src.appointmentsHeldCount ?? 0),
     contractsWrittenCount: Number(src.contractsWrittenCount ?? 0),
     notes: src.notes ?? '',
+    startTime: src.startTime ?? '',
+    endTime: src.endTime ?? '',
   };
+}
+
+function calcHours(start: string, end: string): number | null {
+  if (!start || !end) return null;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return null;
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins < 0) mins += 24 * 60; // overnight
+  return Math.round(mins / 6) / 10; // 1 decimal
 }
 
 function isSameMonth(a: string, year: number, monthIndex: number): boolean {
@@ -557,6 +571,43 @@ export default function DailyTrackerPage() {
                 </div>
               </div>
               <Separator />
+              {/* Time Tracking */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <Label>Start Time</Label>
+                  <Input type="time" value={activity.startTime || ''} onChange={(e) => setActivity(a => ({ ...a, startTime: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>End Time</Label>
+                  <Input type="time" value={activity.endTime || ''} onChange={(e) => setActivity(a => ({ ...a, endTime: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Daily Hours</Label>
+                  <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm font-medium">
+                    {(() => { const h = calcHours(activity.startTime || '', activity.endTime || ''); return h !== null ? `${h} hrs` : '—'; })()}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>Month Hours</Label>
+                  <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm font-medium">
+                    {(() => {
+                      let total = 0;
+                      for (const d of rangeDays) {
+                        const da = d.dailyActivity as any;
+                        const h = calcHours(da.startTime || '', da.endTime || '');
+                        if (h) total += h;
+                      }
+                      // Add today if it's in this month
+                      const todayH = calcHours(activity.startTime || '', activity.endTime || '');
+                      const isCurrentMonth = selectedDate.startsWith(`${monthYear.year}-${String(monthYear.monthIndex + 1).padStart(2, '0')}`);
+                      if (todayH && isCurrentMonth && !rangeDays.some(d => d.date === selectedDate)) total += todayH;
+                      return total > 0 ? `${Math.round(total * 10) / 10} hrs` : '—';
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <Separator />
+              {/* Activity Counts */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
                 <MetricField label="Calls" value={activity.callsCount} onChange={(n) => setActivity((a) => ({ ...a, callsCount: n }))} />
                 <MetricField label="Engagements" value={activity.engagementsCount} onChange={(n) => setActivity((a) => ({ ...a, engagementsCount: n }))} />
@@ -569,7 +620,7 @@ export default function DailyTrackerPage() {
                   <Textarea placeholder="Optional notes for the day..." value={activity.notes || ''} onChange={(e) => setActivity(a => ({...a, notes: e.target.value}))} />
               </div>
               <p className="text-xs text-muted-foreground">
-                Tip: You can go back and edit previous days (up to 45 days).
+                Tip: You can go back and edit previous days (up to 45 days).  Start/End times auto-calculate daily and monthly hours.
               </p>
             </CardContent>
           </Card>
@@ -620,6 +671,7 @@ export default function DailyTrackerPage() {
                     .map((d) => {
                       const a = d.dailyActivity;
                       const total = a.callsCount + a.engagementsCount + a.appointmentsSetCount + a.appointmentsHeldCount + a.contractsWrittenCount;
+                      const hrs = calcHours((a as any).startTime || '', (a as any).endTime || '');
                       return (
                         <button
                           key={d.date}
@@ -631,6 +683,7 @@ export default function DailyTrackerPage() {
                             <div className="text-sm text-muted-foreground truncate">
                               C:{a.callsCount} · E:{a.engagementsCount} · S:{a.appointmentsSetCount} · H:{a.appointmentsHeldCount} · W:{a.contractsWrittenCount}
                             </div>
+                            {hrs !== null && <div className="text-sm text-blue-600 font-medium whitespace-nowrap">{hrs}h</div>}
                             <div className="ml-auto text-sm font-semibold">
                               Total: {total}
                             </div>
@@ -638,6 +691,30 @@ export default function DailyTrackerPage() {
                         </button>
                       );
                     })}
+                  {/* Monthly hours summary */}
+                  {(() => {
+                    let monthTotal = 0;
+                    let daysWorked = 0;
+                    for (const d of rangeDays) {
+                      const da = d.dailyActivity as any;
+                      const h = calcHours(da.startTime || '', da.endTime || '');
+                      if (h) { monthTotal += h; daysWorked++; }
+                    }
+                    if (monthTotal === 0) return null;
+                    const weeklyAvg = daysWorked > 0 ? Math.round((monthTotal / daysWorked) * 5 * 10) / 10 : 0;
+                    const yearlyEst = Math.round(monthTotal * 12);
+                    return (
+                      <div className="mt-4 rounded-lg border bg-muted/30 p-4">
+                        <p className="text-sm font-semibold mb-2">Hours Summary</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div><span className="text-muted-foreground">Month Total:</span> <span className="font-medium">{Math.round(monthTotal * 10) / 10}h</span></div>
+                          <div><span className="text-muted-foreground">Days Tracked:</span> <span className="font-medium">{daysWorked}</span></div>
+                          <div><span className="text-muted-foreground">Est. Weekly:</span> <span className="font-medium">{weeklyAvg}h</span></div>
+                          <div><span className="text-muted-foreground">Est. Yearly:</span> <span className="font-medium">{yearlyEst}h</span></div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </CardContent>

@@ -67,6 +67,8 @@ function emptyDailyActivity(date: string) {
     appointmentsHeldCount: 0,
     contractsWrittenCount: 0,
     notes: "",
+    startTime: "",
+    endTime: "",
   };
 }
 
@@ -144,7 +146,7 @@ export async function POST(req: Request) {
     const docId = `${uid}_${date}`;
     const ref = adminDb.collection("daily_activity").doc(docId);
 
-    const dataToSave = {
+    const dataToSave: Record<string, any> = {
       agentId: uid,
       date,
       callsCount: toNumberOrZero((payload as any).callsCount),
@@ -154,6 +156,9 @@ export async function POST(req: Request) {
       contractsWrittenCount: toNumberOrZero((payload as any).contractsWrittenCount),
       // notes can be top-level or inside payload; support both
       notes: String((body as any).notes ?? (payload as any).notes ?? ""),
+      // Start/End time tracking (optional HH:mm strings)
+      startTime: String((payload as any).startTime ?? (body as any).startTime ?? ""),
+      endTime: String((payload as any).endTime ?? (body as any).endTime ?? ""),
       updatedAt: FieldValue.serverTimestamp(), // ✅ keep storing server timestamp
       updatedByUid: uid,
     };

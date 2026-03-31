@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
     const rules = rulesDoc.exists ? { ...DEFAULT_RULES, ...rulesDoc.data() } : DEFAULT_RULES;
 
     // ── Fetch agents ──────────────────────────────────────────────────────
-    const profileSnap = await adminDb.collection('agentProfiles').where('status', '==', 'active').get();
+    const profileSnap = await adminDb.collection('agentProfiles').where('status', 'in', ['active', 'grace_period']).get();
     const agents: any[] = [];
     for (const doc of profileSnap.docs) {
       const d = doc.data();

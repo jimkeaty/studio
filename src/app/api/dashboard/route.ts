@@ -124,8 +124,16 @@ function performance(actual: number, target: number): number {
 }
 
 function getTransactionNet(t: any): number {
+  // Best: use the split snapshot from auto-calculation
   const splitNet = asNumber(t?.splitSnapshot?.agentNetCommission);
   if (splitNet > 0) return splitNet;
+  // Fallback: agentNetCommission stored directly on the transaction
+  const directNet = asNumber(t?.agentNetCommission);
+  if (directNet > 0) return directNet;
+  // Fallback: netCommission field
+  const netComm = asNumber(t?.netCommission);
+  if (netComm > 0) return netComm;
+  // Last resort: gross commission
   return asNumber(t?.commission);
 }
 
