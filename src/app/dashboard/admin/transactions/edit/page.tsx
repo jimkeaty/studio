@@ -59,6 +59,7 @@ type AgentCommissionData = {
   agentType: string;
   teamGroup: string;
   commissionMode: string;
+  tiersSource?: string;
   defaultTransactionFee: number | null;
   tiers: CommissionTier[];
 };

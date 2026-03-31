@@ -59,6 +59,7 @@ type AgentCommissionData = {
   agentType: string;
   teamGroup: string;
   commissionMode: string;
+  tiersSource?: string;
   defaultTransactionFee: number | null;
   tiers: CommissionTier[];
 };
@@ -1170,8 +1171,12 @@ export default function AddTransactionPage() {
                       </div>
                     ) : (
                       <span>
-                        Commission structure loaded ({agentCommission.tiers.length} tier{agentCommission.tiers.length !== 1 ? 's' : ''}).
-                        {Number(watchedGCI) > 0 ? ' No matching tier for this GCI amount.' : ' Enter GCI to auto-calculate split.'}
+                        {agentCommission.tiers.length === 0
+                          ? 'No commission tiers found for this agent. Please set up their commission profile.'
+                          : Number(watchedGCI) > 0
+                            ? `Commission structure loaded (${agentCommission.tiers.length} tier${agentCommission.tiers.length !== 1 ? 's' : ''}). No matching tier for GCI $${Number(watchedGCI).toLocaleString()}.`
+                            : `Commission structure loaded (${agentCommission.tiers.length} tier${agentCommission.tiers.length !== 1 ? 's' : ''}${agentCommission.tiersSource === 'team_template' ? ' — from team default' : ''}). Enter GCI to auto-calculate split.`
+                        }
                       </span>
                     )}
                   </div>
