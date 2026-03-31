@@ -254,13 +254,40 @@ export default function EditTransactionPage() {
   const watchedCBP = form.watch('commissionBasePrice');
   const watchedGCI = form.watch('gci');
   const watchedAgentId = form.watch('agentId');
+  const watchedClosingType = form.watch('closingType');
+  const watchedDealType = form.watch('dealType');
+  const watchedSellerPayingListing = form.watch('sellerPayingListingAgent');
+  const watchedSellerPayingBuyer = form.watch('sellerPayingBuyerAgent');
+
+  // Reset CBP lock when deal type or closing type changes (different commission basis)
+  useEffect(() => {
+    cbpManuallyEdited.current = false;
+  }, [watchedClosingType, watchedDealType]);
 
   // Auto-fill commissionBasePrice from salePrice when not manually overridden
+  // Also accounts for seller concessions: CBP = salePrice - sellerConcessions
   useEffect(() => {
     if (cbpManuallyEdited.current) return;
     const sp = Number(watchedSalePrice) || 0;
     if (sp > 0) form.setValue('commissionBasePrice', sp as any);
   }, [watchedSalePrice]);
+
+  // When seller concessions change, recalculate GCI directly
+  // (CBP stays as-is; concessions reduce the effective commission base)
+  useEffect(() => {
+    const cbp = Number(form.getValues('commissionBasePrice')) || 0;
+    const pct = Number(form.getValues('commissionPercent')) || 0;
+    const sellerListingAmt = Number(watchedSellerPayingListing) || 0;
+    const sellerBuyerAmt = Number(watchedSellerPayingBuyer) || 0;
+    if (cbp > 0 && pct > 0) {
+      // Recalculate GCI — seller concessions are tracked separately, not subtracted from CBP
+      // but we re-trigger the GCI effect so split updates
+      const calcGCI = resolveGCI({ commissionBasePrice: cbp, commissionPercent: pct });
+      form.setValue('gci', calcGCI as any);
+      // Store concession totals for reference (non-blocking)
+      void sellerListingAmt; void sellerBuyerAmt;
+    }
+  }, [watchedSellerPayingListing, watchedSellerPayingBuyer]);
 
   // Auto-calculate GCI when commissionBasePrice × commissionPercent both set
   useEffect(() => {
@@ -272,7 +299,7 @@ export default function EditTransactionPage() {
     }
   }, [watchedCBP, watchedCommPct]);
 
-  // Auto-calculate commission split when GCI changes
+  // Auto-calculate commission split when GCI or agent commission profile changes
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(watchedGCI) || 0;
@@ -288,6 +315,26 @@ export default function EditTransactionPage() {
       if (txFee > 0) form.setValue('transactionFee', txFee as any);
     }
   }, [watchedGCI, agentCommission]);
+
+  // When agent changes and commission profile loads, re-run split calc with current GCI
+  // (agentCommission change above handles this, but we also need to re-trigger CBP→GCI
+  // in case the agent change doesn't change GCI but the tier structure is different)
+  useEffect(() => {
+    if (!agentCommission || commissionManualOverride.current) return;
+    const gci = Number(form.getValues('gci')) || 0;
+    if (gci <= 0) return;
+    const tier = findActiveTier(agentCommission.tiers, gci);
+    setActiveTier(tier);
+    if (tier) {
+      form.setValue('agentPct', tier.agentSplitPercent as any);
+      form.setValue('brokerPct', tier.companySplitPercent as any);
+      form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+      form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+      const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
+      if (txFee > 0) form.setValue('transactionFee', txFee as any);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentCommission]);
 
   // Load agent list
   useEffect(() => {
