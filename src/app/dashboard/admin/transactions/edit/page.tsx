@@ -835,14 +835,6 @@ export default function EditTransactionPage() {
                 </Select>
               </FormItem>
             )} />
-            <Grid2>
-              <FormField control={form.control} name="clientEmail" render={({ field }) => (
-                <FormItem><FormLabel>Client Email</FormLabel><FormControl><Input type="email" placeholder="client@email.com" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="clientPhone" render={({ field }) => (
-                <FormItem><FormLabel>Client Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-1234" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid2>
             <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
               <FormItem><FormLabel>Client New Address</FormLabel><FormControl><Input placeholder="Where the client is moving to (for mailers)" {...field} /></FormControl></FormItem>
             )} />
