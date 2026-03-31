@@ -39,10 +39,10 @@ function isDateEditable(dateStr: string, role: string): boolean {
     return diff <= EDIT_WINDOW_DAYS;
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { uid: callerUid, role } = await requireUser(req);
-    const { id } = params;
+    const { id } = await params;
     const body = await req.json();
 
     // Admin can patch on behalf of any agent
@@ -80,10 +80,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { uid: callerUid, role } = await requireUser(req);
-    const { id } = params;
+    const { id } = await params;
 
     // For DELETE, check if the doc belongs to the impersonated agent
     const isAdmin = callerUid === ADMIN_UID;

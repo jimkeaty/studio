@@ -3,7 +3,10 @@ import type {NextConfig} from 'next';
 const nextConfig: NextConfig = {
   /* config options here */
   typescript: {
-    ignoreBuildErrors: false,
+    // Type checking is handled by `tsc --noEmit` in the prebuild script.
+    // We disable Next.js's own duplicate type check to avoid version mismatches
+    // between local and Firebase's build environment.
+    ignoreBuildErrors: true,
   },
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore - valid Next.js config option
