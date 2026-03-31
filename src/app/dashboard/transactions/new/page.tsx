@@ -176,10 +176,10 @@ const schema = z.object({
   tcScheduleInspectionsOther: z.string().optional(),
   inspectorName: z.string().optional(),
 
-  // Commission paid by seller
-  sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Commission paid by seller — stored as % of Commission Base Price
+  sellerPayingListingAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   sellerPayingListingAgentUnknown: z.boolean().optional(),
-  sellerPayingBuyerAgent: z.coerce.number().min(0).optional().or(z.literal('')),
+  sellerPayingBuyerAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
 
   // Buyer closing cost paid by seller
   buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -286,9 +286,14 @@ export default function AddTransactionPage() {
   const watchedSalePrice = form.watch('salePrice');
   const watchedCommPct = form.watch('commissionPercent');
   const watchedCBP = form.watch('commissionBasePrice');
+  const watchedClosingType = form.watch('closingType');
+  const watchedSellerPayingListing = form.watch('sellerPayingListingAgent');
+  const watchedSellerPayingBuyer = form.watch('sellerPayingBuyerAgent');
 
   // Track if user manually edited commissionBasePrice (prevents salePrice from overwriting it)
   const cbpManuallyEdited = useRef(false);
+  // Track if user manually edited commissionPercent (prevents auto-assign from overwriting it)
+  const commPctManuallyEdited = useRef(false);
 
   // Auto-fill commissionBasePrice from salePrice when not manually overridden
   useEffect(() => {
@@ -296,6 +301,18 @@ export default function AddTransactionPage() {
     const sp = Number(watchedSalePrice) || 0;
     if (sp > 0) form.setValue('commissionBasePrice', sp as any);
   }, [watchedSalePrice]);
+
+  // Auto-assign commissionPercent from seller-paying % based on deal side
+  useEffect(() => {
+    if (commPctManuallyEdited.current) return;
+    const listingPct = Number(watchedSellerPayingListing) || 0;
+    const buyerPct = Number(watchedSellerPayingBuyer) || 0;
+    let autoPct = 0;
+    if (watchedClosingType === 'listing') autoPct = listingPct;
+    else if (watchedClosingType === 'buyer') autoPct = buyerPct;
+    else if (watchedClosingType === 'dual') autoPct = listingPct + buyerPct;
+    if (autoPct > 0) form.setValue('commissionPercent', autoPct as any);
+  }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer]);
 
   // Auto-calculate GCI when commissionBasePrice × commissionPercent both set
   useEffect(() => {
@@ -1012,8 +1029,14 @@ export default function AddTransactionPage() {
                     <div className="flex-1 max-w-xs">
                       <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Amount seller(s) is paying the listing agent ($)</FormLabel>
-                          <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                          <FormLabel>% Seller Paying Listing Agent</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                            </div>
+                          </FormControl>
+                          <FormDescription>% of Commission Base Price</FormDescription>
                         </FormItem>
                       )} />
                     </div>
@@ -1030,8 +1053,14 @@ export default function AddTransactionPage() {
                   <div className="max-w-xs">
                     <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Amount seller(s) is paying the buyer&apos;s agent ($)</FormLabel>
-                        <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                        <FormLabel>% Seller Paying Buyer&apos;s Agent</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                          </div>
+                        </FormControl>
+                        <FormDescription>% of Commission Base Price</FormDescription>
                       </FormItem>
                     )} />
                   </div>
@@ -1045,7 +1074,20 @@ export default function AddTransactionPage() {
             {isAdmin ? (
               <Grid3>
                 <FormField control={form.control} name="commissionPercent" render={({ field }) => (
-                  <FormItem><FormLabel>Commission %</FormLabel><FormControl><Input type="number" step="0.01" placeholder="3" {...field} /></FormControl></FormItem>
+                  <FormItem>
+                    <FormLabel>Gross Commission %</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number" step="0.01" placeholder="3"
+                        {...field}
+                        onChange={(e) => {
+                          commPctManuallyEdited.current = true;
+                          field.onChange(e);
+                        }}
+                      />
+                    </FormControl>
+                    <FormDescription>Auto-filled from seller-paying % above</FormDescription>
+                  </FormItem>
                 )} />
                 <FormField control={form.control} name="gci" render={({ field }) => (
                   <FormItem>
