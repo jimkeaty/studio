@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase';
 import type { Transaction } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -195,12 +196,13 @@ export default function AdminTransactionLedgerPage() {
     }
   };
 
+  const router = useRouter();
+
   /* ─── Edit handlers ────────────────────────────────────────────────── */
 
   const openEdit = (tx: Transaction) => {
-    setEditTx({ ...tx });
-    setSaveError(null);
-    setEditOpen(true);
+    // Navigate to the full-edit page (mirrors Add Transaction form exactly)
+    router.push(`/dashboard/admin/transactions/edit?id=${tx.id}`);
   };
 
   const updateEditField = (field: string, value: any) => {

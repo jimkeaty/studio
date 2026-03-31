@@ -97,6 +97,93 @@ export interface Transaction {
   };
   createdAt?: any;
   updatedAt?: any;
+  // Extended fields (from Add Transaction form)
+  closingType?: string;
+  dealType?: string;
+  dealSource?: string;
+  listPrice?: number;
+  salePrice?: number;
+  commissionPercent?: number;
+  commissionBasePrice?: number;
+  gci?: number;
+  transactionFee?: number;
+  earnestMoney?: number;
+  listingDate?: string | null;
+  optionExpiration?: string | null;
+  inspectionDeadline?: string | null;
+  surveyDeadline?: string | null;
+  projectedCloseDate?: string | null;
+  // Client contact
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  clientNewAddress?: string | null;
+  clientType?: string;
+  // Buyer info
+  buyerName?: string | null;
+  buyerEmail?: string | null;
+  buyerPhone?: string | null;
+  buyer2Name?: string | null;
+  buyer2Email?: string | null;
+  buyer2Phone?: string | null;
+  // Seller info
+  sellerName?: string | null;
+  sellerEmail?: string | null;
+  sellerPhone?: string | null;
+  seller2Name?: string | null;
+  seller2Email?: string | null;
+  seller2Phone?: string | null;
+  // Legacy second client
+  client2Name?: string | null;
+  client2Email?: string | null;
+  client2Phone?: string | null;
+  // Cooperating agent
+  otherAgentName?: string | null;
+  otherAgentEmail?: string | null;
+  otherAgentPhone?: string | null;
+  otherBrokerage?: string | null;
+  // Mortgage / Lender
+  mortgageCompany?: string | null;
+  loanOfficer?: string | null;
+  loanOfficerEmail?: string | null;
+  loanOfficerPhone?: string | null;
+  lenderOffice?: string | null;
+  // Title
+  titleCompany?: string | null;
+  titleOfficer?: string | null;
+  titleOfficerEmail?: string | null;
+  titleOfficerPhone?: string | null;
+  titleAttorney?: string | null;
+  titleOffice?: string | null;
+  // TC
+  tcWorking?: string;
+  // Inspections
+  inspectionOrdered?: string;
+  targetInspectionDate?: string | null;
+  inspectionTypes?: string[];
+  tcScheduleInspections?: string;
+  tcScheduleInspectionsOther?: string | null;
+  inspectorName?: string | null;
+  // Commission paid by seller
+  sellerPayingListingAgent?: number | null;
+  sellerPayingListingAgentUnknown?: boolean;
+  sellerPayingBuyerAgent?: number | null;
+  // Buyer closing cost
+  buyerClosingCostTotal?: number | null;
+  buyerClosingCostAgentCommission?: number | null;
+  buyerClosingCostTxFee?: number | null;
+  buyerClosingCostOther?: number | null;
+  // Additional info
+  warrantyAtClosing?: string;
+  warrantyPaidBy?: string | null;
+  txComplianceFee?: string;
+  txComplianceFeeAmount?: number | null;
+  txComplianceFeePaidBy?: string | null;
+  occupancyAgreement?: string;
+  occupancyDates?: string | null;
+  shortageInCommission?: string;
+  shortageAmount?: number | null;
+  buyerBringToClosing?: number | null;
+  additionalComments?: string | null;
   // Legacy fields
   userId?: string;
   netCommission?: number;

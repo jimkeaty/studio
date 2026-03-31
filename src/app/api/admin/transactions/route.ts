@@ -63,19 +63,43 @@ const UPDATABLE_FIELDS = new Set([
   'agentId', 'agentDisplayName',
   'status', 'transactionType', 'closingType', 'dealType',
   'address', 'clientName', 'dealValue', 'commission',
-  'commissionPercent', 'transactionFee', 'earnestMoney',
+  'commissionPercent', 'commissionBasePrice', 'gci', 'transactionFee', 'earnestMoney',
   'contractDate', 'closedDate', 'listingDate', 'projectedCloseDate',
   'optionExpiration', 'inspectionDeadline', 'surveyDeadline',
-  'listPrice', 'dealSource', 'notes',
+  'listPrice', 'salePrice', 'dealSource', 'notes', 'additionalComments',
   // Client contact
-  'clientEmail', 'clientPhone', 'clientNewAddress',
+  'clientEmail', 'clientPhone', 'clientNewAddress', 'clientType',
+  // Buyer info
+  'buyerName', 'buyerEmail', 'buyerPhone',
+  'buyer2Name', 'buyer2Email', 'buyer2Phone',
+  // Seller info
+  'sellerName', 'sellerEmail', 'sellerPhone',
+  'seller2Name', 'seller2Email', 'seller2Phone',
+  // Legacy second client
   'client2Name', 'client2Email', 'client2Phone',
   // Parties
   'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
-  'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
+  'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone', 'lenderOffice',
   'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
+  'titleAttorney', 'titleOffice',
+  // TC
+  'tcWorking',
+  // Inspections
+  'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
+  'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
+  // Commission paid by seller
+  'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+  // Buyer closing cost
+  'buyerClosingCostTotal', 'buyerClosingCostAgentCommission', 'buyerClosingCostTxFee', 'buyerClosingCostOther',
+  // Additional info
+  'warrantyAtClosing', 'warrantyPaidBy',
+  'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+  'occupancyAgreement', 'occupancyDates',
+  'shortageInCommission', 'shortageAmount', 'buyerBringToClosing',
   // Financial overrides
   'splitSnapshot', 'brokerProfit',
+  // Split fields stored individually alongside splitSnapshot
+  'agentPct', 'brokerPct', 'agentDollar', 'brokerGci',
 ]);
 
 export async function PATCH(req: NextRequest) {
