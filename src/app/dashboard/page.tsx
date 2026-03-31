@@ -601,15 +601,17 @@ function AgentDashboardPage() {
   // not batch together across component boundaries, causing a fetch with viewAs=null.
   const [bootstrapPending, setBootstrapPending] = React.useState(true);
   const needsImpersonationRef = React.useRef(false);
-  // Prevents Phase 1 from re-running after router.replace clears the URL params.
-  // Without this guard, the second render (with empty searchParams) hits the else
-  // branch and calls setBootstrapPending(false) before Phase 2 can confirm impersonation,
-  // causing fetchPerf to fire with viewAs=null and briefly showing F grades.
+  // Tracks whether Phase 1 has already consumed the URL params.
+  // We must NOT fire Phase 1 until userLoading=false so that isAdmin is correct.
+  // Without this guard, Phase 1 fires with user=null (isAdmin=false) and falls
+  // into the else branch, clearing bootstrapPending before impersonation starts.
   const bootstrapFiredRef = React.useRef(false);
 
-  // Phase 1: consume URL params and start impersonation if needed
+  // Phase 1: consume URL params and start impersonation if needed.
+  // Wait for userLoading=false so isAdmin reflects the real auth state.
   useEffect(() => {
-    if (bootstrapFiredRef.current) return; // only fire once
+    if (userLoading) return; // wait for auth to resolve before checking isAdmin
+    if (bootstrapFiredRef.current) return; // only fire once after auth resolves
     bootstrapFiredRef.current = true;
     const viewAsParam = searchParams.get('viewAs');
     const viewAsName = searchParams.get('viewAsName');
@@ -625,7 +627,7 @@ function AgentDashboardPage() {
       setBootstrapPending(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, searchParams]);
+  }, [userLoading, isAdmin, searchParams]);
 
   // Phase 2: once isImpersonating confirms the agent state has propagated, unblock fetches
   useEffect(() => {
