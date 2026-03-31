@@ -892,8 +892,7 @@ export default function AddTransactionPage() {
               </FormItem>
             )} />
 
-            {inspectionOrdered === 'yes' && (
-              <>
+            {/* All inspection fields always visible regardless of Yes/No selection */}
                 <div className="max-w-xs">
                   <FormField control={form.control} name="targetInspectionDate" render={({ field }) => (
                     <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
@@ -942,8 +941,6 @@ export default function AddTransactionPage() {
                     <FormItem><FormLabel>Inspector Name / Company</FormLabel><FormControl><Input placeholder="Inspector name or company" {...field} /></FormControl></FormItem>
                   )} />
                 </div>
-              </>
-            )}
           </Section>
 
           <Section title="Buyer Closing Cost Paid by Seller">
