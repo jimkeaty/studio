@@ -516,17 +516,26 @@ export default function AgentProfileForm({
    * Priority: team plan's leaderStructureBands → hardcoded team group template.
    */
   function resolveTeamDefaultTiers(teamId: string, teamGroupSlug: string): AgentTierFormValue[] {
+    const teamIdLower = teamId.toLowerCase();
     // 1. Find the team to get its teamPlanId
-    const team = teams.find((t) => t.teamId === teamId);
+    const team = teams.find((t) => t.teamId.toLowerCase() === teamIdLower);
     if (team?.teamPlanId) {
-      // 2. Find the team plan
-      const plan = teamPlans.find((p) => p.teamPlanId === team.teamPlanId);
+      const planIdLower = team.teamPlanId.toLowerCase();
+      // 2a. Exact match by teamPlanId
+      const plan = teamPlans.find((p) => p.teamPlanId.toLowerCase() === planIdLower);
       if (plan?.leaderStructureBands && plan.leaderStructureBands.length > 0) {
         return teamPlanBandsToFormTiers(plan.leaderStructureBands);
       }
+      // 2b. Also try: teamPlanId stored on team might be a prefix of the actual plan doc ID
+      const planByPrefix = teamPlans.find(
+        (p) => p.teamPlanId.toLowerCase().startsWith(planIdLower) && p.teamId.toLowerCase() === teamIdLower
+      );
+      if (planByPrefix?.leaderStructureBands && planByPrefix.leaderStructureBands.length > 0) {
+        return teamPlanBandsToFormTiers(planByPrefix.leaderStructureBands);
+      }
     }
-    // 3. Also try matching by teamId directly
-    const planByTeamId = teamPlans.find((p) => p.teamId === teamId);
+    // 3. Also try matching by teamId directly (case-insensitive)
+    const planByTeamId = teamPlans.find((p) => p.teamId.toLowerCase() === teamIdLower);
     if (planByTeamId?.leaderStructureBands && planByTeamId.leaderStructureBands.length > 0) {
       return teamPlanBandsToFormTiers(planByTeamId.leaderStructureBands);
     }
