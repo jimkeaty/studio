@@ -96,6 +96,7 @@ export default function AdminTransactionLedgerPage() {
   const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
+  const [addressSearch, setAddressSearch] = useState('');
 
   // Sort state
   const [sortKey, setSortKey] = useState<SortKey>('closedDate');
@@ -390,7 +391,8 @@ export default function AdminTransactionLedgerPage() {
       const yearMatch = yearFilter === 'all' || txYear === yearFilter;
       const statusMatch = statusFilter === 'all' || t.status === statusFilter;
       const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? '') === agentFilter;
-      return yearMatch && statusMatch && agentMatch;
+      const addressMatch = !addressSearch.trim() || (t.address || '').toLowerCase().includes(addressSearch.trim().toLowerCase());
+      return yearMatch && statusMatch && agentMatch && addressMatch;
     });
 
     // Sort
@@ -407,7 +409,7 @@ export default function AdminTransactionLedgerPage() {
     });
 
     return result;
-  }, [transactions, yearFilter, statusFilter, agentFilter, sortKey, sortDir]);
+  }, [transactions, yearFilter, statusFilter, agentFilter, addressSearch, sortKey, sortDir]);
 
   const totalGross = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0), [filtered]);
   const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0), 0), [filtered]);
@@ -505,7 +507,18 @@ export default function AdminTransactionLedgerPage() {
       {/* FILTERS */}
       <Card>
         <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap gap-4">
+        <CardContent className="space-y-4">
+          {/* Address Search */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground">Search by Address</span>
+            <Input
+              placeholder="Type an address to search..."
+              value={addressSearch}
+              onChange={(e) => setAddressSearch(e.target.value)}
+              className="max-w-md"
+            />
+          </div>
+          <div className="flex flex-wrap gap-4">
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted-foreground">Year</span>
             <Select value={yearFilter} onValueChange={setYearFilter}>
@@ -537,6 +550,7 @@ export default function AdminTransactionLedgerPage() {
                 {agentNames.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
           </div>
         </CardContent>
       </Card>
