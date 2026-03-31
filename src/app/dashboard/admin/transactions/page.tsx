@@ -14,7 +14,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2,
@@ -103,11 +102,6 @@ export default function AdminTransactionLedgerPage() {
   const [sortKey, setSortKey] = useState<SortKey>('closedDate');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Edit sheet state
-  const [editTx, setEditTx] = useState<Transaction | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Delete confirmation
   const [deleteTx, setDeleteTx] = useState<Transaction | null>(null);
@@ -205,67 +199,6 @@ export default function AdminTransactionLedgerPage() {
     router.push(`/dashboard/admin/transactions/edit?id=${tx.id}`);
   };
 
-  const updateEditField = (field: string, value: any) => {
-    if (!editTx) return;
-    setEditTx({ ...editTx, [field]: value });
-  };
-
-  const updateSplitField = (field: string, value: number) => {
-    if (!editTx) return;
-    setEditTx({
-      ...editTx,
-      splitSnapshot: {
-        ...editTx.splitSnapshot,
-        grossCommission: editTx.splitSnapshot?.grossCommission ?? 0,
-        agentNetCommission: editTx.splitSnapshot?.agentNetCommission ?? 0,
-        companyRetained: editTx.splitSnapshot?.companyRetained ?? 0,
-        [field]: value,
-      },
-    });
-  };
-
-  const handleSave = async () => {
-    if (!editTx || !user) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch('/api/admin/transactions', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          id: editTx.id,
-          status: editTx.status,
-          transactionType: editTx.transactionType,
-          address: editTx.address,
-          clientName: editTx.clientName || null,
-          dealValue: Number(editTx.dealValue) || 0,
-          commission: Number(editTx.commission) || 0,
-          contractDate: editTx.contractDate || null,
-          closedDate: editTx.closedDate || null,
-          notes: editTx.notes || null,
-          splitSnapshot: editTx.splitSnapshot,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to update');
-
-      const updatedYear = editTx.closedDate
-        ? new Date(editTx.closedDate).getFullYear()
-        : editTx.contractDate
-          ? new Date(editTx.contractDate).getFullYear()
-          : editTx.year;
-      setTransactions(prev =>
-        prev.map(t => t.id === editTx.id ? { ...t, ...editTx, year: updatedYear || t.year } : t)
-      );
-      setEditOpen(false);
-      setEditTx(null);
-    } catch (err: any) {
-      setSaveError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
 
   /* ─── Delete handlers ──────────────────────────────────────────────── */
 
@@ -290,10 +223,6 @@ export default function AdminTransactionLedgerPage() {
       setTransactions(prev => prev.filter(t => t.id !== deleteTx.id));
       setDeleteOpen(false);
       setDeleteTx(null);
-      if (editTx?.id === deleteTx.id) {
-        setEditOpen(false);
-        setEditTx(null);
-      }
     } catch (err: any) {
       setPageError(err.message);
     } finally {
@@ -351,10 +280,6 @@ export default function AdminTransactionLedgerPage() {
       setTransferOpen(false);
       setTransferTx(null);
       // Close edit sheet if open for this tx
-      if (editTx?.id === transferTx.id) {
-        setEditOpen(false);
-        setEditTx(null);
-      }
     } catch (err: any) {
       setPageError(err.message);
     } finally {
@@ -681,151 +606,6 @@ export default function AdminTransactionLedgerPage() {
       </Card>
 
       {/* ── EDIT SHEET ── */}
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Pencil className="h-4 w-4" /> Edit Transaction
-            </SheetTitle>
-            <SheetDescription>
-              {editTx?.address} · {editTx?.agentDisplayName}
-            </SheetDescription>
-          </SheetHeader>
-
-          {editTx && (
-            <div className="space-y-6 py-6">
-              {saveError && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>{saveError}</AlertDescription>
-                </Alert>
-              )}
-
-              {/* STATUS — Quick Change */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Status</Label>
-                <div className="flex flex-wrap gap-2">
-                  {ALL_STATUSES.map(s => {
-                    const sc = statusConfig[s];
-                    return (
-                      <Button
-                        key={s}
-                        size="sm"
-                        variant={editTx.status === s ? 'default' : 'outline'}
-                        className={cn(editTx.status === s && sc.color)}
-                        onClick={() => updateEditField('status', s)}
-                      >
-                        {sc.label}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* TRANSACTION TYPE */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Transaction Type</Label>
-                <Select
-                  value={editTx.transactionType || 'residential_sale'}
-                  onValueChange={(v) => updateEditField('transactionType', v)}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="residential_sale">Residential Sale</SelectItem>
-                    <SelectItem value="rental">Rental</SelectItem>
-                    <SelectItem value="commercial_sale">Commercial Sale</SelectItem>
-                    <SelectItem value="commercial_lease">Commercial Lease</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* ADDRESS */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Address</Label>
-                <Input value={editTx.address || ''} onChange={(e) => updateEditField('address', e.target.value)} />
-              </div>
-
-              {/* CLIENT */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Client Name</Label>
-                <Input value={editTx.clientName || ''} onChange={(e) => updateEditField('clientName', e.target.value)} />
-              </div>
-
-              {/* KEY DATES */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Key Dates</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Contract Date</Label>
-                    <Input type="date" value={editTx.contractDate || ''} onChange={(e) => updateEditField('contractDate', e.target.value || null)} />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Closed Date</Label>
-                    <Input type="date" value={editTx.closedDate || ''} onChange={(e) => updateEditField('closedDate', e.target.value || null)} />
-                  </div>
-                </div>
-              </div>
-
-              {/* FINANCIALS */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Financials</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Deal Value ($)</Label>
-                    <Input type="number" value={editTx.dealValue || ''} onChange={(e) => updateEditField('dealValue', Number(e.target.value) || 0)} />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Gross Commission ($)</Label>
-                    <Input
-                      type="number"
-                      value={editTx.commission ?? editTx.splitSnapshot?.grossCommission ?? ''}
-                      onChange={(e) => {
-                        const v = Number(e.target.value) || 0;
-                        updateEditField('commission', v);
-                        updateSplitField('grossCommission', v);
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Agent Net ($)</Label>
-                    <Input type="number" value={editTx.splitSnapshot?.agentNetCommission ?? ''} onChange={(e) => updateSplitField('agentNetCommission', Number(e.target.value) || 0)} />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Company Retained ($)</Label>
-                    <Input type="number" value={editTx.splitSnapshot?.companyRetained ?? ''} onChange={(e) => updateSplitField('companyRetained', Number(e.target.value) || 0)} />
-                  </div>
-                </div>
-              </div>
-
-              {/* NOTES */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Notes</Label>
-                <Textarea value={editTx.notes || ''} onChange={(e) => updateEditField('notes', e.target.value)} rows={3} />
-              </div>
-
-              {/* ACTIONS */}
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div className="flex gap-2">
-                  <Button variant="destructive" size="sm" onClick={() => { setEditOpen(false); openDelete(editTx); }}>
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => { setEditOpen(false); openTransfer(editTx); }}>
-                    <ArrowRightLeft className="mr-2 h-4 w-4" /> Transfer
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setEditOpen(false)}>
-                    <X className="mr-2 h-4 w-4" /> Cancel
-                  </Button>
-                  <Button onClick={handleSave} disabled={saving}>
-                    <Save className="mr-2 h-4 w-4" /> {saving ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
 
       {/* ── TRANSFER DIALOG ── */}
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
