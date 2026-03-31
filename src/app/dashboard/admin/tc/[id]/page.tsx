@@ -61,7 +61,7 @@ type ActivityEntry = {
 // Form schema (mirrors submit form)
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
-  closingType: z.enum(['buyer', 'listing', 'referral']),
+  closingType: z.enum(['buyer', 'listing', 'referral', 'dual']),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5),
   clientName: z.string().min(1),
@@ -700,6 +700,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                     <SelectContent>
                       <SelectItem value="buyer">Buyer</SelectItem>
                       <SelectItem value="listing">Listing</SelectItem>
+                      <SelectItem value="dual">Dual Agent</SelectItem>
                       <SelectItem value="referral">Referral</SelectItem>
                     </SelectContent>
                   </Select>
