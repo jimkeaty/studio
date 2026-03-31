@@ -433,12 +433,10 @@ export default function AddTransactionPage() {
       <div className="max-w-xl mx-auto text-center space-y-6 py-16">
         <CheckCircle2 className="h-20 w-20 text-green-500 mx-auto" />
         <h1 className="text-3xl font-bold">
-          {isAdmin ? 'Transaction Added!' : 'Transaction Submitted!'}
+          Transaction Submitted!
         </h1>
         <p className="text-muted-foreground">
-          {isAdmin
-            ? 'The transaction has been added directly to the ledger.'
-            : 'Your transaction has been submitted for broker review. It will appear in your dashboard once approved.'}
+          Your transaction has been submitted to the TC Queue for review. It will appear in the ledger once approved.
           {resultId && (
             <span className="block mt-2 font-mono text-xs">Ref: {resultId}</span>
           )}
@@ -447,20 +445,12 @@ export default function AddTransactionPage() {
           <Button onClick={() => { setSubmitted(false); setResultId(null); form.reset({ agentId: isAdmin ? '' : user.uid, agentDisplayName: isAdmin ? '' : (user.displayName || user.email || ''), closingType: 'buyer', dealType: 'residential_sale', address: '', clientName: '', contractDate: '', inspectionTypes: [], sellerPayingListingAgentUnknown: false }); }}>
             Add Another
           </Button>
-          {isAdmin ? (
-            <Link href="/dashboard/admin/transactions">
-              <Button variant="outline"><FileCheck2 className="mr-2 h-4 w-4" /> View Ledger</Button>
-            </Link>
-          ) : (
-            <Link href="/dashboard">
-              <Button variant="outline">Back to Dashboard</Button>
-            </Link>
-          )}
-          {isAdmin && (
-            <Link href="/dashboard/admin/tc">
-              <Button variant="outline"><ClipboardList className="mr-2 h-4 w-4" /> TC Queue</Button>
-            </Link>
-          )}
+          <Link href="/dashboard/admin/tc">
+            <Button variant="outline"><ClipboardList className="mr-2 h-4 w-4" /> TC Queue</Button>
+          </Link>
+          <Link href={isAdmin ? '/dashboard/admin/transactions' : '/dashboard'}>
+            <Button variant="outline">{isAdmin ? 'View Ledger' : 'Back to Dashboard'}</Button>
+          </Link>
         </div>
       </div>
     );
@@ -473,154 +463,20 @@ export default function AddTransactionPage() {
     try {
       const token = await user.getIdToken();
 
-      if (isAdmin) {
-        // Admin → create transaction directly via the TC approve-style endpoint
-        // Build GCI-based splitSnapshot inline
-        const gci = Number(values.gci) || 0;
-        const agentDollar = Number(values.agentDollar) || 0;
-        const brokerGci = Number(values.brokerGci) || 0;
-        const companyRetained = brokerGci > 0 ? brokerGci : agentDollar > 0 ? Math.max(0, gci - agentDollar) : 0;
-
-        const txTypeMap: Record<string, string> = {
-          residential_sale: 'residential_sale',
-          residential_lease: 'rental',
-          land: 'residential_sale',
-          commercial_sale: 'commercial_sale',
-          commercial_lease: 'commercial_lease',
-        };
-
-        const payload = {
-          agentId: values.agentId,
-          agentDisplayName: values.agentDisplayName,
-          status: values.status || ((values.closedDate && values.closedDate.length >= 8) ? 'closed' : 'pending'),
-          transactionType: txTypeMap[values.dealType] || 'residential_sale',
-          closingType: values.closingType,
-          dealType: values.dealType,
-          address: values.address,
-          clientName: values.clientName || null,
-          dealSource: normalizeDealSource(values.dealSource) || null,
-          listPrice: Number(values.listPrice) || null,
-          dealValue: Number(values.salePrice) || Number(values.listPrice) || null,
-          commissionPercent: Number(values.commissionPercent) || null,
-          commissionBasePrice: Number(values.commissionBasePrice) || Number(values.salePrice) || null,
-          commission: gci,
-          transactionFee: Number(values.transactionFee) || null,
-          earnestMoney: Number(values.earnestMoney) || null,
-          listingDate: values.listingDate || null,
-          contractDate: values.contractDate || null,
-          optionExpiration: values.optionExpiration || null,
-          inspectionDeadline: values.inspectionDeadline || null,
-          surveyDeadline: values.surveyDeadline || null,
-          projectedCloseDate: values.projectedCloseDate || null,
-          closedDate: values.closedDate || null,
-          // Client contact
-          clientEmail: values.clientEmail || null,
-          clientPhone: values.clientPhone || null,
-          clientNewAddress: values.clientNewAddress || null,
-          client2Name: values.client2Name || null,
-          client2Email: values.client2Email || null,
-          client2Phone: values.client2Phone || null,
-          // Parties
-          otherAgentName: values.otherAgentName || null,
-          otherAgentEmail: values.otherAgentEmail || null,
-          otherAgentPhone: values.otherAgentPhone || null,
-          otherBrokerage: values.otherBrokerage || null,
-          mortgageCompany: values.mortgageCompany || null,
-          loanOfficer: values.loanOfficer || null,
-          loanOfficerEmail: values.loanOfficerEmail || null,
-          loanOfficerPhone: values.loanOfficerPhone || null,
-          lenderOffice: values.lenderOffice || null,
-          titleCompany: values.titleCompany || null,
-          titleOfficer: values.titleOfficer || null,
-          titleOfficerEmail: values.titleOfficerEmail || null,
-          titleOfficerPhone: values.titleOfficerPhone || null,
-          titleAttorney: values.titleAttorney || null,
-          titleOffice: values.titleOffice || null,
-          notes: values.notes || null,
-          // TC Working File fields
-          tcWorking: values.tcWorking || 'no',
-          clientType: values.clientType || null,
-          // Buyer info
-          buyerName: values.buyerName || null,
-          buyerEmail: values.buyerEmail || null,
-          buyerPhone: values.buyerPhone || null,
-          buyer2Name: values.buyer2Name || null,
-          buyer2Email: values.buyer2Email || null,
-          buyer2Phone: values.buyer2Phone || null,
-          // Seller info
-          sellerName: values.sellerName || null,
-          sellerEmail: values.sellerEmail || null,
-          sellerPhone: values.sellerPhone || null,
-          seller2Name: values.seller2Name || null,
-          seller2Email: values.seller2Email || null,
-          seller2Phone: values.seller2Phone || null,
-          // Inspections
-          inspectionOrdered: values.inspectionOrdered || null,
-          targetInspectionDate: values.targetInspectionDate || null,
-          inspectionTypes: values.inspectionTypes || [],
-          tcScheduleInspections: values.tcScheduleInspections || null,
-          tcScheduleInspectionsOther: values.tcScheduleInspectionsOther || null,
-          inspectorName: values.inspectorName || null,
-          // Commission
-          sellerPayingListingAgent: Number(values.sellerPayingListingAgent) || null,
-          sellerPayingListingAgentUnknown: values.sellerPayingListingAgentUnknown || false,
-          sellerPayingBuyerAgent: Number(values.sellerPayingBuyerAgent) || null,
-          // Buyer closing cost
-          buyerClosingCostTotal: Number(values.buyerClosingCostTotal) || null,
-          buyerClosingCostAgentCommission: Number(values.buyerClosingCostAgentCommission) || null,
-          buyerClosingCostTxFee: Number(values.buyerClosingCostTxFee) || null,
-          buyerClosingCostOther: Number(values.buyerClosingCostOther) || null,
-          // Additional
-          warrantyAtClosing: values.warrantyAtClosing || null,
-          warrantyPaidBy: values.warrantyPaidBy || null,
-          txComplianceFee: values.txComplianceFee || null,
-          txComplianceFeeAmount: Number(values.txComplianceFeeAmount) || null,
-          txComplianceFeePaidBy: values.txComplianceFeePaidBy || null,
-          occupancyAgreement: values.occupancyAgreement || null,
-          occupancyDates: values.occupancyDates || null,
-          shortageInCommission: values.shortageInCommission || null,
-          shortageAmount: Number(values.shortageAmount) || null,
-          buyerBringToClosing: Number(values.buyerBringToClosing) || null,
-          additionalComments: values.additionalComments || null,
-          // Override splitSnapshot if agentDollar provided
-          ...(agentDollar > 0 ? {
-            splitSnapshot: {
-              primaryTeamId: null, teamPlanId: null, memberPlanId: null,
-              grossCommission: gci,
-              agentSplitPercent: Number(values.agentPct) || null,
-              companySplitPercent: Number(values.brokerPct) || null,
-              agentNetCommission: agentDollar,
-              leaderStructurePercent: null, leaderStructureGross: null,
-              memberPercentOfLeaderSide: null, memberPaid: null, leaderRetainedAfterMember: null,
-              companyRetained,
-            },
-          } : {}),
-          source: 'manual',
-        };
-
-        const res = await fetch('/api/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to create transaction');
-        setResultId(data.id);
-      } else {
-        // Agent → submit to TC queue for review
-        const res = await fetch('/api/tc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(values),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'Submission failed');
-        setResultId(data.id);
-      }
+      // All transactions (admin and agent) go to TC Queue for approval first
+      const res = await fetch('/api/tc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(values),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Submission failed');
+      setResultId(data.id);
 
       setSubmitted(true);
       toast({
-        title: isAdmin ? 'Transaction added to ledger' : 'Transaction submitted for review',
+        title: 'Transaction submitted to TC Queue',
+        description: 'It will appear in the ledger once approved.',
       });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -637,15 +493,11 @@ export default function AddTransactionPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Add Transaction</h1>
           <p className="text-muted-foreground mt-1">
-            {isAdmin
-              ? 'Transaction will be added directly to the ledger.'
-              : 'Transaction will be submitted to the broker for review and approval.'}
+            Transaction will be submitted to the TC Queue for review and approval before appearing in the ledger.
           </p>
         </div>
         <Badge variant="outline" className="mt-1">
-          {isAdmin
-            ? <><FileCheck2 className="h-3 w-3 mr-1" /> Direct to Ledger</>
-            : <><ClipboardList className="h-3 w-3 mr-1" /> Pending Review</>}
+          <ClipboardList className="h-3 w-3 mr-1" /> TC Queue Review
         </Badge>
       </div>
 
@@ -1494,13 +1346,11 @@ export default function AddTransactionPage() {
               {submitting
                 ? 'Submitting...'
                 : isAdmin
-                  ? 'Add to Ledger'
-                  : 'Submit for Review'}
+                  ? 'Submit to TC Queue'
+                  : 'Submit to TC Queue'}
             </Button>
             <p className="text-sm text-muted-foreground">
-              {isAdmin
-                ? 'Creates the transaction immediately in the ledger.'
-                : 'Goes to the broker for review before appearing in the ledger.'}
+              All transactions go to the TC Queue for review before appearing in the ledger.
             </p>
           </div>
 
