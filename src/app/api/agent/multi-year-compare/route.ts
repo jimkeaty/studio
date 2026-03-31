@@ -4,6 +4,7 @@
 // ?view=personal|team  — team view available to team leaders only
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -46,11 +47,11 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-    const isAdminCaller = decoded.uid === ADMIN_UID;
+    const isAdminCaller = await isAdminLike(decoded.uid);
     const { searchParams } = new URL(req.url);
     const viewAs = searchParams.get('viewAs');
-    const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
+    const callerIsAdmin = await isAdminLike(decoded.uid);
+    const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
     const view = searchParams.get('view') || 'personal';
 
     // ── Determine which agent IDs to include ─────────────────────────────────

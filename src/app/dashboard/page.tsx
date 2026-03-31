@@ -37,6 +37,7 @@ import { differenceInDays, parseISO, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -569,8 +570,6 @@ const kpiMeta: Record<string, { label: string; icon: React.ElementType; unit: st
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-
 export default function AgentDashboardPageWrapper() {
   return (
     <Suspense fallback={<DashboardSkeleton />}>
@@ -581,12 +580,10 @@ export default function AgentDashboardPageWrapper() {
 
 function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
+  const { isAdmin } = useIsAdminLike();
   const { isImpersonating, impersonatedAgent, startImpersonation, impersonationReady } = useEffectiveUser();
   const searchParams = useSearchParams();
   const router = useRouter();
-
-  // Bootstrap impersonation from URL params (links from admin pages)
-  const isAdmin = user?.uid === ADMIN_UID;
 
   // bootstrapPending: blocks all data fetches until viewAs is fully resolved.
   //

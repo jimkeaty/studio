@@ -40,7 +40,6 @@ import type {
 } from '@/lib/competitions/types';
 import Link from 'next/link';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCurrency = (n: number) => (n >= 1000 ? `$${(n / 1000).toFixed(0)}k` : `$${n.toFixed(0)}`);

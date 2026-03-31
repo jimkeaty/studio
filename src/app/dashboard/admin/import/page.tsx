@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -34,8 +35,6 @@ import * as XLSX from 'xlsx';
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-
 /** Exact column headers in order (matches Excel template) */
 const CSV_HEADERS = [
   'Type',
@@ -424,6 +423,7 @@ type Step = 'upload' | 'mapping' | 'preview' | 'result';
 
 export default function BulkImportPage() {
   const { user, loading: userLoading } = useUser();
+  const { isAdmin, loading: adminLoading } = useIsAdminLike();
 
   const [step, setStep] = useState<Step>('upload');
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
@@ -446,7 +446,7 @@ export default function BulkImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Auth guards ──────────────────────────────────────────────────────────
-  if (userLoading) {
+   if (userLoading || adminLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-12 w-1/3" />
@@ -454,7 +454,6 @@ export default function BulkImportPage() {
       </div>
     );
   }
-
   if (!user) {
     return (
       <Alert>
@@ -463,8 +462,7 @@ export default function BulkImportPage() {
       </Alert>
     );
   }
-
-  if (user.uid !== ADMIN_UID) {
+  if (!isAdmin) {
     return (
       <Alert variant="destructive">
         <AlertTitle>Access Denied</AlertTitle>

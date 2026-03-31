@@ -4,6 +4,7 @@
 // ?compareYear=2025 — optional comparison year
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import type admin from 'firebase-admin';
 import { format } from 'date-fns';
 import type {
@@ -83,12 +84,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
     const { searchParams } = new URL(req.url);
     // Allow admin to view any agent's metrics via ?viewAs=agentId
     const viewAs = searchParams.get('viewAs');
-    const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
+    const callerIsAdmin = await isAdminLike(decoded.uid);
+    const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()), 10);
     const view = searchParams.get('view') || 'personal'; // 'personal' | 'team'
     const compareYearParam = searchParams.get('compareYear');
@@ -435,7 +436,7 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Response ──────────────────────────────────────────────────────────
-    const isAdminCaller = decoded.uid === ADMIN_UID;
+    const isAdminCaller = await isAdminLike(decoded.uid);
     const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown, sideBreakdown };
 
     // ── Strip commission split data for non-admin callers ─────────────────

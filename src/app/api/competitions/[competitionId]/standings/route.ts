@@ -2,6 +2,7 @@
 // Supports both threshold_map (golf) and points (nascar) scoring strategies.
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import type {
   CompetitionConfig,
   ThresholdRule,
@@ -10,8 +11,6 @@ import type {
   DailyScore,
   ScoreGrouping,
 } from '@/lib/competitions/types';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -105,7 +104,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       const token = bearer(req);
       if (!token) return jsonError(401, 'Missing token');
       const decoded = await adminAuth.verifyIdToken(token);
-      if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden');
+      if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
     }
 
     // ── 1. Load competition config ──────────────────────────────────────

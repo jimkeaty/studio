@@ -7,7 +7,6 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;

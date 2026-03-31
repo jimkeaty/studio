@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +24,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Pencil, UserX, UserCheck, Mail, Shield, Building2, ClipboardList, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 type StaffRole = 'office_admin' | 'tc_admin' | 'tc';
 
@@ -83,7 +83,7 @@ export default function StaffUsersPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<StaffUser | null>(null);
   const [form, setForm] = useState(emptyForm);
 
-  const isAdmin = user?.uid === ADMIN_UID;
+  const { isAdmin } = useIsAdminLike();
 
   const fetchUsers = useCallback(async () => {
     if (!user) return;
@@ -202,7 +202,7 @@ export default function StaffUsersPage() {
       <div className="p-6">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>Access denied. Office Admin only.</AlertDescription>
+          <AlertDescription>Access denied. Admin access required.</AlertDescription>
         </Alert>
       </div>
     );

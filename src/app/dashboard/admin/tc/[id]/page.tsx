@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use, useCallback } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -30,8 +31,6 @@ import {
   ClipboardList, UserCheck, Clock, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -157,6 +156,7 @@ const STATUS_BADGE: Record<string, string> = {
 export default function TcReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user, loading: userLoading } = useUser();
+  const { isAdmin, loading: adminLoading } = useIsAdminLike();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -458,10 +458,10 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   };
 
   // ── Guards ───────────────────────────────────────────────────────────────
-  if (userLoading || loading) {
+  if (userLoading || adminLoading || loading) {
     return <div className="space-y-4"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-96 w-full" /></div>;
   }
-  if (!user || user.uid !== ADMIN_UID) {
+  if (!user || !isAdmin) {
     return <Alert variant="destructive"><AlertTitle>Access Denied</AlertTitle></Alert>;
   }
   if (!intake) {

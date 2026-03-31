@@ -5,9 +5,8 @@
 // ?agentId=xxx                  (admin-only viewAs override)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import type { ActivityRecord, ActivityRollupBucket, ActivityRollupPeriod } from '@/lib/types/activityTracking';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function getBearerToken(req: NextRequest): string | null {
@@ -48,7 +47,8 @@ export async function GET(req: NextRequest) {
 
     // Admin can view any agent
     const viewAsParam = searchParams.get('agentId');
-    const uid = (viewAsParam && decoded.uid === ADMIN_UID) ? viewAsParam : decoded.uid;
+    const callerIsAdmin = await isAdminLike(decoded.uid);
+    const uid = (viewAsParam && callerIsAdmin) ? viewAsParam : decoded.uid;
 
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()), 10);
     const period = (searchParams.get('period') || 'monthly') as ActivityRollupPeriod;

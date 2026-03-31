@@ -2,6 +2,7 @@
 // Returns the logged-in agent's pending/closed transactions and opportunities.
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -61,13 +62,13 @@ export async function GET(req: NextRequest) {
     if (!authHeader?.startsWith('Bearer ')) return jsonError(401, 'Missing auth token');
     const token = authHeader.slice('Bearer '.length);
     const decoded = await adminAuth.verifyIdToken(token);
-    const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-    const isAdminCaller = decoded.uid === ADMIN_UID;
+    const isAdminCaller = await isAdminLike(decoded.uid);
 
     const { searchParams } = new URL(req.url);
     // Allow admin to view any agent's pipeline via ?viewAs=agentId
     const viewAs = searchParams.get('viewAs');
-    const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
+    const callerIsAdmin = await isAdminLike(decoded.uid);
+    const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
 
     // Resolve all possible agentId values for this agent (slug + Firebase UID)

@@ -7,7 +7,6 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { resolveGCI } from '@/lib/commissions';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 function serializeFirestore(val: any): any {
   if (val == null) return val;
   if (typeof val?.toDate === 'function') return val.toDate().toISOString();

@@ -6,7 +6,6 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { format } from 'date-fns';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 function jsonError(s: number, e: string) {
   return NextResponse.json({ ok: false, error: e }, { status: s });

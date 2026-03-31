@@ -1,7 +1,6 @@
 'use client';
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 const STORAGE_KEY = 'impersonation_session';
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 export interface ImpersonatedAgent {
   uid: string;
   name: string;
@@ -23,11 +22,11 @@ const ImpersonationContext = createContext<ImpersonationState>({
 });
 export function ImpersonationProvider({
   children,
-  adminUid,
+  isAdmin,
   getToken,
 }: {
   children: ReactNode;
-  adminUid: string | null;
+  isAdmin: boolean;
   getToken?: () => Promise<string>;
 }) {
   // Synchronously restore impersonation session from sessionStorage at mount time.
@@ -38,8 +37,7 @@ export function ImpersonationProvider({
   //   - If a valid session exists → restore it immediately, mark ready
   //   - If no session exists → no impersonation to restore, mark ready immediately
   //
-  // The adminUid check is still needed to prevent non-admins from impersonating,
-  // but we no longer need to wait for it to mark impersonationReady.
+  // The isAdmin check prevents non-admins from impersonating.
   const [agent, setAgent] = useState<ImpersonatedAgent | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -68,7 +66,7 @@ export function ImpersonationProvider({
   }, []);
   const startImpersonation = useCallback(
     (next: ImpersonatedAgent) => {
-      if (adminUid !== ADMIN_UID) return;
+      if (!isAdmin) return;
       setAgent(next);
       try {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -88,7 +86,7 @@ export function ImpersonationProvider({
           .catch(() => {});
       }
     },
-    [adminUid, getToken]
+    [isAdmin, getToken]
   );
   const stopImpersonation = useCallback(() => {
     const prev = agent;

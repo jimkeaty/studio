@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUser } from '@/firebase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -22,13 +23,11 @@ import { useToast } from '@/hooks/use-toast';
 import { CheckCircle2, Send, ClipboardList, FileCheck2 } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
+import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-
-import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
 const SOURCES = CANONICAL_SOURCES;
 
 const INSPECTION_TYPE_OPTIONS = [
@@ -252,9 +251,9 @@ export default function AddTransactionPage() {
   const [activeTier, setActiveTier] = useState<CommissionTier | null>(null);
   const commissionManualOverride = useRef(false);
 
+  const { isAdmin: isAdminUser } = useIsAdminLike();
   // When admin is impersonating an agent, treat the form as agent-mode
   // so commission split fields are hidden (same experience as the real agent).
-  const isAdminUser = user?.uid === ADMIN_UID;
   const isAdmin = isAdminUser && !isImpersonating;
 
   const form = useForm<FormValues>({

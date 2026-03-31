@@ -1,9 +1,9 @@
 // src/app/api/daily-activity/range/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import type { DailyActivity } from '@/lib/types';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 // --- API Helpers ---
 function jsonError(status: number, error: string, code?: string) {
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     const start = searchParams.get('start');
     const end = searchParams.get('end');
     const viewAs = searchParams.get('viewAs');
-    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
+    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
 
     if (!start || !end) {
       return jsonError(400, 'Missing required query params: start, end');

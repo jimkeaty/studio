@@ -12,7 +12,6 @@ import type {
   Metric,
 } from '@/lib/types/brokerCommandMetrics';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 // ── Transaction shape in Firestore ──────────────────────────────────────────
 interface Transaction {

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import {
   Sidebar,
   SidebarContent,
@@ -40,8 +41,6 @@ import {
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 type BrandingData = {
   companyName: string;
@@ -94,20 +93,7 @@ const adminMenuItems = [
 export function SidebarNav() {
   const pathname = usePathname();
   const { user } = useUser();
-  const isAdmin = user?.uid === ADMIN_UID;
-  const [isStaffAdmin, setIsStaffAdmin] = useState(false);
-  useEffect(() => {
-    if (!user || user.uid === ADMIN_UID) return;
-    let cancelled = false;
-    user.getIdToken().then((token) => {
-      fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((d) => { if (!cancelled && d.ok) setIsStaffAdmin(true); })
-        .catch(() => {});
-    });
-    return () => { cancelled = true; };
-  }, [user]);
-  const showAdminMenu = isAdmin || isStaffAdmin;
+  const { isAdmin: showAdminMenu } = useIsAdminLike();
   const { isImpersonating } = useImpersonation();
   const [branding, setBranding] = useState<BrandingData | null>(null);
 

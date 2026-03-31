@@ -4,7 +4,6 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 function getBearerToken(req: NextRequest) {
   const auth = req.headers.get('authorization') || '';

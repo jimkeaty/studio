@@ -1,8 +1,8 @@
 // src/app/api/daily-activity/route.ts
 import { NextResponse } from "next/server";
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 import { FieldValue, DocumentData } from "firebase-admin/firestore";
 import { differenceInDays } from "date-fns";
 
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const date = url.searchParams.get("date");
     const viewAs = url.searchParams.get("viewAs");
-    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
+    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
 
     if (!date) {
       return jsonError(400, "Missing required query param: date", "bad_request/missing-date");
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
 
     // Admin can write on behalf of any agent via body.viewAs
     const viewAs = (body as any).viewAs;
-    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
+    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
 
     const date = (body as any).date;
     if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     }
 
     // Admin impersonating uses admin role privileges for edit window
-    const effectiveRole = callerUid === ADMIN_UID ? "admin" : role;
+    const effectiveRole = await isAdminLike(callerUid) ? "admin" : role;
     if (!isDateEditable(date, effectiveRole)) {
       return jsonError(403, "Edits are locked after 45 days.", "edit_window_expired");
     }

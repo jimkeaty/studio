@@ -3,9 +3,8 @@
 // DELETE /api/competitions/[competitionId] — delete competition
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import type { CompetitionConfig } from '@/lib/competitions/types';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 function bearer(req: NextRequest) {
   const h = req.headers.get('authorization') || '';
@@ -60,7 +59,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     const token = bearer(req);
     if (!token) return jsonError(401, 'Missing token');
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
 
     const { competitionId } = await ctx.params;
     const ref = adminDb.collection('competitions').doc(competitionId);
@@ -92,7 +91,7 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
     const token = bearer(req);
     if (!token) return jsonError(401, 'Missing token');
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
 
     const { competitionId } = await ctx.params;
     const ref = adminDb.collection('competitions').doc(competitionId);

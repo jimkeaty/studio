@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
     const callerRole = await getStaffRole(decoded.uid);
-    if (callerRole !== 'office_admin') return jsonError(403, 'Forbidden: Office Admin only');
+    if (callerRole !== 'office_admin' && callerRole !== 'tc_admin') return jsonError(403, 'Forbidden: Admin only');
 
     const { userId } = await params;
     const body = await req.json();
@@ -71,7 +71,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
     const callerRole = await getStaffRole(decoded.uid);
-    if (callerRole !== 'office_admin') return jsonError(403, 'Forbidden: Office Admin only');
+    if (callerRole !== 'office_admin' && callerRole !== 'tc_admin') return jsonError(403, 'Forbidden: Admin only');
 
     const { userId } = await params;
     const docRef = adminDb.collection('staffUsers').doc(userId);

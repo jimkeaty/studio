@@ -6,8 +6,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
@@ -25,7 +23,7 @@ async function requireAuth(req: NextRequest) {
 // Check if user can write to the given segment
 async function canWriteSegment(uid: string, segment: string): Promise<boolean> {
   // Admin can write anything — including agent_* segments when impersonating
-  if (uid === ADMIN_UID) return true;
+  if (await isAdminLike(uid)) return true;
 
   // Agents can write their own segment (keyed by Firebase UID)
   if (segment === `agent_${uid}`) return true;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,8 +15,6 @@ import {
   Upload, Image as ImageIcon, Paintbrush, Save, CheckCircle2, AlertTriangle, Loader2, X, Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 type BrandingSettings = {
   companyName: string;
@@ -179,6 +178,7 @@ function SidebarPreview({ branding }: { branding: BrandingSettings }) {
 // ---------- Main Page ----------
 export default function AdminBrandingPage() {
   const { user, loading: userLoading } = useUser();
+  const { isAdmin, loading: adminLoading } = useIsAdminLike();
 
   const [branding, setBranding] = useState<BrandingSettings>(DEFAULT_BRANDING);
   const [loading, setLoading] = useState(false);
@@ -274,7 +274,7 @@ export default function AdminBrandingPage() {
   };
 
   // ---------- Auth guards ----------
-  if (userLoading) {
+  if (userLoading || adminLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-12 w-1/3" />
@@ -292,7 +292,7 @@ export default function AdminBrandingPage() {
     );
   }
 
-  if (user.uid !== ADMIN_UID) {
+  if (!isAdmin) {
     return (
       <Alert variant="destructive">
         <AlertTitle>Access Denied</AlertTitle>

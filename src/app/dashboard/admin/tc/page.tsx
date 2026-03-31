@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,8 +27,6 @@ import {
   Plus, Pencil, Trash2, UserCheck, Users, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 type IntakeStatus = 'submitted' | 'in_review' | 'approved' | 'rejected';
 
@@ -130,6 +129,7 @@ const DEFAULT_CHECKLIST = [
 
 export default function TcQueuePage() {
   const { user, loading: userLoading } = useUser();
+  const { isAdmin, loading: adminLoading } = useIsAdminLike();
 
   // ── TC Queue state ──────────────────────────────────────────────────────────
   const [intakes, setIntakes] = useState<Intake[]>([]);
@@ -357,7 +357,7 @@ export default function TcQueuePage() {
   };
 
   // ── Auth guards ─────────────────────────────────────────────────────────────
-  if (userLoading) {
+  if (userLoading || adminLoading) {
     return <div className="space-y-4"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-96 w-full" /></div>;
   }
 
@@ -365,7 +365,7 @@ export default function TcQueuePage() {
     return <Alert><AlertTitle>Authentication Required</AlertTitle><AlertDescription>Please sign in.</AlertDescription></Alert>;
   }
 
-  if (user.uid !== ADMIN_UID) {
+  if (!isAdmin) {
     return <Alert variant="destructive"><AlertTitle>Access Denied</AlertTitle><AlertDescription>Admin only.</AlertDescription></Alert>;
   }
 

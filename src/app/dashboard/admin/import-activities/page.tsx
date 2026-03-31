@@ -4,6 +4,7 @@
 
 import { useRef, useState } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -42,7 +43,6 @@ import * as XLSX from 'xlsx';
 import type { ActivityImportRow } from '@/lib/types/activityTracking';
 
 // ─────────────────────────────────────────────────────────────────────────────
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 /** Canonical column headers matching the expected spreadsheet format */
 const ACTIVITY_CSV_HEADERS = [
@@ -301,6 +301,7 @@ const ALL_API_KEYS: Array<{ key: string; label: string }> = [
 // ─────────────────────────────────────────────────────────────────────────────
 export default function BulkActivityImportPage() {
   const { user, loading: userLoading } = useUser();
+  const { isAdmin, loading: adminLoading } = useIsAdminLike();
 
   const [step, setStep] = useState<Step>('upload');
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
@@ -318,7 +319,7 @@ export default function BulkActivityImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Auth guards ──────────────────────────────────────────────────────────
-  if (userLoading) {
+  if (userLoading || adminLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-12 w-1/3" />
@@ -333,7 +334,7 @@ export default function BulkActivityImportPage() {
       </Alert>
     );
   }
-  if (user.uid !== ADMIN_UID) {
+  if (!isAdmin) {
     return (
       <Alert variant="destructive"><AlertTitle>Access Denied</AlertTitle>
         <AlertDescription>This page is restricted to administrators.</AlertDescription>

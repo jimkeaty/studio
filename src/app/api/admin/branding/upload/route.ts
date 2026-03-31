@@ -6,7 +6,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { admin, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 const BUCKET_NAME = 'smart-broker-usa.firebasestorage.app';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_TYPES = new Set([

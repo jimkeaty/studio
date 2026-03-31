@@ -1,6 +1,7 @@
 // src/app/api/dashboard/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 import type { AgentDashboardData, BusinessPlan } from "@/lib/types";
 
@@ -153,12 +154,12 @@ export async function GET(req: NextRequest) {
     }
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
     // Allow admin to view any agent's dashboard via ?viewAs=agentId
     const reqParams = new URL(req.url).searchParams;
     const viewAs = reqParams.get('viewAs');
-    const uid = (viewAs && decoded.uid === ADMIN_UID) ? viewAs : decoded.uid;
+    const callerIsAdmin = await isAdminLike(decoded.uid);
+    const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
 
     const year = parseYear(req);
     const yearNum = Number(year);
@@ -912,7 +913,7 @@ export async function GET(req: NextRequest) {
     dashboard.availableComparisonYears = availableYears;
 
     // ── Strip commission split fields for non-admin callers ───────────────
-    const isAdminCaller = decoded.uid === ADMIN_UID;
+    const isAdminCaller = await isAdminLike(decoded.uid);
     if (!isAdminCaller && dashboard.stats) {
       delete (dashboard.stats as any).avgCommissionPct;
     }

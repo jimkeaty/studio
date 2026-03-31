@@ -6,6 +6,7 @@ import { Header } from '@/components/dashboard/header';
 import { SidebarNav } from '@/components/dashboard/sidebar-nav';
 import { ImpersonationProvider, useImpersonation } from '@/contexts/ImpersonationContext';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
 import { UserX } from 'lucide-react';
 
@@ -52,10 +53,11 @@ function DashboardShell({ children }: { children: ReactNode }) {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { user } = useUser();
+  const { isAdmin } = useIsAdminLike();
   const getToken = user ? () => user.getIdToken() : undefined;
 
   return (
-    <ImpersonationProvider adminUid={user?.uid ?? null} getToken={getToken}>
+    <ImpersonationProvider isAdmin={isAdmin} getToken={getToken}>
       <DashboardShell>{children}</DashboardShell>
     </ImpersonationProvider>
   );

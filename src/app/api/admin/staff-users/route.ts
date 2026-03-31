@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
     const role = await getStaffRole(decoded.uid);
-    if (role !== 'office_admin') return jsonError(403, 'Forbidden: Office Admin only');
+    if (role !== 'office_admin' && role !== 'tc_admin') return jsonError(403, 'Forbidden: Admin only');
 
     const snap = await adminDb.collection('staffUsers').orderBy('createdAt', 'desc').get();
     const users = snap.docs.map((d) => serializeDoc(d.id, d.data()));
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
     const role = await getStaffRole(decoded.uid);
-    if (role !== 'office_admin') return jsonError(403, 'Forbidden: Office Admin only');
+    if (role !== 'office_admin' && role !== 'tc_admin') return jsonError(403, 'Forbidden: Admin only');
 
     const body = await req.json();
     const { displayName, email, phone, role: newRole } = body;

@@ -12,11 +12,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Trophy, Flag, Plus, Settings, Play, Calendar, Users, Zap, BarChart3, AlertCircle } from 'lucide-react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { getDefaultConfig } from '@/lib/competitions/scoring-engine';
 import type { Competition, CompetitionConfig, CompetitionTheme } from '@/lib/competitions/types';
 import Link from 'next/link';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 // ── Metric options ──────────────────────────────────────────────────────────
 const METRIC_OPTIONS = [
@@ -70,20 +69,7 @@ function fmtDateRange(start: string, end: string) {
 
 export default function CompetitionCenterPage() {
   const { user, loading: userLoading } = useUser();
-  const isAdmin = user?.uid === ADMIN_UID;
-  const [isStaffAdmin, setIsStaffAdmin] = useState(false);
-  useEffect(() => {
-    if (!user || user.uid === ADMIN_UID) return;
-    let cancelled = false;
-    user.getIdToken().then((token) => {
-      fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((d) => { if (!cancelled && d.ok) setIsStaffAdmin(true); })
-        .catch(() => {});
-    });
-    return () => { cancelled = true; };
-  }, [user]);
-  const hasAdminAccess: boolean = !!(user && ((user as any).role === 'admin' || isStaffAdmin));
+  const { isAdmin: hasAdminAccess, loading: adminLoading } = useIsAdminLike();
 
   // ── Data state ──────────────────────────────────────────────────────────
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -219,7 +205,7 @@ export default function CompetitionCenterPage() {
   const themesAvailable = 2; // NASCAR, Golf
 
   // ── Loading / error states ──────────────────────────────────────────────
-  if (userLoading || loading) {
+  if (userLoading || adminLoading || loading) {
     return (
       <div className="space-y-8">
         <Skeleton className="h-12 w-1/2" />

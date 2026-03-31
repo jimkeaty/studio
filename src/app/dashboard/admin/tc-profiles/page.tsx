@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +22,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 type TcProfile = {
   id: string;
@@ -56,20 +56,7 @@ export default function TcProfilesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
 
-  const isAdmin = user?.uid === ADMIN_UID;
-  const [isStaffAdmin, setIsStaffAdmin] = useState(false);
-  useEffect(() => {
-    if (!user || user.uid === ADMIN_UID) return;
-    let cancelled = false;
-    user.getIdToken().then((token) => {
-      fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((d) => { if (!cancelled && d.ok) setIsStaffAdmin(true); })
-        .catch(() => {});
-    });
-    return () => { cancelled = true; };
-  }, [user]);
-  const hasAdminAccess: boolean = !!(user && ((user as any).role === 'admin' || isStaffAdmin));
+  const { isAdmin: hasAdminAccess } = useIsAdminLike();
 
   const fetchProfiles = useCallback(async () => {
     if (!user) return;

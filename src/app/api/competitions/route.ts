@@ -2,9 +2,8 @@
 // POST /api/competitions       — create a new competition
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import type { CompetitionConfig, Competition } from '@/lib/competitions/types';
-
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 function bearer(req: NextRequest) {
   const h = req.headers.get('authorization') || '';
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest) {
     const token = bearer(req);
     if (!token) return jsonError(401, 'Missing token');
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.uid !== ADMIN_UID) return jsonError(403, 'Forbidden');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
 
     const body = (await req.json()) as CompetitionConfig;
 

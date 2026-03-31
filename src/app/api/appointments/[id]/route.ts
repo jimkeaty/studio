@@ -1,8 +1,8 @@
 // src/app/api/appointments/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth, admin } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 import { FieldValue } from 'firebase-admin/firestore';
 import { differenceInDays } from 'date-fns';
 
@@ -47,8 +47,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Admin can patch on behalf of any agent
     const viewAs = body?.viewAs;
-    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
-    const effectiveRole = callerUid === ADMIN_UID ? 'admin' : role;
+    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
+    const effectiveRole = await isAdminLike(callerUid) ? 'admin' : role;
 
     const docRef = adminDb.collection('appointments').doc(id);
     const docSnap = await docRef.get();
@@ -86,7 +86,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
 
     // For DELETE, check if the doc belongs to the impersonated agent
-    const isAdmin = callerUid === ADMIN_UID;
+    const isAdmin = await isAdminLike(callerUid);
     const effectiveRole = isAdmin ? 'admin' : role;
 
     const docRef = adminDb.collection('appointments').doc(id);

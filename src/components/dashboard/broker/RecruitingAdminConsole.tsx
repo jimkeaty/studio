@@ -5,6 +5,7 @@
 // The current client-side queries violate security rules and are disabled.
 
 import { useUser } from '@/firebase';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import {
   Card,
   CardContent,
@@ -19,12 +20,11 @@ import {
 } from '@/components/ui/alert';
 import { ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 export function RecruitingAdminConsole() {
-  const { user } = useUser();
+  const { isAdmin } = useIsAdminLike();
   
-  if (user?.uid !== ADMIN_UID) {
+  if (!isAdmin) {
     // This component is only rendered by BrokerDashboardInner which already performs this check.
     // This is an extra safeguard.
     return null;

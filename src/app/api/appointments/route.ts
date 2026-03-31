@@ -1,8 +1,8 @@
 // src/app/api/appointments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 import { FieldValue, Query } from 'firebase-admin/firestore';
 import { differenceInDays, startOfMonth, endOfMonth, format } from 'date-fns';
 
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     const year = searchParams.get('year');
     const month = searchParams.get('month');
     const viewAs = searchParams.get('viewAs');
-    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
+    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
 
     let q: Query = adminDb.collection('appointments').where('agentId', '==', uid);
 
@@ -130,8 +130,8 @@ export async function POST(req: NextRequest) {
 
     // Admin can create appointment for any agent via body.viewAs
     const viewAs = body?.viewAs;
-    const uid = (callerUid === ADMIN_UID && viewAs) ? viewAs : callerUid;
-    const effectiveRole = callerUid === ADMIN_UID ? 'admin' : role;
+    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
+    const effectiveRole = await isAdminLike(callerUid) ? 'admin' : role;
 
     if (!body.date || !body.contactName || !body.category || !body.status) {
       return jsonError(400, 'Missing required fields');
