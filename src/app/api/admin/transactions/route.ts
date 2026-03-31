@@ -165,13 +165,34 @@ export async function PATCH(req: NextRequest) {
       };
     }
 
-     // If agentId is changing (transfer), capture the old agentId first
+    // Keep dealType and transactionType in sync — both fields are used by different parts of the app
+    if (updates.dealType && !updates.transactionType) {
+      updates.transactionType = updates.dealType;
+    } else if (updates.transactionType && !updates.dealType) {
+      updates.dealType = updates.transactionType;
+    }
+
+    // Capture existing state BEFORE update so we can rebuild old rollups if needed
+    const existingSnap = await adminDb.collection('transactions').doc(id).get();
+    const existingData = existingSnap.data() as any;
+
+    // If agentId is changing (transfer), capture the old agentId
     let oldAgentId: string | null = null;
-    if (updates.agentId) {
-      const existingSnap = await adminDb.collection('transactions').doc(id).get();
-      const existingData = existingSnap.data() as any;
-      if (existingData?.agentId && existingData.agentId !== updates.agentId) {
-        oldAgentId = String(existingData.agentId).trim();
+    if (updates.agentId && existingData?.agentId && existingData.agentId !== updates.agentId) {
+      oldAgentId = String(existingData.agentId).trim();
+    }
+
+    // If the year is changing (e.g. closedDate moved from 2024 → 2025), capture the old year
+    // so we can rebuild both the old and new year rollups
+    let oldYear: number | null = null;
+    if (updates.year) {
+      const existingYear = Number(
+        existingData?.year ??
+        (existingData?.closedDate ? new Date(existingData.closedDate).getFullYear() : null) ??
+        (existingData?.contractDate ? new Date(existingData.contractDate).getFullYear() : null)
+      );
+      if (existingYear && existingYear !== updates.year) {
+        oldYear = existingYear;
       }
     }
 
@@ -180,17 +201,26 @@ export async function PATCH(req: NextRequest) {
     // Fetch the updated doc to return
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
     const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });
-    // Rebuild rollup so leaderboards stay in sync
+    // Rebuild rollup(s) so leaderboards, agent dashboard, TV mode, and reporting stay in sync
     try {
       const txData = updatedSnap.data() as any;
       const agentId = String(txData?.agentId || '').trim();
       const txYear = Number(txData?.year || updates.year || new Date().getFullYear());
+
       if (agentId && txYear) {
+        // Rebuild new year's rollup for current agent
         await rebuildAgentRollup(adminDb, agentId, txYear);
+        // If the year changed, also rebuild the OLD year's rollup so it no longer counts this tx
+        if (oldYear && oldYear !== txYear) {
+          await rebuildAgentRollup(adminDb, agentId, oldYear);
+        }
       }
-      // If transferred, also rebuild the OLD agent's rollup
-      if (oldAgentId && txYear) {
+      // If agent changed (transfer), rebuild the OLD agent's rollup for both old and new year
+      if (oldAgentId) {
         await rebuildAgentRollup(adminDb, oldAgentId, txYear);
+        if (oldYear && oldYear !== txYear) {
+          await rebuildAgentRollup(adminDb, oldAgentId, oldYear);
+        }
       }
     } catch (rollupErr: any) {
       console.warn('[api/admin/transactions PATCH] Rollup rebuild failed (non-fatal):', rollupErr?.message);
