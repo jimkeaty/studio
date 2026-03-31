@@ -54,11 +54,17 @@ export async function GET(
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
-    if (!(await isAdminLike(decoded.uid))) {
-      return jsonError(403, 'Forbidden');
-    }
     const { agentId } = await params;
     if (!agentId) return jsonError(400, 'Missing agentId');
+
+    // Allow: admin-like users can fetch any agent's commission profile.
+    // Allow: an agent can fetch their own commission profile (agentId === their UID).
+    // Deny: agents cannot fetch other agents' commission profiles.
+    const adminAccess = await isAdminLike(decoded.uid);
+    const isSelf = decoded.uid === agentId;
+    if (!adminAccess && !isSelf) {
+      return jsonError(403, 'Forbidden');
+    }
 
     const snap = await adminDb.collection('agentProfiles').doc(agentId).get();
     if (!snap.exists) {
