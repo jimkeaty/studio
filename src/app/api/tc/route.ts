@@ -133,7 +133,43 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
-    const ref = await adminDb.collection('transactionIntakes').add(intake);
+    const ref = await adminDb.collection('tcIntakes').add(intake);
+
+    // Create default checklist items as a subcollection (same as admin-created intakes)
+    const defaultChecklist = [
+      { order: 1, label: 'Contract received & verified' },
+      { order: 2, label: 'Earnest money deposit confirmed' },
+      { order: 3, label: 'Title company ordered' },
+      { order: 4, label: 'Home inspection scheduled' },
+      { order: 5, label: 'Home inspection completed' },
+      { order: 6, label: 'Appraisal ordered' },
+      { order: 7, label: 'Appraisal received' },
+      { order: 8, label: 'Loan approval received' },
+      { order: 9, label: 'Title commitment reviewed' },
+      { order: 10, label: 'Survey ordered/received' },
+      { order: 11, label: 'HOA docs requested (if applicable)' },
+      { order: 12, label: 'Final walkthrough scheduled' },
+      { order: 13, label: 'Closing disclosure reviewed' },
+      { order: 14, label: 'Closing documents prepared' },
+      { order: 15, label: 'Commission disbursement verified' },
+      { order: 16, label: 'File closed & archived' },
+    ];
+    const batch = adminDb.batch();
+    for (const item of defaultChecklist) {
+      const itemRef = adminDb
+        .collection('tcIntakes')
+        .doc(ref.id)
+        .collection('checklist')
+        .doc(`item_${String(item.order).padStart(2, '0')}`);
+      batch.set(itemRef, {
+        order: item.order,
+        label: item.label,
+        completed: false,
+        completedBy: null,
+        completedAt: null,
+      });
+    }
+    await batch.commit();
 
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err: any) {
@@ -152,7 +188,7 @@ export async function GET(req: NextRequest) {
     const uid = decoded.uid;
 
     const snap = await adminDb
-      .collection('transactionIntakes')
+      .collection('tcIntakes')
       .where('submittedByUid', '==', uid)
       .orderBy('submittedAt', 'desc')
       .limit(100)
