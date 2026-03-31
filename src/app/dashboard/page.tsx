@@ -2378,7 +2378,8 @@ function CategoryBreakdownSection({ perfData, year }: {
     .map((k, i) => ({ key: k, name: SIDE_LABELS[k], value: (closedSide[k]?.netRevenue ?? 0), color: SIDE_COLORS[i] }))
     .filter(d => d.value > 0);
 
-  const sourceEntries = Object.entries(sourceBreakdown?.closed ?? {})
+  type SourceMetricEntry = [string, { count: number; volume: number; netRevenue: number }];
+  const sourceEntries = (Object.entries(sourceBreakdown?.closed ?? {}) as SourceMetricEntry[])
     .sort((a, b) => b[1].count - a[1].count);
   const sourceSalesData = sourceEntries
     .filter(([, v]) => v.count > 0)

@@ -222,7 +222,7 @@ export default function TeamPlanForm({
         leaderStructureBands: values.leaderStructureBands.map((band) => ({
           fromCompanyDollar: Number(band.fromCompanyDollar || 0),
           toCompanyDollar:
-            band.toCompanyDollar === null || band.toCompanyDollar === undefined || band.toCompanyDollar === ''
+            band.toCompanyDollar === null || band.toCompanyDollar === undefined || String(band.toCompanyDollar) === ''
               ? null
               : Number(band.toCompanyDollar),
           leaderPercent: Number(band.leaderPercent || 0),
@@ -231,7 +231,7 @@ export default function TeamPlanForm({
         memberDefaultBands: values.memberDefaultBands.map((band) => ({
           fromCompanyDollar: Number(band.fromCompanyDollar || 0),
           toCompanyDollar:
-            band.toCompanyDollar === null || band.toCompanyDollar === undefined || band.toCompanyDollar === ''
+            band.toCompanyDollar === null || band.toCompanyDollar === undefined || String(band.toCompanyDollar) === ''
               ? null
               : Number(band.toCompanyDollar),
           memberPercent: Number(band.memberPercent || 0),

@@ -9,6 +9,7 @@ export const mockAgentDashboardData: AgentDashboardData = {
     incomeGrade: 'A',
     incomePerformance: 99,
     isIncomeGracePeriod: false,
+    isMetricsGracePeriod: false,
     expectedYTDIncomeGoal: 30000,
     ytdTotalPotential: 39000,
     pipelineAdjustedIncome: { grade: 'A', performance: 110 },
@@ -55,5 +56,8 @@ export const mockAgentDashboardData: AgentDashboardData = {
         renterClosings: 0,
         avgCommission: 3000,
         engagementValue: 64.28,
+        appointmentValue: 0,
+        avgCommissionPct: 0,
+        pendingVolume: 0,
     },
 };

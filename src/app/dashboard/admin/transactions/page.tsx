@@ -201,14 +201,14 @@ export default function AdminTransactionLedgerPage() {
   }
 
   const agentNames = Array.from(new Set(
-    transactions.map(t => t.agentDisplayName ?? t.agentName ?? '').filter(Boolean)
+    transactions.map(t => t.agentDisplayName ?? '').filter(Boolean)
   )).sort();
 
   const filtered = transactions.filter(t => {
     const txYear = t.year ? String(t.year) : (t.closedDate ?? (t as any).closingDate ?? t.contractDate ?? '').slice(0, 4);
     const yearMatch = yearFilter === 'all' || txYear === yearFilter;
     const statusMatch = statusFilter === 'all' || t.status === statusFilter;
-    const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? t.agentName ?? '') === agentFilter;
+    const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? '') === agentFilter;
     return yearMatch && statusMatch && agentMatch;
   });
 

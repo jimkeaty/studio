@@ -63,7 +63,7 @@ function normalizePayoutBand(
   const toCompanyDollar =
     band.toCompanyDollar === null ||
     band.toCompanyDollar === undefined ||
-    band.toCompanyDollar === ''
+    String(band.toCompanyDollar) === ''
       ? null
       : Number(band.toCompanyDollar);
   const memberPercent = Number(band.memberPercent);

@@ -2,6 +2,7 @@
 // Returns YTD performance grades for ALL active agents — used by the Recruiting & Dev admin page
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 

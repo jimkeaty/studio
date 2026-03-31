@@ -1,6 +1,7 @@
 // src/app/api/admin/link-agent/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { admin, adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function jsonError(status: number, error: string, details?: any) {
   return NextResponse.json({ ok: false, error, details: details || null }, { status });

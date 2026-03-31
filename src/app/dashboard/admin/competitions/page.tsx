@@ -80,7 +80,7 @@ export default function CompetitionCenterPage() {
     });
     return () => { cancelled = true; };
   }, [user]);
-  const hasAdminAccess = hasAdminAccess || isStaffAdmin;
+  const hasAdminAccess: boolean = !!(user && ((user as any).role === 'admin' || isStaffAdmin));
 
   // ── Data state ──────────────────────────────────────────────────────────
   const [competitions, setCompetitions] = useState<Competition[]>([]);

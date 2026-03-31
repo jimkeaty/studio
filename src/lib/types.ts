@@ -113,6 +113,7 @@ export interface Opportunity {
   isActive: boolean;
   stage: 'Hot' | 'Nurture' | 'Watch';
   notes?: string;
+  scheduledAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -339,4 +340,27 @@ export interface AgentYearRollup {
     listings: number;
     all: number;
   };
+}
+
+// ── Activity Tracker types ────────────────────────────────────────────────────
+export interface DailyActivity {
+  callsCount: number;
+  engagementsCount: number;
+  appointmentsSetCount: number;
+  appointmentsHeldCount: number;
+  contractsWrittenCount: number;
+  notes?: string;
+}
+
+export interface AppointmentLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // "HH:mm" optional
+  contactName: string;
+  notes?: string;
+  category: 'buyer' | 'seller';
+  status?: 'scheduled' | 'held' | 'canceled' | 'no_show';
+  scheduledAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

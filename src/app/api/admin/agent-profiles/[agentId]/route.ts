@@ -34,7 +34,7 @@ function normalizeTier(tier: AgentTier, index: number): AgentTier {
   const tierName = String(tier.tierName || `Tier ${index + 1}`).trim();
   const fromCompanyDollar = Number(tier.fromCompanyDollar);
   const toCompanyDollar =
-    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || tier.toCompanyDollar === ''
+    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || String(tier.toCompanyDollar) === ''
       ? null
       : Number(tier.toCompanyDollar);
   const agentSplitPercent = Number(tier.agentSplitPercent);
@@ -71,7 +71,7 @@ function normalizeTeamMemberOverrideBand(
   const tierName = String(tier.tierName || `Tier ${index + 1}`).trim();
   const fromCompanyDollar = Number(tier.fromCompanyDollar);
   const toCompanyDollar =
-    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || tier.toCompanyDollar === ''
+    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || String(tier.toCompanyDollar) === ''
       ? null
       : Number(tier.toCompanyDollar);
   const memberPercent = Number(tier.memberPercent);

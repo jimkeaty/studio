@@ -59,8 +59,8 @@ export async function GET(req: NextRequest) {
 
     const activitiesByDate: Record<string, DailyActivity> = {};
     snap.forEach((doc) => {
-      const data = doc.data() as DailyActivity;
-      activitiesByDate[data.date] = { id: doc.id, ...data };
+      const data = doc.data() as DailyActivity & { date: string };
+      activitiesByDate[data.date] = { id: doc.id, ...data } as DailyActivity & { id: string; date: string };
     });
 
     return NextResponse.json({ ok: true, activities: activitiesByDate });

@@ -69,7 +69,7 @@ export default function TcProfilesPage() {
     });
     return () => { cancelled = true; };
   }, [user]);
-  const hasAdminAccess = hasAdminAccess || isStaffAdmin;
+  const hasAdminAccess: boolean = !!(user && ((user as any).role === 'admin' || isStaffAdmin));
 
   const fetchProfiles = useCallback(async () => {
     if (!user) return;

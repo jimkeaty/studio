@@ -63,7 +63,7 @@ function normalizeLeaderStructureBand(
   const toCompanyDollar =
     band.toCompanyDollar === null ||
     band.toCompanyDollar === undefined ||
-    band.toCompanyDollar === ''
+    String(band.toCompanyDollar) === ''
       ? null
       : Number(band.toCompanyDollar);
   const leaderPercent = Number(band.leaderPercent);
@@ -105,7 +105,7 @@ function normalizeMemberDefaultBand(
   const toCompanyDollar =
     band.toCompanyDollar === null ||
     band.toCompanyDollar === undefined ||
-    band.toCompanyDollar === ''
+    String(band.toCompanyDollar) === ''
       ? null
       : Number(band.toCompanyDollar);
   const memberPercent = Number(band.memberPercent);

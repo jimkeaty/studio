@@ -43,7 +43,7 @@ function normalizeTier(tier: AgentTier, index: number): AgentTier {
   const tierName = String(tier.tierName || `Tier ${index + 1}`).trim();
   const fromCompanyDollar = Number(tier.fromCompanyDollar);
   const toCompanyDollar =
-    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || tier.toCompanyDollar === ''
+    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || String(tier.toCompanyDollar) === ''
       ? null
       : Number(tier.toCompanyDollar);
   const agentSplitPercent = Number(tier.agentSplitPercent);
@@ -80,7 +80,7 @@ function normalizeTeamMemberOverrideBand(
   const tierName = String(tier.tierName || `Tier ${index + 1}`).trim();
   const fromCompanyDollar = Number(tier.fromCompanyDollar);
   const toCompanyDollar =
-    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || tier.toCompanyDollar === ''
+    tier.toCompanyDollar === null || tier.toCompanyDollar === undefined || String(tier.toCompanyDollar) === ''
       ? null
       : Number(tier.toCompanyDollar);
   const memberPercent = Number(tier.memberPercent);
@@ -287,7 +287,7 @@ export async function POST(req: NextRequest) {
       progressionMetric: normalized.progressionMetric,
       primaryTeamId: normalized.primaryTeamId,
       teamRole: normalized.teamRole,
-      defaultPlanType: normalized.defaultPlanType,
+      defaultPlanType: normalized.defaultPlanType as import('@/lib/agents/types').PlanAssignmentType,
       defaultPlanId: normalized.defaultPlanId,
       teamMemberCompMode: normalized.teamMemberCompMode,
       teamMemberOverrideBands: normalized.teamMemberOverrideBands,
@@ -295,6 +295,7 @@ export async function POST(req: NextRequest) {
       referringAgentDisplayNameSnapshot: normalized.referringAgentDisplayNameSnapshot,
       tiers: normalized.tiers,
       notes: normalized.notes,
+      gracePeriodEnabled: normalized.gracePeriodEnabled ?? false,
       createdAt: now,
       updatedAt: now,
     };

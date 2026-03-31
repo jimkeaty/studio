@@ -47,6 +47,14 @@ export const charlesDitchTeamPlan: TeamPlan = {
     { fromCompanyDollar: 168000, toCompanyDollar: 224000, leaderPercent: 70, companyPercent: 30 },
     { fromCompanyDollar: 224000, toCompanyDollar: null, leaderPercent: 90, companyPercent: 10 },
   ],
+  memberDefaultBands: [
+    { fromCompanyDollar: 0, toCompanyDollar: 42000, memberPercent: 45 },
+    { fromCompanyDollar: 42000, toCompanyDollar: 84000, memberPercent: 50 },
+    { fromCompanyDollar: 84000, toCompanyDollar: 140000, memberPercent: 55 },
+    { fromCompanyDollar: 140000, toCompanyDollar: 168000, memberPercent: 60 },
+    { fromCompanyDollar: 168000, toCompanyDollar: 224000, memberPercent: 65 },
+    { fromCompanyDollar: 224000, toCompanyDollar: null, memberPercent: 70 },
+  ],
   tierCreditRules: {
     memberGetsFullCompanyDollar: true,
     leaderGetsFullCompanyDollar: true,

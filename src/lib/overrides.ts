@@ -1,5 +1,5 @@
 import 'server-only';
-import type { FirebaseFirestore } from 'firebase-admin';
+import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebaseAdmin';
 
 // Keep the exported type because TopAgents2025 imports it.
@@ -22,7 +22,7 @@ type HistoricalOverride = {
  * Server-side only (Admin SDK).
  */
 export async function fetchRollupsWithOverrides(
-  db: FirebaseFirestore.Firestore = adminDb(),
+  db: Firestore = adminDb(),
   year: number
 ): Promise<EffectiveRollup[]> {
 
@@ -32,7 +32,7 @@ export async function fetchRollupsWithOverrides(
     .where('year', '==', year)
     .get();
 
-  const base: EffectiveRollup[] = rollupsSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  const base: EffectiveRollup[] = rollupsSnap.docs.map((d: QueryDocumentSnapshot) => ({ id: d.id, ...(d.data() as any) }));
 
   // 2) Overrides
   const overridesSnap = await db
@@ -45,7 +45,7 @@ export async function fetchRollupsWithOverrides(
   if (overridesSnap.empty) return base;
 
   const overridesMap = new Map<string, HistoricalOverride>();
-  overridesSnap.forEach(d => {
+  overridesSnap.forEach((d: QueryDocumentSnapshot) => {
     const data = d.data() as any;
     const ov: HistoricalOverride = {
       id: d.id,

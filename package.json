@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs"
+    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs && tsc --noEmit",
+    "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.20.0",

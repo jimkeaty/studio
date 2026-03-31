@@ -79,28 +79,6 @@ type MemberPlanOption = {
   status?: string;
 };
 
-type TeamOption = {
-  teamId: string;
-  teamName: string;
-  teamPlanId?: string;
-  status?: string;
-};
-
-type TeamPlanOption = {
-  teamPlanId: string;
-  teamId: string;
-  planName: string;
-  status?: string;
-};
-
-type MemberPlanOption = {
-  memberPlanId: string;
-  teamId: string;
-  agentId?: string;
-  planName: string;
-  status?: string;
-};
-
 const DEFAULT_INDEPENDENT_TIERS: AgentTierFormValue[] = [
   {
     tierName: 'Tier 1',
@@ -260,13 +238,13 @@ async function fetchTeamOptions(token: string) {
 
   return {
     teams: Array.isArray(teamsJson?.teams)
-      ? teamsJson.teams.filter((team) => team.status !== 'inactive')
+      ? teamsJson.teams.filter((team: TeamOption) => team.status !== 'inactive')
       : [],
     teamPlans: Array.isArray(teamPlansJson?.teamPlans)
-      ? teamPlansJson.teamPlans.filter((plan) => plan.status !== 'inactive')
+      ? teamPlansJson.teamPlans.filter((plan: TeamPlanOption) => plan.status !== 'inactive')
       : [],
     memberPlans: Array.isArray(memberPlansJson?.memberPlans)
-      ? memberPlansJson.memberPlans.filter((plan) => plan.status !== 'inactive')
+      ? memberPlansJson.memberPlans.filter((plan: MemberPlanOption) => plan.status !== 'inactive')
       : [],
   };
 }
@@ -512,7 +490,7 @@ export default function AgentProfileForm({
       setNewTeamOffice('');
       setNewTeamNotes('');
     } catch (err) {
-      setCreateTeamError(err?.message || 'Failed to create team.');
+      setCreateTeamError((err as Error)?.message || 'Failed to create team.');
     } finally {
       setIsCreatingTeam(false);
     }
@@ -650,7 +628,7 @@ export default function AgentProfileForm({
                 tierName: tier.tierName,
                 fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
                 toCompanyDollar:
-                  tier.toCompanyDollar === null || tier.toCompanyDollar === ''
+                  tier.toCompanyDollar === null || String(tier.toCompanyDollar) === ''
                     ? null
                     : Number(tier.toCompanyDollar),
                 memberPercent: Number(tier.memberPercent || 0),
@@ -665,7 +643,7 @@ export default function AgentProfileForm({
               tierName: tier.tierName,
               fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
               toCompanyDollar:
-                tier.toCompanyDollar === null || tier.toCompanyDollar === ''
+                tier.toCompanyDollar === null || String(tier.toCompanyDollar) === ''
                   ? null
                   : Number(tier.toCompanyDollar),
               agentSplitPercent: Number(tier.agentSplitPercent || 0),
