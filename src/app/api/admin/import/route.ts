@@ -113,19 +113,7 @@ function normalizeDealType(v: string): string | null {
   return null;
 }
 
-function normalizeDealSource(v: string): string | null {
-  const s = v.toLowerCase().trim();
-  if (s === 'boomtown') return 'boomtown';
-  if (s === 'referral' || s === 'ref') return 'referral';
-  if (s === 'sphere') return 'sphere';
-  if (s.includes('sign call') || s === 'sign') return 'sign_call';
-  if (s.includes('company gen') || s === 'company' || s === 'company_gen') return 'company_gen';
-  if (s === 'social') return 'social';
-  if (s.includes('open house') || s === 'oh') return 'open_house';
-  if (s === 'fsbo') return 'fsbo';
-  if (s === 'expired') return 'expired_listing';
-  return toOptStr(v);
-}
+import { normalizeDealSource } from '@/lib/normalizeDealSource';
 
 export interface ImportRow {
   agentName: string;

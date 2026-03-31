@@ -3,6 +3,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver'
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup'
 import { isAdminLike } from '@/lib/auth/staffAccess'
+import { normalizeDealSource } from '@/lib/normalizeDealSource'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -146,7 +147,7 @@ export async function POST(req: NextRequest) {
       // Pass through additional fields from the form
       ...(body.closingType ? { closingType: body.closingType } : {}),
       ...(body.dealType ? { dealType: body.dealType } : {}),
-      ...(body.dealSource ? { dealSource: body.dealSource } : {}),
+      ...(body.dealSource ? { dealSource: normalizeDealSource(body.dealSource) } : {}),
       ...(body.listPrice ? { listPrice: toNumber(body.listPrice) } : {}),
       ...(body.commissionPercent ? { commissionPercent: toNumber(body.commissionPercent) } : {}),
       ...(body.commissionBasePrice ? { commissionBasePrice: toNumber(body.commissionBasePrice) } : {}),

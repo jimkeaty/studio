@@ -70,7 +70,7 @@ export interface Transaction {
   agentId?: string;
   agentDisplayName?: string;
   address: string;
-  status: 'pending' | 'closed' | 'under_contract' | 'cancelled';
+  status: 'active' | 'pending' | 'sold' | 'canceled' | 'expired' | 'closed' | 'under_contract' | 'cancelled';
   transactionType?: 'residential_sale' | 'rental' | 'commercial_lease' | 'commercial_sale';
   dealValue?: number;
   commission?: number;

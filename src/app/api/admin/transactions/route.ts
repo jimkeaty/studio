@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
+import { normalizeDealSource } from '@/lib/normalizeDealSource';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -92,6 +93,11 @@ export async function PATCH(req: NextRequest) {
       if (UPDATABLE_FIELDS.has(key)) {
         updates[key] = value;
       }
+    }
+
+    // Normalize dealSource if present
+    if (updates.dealSource) {
+      updates.dealSource = normalizeDealSource(updates.dealSource) || updates.dealSource;
     }
 
     if (Object.keys(updates).length === 0) {

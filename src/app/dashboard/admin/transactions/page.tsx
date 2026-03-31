@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUser } from '@/firebase';
 import type { Transaction } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,12 +15,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2, Save, X, RefreshCw } from 'lucide-react';
+import {
+  Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2,
+  Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft,
+} from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
+/* ─── Constants ──────────────────────────────────────────────────────── */
 
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
@@ -37,7 +40,52 @@ const txTypeLabel: Record<string, string> = {
   commercial_sale: 'Comm. Sale',
 };
 
+const closingTypeLabel: Record<string, string> = {
+  buyer: 'Buyer',
+  listing: 'Seller/Listing',
+  referral: 'Referral',
+  dual: 'Dual Agent',
+};
+
+const statusConfig: Record<string, { label: string; color: string }> = {
+  active: { label: 'Active', color: 'bg-blue-500/80 text-white' },
+  pending: { label: 'Pending', color: 'bg-yellow-500/80 text-white' },
+  under_contract: { label: 'Under Contract', color: 'bg-yellow-500/80 text-white' },
+  sold: { label: 'Sold', color: 'bg-green-600/80 text-white' },
+  closed: { label: 'Closed', color: 'bg-green-600/80 text-white' },
+  canceled: { label: 'Canceled', color: 'bg-red-500/80 text-white' },
+  cancelled: { label: 'Canceled', color: 'bg-red-500/80 text-white' },
+  expired: { label: 'Expired', color: 'bg-gray-500/80 text-white' },
+};
+
 const YEARS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
+
+const ALL_STATUSES = ['active', 'pending', 'under_contract', 'sold', 'closed', 'canceled', 'expired'] as const;
+
+/* ─── Sorting ────────────────────────────────────────────────────────── */
+
+type SortKey = 'status' | 'address' | 'agent' | 'closingType' | 'dealType' | 'contractDate' | 'closedDate' | 'dealValue' | 'grossComm' | 'netAgent' | 'companyRetained' | 'source';
+type SortDir = 'asc' | 'desc';
+
+function getSortValue(tx: Transaction, key: SortKey): string | number {
+  switch (key) {
+    case 'status': return tx.status || '';
+    case 'address': return (tx.address || '').toLowerCase();
+    case 'agent': return (tx.agentDisplayName || '').toLowerCase();
+    case 'closingType': return (tx as any).closingType || '';
+    case 'dealType': return tx.transactionType || '';
+    case 'contractDate': return tx.contractDate || '';
+    case 'closedDate': return tx.closedDate || (tx as any).closingDate || '';
+    case 'dealValue': return tx.dealValue || 0;
+    case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
+    case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.netCommission ?? 0;
+    case 'companyRetained': return tx.splitSnapshot?.companyRetained ?? 0;
+    case 'source': return tx.source || 'manual';
+    default: return '';
+  }
+}
+
+/* ─── Component ──────────────────────────────────────────────────────── */
 
 export default function AdminTransactionLedgerPage() {
   const { user, loading: userLoading } = useUser();
@@ -46,8 +94,12 @@ export default function AdminTransactionLedgerPage() {
   const [loadingTx, setLoadingTx] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [yearFilter, setYearFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'under_contract' | 'closed'>('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
+
+  // Sort state
+  const [sortKey, setSortKey] = useState<SortKey>('closedDate');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   // Edit sheet state
   const [editTx, setEditTx] = useState<Transaction | null>(null);
@@ -60,10 +112,64 @@ export default function AdminTransactionLedgerPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Transfer dialog
+  const [transferTx, setTransferTx] = useState<Transaction | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferAgentId, setTransferAgentId] = useState('');
+  const [transferAgentName, setTransferAgentName] = useState('');
+  const [transferring, setTransferring] = useState(false);
+
   // Recalculate rollups
   const [recalculating, setRecalculating] = useState(false);
   const [recalcResult, setRecalcResult] = useState<{ rebuilt: number; year: number } | null>(null);
   const [recalcError, setRecalcError] = useState<string | null>(null);
+
+  // Agent list for transfer dropdown
+  const [allAgents, setAllAgents] = useState<{ id: string; displayName: string }[]>([]);
+
+  /* ─── Data loading ─────────────────────────────────────────────────── */
+
+  const loadTransactions = useCallback(async () => {
+    if (!user) return;
+    setLoadingTx(true);
+    setPageError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/transactions', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load transactions');
+      setTransactions(data.transactions ?? []);
+    } catch (err: any) {
+      setPageError(err.message);
+    } finally {
+      setLoadingTx(false);
+    }
+  }, [user]);
+
+  const loadAgents = useCallback(async () => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/agents', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok && data.agents) {
+        setAllAgents(data.agents.map((a: any) => ({ id: a.uid || a.id, displayName: a.displayName || a.name || a.email })));
+      }
+    } catch { /* ignore */ }
+  }, [user]);
+
+  useEffect(() => {
+    if (!userLoading && user) {
+      loadTransactions();
+      loadAgents();
+    }
+  }, [user, userLoading, loadTransactions, loadAgents]);
+
+  /* ─── Recalculate rollups ──────────────────────────────────────────── */
 
   const handleRecalculateRollups = async () => {
     if (!user) return;
@@ -88,30 +194,8 @@ export default function AdminTransactionLedgerPage() {
     }
   };
 
-  const loadTransactions = async () => {
-    if (!user) return;
-    setLoadingTx(true);
-    setPageError(null);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch('/api/admin/transactions', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load transactions');
-      setTransactions(data.transactions ?? []);
-    } catch (err: any) {
-      setPageError(err.message);
-    } finally {
-      setLoadingTx(false);
-    }
-  };
+  /* ─── Edit handlers ────────────────────────────────────────────────── */
 
-  useEffect(() => {
-    if (!userLoading && user) loadTransactions();
-  }, [user, userLoading]);
-
-  // ── Edit handlers ──
   const openEdit = (tx: Transaction) => {
     setEditTx({ ...tx });
     setSaveError(null);
@@ -163,8 +247,6 @@ export default function AdminTransactionLedgerPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to update');
 
-      // Update local state with the edited values
-      // Also recalculate year from dates to keep filter in sync
       const updatedYear = editTx.closedDate
         ? new Date(editTx.closedDate).getFullYear()
         : editTx.contractDate
@@ -182,7 +264,8 @@ export default function AdminTransactionLedgerPage() {
     }
   };
 
-  // ── Delete handlers ──
+  /* ─── Delete handlers ──────────────────────────────────────────────── */
+
   const openDelete = (tx: Transaction) => {
     setDeleteTx(tx);
     setDeleteOpen(true);
@@ -204,7 +287,6 @@ export default function AdminTransactionLedgerPage() {
       setTransactions(prev => prev.filter(t => t.id !== deleteTx.id));
       setDeleteOpen(false);
       setDeleteTx(null);
-      // If we were editing this tx, close the edit sheet
       if (editTx?.id === deleteTx.id) {
         setEditOpen(false);
         setEditTx(null);
@@ -216,6 +298,123 @@ export default function AdminTransactionLedgerPage() {
     }
   };
 
+  /* ─── Transfer handler ─────────────────────────────────────────────── */
+
+  const openTransfer = (tx: Transaction) => {
+    setTransferTx(tx);
+    setTransferAgentId('');
+    setTransferAgentName('');
+    setTransferOpen(true);
+  };
+
+  const handleTransfer = async () => {
+    if (!transferTx || !transferAgentId || !user) return;
+    setTransferring(true);
+    try {
+      const token = await user.getIdToken();
+      const selectedAgent = allAgents.find(a => a.id === transferAgentId);
+      const newName = selectedAgent?.displayName || transferAgentName || transferAgentId;
+
+      const res = await fetch('/api/admin/transactions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          id: transferTx.id,
+          agentId: transferAgentId,
+          agentDisplayName: newName,
+          // Preserve all other fields
+          status: transferTx.status,
+          transactionType: transferTx.transactionType,
+          address: transferTx.address,
+          clientName: transferTx.clientName || null,
+          dealValue: Number(transferTx.dealValue) || 0,
+          commission: Number(transferTx.commission) || 0,
+          contractDate: transferTx.contractDate || null,
+          closedDate: transferTx.closedDate || null,
+          notes: transferTx.notes || null,
+          splitSnapshot: transferTx.splitSnapshot,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to transfer');
+
+      // Update local state
+      setTransactions(prev =>
+        prev.map(t => t.id === transferTx.id
+          ? { ...t, agentId: transferAgentId, agentDisplayName: newName }
+          : t
+        )
+      );
+      setTransferOpen(false);
+      setTransferTx(null);
+      // Close edit sheet if open for this tx
+      if (editTx?.id === transferTx.id) {
+        setEditOpen(false);
+        setEditTx(null);
+      }
+    } catch (err: any) {
+      setPageError(err.message);
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  /* ─── Sort toggle ──────────────────────────────────────────────────── */
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'closedDate' || key === 'dealValue' || key === 'grossComm' || key === 'netAgent' || key === 'companyRetained' ? 'desc' : 'asc');
+    }
+  };
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="h-3 w-3 ml-1 text-primary" />
+      : <ArrowDown className="h-3 w-3 ml-1 text-primary" />;
+  };
+
+  /* ─── Filtering + Sorting ──────────────────────────────────────────── */
+
+  const agentNames = useMemo(() =>
+    Array.from(new Set(transactions.map(t => t.agentDisplayName ?? '').filter(Boolean))).sort(),
+    [transactions]
+  );
+
+  const filtered = useMemo(() => {
+    let result = transactions.filter(t => {
+      const txYear = t.year ? String(t.year) : (t.closedDate ?? (t as any).closingDate ?? t.contractDate ?? '').slice(0, 4);
+      const yearMatch = yearFilter === 'all' || txYear === yearFilter;
+      const statusMatch = statusFilter === 'all' || t.status === statusFilter;
+      const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? '') === agentFilter;
+      return yearMatch && statusMatch && agentMatch;
+    });
+
+    // Sort
+    result.sort((a, b) => {
+      const aVal = getSortValue(a, sortKey);
+      const bVal = getSortValue(b, sortKey);
+      let cmp = 0;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        cmp = aVal - bVal;
+      } else {
+        cmp = String(aVal).localeCompare(String(bVal));
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return result;
+  }, [transactions, yearFilter, statusFilter, agentFilter, sortKey, sortDir]);
+
+  const totalGross = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0), [filtered]);
+  const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0), 0), [filtered]);
+  const totalBroker = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.companyRetained ?? 0), 0), [filtered]);
+
+  /* ─── Auth guards ──────────────────────────────────────────────────── */
+
   if (userLoading) {
     return <div className="space-y-4"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-64 w-full" /></div>;
   }
@@ -224,28 +423,11 @@ export default function AdminTransactionLedgerPage() {
     return <Alert><AlertTitle>Authentication Required</AlertTitle><AlertDescription>Please sign in.</AlertDescription></Alert>;
   }
 
-  if (user.uid !== ADMIN_UID) {
-    return <Alert variant="destructive"><AlertTitle>Access Denied</AlertTitle><AlertDescription>Admin only.</AlertDescription></Alert>;
-  }
-
-  const agentNames = Array.from(new Set(
-    transactions.map(t => t.agentDisplayName ?? '').filter(Boolean)
-  )).sort();
-
-  const filtered = transactions.filter(t => {
-    const txYear = t.year ? String(t.year) : (t.closedDate ?? (t as any).closingDate ?? t.contractDate ?? '').slice(0, 4);
-    const yearMatch = yearFilter === 'all' || txYear === yearFilter;
-    const statusMatch = statusFilter === 'all' || t.status === statusFilter;
-    const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? '') === agentFilter;
-    return yearMatch && statusMatch && agentMatch;
-  });
-
-  const totalGross = filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0);
-  const totalNet = filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0), 0);
-  const totalBroker = filtered.reduce((s, t) => s + (t.splitSnapshot?.companyRetained ?? 0), 0);
+  /* ─── Render ───────────────────────────────────────────────────────── */
 
   return (
     <div className="space-y-6">
+      {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Transaction Ledger</h1>
@@ -270,6 +452,7 @@ export default function AdminTransactionLedgerPage() {
         </div>
       </div>
 
+      {/* ALERTS */}
       {recalcResult && (
         <Alert className="border-green-200 bg-green-50">
           <RefreshCw className="h-4 w-4 text-green-600" />
@@ -279,7 +462,6 @@ export default function AdminTransactionLedgerPage() {
           </AlertDescription>
         </Alert>
       )}
-
       {recalcError && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -287,7 +469,6 @@ export default function AdminTransactionLedgerPage() {
           <AlertDescription>{recalcError}</AlertDescription>
         </Alert>
       )}
-
       {pageError && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -337,13 +518,13 @@ export default function AdminTransactionLedgerPage() {
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted-foreground">Status</span>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="under_contract">Under Contract</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
+                {ALL_STATUSES.map(s => (
+                  <SelectItem key={s} value={s}>{statusConfig[s]?.label ?? s}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -364,7 +545,10 @@ export default function AdminTransactionLedgerPage() {
       <Card>
         <CardHeader>
           <CardTitle>Transactions</CardTitle>
-          <CardDescription>{filtered.length} record{filtered.length !== 1 ? 's' : ''}{yearFilter !== 'all' ? ` in ${yearFilter}` : ''} ({transactions.length} total in database) &middot; Click a row to edit</CardDescription>
+          <CardDescription>
+            {filtered.length} record{filtered.length !== 1 ? 's' : ''}
+            {yearFilter !== 'all' ? ` in ${yearFilter}` : ''} ({transactions.length} total) · Click a row to edit
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loadingTx ? (
@@ -382,18 +566,43 @@ export default function AdminTransactionLedgerPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Address</TableHead>
-                    <TableHead>Agent</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Close Date</TableHead>
-                    <TableHead className="text-right">Deal Value</TableHead>
-                    <TableHead className="text-right">Gross Comm.</TableHead>
-                    <TableHead className="text-right">Net to Agent</TableHead>
-                    <TableHead className="text-right">Co. Retained</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[60px]"></TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('status')}>
+                      <span className="flex items-center">Status<SortIcon col="status" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('address')}>
+                      <span className="flex items-center">Address<SortIcon col="address" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('agent')}>
+                      <span className="flex items-center">Agent<SortIcon col="agent" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('closingType')}>
+                      <span className="flex items-center">Side<SortIcon col="closingType" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('dealType')}>
+                      <span className="flex items-center">Deal Type<SortIcon col="dealType" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('contractDate')}>
+                      <span className="flex items-center">Contract Date<SortIcon col="contractDate" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('closedDate')}>
+                      <span className="flex items-center">Close Date<SortIcon col="closedDate" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('dealValue')}>
+                      <span className="flex items-center justify-end">Deal Value<SortIcon col="dealValue" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('grossComm')}>
+                      <span className="flex items-center justify-end">Gross Comm.<SortIcon col="grossComm" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('netAgent')}>
+                      <span className="flex items-center justify-end">Net to Agent<SortIcon col="netAgent" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('companyRetained')}>
+                      <span className="flex items-center justify-end">Co. Retained<SortIcon col="companyRetained" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('source')}>
+                      <span className="flex items-center">Source<SortIcon col="source" /></span>
+                    </TableHead>
+                    <TableHead className="w-[80px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -401,57 +610,46 @@ export default function AdminTransactionLedgerPage() {
                     const net = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0;
                     const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
                     const broker = t.splitSnapshot?.companyRetained ?? 0;
+                    const sc = statusConfig[t.status] || statusConfig.pending;
                     return (
                       <TableRow
                         key={t.id}
                         className="cursor-pointer hover:bg-muted/50 transition-colors"
                         onClick={() => openEdit(t)}
                       >
-                        <TableCell className="font-medium max-w-[200px] truncate">{t.address}</TableCell>
-                        <TableCell className="text-sm">{t.agentDisplayName ?? t.agentId ?? (t as any).userId ?? '—'}</TableCell>
-                        <TableCell>{t.clientName ?? '—'}</TableCell>
                         <TableCell>
-                          {t.transactionType ? (
-                            <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge>
-                          ) : '—'}
+                          <Badge className={cn(sc.color, 'text-xs capitalize whitespace-nowrap')}>
+                            {sc.label}
+                          </Badge>
                         </TableCell>
-                        <TableCell>{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
-                        <TableCell className="text-right">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</TableCell>
-                        <TableCell className="text-right">{gross ? formatCurrency(gross) : '—'}</TableCell>
-                        <TableCell className="text-right font-semibold text-primary">{net ? formatCurrency(net) : '—'}</TableCell>
-                        <TableCell className="text-right">{broker ? formatCurrency(broker) : '—'}</TableCell>
-                        <TableCell><Badge variant="secondary" className="text-xs capitalize">{t.source ?? 'manual'}</Badge></TableCell>
+                        <TableCell className="font-medium max-w-[200px] truncate">{t.address}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">{t.agentDisplayName ?? '—'}</TableCell>
                         <TableCell>
-                          <Badge className={cn(
-                            t.status === 'closed' && 'bg-green-600/80 text-white',
-                            (t.status === 'pending' || t.status === 'under_contract') && 'bg-yellow-500/80 text-white',
-                            t.status === 'cancelled' && 'bg-red-500/80 text-white',
-                          )}>
-                            {t.status === 'closed' ? (
-                              <span className="flex items-center gap-1"><FileCheck2 className="h-3 w-3" /> Closed</span>
-                            ) : t.status === 'under_contract' ? (
-                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Under Contract</span>
-                            ) : (
-                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {t.status}</span>
-                            )}
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                            {closingTypeLabel[(t as any).closingType] ?? (t as any).closingType ?? '—'}
                           </Badge>
                         </TableCell>
                         <TableCell>
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                            {txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '—'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDate(t.contractDate)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">{gross ? formatCurrency(gross) : '—'}</TableCell>
+                        <TableCell className="text-right font-semibold text-primary whitespace-nowrap">{net ? formatCurrency(net) : '—'}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">{broker ? formatCurrency(broker) : '—'}</TableCell>
+                        <TableCell><Badge variant="secondary" className="text-xs capitalize">{t.source ?? 'manual'}</Badge></TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={(e) => { e.stopPropagation(); openEdit(t); }}
-                            >
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(t); }} title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              onClick={(e) => { e.stopPropagation(); openDelete(t); }}
-                            >
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openTransfer(t); }} title="Transfer to another agent">
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDelete(t); }} title="Delete">
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -474,7 +672,7 @@ export default function AdminTransactionLedgerPage() {
               <Pencil className="h-4 w-4" /> Edit Transaction
             </SheetTitle>
             <SheetDescription>
-              {editTx?.address} &middot; {editTx?.agentDisplayName}
+              {editTx?.address} · {editTx?.agentDisplayName}
             </SheetDescription>
           </SheetHeader>
 
@@ -490,22 +688,21 @@ export default function AdminTransactionLedgerPage() {
               {/* STATUS — Quick Change */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Status</Label>
-                <div className="flex gap-2">
-                  {(['pending', 'under_contract', 'closed', 'cancelled'] as const).map(s => (
-                    <Button
-                      key={s}
-                      size="sm"
-                      variant={editTx.status === s ? 'default' : 'outline'}
-                      className={cn(
-                        editTx.status === s && s === 'closed' && 'bg-green-600 hover:bg-green-700',
-                        editTx.status === s && (s === 'pending' || s === 'under_contract') && 'bg-yellow-500 hover:bg-yellow-600',
-                        editTx.status === s && s === 'cancelled' && 'bg-red-500 hover:bg-red-600',
-                      )}
-                      onClick={() => updateEditField('status', s)}
-                    >
-                      {s === 'under_contract' ? 'Under Contract' : s.charAt(0).toUpperCase() + s.slice(1)}
-                    </Button>
-                  ))}
+                <div className="flex flex-wrap gap-2">
+                  {ALL_STATUSES.map(s => {
+                    const sc = statusConfig[s];
+                    return (
+                      <Button
+                        key={s}
+                        size="sm"
+                        variant={editTx.status === s ? 'default' : 'outline'}
+                        className={cn(editTx.status === s && sc.color)}
+                        onClick={() => updateEditField('status', s)}
+                      >
+                        {sc.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -529,19 +726,13 @@ export default function AdminTransactionLedgerPage() {
               {/* ADDRESS */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Address</Label>
-                <Input
-                  value={editTx.address || ''}
-                  onChange={(e) => updateEditField('address', e.target.value)}
-                />
+                <Input value={editTx.address || ''} onChange={(e) => updateEditField('address', e.target.value)} />
               </div>
 
               {/* CLIENT */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Client Name</Label>
-                <Input
-                  value={editTx.clientName || ''}
-                  onChange={(e) => updateEditField('clientName', e.target.value)}
-                />
+                <Input value={editTx.clientName || ''} onChange={(e) => updateEditField('clientName', e.target.value)} />
               </div>
 
               {/* KEY DATES */}
@@ -550,19 +741,11 @@ export default function AdminTransactionLedgerPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs text-muted-foreground">Contract Date</Label>
-                    <Input
-                      type="date"
-                      value={editTx.contractDate || ''}
-                      onChange={(e) => updateEditField('contractDate', e.target.value || null)}
-                    />
+                    <Input type="date" value={editTx.contractDate || ''} onChange={(e) => updateEditField('contractDate', e.target.value || null)} />
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Closed Date</Label>
-                    <Input
-                      type="date"
-                      value={editTx.closedDate || ''}
-                      onChange={(e) => updateEditField('closedDate', e.target.value || null)}
-                    />
+                    <Input type="date" value={editTx.closedDate || ''} onChange={(e) => updateEditField('closedDate', e.target.value || null)} />
                   </div>
                 </div>
               </div>
@@ -573,11 +756,7 @@ export default function AdminTransactionLedgerPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs text-muted-foreground">Deal Value ($)</Label>
-                    <Input
-                      type="number"
-                      value={editTx.dealValue || ''}
-                      onChange={(e) => updateEditField('dealValue', Number(e.target.value) || 0)}
-                    />
+                    <Input type="number" value={editTx.dealValue || ''} onChange={(e) => updateEditField('dealValue', Number(e.target.value) || 0)} />
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Gross Commission ($)</Label>
@@ -593,19 +772,11 @@ export default function AdminTransactionLedgerPage() {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Agent Net ($)</Label>
-                    <Input
-                      type="number"
-                      value={editTx.splitSnapshot?.agentNetCommission ?? ''}
-                      onChange={(e) => updateSplitField('agentNetCommission', Number(e.target.value) || 0)}
-                    />
+                    <Input type="number" value={editTx.splitSnapshot?.agentNetCommission ?? ''} onChange={(e) => updateSplitField('agentNetCommission', Number(e.target.value) || 0)} />
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Company Retained ($)</Label>
-                    <Input
-                      type="number"
-                      value={editTx.splitSnapshot?.companyRetained ?? ''}
-                      onChange={(e) => updateSplitField('companyRetained', Number(e.target.value) || 0)}
-                    />
+                    <Input type="number" value={editTx.splitSnapshot?.companyRetained ?? ''} onChange={(e) => updateSplitField('companyRetained', Number(e.target.value) || 0)} />
                   </div>
                 </div>
               </div>
@@ -613,22 +784,19 @@ export default function AdminTransactionLedgerPage() {
               {/* NOTES */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Notes</Label>
-                <Textarea
-                  value={editTx.notes || ''}
-                  onChange={(e) => updateEditField('notes', e.target.value)}
-                  rows={3}
-                />
+                <Textarea value={editTx.notes || ''} onChange={(e) => updateEditField('notes', e.target.value)} rows={3} />
               </div>
 
               {/* ACTIONS */}
               <div className="flex items-center justify-between pt-4 border-t">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => { setEditOpen(false); openDelete(editTx); }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="destructive" size="sm" onClick={() => { setEditOpen(false); openDelete(editTx); }}>
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setEditOpen(false); openTransfer(editTx); }}>
+                    <ArrowRightLeft className="mr-2 h-4 w-4" /> Transfer
+                  </Button>
+                </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setEditOpen(false)}>
                     <X className="mr-2 h-4 w-4" /> Cancel
@@ -643,6 +811,55 @@ export default function AdminTransactionLedgerPage() {
         </SheetContent>
       </Sheet>
 
+      {/* ── TRANSFER DIALOG ── */}
+      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4" /> Transfer Transaction
+            </DialogTitle>
+            <DialogDescription>
+              Reassign this transaction to another agent. All data will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+          {transferTx && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-md border p-3 bg-muted/50">
+                <p className="font-medium">{transferTx.address}</p>
+                <p className="text-sm text-muted-foreground">
+                  Currently assigned to: <strong>{transferTx.agentDisplayName ?? '—'}</strong>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {formatCurrency(transferTx.splitSnapshot?.grossCommission ?? transferTx.commission ?? 0)} GCI
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Transfer to Agent</Label>
+                <Select value={transferAgentId} onValueChange={(v) => {
+                  setTransferAgentId(v);
+                  const agent = allAgents.find(a => a.id === v);
+                  if (agent) setTransferAgentName(agent.displayName);
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select an agent..." /></SelectTrigger>
+                  <SelectContent>
+                    {allAgents
+                      .filter(a => a.id !== transferTx.agentId)
+                      .map(a => <SelectItem key={a.id} value={a.id}>{a.displayName}</SelectItem>)
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferOpen(false)} disabled={transferring}>Cancel</Button>
+            <Button onClick={handleTransfer} disabled={transferring || !transferAgentId}>
+              <ArrowRightLeft className="mr-2 h-4 w-4" /> {transferring ? 'Transferring...' : 'Transfer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── DELETE CONFIRMATION ── */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
@@ -656,7 +873,7 @@ export default function AdminTransactionLedgerPage() {
             <div className="py-4 space-y-2">
               <p className="font-medium">{deleteTx.address}</p>
               <p className="text-sm text-muted-foreground">
-                {deleteTx.agentDisplayName} &middot; {formatCurrency(deleteTx.splitSnapshot?.grossCommission ?? deleteTx.commission ?? 0)} GCI
+                {deleteTx.agentDisplayName} · {formatCurrency(deleteTx.splitSnapshot?.grossCommission ?? deleteTx.commission ?? 0)} GCI
               </p>
             </div>
           )}
