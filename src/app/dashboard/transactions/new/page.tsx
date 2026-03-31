@@ -756,10 +756,6 @@ export default function AddTransactionPage() {
               </FormItem>
             )} />
 
-            <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
-              <FormItem><FormLabel>Client New Address</FormLabel><FormControl><Input placeholder="Where the client is moving to (for mailers)" {...field} /></FormControl></FormItem>
-            )} />
-
             {/* Buyer section */}
             {(clientType === 'buyer' || clientType === 'dual') && (
               <>
@@ -819,6 +815,9 @@ export default function AddTransactionPage() {
                     <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
                   )} />
                 </Grid3>
+                <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
+                  <FormItem><FormLabel>Client New Address</FormLabel><FormDescription>Where the seller is moving to (for mailers)</FormDescription><FormControl><Input placeholder="New address after closing" {...field} /></FormControl></FormItem>
+                )} />
               </>
             )}
 
