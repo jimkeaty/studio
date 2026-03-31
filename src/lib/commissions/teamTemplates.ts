@@ -216,6 +216,8 @@ export const TEAM_GROUP_OPTIONS = [
  */
 export const TEAM_NAME_TO_GROUP: Record<string, string> = {
   'cgl-team': 'cgl',
+  'new-cgl': 'cgl',
   'sgl-team': 'sgl',
   'charles-ditch-team': 'charles_ditch_team',
+  'cd-team': 'charles_ditch_team',
 };

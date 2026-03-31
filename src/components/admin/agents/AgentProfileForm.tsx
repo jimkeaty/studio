@@ -445,9 +445,7 @@ export default function AgentProfileForm({
     setValues((prev) => {
       const isDefault = prev.commissionMode === 'team_default';
       const tiers = isDefault
-        ? (prev.primaryTeamId
-            ? resolveTeamDefaultTiers(prev.primaryTeamId, nextGroup)
-            : getDefaultTiersForTeamGroup(nextGroup))
+        ? resolveTeamDefaultTiers(prev.primaryTeamId || '', nextGroup)
         : prev.tiers;
       return {
         ...prev,
@@ -464,9 +462,7 @@ export default function AgentProfileForm({
   function updateCommissionMode(nextMode: CommissionMode) {
     setValues((prev) => {
       if (nextMode === 'team_default') {
-        const tiers = prev.primaryTeamId
-          ? resolveTeamDefaultTiers(prev.primaryTeamId, prev.teamGroup)
-          : getDefaultTiersForTeamGroup(prev.teamGroup);
+        const tiers = resolveTeamDefaultTiers(prev.primaryTeamId || '', prev.teamGroup);
         return {
           ...prev,
           commissionMode: 'team_default',
@@ -514,37 +510,68 @@ export default function AgentProfileForm({
   /**
    * Resolve the best default tiers for a given team.
    * Priority: team plan's leaderStructureBands → hardcoded team group template.
+   * Can be called with just a teamGroupSlug (teamId = '') to resolve by group.
    */
   function resolveTeamDefaultTiers(teamId: string, teamGroupSlug: string): AgentTierFormValue[] {
     const teamIdLower = teamId.toLowerCase();
-    console.log('[resolveTeamDefaultTiers] teamId:', teamId, 'teamGroupSlug:', teamGroupSlug);
-    console.log('[resolveTeamDefaultTiers] teams count:', teams.length, 'teamPlans count:', teamPlans.length);
-    console.log('[resolveTeamDefaultTiers] teamPlans:', JSON.stringify(teamPlans.map(p => ({ teamPlanId: p.teamPlanId, teamId: p.teamId, hasBands: !!(p.leaderStructureBands?.length) }))));
-    // 1. Find the team to get its teamPlanId
-    const team = teams.find((t) => t.teamId.toLowerCase() === teamIdLower);
-    console.log('[resolveTeamDefaultTiers] found team:', team ? { teamId: team.teamId, teamPlanId: team.teamPlanId } : 'NOT FOUND');
-    if (team?.teamPlanId) {
-      const planIdLower = team.teamPlanId.toLowerCase();
-      // 2a. Exact match by teamPlanId
-      const plan = teamPlans.find((p) => p.teamPlanId.toLowerCase() === planIdLower);
-      console.log('[resolveTeamDefaultTiers] 2a plan match:', plan ? { teamPlanId: plan.teamPlanId, hasBands: !!(plan.leaderStructureBands?.length), bandsCount: plan.leaderStructureBands?.length } : 'NOT FOUND');
-      if (plan?.leaderStructureBands && plan.leaderStructureBands.length > 0) {
-        return teamPlanBandsToFormTiers(plan.leaderStructureBands);
+
+    // --- Path A: specific team selected → look up its plan ---
+    if (teamId) {
+      const team = teams.find((t) => t.teamId.toLowerCase() === teamIdLower);
+      if (team?.teamPlanId) {
+        const planIdLower = team.teamPlanId.toLowerCase();
+        // Exact match by teamPlanId
+        const plan = teamPlans.find((p) => p.teamPlanId.toLowerCase() === planIdLower);
+        if (plan?.leaderStructureBands && plan.leaderStructureBands.length > 0) {
+          return teamPlanBandsToFormTiers(plan.leaderStructureBands);
+        }
+        // Prefix match: teamPlanId stored on team might be a prefix of the actual plan doc ID
+        const planByPrefix = teamPlans.find(
+          (p) => p.teamPlanId.toLowerCase().startsWith(planIdLower) && p.teamId.toLowerCase() === teamIdLower
+        );
+        if (planByPrefix?.leaderStructureBands && planByPrefix.leaderStructureBands.length > 0) {
+          return teamPlanBandsToFormTiers(planByPrefix.leaderStructureBands);
+        }
       }
-      // 2b. Also try: teamPlanId stored on team might be a prefix of the actual plan doc ID
-      const planByPrefix = teamPlans.find(
-        (p) => p.teamPlanId.toLowerCase().startsWith(planIdLower) && p.teamId.toLowerCase() === teamIdLower
-      );
-      if (planByPrefix?.leaderStructureBands && planByPrefix.leaderStructureBands.length > 0) {
-        return teamPlanBandsToFormTiers(planByPrefix.leaderStructureBands);
+      // Direct match by teamId on plan
+      const planByTeamId = teamPlans.find((p) => p.teamId.toLowerCase() === teamIdLower);
+      if (planByTeamId?.leaderStructureBands && planByTeamId.leaderStructureBands.length > 0) {
+        return teamPlanBandsToFormTiers(planByTeamId.leaderStructureBands);
       }
     }
-    // 3. Also try matching by teamId directly (case-insensitive)
-    const planByTeamId = teamPlans.find((p) => p.teamId.toLowerCase() === teamIdLower);
-    if (planByTeamId?.leaderStructureBands && planByTeamId.leaderStructureBands.length > 0) {
-      return teamPlanBandsToFormTiers(planByTeamId.leaderStructureBands);
+
+    // --- Path B: no specific team → find any team plan whose team maps to this group ---
+    if (teamGroupSlug) {
+      // Build a set of teamIds that belong to this group
+      const groupTeamIds = new Set<string>();
+      for (const [tid, grp] of Object.entries(TEAM_NAME_TO_GROUP)) {
+        if (grp === teamGroupSlug) groupTeamIds.add(tid.toLowerCase());
+      }
+      // Also check teams list for any team whose teamGroup matches
+      for (const t of teams) {
+        if ((t as any).teamGroup === teamGroupSlug) groupTeamIds.add(t.teamId.toLowerCase());
+      }
+      // Search team plans for any plan whose teamId belongs to this group
+      for (const plan of teamPlans) {
+        if (plan.status === 'inactive') continue;
+        const planTeamIdLower = plan.teamId.toLowerCase();
+        // Direct membership check
+        if (groupTeamIds.has(planTeamIdLower)) {
+          if (plan.leaderStructureBands && plan.leaderStructureBands.length > 0) {
+            return teamPlanBandsToFormTiers(plan.leaderStructureBands);
+          }
+        }
+        // Also check if the plan name matches the group name
+        const planNameSlug = plan.planName?.toLowerCase().replace(/[\s-]+/g, '_') || '';
+        if (planNameSlug === teamGroupSlug || planNameSlug.includes(teamGroupSlug.replace(/_/g, ' ').toLowerCase())) {
+          if (plan.leaderStructureBands && plan.leaderStructureBands.length > 0) {
+            return teamPlanBandsToFormTiers(plan.leaderStructureBands);
+          }
+        }
+      }
     }
-    // 4. Fall back to hardcoded team group template
+
+    // --- Path C: fall back to hardcoded team group template ---
     return getDefaultTiersForTeamGroup(teamGroupSlug);
   }
 
