@@ -23,7 +23,7 @@ function jsonError(status: number, error: string) {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = req.headers.get('authorization');
@@ -32,7 +32,8 @@ export async function GET(
     const decoded = await adminAuth.verifyIdToken(token);
     if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
-    const id = params.id;
+    // Next.js 15+: params is a Promise and must be awaited
+    const { id } = await context.params;
     if (!id) return jsonError(400, 'Transaction id is required');
 
     const doc = await adminDb.collection('transactions').doc(id).get();
