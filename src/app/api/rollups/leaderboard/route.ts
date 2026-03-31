@@ -254,9 +254,12 @@ async function handlePeriod(
       });
     }
     const agg = agentMap.get(agentId)!;
+    // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+    const isDual = String(t.closingType || "").toLowerCase() === "dual";
+    const sideCount = isDual ? 2 : 1;
 
     if (status === "closed") {
-      agg.closed += 1;
+      agg.closed += sideCount;
       agg.closedVolume += num(t.dealValue);
       agg.totalGCI += num(t.commission);
       agg.agentNetCommission += num(
@@ -264,7 +267,7 @@ async function handlePeriod(
       );
       agg.companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
     } else if (status === "pending" || status === "under_contract") {
-      agg.pending += 1;
+      agg.pending += sideCount;
     }
   }
 

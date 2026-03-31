@@ -91,9 +91,13 @@ export async function GET(req: NextRequest) {
       const grossMargin = companyRetained > 0 ? companyRetained : Math.max(0, gci - agentNet);
       const dealValue = Number(d.dealValue) || Number(d.listPrice) || 0;
 
+      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+      const isDual = String(d.closingType || '').toLowerCase() === 'dual';
+      const sideCount = isDual ? 2 : 1;
+
       bucket.grossMargin += grossMargin;
       bucket.volume += dealValue;
-      bucket.sales += 1;
+      bucket.sales += sideCount;
       bucket.gci += gci;
     }
 

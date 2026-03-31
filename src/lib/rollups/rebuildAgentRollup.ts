@@ -52,6 +52,9 @@ export async function rebuildAgentRollup(
     .get();
 
   // ── 2. Filter to the target year and bucket by status ────────────────────
+  // NOTE: Dual Agent transactions count as 2 sides (1 buyer + 1 listing).
+  // Volume and commission are NOT doubled — the dollar amounts are already
+  // the full deal total. Only the side/unit count is doubled.
   let closed = 0;
   let pending = 0;
   let listingsActive = 0;
@@ -77,9 +80,13 @@ export async function rebuildAgentRollup(
     const status = String(t.status || '').toLowerCase();
     const txType = String(t.transactionType || '').toLowerCase();
 
+    // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+    const isDual = String(t.closingType || '').toLowerCase() === 'dual';
+    const sideCount = isDual ? 2 : 1;
+
     // Closed transactions
     if (status === 'closed') {
-      closed += 1;
+      closed += sideCount;
       closedVolume += num(t.dealValue);
       totalGCI += num(t.commission);
       agentNetCommission += num(t.splitSnapshot?.agentNetCommission ?? t.commission);
@@ -88,7 +95,7 @@ export async function rebuildAgentRollup(
 
     // Pending / under contract
     if (status === 'pending' || status === 'under_contract') {
-      pending += 1;
+      pending += sideCount;
     }
 
     // Listings (active, canceled, expired)

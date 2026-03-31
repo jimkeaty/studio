@@ -318,6 +318,9 @@ export async function GET(req: NextRequest) {
         const status = String(t.status || '').trim();
         const net = getTransactionNet(t);
         const dealValue = asNumber(t.dealValue);
+        // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+        const isDual = String((t as any).closingType || '').toLowerCase() === 'dual';
+        const sideCount = isDual ? 2 : 1;
 
         if (status === 'closed') {
           const d = toDate(t.closedDate || t.closingDate);
@@ -325,7 +328,7 @@ export async function GET(req: NextRequest) {
           const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
           if (dUtc.getTime() >= effectiveStart.getTime() && dUtc.getTime() <= asOf.getTime()) {
             netEarned += net;
-            closedUnits += 1;
+            closedUnits += sideCount;
             closedVolume += dealValue;
           }
         } else if (status === 'pending' || status === 'under_contract') {
@@ -334,7 +337,7 @@ export async function GET(req: NextRequest) {
           const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
           if (dUtc.getTime() >= effectiveStart.getTime() && dUtc.getTime() <= asOf.getTime()) {
             netPending += net;
-            pendingUnits += 1;
+            pendingUnits += sideCount;
             pendingVolume += dealValue;
           }
         }

@@ -285,6 +285,9 @@ export async function GET(req: NextRequest) {
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
       const srcKey = (t.dealSource || 'other').toLowerCase();
+      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+      const isDual = String(t.closingType || '').toLowerCase() === 'dual';
+      const sideCount = isDual ? 2 : 1;
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -295,39 +298,51 @@ export async function GET(req: NextRequest) {
         months[mi].grossMargin += companyRetained;
         months[mi].transactionFees += txFee;
         months[mi].closedVolume += dealValue;
-        months[mi].closedCount += 1;
+        months[mi].closedCount += sideCount;
         monthlyNetIncome[mi] += agentNet;
 
         totals.totalGCI += gci;
         totals.grossMargin += companyRetained;
         totals.transactionFees += txFee;
         totals.closedVolume += dealValue;
-        totals.closedCount += 1;
+        totals.closedCount += sideCount;
         totals.netIncome += agentNet;
         totals.agentNetCommission += agentNet;
 
-        categoryBreakdown.closed[catKey].count += 1;
+        categoryBreakdown.closed[catKey].count += sideCount;
         categoryBreakdown.closed[catKey].netRevenue += agentNet;
         addToSource(sourceBreakdown.closed, srcKey, dealValue, agentNet);
-        addToSide(sideBreakdown.closed, getSideKey(t), dealValue, agentNet);
+        // For dual agent, split into buyer + seller sides (1 each) instead of a single 'dual' bucket
+        if (isDual) {
+          addToSide(sideBreakdown.closed, 'buyer', dealValue / 2, agentNet / 2);
+          addToSide(sideBreakdown.closed, 'seller', dealValue / 2, agentNet / 2);
+        } else {
+          addToSide(sideBreakdown.closed, getSideKey(t), dealValue, agentNet);
+        }
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         const contractDate = parseDate(t.contractDate);
         const mi = contractDate && contractDate.getFullYear() === year ? contractDate.getMonth() : null;
 
         totals.pendingVolume += dealValue;
-        totals.pendingCount += 1;
+        totals.pendingCount += sideCount;
         totals.pendingNetIncome += agentNet;
 
         if (mi !== null) {
           months[mi].pendingVolume += dealValue;
-          months[mi].pendingCount += 1;
+          months[mi].pendingCount += sideCount;
           monthlyPendingNetIncome[mi] += agentNet;
         }
 
-        categoryBreakdown.pending[catKey].count += 1;
+        categoryBreakdown.pending[catKey].count += sideCount;
         categoryBreakdown.pending[catKey].netRevenue += agentNet;
         addToSource(sourceBreakdown.pending, srcKey, dealValue, agentNet);
-        addToSide(sideBreakdown.pending, getSideKey(t), dealValue, agentNet);
+        // For dual agent, split into buyer + seller sides (1 each) instead of a single 'dual' bucket
+        if (isDual) {
+          addToSide(sideBreakdown.pending, 'buyer', dealValue / 2, agentNet / 2);
+          addToSide(sideBreakdown.pending, 'seller', dealValue / 2, agentNet / 2);
+        } else {
+          addToSide(sideBreakdown.pending, getSideKey(t), dealValue, agentNet);
+        }
       }
     }
 
@@ -348,7 +363,13 @@ export async function GET(req: NextRequest) {
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
       const dealValue = t.dealValue ?? 0;
-      addToSide(allTimeSideBreakdown.closed, getSideKey(t), dealValue, agentNet);
+      const isAllTimeDual = String(t.closingType || '').toLowerCase() === 'dual';
+      if (isAllTimeDual) {
+        addToSide(allTimeSideBreakdown.closed, 'buyer', dealValue / 2, agentNet / 2);
+        addToSide(allTimeSideBreakdown.closed, 'seller', dealValue / 2, agentNet / 2);
+      } else {
+        addToSide(allTimeSideBreakdown.closed, getSideKey(t), dealValue, agentNet);
+      }
       const srcKey = (t.dealSource || 'other').toLowerCase();
       addToSource(allTimeSourceBreakdown.closed, srcKey, dealValue, agentNet);
     }
@@ -370,14 +391,17 @@ export async function GET(req: NextRequest) {
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
       const vol = t.dealValue ?? 0;
+      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+      const isPrevDual = String(t.closingType || '').toLowerCase() === 'dual';
+      const prevSideCount = isPrevDual ? 2 : 1;
 
       prevMonthly[m].closedVolume += vol;
-      prevMonthly[m].closedCount += 1;
+      prevMonthly[m].closedCount += prevSideCount;
       prevMonthly[m].totalGCI += gci;
       prevMonthly[m].netIncome += agentNet;
 
       prevTotalVolume += vol;
-      prevTotalCount += 1;
+      prevTotalCount += prevSideCount;
       prevTotalGCI += gci;
       prevTotalNet += agentNet;
     }

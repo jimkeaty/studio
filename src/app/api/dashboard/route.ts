@@ -321,6 +321,9 @@ export async function GET(req: NextRequest) {
         || t.splitSnapshot?.grossCommission
         || t.commission
       );
+      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+      const isDual = String((t as any).closingType || "").toLowerCase() === "dual";
+      const sideCount = isDual ? 2 : 1;
 
       if (status === "closed") {
         const d = getTransactionDateForEarned(t);
@@ -336,7 +339,7 @@ export async function GET(req: NextRequest) {
           dUtc.getTime() <= asOf.getTime()
         ) {
           netEarned += net;
-          closedUnits += 1;
+          closedUnits += sideCount;
           closedVolume += dealValue;
           totalGCI += gci;
           grossGCIYTD += tierGCI;
@@ -366,7 +369,7 @@ export async function GET(req: NextRequest) {
           dUtc.getTime() <= asOf.getTime()
         ) {
           netPending += net;
-          pendingUnits += 1;
+          pendingUnits += sideCount;
           pendingVolume += dealValue;
           pendingGrossGCI += tierGCI;
         }

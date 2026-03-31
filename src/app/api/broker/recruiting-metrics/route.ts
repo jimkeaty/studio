@@ -80,6 +80,9 @@ export async function GET(req: NextRequest) {
     const monthlyDeals: number[] = new Array(12).fill(0);
     txSnap.docs.forEach(d => {
       const t = d.data();
+      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+      const isDual = String(t.closingType || '').toLowerCase() === 'dual';
+      const sideCount = isDual ? 2 : 1;
       if (t.closedDate) {
         let closedDate: Date | null = null;
         if (typeof (t.closedDate as any).toDate === 'function') {
@@ -89,7 +92,7 @@ export async function GET(req: NextRequest) {
           if (!isNaN(parsed.getTime())) closedDate = parsed;
         }
         if (closedDate && closedDate.getFullYear() === year) {
-          monthlyDeals[closedDate.getMonth()] += 1;
+          monthlyDeals[closedDate.getMonth()] += sideCount;
         }
       }
     });
