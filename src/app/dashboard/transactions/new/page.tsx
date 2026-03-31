@@ -101,6 +101,8 @@ const schema = z.object({
   gci: z.coerce.number().min(0).optional().or(z.literal('')),
   transactionFee: z.coerce.number().min(0).optional().or(z.literal('')),
   earnestMoney: z.coerce.number().min(0).optional().or(z.literal('')),
+  depositHolder: z.enum(['listing_broker', 'selling_broker', 'other']).optional(),
+  depositHolderOther: z.string().optional(),
   brokerPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   brokerGci: z.coerce.number().min(0).optional().or(z.literal('')),
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
@@ -708,13 +710,35 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Sale Price ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
-            <div className="max-w-xs">
+            <Grid2>
               <FormField control={form.control} name="earnestMoney" render={({ field }) => (
                 <FormItem><FormLabel>Earnest Money / Deposit ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
               )} />
-            </div>
+              <FormField control={form.control} name="depositHolder" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Who is holding the deposit?</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="listing_broker">Listing Broker</SelectItem>
+                      <SelectItem value="selling_broker">Selling Broker</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+            </Grid2>
+            {form.watch('depositHolder') === 'other' && (
+              <div className="max-w-xs">
+                <FormField control={form.control} name="depositHolderOther" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Specify deposit holder</FormLabel>
+                    <FormControl><Input placeholder="Name or company..." {...field} /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+            )}
           </Section>
-
           {/* ── Section 4: Client Info ─────────────────────────────────── */}
           <Section title="Client Info" description="Select client type to show the appropriate contact fields.">
             <FormField control={form.control} name="clientType" render={({ field }) => (

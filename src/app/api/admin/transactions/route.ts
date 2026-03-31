@@ -64,6 +64,7 @@ const UPDATABLE_FIELDS = new Set([
   'status', 'transactionType', 'closingType', 'dealType',
   'address', 'clientName', 'dealValue', 'commission',
   'commissionPercent', 'commissionBasePrice', 'gci', 'transactionFee', 'earnestMoney',
+  'depositHolder', 'depositHolderOther',
   'contractDate', 'closedDate', 'listingDate', 'projectedCloseDate',
   'optionExpiration', 'inspectionDeadline', 'surveyDeadline',
   'listPrice', 'salePrice', 'dealSource', 'notes', 'additionalComments',

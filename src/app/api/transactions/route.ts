@@ -153,6 +153,8 @@ export async function POST(req: NextRequest) {
       ...(body.commissionBasePrice ? { commissionBasePrice: toNumber(body.commissionBasePrice) } : {}),
       ...(body.transactionFee ? { transactionFee: toNumber(body.transactionFee) } : {}),
       ...(body.earnestMoney ? { earnestMoney: toNumber(body.earnestMoney) } : {}),
+      ...(body.depositHolder ? { depositHolder: body.depositHolder } : {}),
+      ...(body.depositHolderOther ? { depositHolderOther: body.depositHolderOther } : {}),
       ...(body.listingDate ? { listingDate: body.listingDate } : {}),
       ...(body.optionExpiration ? { optionExpiration: body.optionExpiration } : {}),
       ...(body.inspectionDeadline ? { inspectionDeadline: body.inspectionDeadline } : {}),
