@@ -580,7 +580,7 @@ export default function AgentDashboardPageWrapper() {
 
 function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
-  const { isAdmin } = useIsAdminLike();
+  const { isAdmin, loading: adminLoading } = useIsAdminLike();
   const { isImpersonating, impersonatedAgent, startImpersonation, impersonationReady } = useEffectiveUser();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -605,9 +605,12 @@ function AgentDashboardPage() {
   const bootstrapFiredRef = React.useRef(false);
 
   // Phase 1: consume URL params and start impersonation if needed.
-  // Wait for userLoading=false so isAdmin reflects the real auth state.
+  // Wait for BOTH userLoading=false AND adminLoading=false so isAdmin is correct.
+  // Without waiting for adminLoading, staff admins (tc_admin/office_admin) would
+  // have isAdmin=false when the bootstrap fires (staff check still pending),
+  // causing impersonation to be skipped and the dashboard to show no data.
   useEffect(() => {
-    if (userLoading) return; // wait for auth to resolve before checking isAdmin
+    if (userLoading || adminLoading) return; // wait for auth + staff role check
     if (bootstrapFiredRef.current) return; // only fire once after auth resolves
     bootstrapFiredRef.current = true;
     const viewAsParam = searchParams.get('viewAs');
@@ -624,7 +627,7 @@ function AgentDashboardPage() {
       setBootstrapPending(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLoading, isAdmin, searchParams]);
+  }, [userLoading, adminLoading, isAdmin, searchParams]);
 
   // Phase 2: once isImpersonating confirms the agent state has propagated, unblock fetches
   useEffect(() => {
