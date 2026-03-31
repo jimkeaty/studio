@@ -359,10 +359,10 @@ export default function AddTransactionPage() {
     }
   }, [user, isAdmin, isImpersonating, effectiveUid, effectiveName]);
 
-  // Fetch agent commission structure when agent is selected (admin only)
+  // Fetch agent commission structure when agent is selected (admin + agent users)
   const watchedAgentId = form.watch('agentId');
   useEffect(() => {
-    if (!user || !isAdmin || !watchedAgentId) {
+    if (!user || !watchedAgentId) {
       setAgentCommission(null);
       setActiveTier(null);
       return;
@@ -397,7 +397,7 @@ export default function AddTransactionPage() {
   // Auto-calculate commission split when GCI changes and we have agent commission data
   const watchedGCI = form.watch('gci');
   useEffect(() => {
-    if (!isAdmin || !agentCommission || commissionManualOverride.current) return;
+    if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(watchedGCI) || 0;
     if (gci <= 0) {
       setActiveTier(null);
@@ -420,7 +420,7 @@ export default function AddTransactionPage() {
         form.setValue('transactionFee', txFee as any);
       }
     }
-  }, [watchedGCI, agentCommission, isAdmin]);
+  }, [watchedGCI, agentCommission]);
 
   // Helper: toggle inspection type checkbox
   const toggleInspectionType = (type: string) => {
@@ -1018,109 +1018,128 @@ export default function AddTransactionPage() {
 
           {/* ── Commission & Fees (unified section) ────────────────────────── */}
           <Section title="Commission & Fees">
-            {/* Commission base price */}
-            {isAdmin && (
-              <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Price Commission Is Based On (Sale Price – Seller Concessions)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="1"
-                      placeholder="Auto-filled from Sale Price"
-                      {...field}
-                      onChange={(e) => {
-                        cbpManuallyEdited.current = true;
-                        field.onChange(e);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Defaults to Sale Price. Edit if seller concessions reduce the commission base.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
+            {/* Commission base price — visible to all users */}
+            <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Price Commission Is Based On (Sale Price – Seller Concessions)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="1"
+                    placeholder="Auto-filled from Sale Price"
+                    {...field}
+                    onChange={(e) => {
+                      cbpManuallyEdited.current = true;
+                      field.onChange(e);
+                    }}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Defaults to Sale Price. Edit if seller concessions reduce the commission base.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Commission paid by seller — visible to all users */}
+            <Separator />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Paid by Seller</p>
+            <div className="space-y-4">
+              <div className="flex items-end gap-4">
+                <div className="flex-1 max-w-xs">
+                  <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>% Seller Paying Listing Agent</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                        </div>
+                      </FormControl>
+                      <FormDescription>% of Commission Base Price</FormDescription>
+                    </FormItem>
+                  )} />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm pb-2">
+                  <input
+                    type="checkbox"
+                    checked={form.watch('sellerPayingListingAgentUnknown') || false}
+                    onChange={(e) => form.setValue('sellerPayingListingAgentUnknown', e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  Unknown / Confirm with listing agent
+                </label>
+              </div>
+              <div className="max-w-xs">
+                <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>% Seller Paying Buyer&apos;s Agent</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                      </div>
+                    </FormControl>
+                    <FormDescription>% of Commission Base Price</FormDescription>
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+
+            {/* Agent Net — visible to agents only (read-only, auto-calculated from tier) */}
+            {!isAdmin && (
+              <div className="rounded-md border border-border bg-muted/40 px-4 py-3 max-w-xs">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Your Estimated Net</p>
+                <FormField control={form.control} name="agentDollar" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Agent Net $</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="Auto-calculated"
+                        readOnly
+                        className="bg-background cursor-default"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>Calculated from your commission profile and tier.</FormDescription>
+                  </FormItem>
+                )} />
+              </div>
             )}
 
-            {/* Commission paid by seller */}
+            {/* GCI & Commission % — admin only */}
             {isAdmin && (
               <>
                 <Separator />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Paid by Seller</p>
-                <div className="space-y-4">
-                  <div className="flex items-end gap-4">
-                    <div className="flex-1 max-w-xs">
-                      <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>% Seller Paying Listing Agent</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-                            </div>
-                          </FormControl>
-                          <FormDescription>% of Commission Base Price</FormDescription>
-                        </FormItem>
-                      )} />
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer text-sm pb-2">
-                      <input
-                        type="checkbox"
-                        checked={form.watch('sellerPayingListingAgentUnknown') || false}
-                        onChange={(e) => form.setValue('sellerPayingListingAgentUnknown', e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      Unknown / Confirm with listing agent
-                    </label>
-                  </div>
-                  <div className="max-w-xs">
-                    <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>% Seller Paying Buyer&apos;s Agent</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-                          </div>
-                        </FormControl>
-                        <FormDescription>% of Commission Base Price</FormDescription>
-                      </FormItem>
-                    )} />
-                  </div>
-                </div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
+                <Grid3>
+                  <FormField control={form.control} name="commissionPercent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gross Commission %</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number" step="0.01" placeholder="3"
+                          {...field}
+                          onChange={(e) => {
+                            commPctManuallyEdited.current = true;
+                            field.onChange(e);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>Auto-filled from seller-paying % above</FormDescription>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="gci" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GCI ($)</FormLabel>
+                      <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                      <FormDescription>Gross Commission Income</FormDescription>
+                    </FormItem>
+                  )} />
+                </Grid3>
               </>
-            )}
-
-            {/* GCI & Commission % */}
-            <Separator />
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
-            {isAdmin && (
-              <Grid3>
-                <FormField control={form.control} name="commissionPercent" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Gross Commission %</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number" step="0.01" placeholder="3"
-                        {...field}
-                        onChange={(e) => {
-                          commPctManuallyEdited.current = true;
-                          field.onChange(e);
-                        }}
-                      />
-                    </FormControl>
-                    <FormDescription>Auto-filled from seller-paying % above</FormDescription>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="gci" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>GCI ($)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                    <FormDescription>Gross Commission Income</FormDescription>
-                  </FormItem>
-                )} />
-              </Grid3>
             )}
 
             {/* Commission Split (Admin) */}
