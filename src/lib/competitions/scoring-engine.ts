@@ -654,6 +654,47 @@ export function getDefaultConfig(theme: CompetitionTheme): CompetitionConfig {
     };
   }
 
+  if (theme === 'horse_race') {
+    return {
+      ...base,
+      name: `Horse Race ${year}`,
+      description: 'Head-to-head race where KPI completions move your horse forward.',
+      theme: 'horse_race',
+      startDate: `${year}-01-01`,
+      endDate: `${year}-12-31`,
+      metric: 'engagements',
+      metricLabel: 'Engagements',
+      targetType: 'season',
+      targetValue: 500,
+      scoringStrategy: 'points',
+      rankingDirection: 'desc',
+      pointRules: {
+        closedDeal: 100,
+        pendingDeal: 50,
+        engagementPoint: 2,
+        appointmentHeldPoint: 10,
+        contractWrittenPoint: 25,
+      },
+      bonuses: {
+        bigClosingBonus: { enabled: true, threshold: 500000, score: 50, label: 'Turbo Gallop' },
+        firstDealOfMonth: { enabled: true, score: 25, label: 'Fast Start' },
+      },
+      penalties: {
+        cancelledDeal: { enabled: true, score: -50, label: 'Stumble' },
+      },
+      prizes: [
+        { place: 1, label: '1st Place', amount: 1000 },
+        { place: 2, label: '2nd Place', amount: 500 },
+        { place: 3, label: '3rd Place', amount: 250 },
+      ],
+      leaderboardVariant: 'racetrack',
+      commentaryPack: 'horse_race_classic',
+      audioPack: 'horse_race_crowd',
+      audioEnabled: true,
+      commentaryEnabled: true,
+    };
+  }
+
   // NASCAR (default)
   return {
     ...base,

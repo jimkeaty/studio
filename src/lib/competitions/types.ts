@@ -9,7 +9,7 @@ export type ScoringStrategy = 'points' | 'threshold_map' | 'laps';
 export type RankingDirection = 'asc' | 'desc';
 
 /** Visual / UX theme applied to the competition. */
-export type CompetitionTheme = 'nascar' | 'golf';
+export type CompetitionTheme = 'nascar' | 'golf' | 'horse_race';
 
 /** Cadence of the metric target. */
 export type TargetType = 'daily' | 'weekly' | 'monthly' | 'season';
@@ -55,9 +55,9 @@ export type PenaltyConfig = {
 
 // ── Commentary & Audio ──────────────────────────────────────────────────────
 
-export type CommentaryPack = 'nascar_classic' | 'golf_classic' | 'generic';
+export type CommentaryPack = 'nascar_classic' | 'golf_classic' | 'horse_race_classic' | 'generic';
 
-export type AudioPack = 'nascar_engine' | 'golf_clean' | 'none';
+export type AudioPack = 'nascar_engine' | 'golf_clean' | 'horse_race_crowd' | 'none';
 
 // ── Prizes ──────────────────────────────────────────────────────────────────
 

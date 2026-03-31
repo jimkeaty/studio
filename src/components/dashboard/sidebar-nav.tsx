@@ -64,7 +64,6 @@ const agentMenuItems = [
 // Shown to all users — community & entertainment
 const communityMenuItems = [
   { href: '/dashboard/admin/competitions', label: 'Competition Center', icon: Gamepad2 },
-  { href: '/dashboard/admin/keaty-cup', label: 'Keaty Cup', icon: Trophy },
 ];
 
 const tvModeMenuItems = [
@@ -85,7 +84,6 @@ const adminMenuItems = [
   { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
   { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
   { href: '/dashboard/admin/competitions', label: 'Competition Center', icon: Gamepad2 },
-  { href: '/dashboard/admin/keaty-cup', label: 'Keaty Cup', icon: Trophy },
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
   { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
   { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },

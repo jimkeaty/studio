@@ -73,6 +73,8 @@ export interface AgentRosterRow {
   teamName: string | null;
   teamId: string | null;
   teamRole: string | null;
+  teamGroup: string | null;       // referral_group, cgl, sgl, charles_ditch_team, independent
+  agentStatus: string | null;     // active, grace_period, inactive, out
   startDate: string | null;
   isGracePeriod: boolean;
 
@@ -368,6 +370,8 @@ export async function GET(req: NextRequest) {
         teamName: agent.teamName || null,
         teamId: agent.primaryTeamId || null,
         teamRole: agent.teamRole || null,
+        teamGroup: agent.teamGroup || null,
+        agentStatus: agent.status || 'active',
         startDate: toYmd(agent.startDate) || null,
         isGracePeriod,
 
@@ -428,6 +432,20 @@ export async function GET(req: NextRequest) {
     const graceAtRisk = rows.filter(r => r.graceStatus === 'grace_at_risk').length;
     const graceNoDeal = rows.filter(r => r.graceStatus === 'in_grace').length;
 
+    // Team Group breakdown
+    const teamGroupBreakdown: Record<string, number> = {};
+    for (const r of rows) {
+      const tg = r.teamGroup || 'unknown';
+      teamGroupBreakdown[tg] = (teamGroupBreakdown[tg] || 0) + 1;
+    }
+
+    // Status breakdown (from profile status field)
+    const statusBreakdown: Record<string, number> = {};
+    for (const r of rows) {
+      const st = r.agentStatus || 'active';
+      statusBreakdown[st] = (statusBreakdown[st] || 0) + 1;
+    }
+
     return NextResponse.json({
       ok: true,
       year: yearNum,
@@ -445,6 +463,9 @@ export async function GET(req: NextRequest) {
         graceAtRisk,
         graceNoDeal,
         established: totalAgents - inGrace.length,
+        // New breakdowns
+        teamGroupBreakdown,
+        statusBreakdown,
       },
     });
   } catch (err: any) {

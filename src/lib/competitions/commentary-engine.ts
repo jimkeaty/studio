@@ -287,11 +287,86 @@ const genericPack: CommentaryPackDefinition = {
   ],
 };
 
+// ── Horse Race Commentary Pack ────────────────────────────────────────────
+
+const horseRaceClassicPack: CommentaryPackDefinition = {
+  id: 'horse_race_classic',
+  name: 'Horse Race Classic',
+  templates: [
+    {
+      trigger: 'race_start',
+      templates: [
+        'And they\'re off! {count} horses burst from the gate for the {competitionName}!',
+        'The gates are open! {count} thoroughbreds charging down the track!',
+        'Welcome to the {competitionName}! {count} horses are racing for glory!',
+      ],
+    },
+    {
+      trigger: 'leader_announce',
+      templates: [
+        '{name} leads by a nose with {score} points!',
+        '{name} is out front — {score} points and pulling away!',
+        'Down the stretch, {name} holds the lead at {score} points!',
+      ],
+    },
+    {
+      trigger: 'midrace',
+      templates: [
+        'Around the far turn! {name} is closing — just {gap} points behind!',
+        'What a race! The top {count} are neck and neck, separated by {gap} points!',
+        '{runner} is making a move on {leader}!',
+      ],
+    },
+    {
+      trigger: 'achievement',
+      templates: [
+        '{name} surges ahead with a powerful gallop! A big closing!',
+        '{name} breaks away from the pack with a massive deal!',
+      ],
+    },
+    {
+      trigger: 'penalty',
+      templates: [
+        '{name} stumbles! A deal fell through — that\'s -{points} points!',
+        'Trouble on the track! {name} loses {points} points from a cancellation!',
+      ],
+    },
+    {
+      trigger: 'streak',
+      templates: [
+        '{name} is in full gallop! {days} consecutive months of closings!',
+        'Unstoppable! {name} has been producing for {days} months straight!',
+      ],
+    },
+    {
+      trigger: 'finish',
+      templates: [
+        'Photo finish! {name} wins the {competitionName} with {score} points!',
+        '{name} crosses the finish line first! Champion of the {competitionName}!',
+        'And the winner is {name} with {score} points! What a race!',
+      ],
+    },
+    {
+      trigger: 'podium_2nd',
+      templates: [
+        'In the place position, {name} with {score} points!',
+      ],
+    },
+    {
+      trigger: 'podium_3rd',
+      templates: [
+        'Showing third, {name} with {score} points!',
+      ],
+    },
+  ],
+};
+
 // ── Pack registry ─────────────────────────────────────────────────────────
 
 const PACKS: Record<CommentaryPack, CommentaryPackDefinition> = {
   nascar_classic: nascarClassicPack,
   golf_classic: golfClassicPack,
+  horse_race_classic: horseRaceClassicPack,
   generic: genericPack,
 };
 

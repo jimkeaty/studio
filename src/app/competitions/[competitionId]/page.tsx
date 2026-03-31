@@ -66,6 +66,7 @@ function currentDayNumber(startDate: string): number {
 function getThemeIcon(theme: string): string {
   if (theme === 'golf') return '\u26F3';
   if (theme === 'nascar') return '\uD83C\uDFC1';
+  if (theme === 'horse_race') return '\uD83C\uDFC7';
   return '\uD83C\uDFC6';
 }
 
@@ -141,6 +142,65 @@ function NascarTrack({ standings, showTopN }: { standings: ParticipantStanding[]
                   {s.displayName.split(' ')[0]}
                 </text>
               )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ── Horse Race Track SVG ─────────────────────────────────────────────────────
+
+function HorseRaceTrack({ standings, showTopN }: { standings: ParticipantStanding[]; showTopN: number }) {
+  const visible = standings.slice(0, Math.min(showTopN, 16));
+  const maxScore = visible[0]?.totalScore || 1;
+  const laneH = 28;
+  const topPad = 40;
+  const svgH = topPad + visible.length * laneH + 20;
+  const trackLeft = 20;
+  const trackRight = 480;
+  const trackW = trackRight - trackLeft;
+
+  const horseColors = ['#facc15', '#94a3b8', '#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#06b6d4', '#f43e5e', '#84cc16', '#f59e0b', '#8b5cf6', '#14b8a6', '#e11d48', '#0ea5e9', '#d946ef'];
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center p-4">
+      <svg viewBox={`0 0 500 ${svgH}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+        {/* Dirt track background */}
+        <rect x={trackLeft} y={topPad - 5} width={trackW} height={visible.length * laneH + 10} rx="6" fill="#292524" stroke="#44403c" strokeWidth="1" />
+
+        {/* Finish line */}
+        <line x1={trackRight - 10} y1={topPad - 5} x2={trackRight - 10} y2={topPad + visible.length * laneH + 5} stroke="#fff" strokeWidth="2" strokeDasharray="4 4" />
+        <text x={trackRight - 10} y={topPad - 12} textAnchor="middle" fill="#a8a29e" fontSize="8" fontFamily="monospace">FINISH</text>
+
+        {/* Start line */}
+        <line x1={trackLeft + 10} y1={topPad - 5} x2={trackLeft + 10} y2={topPad + visible.length * laneH + 5} stroke="#78716c" strokeWidth="1" strokeDasharray="4 4" />
+
+        {/* Lane lines and horses */}
+        {visible.map((s, i) => {
+          const y = topPad + i * laneH;
+          const progress = maxScore > 0 ? Math.min(s.totalScore / maxScore, 1) : 0;
+          const horseX = trackLeft + 20 + progress * (trackW - 50);
+          const color = i < horseColors.length ? horseColors[i] : s.color || '#78716c';
+
+          return (
+            <g key={s.agentId}>
+              {/* Lane divider */}
+              {i > 0 && <line x1={trackLeft} y1={y} x2={trackRight} y2={y} stroke="#44403c" strokeWidth="0.5" />}
+
+              {/* Position number */}
+              <text x={trackLeft + 5} y={y + laneH / 2 + 4} fill="#a8a29e" fontSize="8" fontWeight="bold">{s.position}</text>
+
+              {/* Horse body */}
+              <rect x={horseX - 10} y={y + 5} width="20" height={laneH - 10} rx="4" fill={color} stroke={i === 0 ? '#facc15' : '#000'} strokeWidth={i === 0 ? 1.5 : 0.5} className="transition-all duration-1000" />
+              {/* Horse emoji */}
+              <text x={horseX} y={y + laneH / 2 + 4} textAnchor="middle" fontSize="10">\uD83C\uDFC7</text>
+
+              {/* Name */}
+              <text x={horseX + 16} y={y + laneH / 2 + 3} fill="#d6d3d1" fontSize="7" fontWeight="500">
+                {s.displayName.split(' ')[0]}
+              </text>
             </g>
           );
         })}
@@ -225,6 +285,8 @@ export default function CompetitionTVPage() {
   const theme = config?.theme ?? 'golf';
   const isGolf = theme === 'golf';
   const isNascar = theme === 'nascar';
+  const isHorseRace = theme === 'horse_race';
+  const isRaceTheme = isNascar || isHorseRace;
 
   // ── Data Fetching ────────────────────────────────────────────────────────
 
@@ -475,8 +537,9 @@ export default function CompetitionTVPage() {
               <p className="text-gray-400 text-sm lg:text-base mt-0.5">
                 {isGolf && <>Par: {config.targetValue} {config.metricLabel || config.metric} | </>}
                 {isNascar && <>{standings.length} Racers | </>}
+                {isHorseRace && <>{standings.length} Horses | </>}
                 Day {Math.min(currentDay, totalDays)} of {totalDays}
-                {config.targetType === 'season' && isNascar && <> | Target: {config.targetValue} {config.metricLabel || config.metric}</>}
+                {config.targetType === 'season' && isRaceTheme && <> | Target: {config.targetValue} {config.metricLabel || config.metric}</>}
               </p>
             </div>
           </div>
@@ -513,7 +576,7 @@ export default function CompetitionTVPage() {
           ══════════════════════════════════════════════════════════════════════ */}
       <div className="flex-1 flex min-h-0">
         {/* ── LEFT PANEL: Leaderboard ────────────────────────────────────── */}
-        <div className={`${isGolf ? 'w-[65%]' : isNascar ? 'w-[55%]' : 'w-full'} flex flex-col border-r border-gray-800/50`}>
+        <div className={`${isGolf ? 'w-[65%]' : isRaceTheme ? 'w-[55%]' : 'w-full'} flex flex-col border-r border-gray-800/50`}>
           {/* Column headers */}
           <div className="flex-shrink-0 flex items-center px-6 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-800/40 bg-gray-900/30">
             <div className="w-12 text-center">Pos</div>
@@ -639,7 +702,7 @@ export default function CompetitionTVPage() {
                         ${!isLeader && isGolf && s.totalScore < 0 ? 'text-emerald-400' : ''}
                         ${!isLeader && isGolf && s.totalScore > 0 ? 'text-red-400' : ''}
                         ${!isLeader && isGolf && s.totalScore === 0 ? 'text-gray-300' : ''}
-                        ${!isLeader && isNascar ? 'text-gray-100' : ''}
+                        ${!isLeader && isRaceTheme ? 'text-gray-100' : ''}
                         ${isChanged ? 'scale-110' : ''}
                       `}
                     >
@@ -713,6 +776,30 @@ export default function CompetitionTVPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Horse Race: Track + standings */}
+          {isHorseRace && (
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0">
+                <HorseRaceTrack standings={standings} showTopN={config.showTopN || 16} />
+              </div>
+              <div className="flex-shrink-0 border-t border-gray-800/40 p-4 max-h-[300px] overflow-y-auto">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3 px-1">Standings</h3>
+                <div className="space-y-1.5">
+                  {standings.slice(0, config.showTopN || 16).map((s, idx) => (
+                    <div key={s.agentId} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.02] transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-bold w-6 tabular-nums ${idx === 0 ? 'text-yellow-400' : 'text-gray-500'}`}>{s.position}.</span>
+                        <span className={`text-sm font-medium ${idx === 0 ? 'text-yellow-50' : 'text-gray-300'}`}>{s.displayName}</span>
+                        {s.streak >= 3 && <span className="text-xs">\uD83D\uDD25</span>}
+                      </div>
+                      <span className={`text-sm font-bold tabular-nums ${idx === 0 ? 'text-yellow-400' : 'text-gray-200'}`}>{formatScore(s.totalScore, config)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 

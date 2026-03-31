@@ -49,6 +49,9 @@ function themeBadge(theme: CompetitionTheme) {
   if (theme === 'nascar') {
     return <Badge className="bg-gray-900 text-white border-gray-700">🏁 NASCAR</Badge>;
   }
+  if (theme === 'horse_race') {
+    return <Badge className="bg-amber-700 text-white border-amber-600">🏇 Horse Race</Badge>;
+  }
   return <Badge className="bg-green-700 text-white border-green-600">⛳ Golf</Badge>;
 }
 
@@ -433,7 +436,7 @@ export default function CompetitionCenterPage() {
 
           {/* Theme selector */}
           {!selectedTheme ? (
-            <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="grid grid-cols-3 gap-4 py-4">
               <button
                 onClick={() => handleThemeSelect('nascar')}
                 className="group relative rounded-xl border-2 border-transparent hover:border-gray-400 bg-gray-900 text-white p-6 text-center transition-all hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-600"
@@ -450,6 +453,15 @@ export default function CompetitionCenterPage() {
                 <div className="text-4xl mb-3">⛳</div>
                 <h3 className="text-lg font-bold">Golf</h3>
                 <p className="text-xs text-green-200 mt-1">Clubhouse leaderboard with par, birdies, and eagles</p>
+              </button>
+
+              <button
+                onClick={() => handleThemeSelect('horse_race')}
+                className="group relative rounded-xl border-2 border-transparent hover:border-amber-400 bg-gradient-to-br from-amber-700 to-amber-900 text-white p-6 text-center transition-all hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-600"
+              >
+                <div className="text-4xl mb-3">🏇</div>
+                <h3 className="text-lg font-bold">Horse Race</h3>
+                <p className="text-xs text-amber-200 mt-1">KPI-driven race with horses galloping to the finish</p>
               </button>
             </div>
           ) : (
@@ -474,7 +486,7 @@ export default function CompetitionCenterPage() {
                   id="comp-name"
                   value={formData.name || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder={selectedTheme === 'nascar' ? 'Keaty Cup 2026' : 'Golf Challenge 2026'}
+                  placeholder={selectedTheme === 'nascar' ? 'Keaty Cup 2026' : selectedTheme === 'horse_race' ? 'Horse Race 2026' : 'Golf Challenge 2026'}
                 />
               </div>
 

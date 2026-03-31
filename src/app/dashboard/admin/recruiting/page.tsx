@@ -378,9 +378,40 @@ function GraceStatusBadge({ status, daysRemaining, month, hasFirstDeal }: {
   );
 }
 
+// ── Team Group & Status Helpers ─────────────────────────────────────────────
+
+const TEAM_GROUP_LABELS: Record<string, string> = {
+  referral_group: 'Referral Group',
+  cgl: 'CGL',
+  sgl: 'SGL',
+  charles_ditch_team: 'Charles Ditch Team',
+  independent: 'Independent',
+};
+
+const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  active: { label: 'Active', className: 'bg-green-100 text-green-800 border-green-300' },
+  grace_period: { label: 'Grace Period', className: 'bg-amber-100 text-amber-800 border-amber-300' },
+  inactive: { label: 'Inactive', className: 'bg-gray-100 text-gray-600 border-gray-300' },
+  out: { label: 'Out', className: 'bg-red-100 text-red-800 border-red-300' },
+};
+
+function TeamGroupBadge({ teamGroup }: { teamGroup: string | null }) {
+  const label = TEAM_GROUP_LABELS[teamGroup || ''] || teamGroup || 'Unknown';
+  return <span className="text-[10px] text-muted-foreground">{label}</span>;
+}
+
+function AgentStatusBadge({ status }: { status: string | null }) {
+  const cfg = STATUS_LABELS[status || 'active'] || STATUS_LABELS.active;
+  return (
+    <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
 // ── Agent Performance Roster ────────────────────────────────────────────────
 
-type SortField = 'name' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual' | 'graceStatus';
+type SortField = 'name' | 'teamGroup' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual' | 'graceStatus';
 type SortDir = 'asc' | 'desc';
 
 const GRADE_ORDER: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 };
@@ -393,7 +424,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
   const [sortField, setSortField] = useState<SortField>('incomeGrade');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [filterGrade, setFilterGrade] = useState<string>('all');
-  const [filterTeam, setFilterTeam] = useState<string>('all');
+  const [filterTeamGroup, setFilterTeamGroup] = useState<string>('all');
   const [filterGrace, setFilterGrace] = useState<string>('all');
   const [view, setView] = useState<'table' | 'cards'>('table');
 
@@ -421,16 +452,16 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
   const { agents, summary } = data;
 
-  // Get unique teams
-  const teams = [...new Set(agents.map((a: any) => a.teamName).filter(Boolean))].sort() as string[];
+  // Get unique team groups from agents
+  const teamGroups = [...new Set(agents.map((a: any) => a.teamGroup).filter(Boolean))].sort() as string[];
 
   // Filter
   let filtered = [...agents];
   if (filterGrade !== 'all') {
     filtered = filtered.filter((a: any) => a.incomeGrade === filterGrade);
   }
-  if (filterTeam !== 'all') {
-    filtered = filtered.filter((a: any) => a.teamName === filterTeam);
+  if (filterTeamGroup !== 'all') {
+    filtered = filtered.filter((a: any) => a.teamGroup === filterTeamGroup);
   }
   if (filterGrace !== 'all') {
     if (filterGrace === 'in_grace') {
@@ -449,6 +480,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
     let cmp = 0;
     switch (sortField) {
       case 'name': cmp = a.displayName.localeCompare(b.displayName); break;
+      case 'teamGroup': cmp = (a.teamGroup || '').localeCompare(b.teamGroup || ''); break;
       case 'engGrade': cmp = (GRADE_ORDER[a.engagementsGrade] ?? 0) - (GRADE_ORDER[b.engagementsGrade] ?? 0); break;
       case 'apptGrade': cmp = (GRADE_ORDER[a.appointmentsGrade] ?? 0) - (GRADE_ORDER[b.appointmentsGrade] ?? 0); break;
       case 'incomeGrade': cmp = (GRADE_ORDER[a.incomeGrade] ?? 0) - (GRADE_ORDER[b.incomeGrade] ?? 0); break;
@@ -521,6 +553,28 @@ function AgentPerformanceRoster({ year }: { year: number }) {
         </Card>
       </div>
 
+      {/* Team Group Breakdown */}
+      {summary.teamGroupBreakdown && Object.keys(summary.teamGroupBreakdown).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground font-medium">By Team Group:</span>
+          {Object.entries(summary.teamGroupBreakdown as Record<string, number>)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
+            .map(([key, count]) => (
+              <button key={key}
+                onClick={() => setFilterTeamGroup(filterTeamGroup === key ? 'all' : key)}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border ${
+                  filterTeamGroup === key ? 'ring-2 ring-offset-1 ring-blue-500 bg-blue-50' : 'hover:bg-muted'
+                }`}>
+                <span className="font-medium">{TEAM_GROUP_LABELS[key] || key}</span>
+                <span className="text-muted-foreground">({count as number})</span>
+              </button>
+            ))}
+          {filterTeamGroup !== 'all' && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFilterTeamGroup('all')}>Clear</Button>
+          )}
+        </div>
+      )}
+
       {/* ── New Agent Grace Period Tracker ──────────────────────────────── */}
       {summary.totalInGrace > 0 && (
         <Card className="border-2 border-amber-200">
@@ -590,10 +644,10 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
                   return (
                     <div key={a.agentId} className={`flex items-center gap-4 border rounded-lg p-3 ${rowBg}`}>
-                      {/* Name & Team */}
+                      {/* Name & Team Group */}
                       <div className="min-w-[140px]">
                         <p className="text-sm font-medium">{a.displayName}</p>
-                        <p className="text-[10px] text-muted-foreground">{a.teamName || 'Independent'}</p>
+                        <TeamGroupBadge teamGroup={a.teamGroup} />
                       </div>
 
                       {/* Grace Status Badge */}
@@ -665,14 +719,14 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
       {/* Filters Row */}
       <div className="flex flex-wrap items-center gap-3">
-        {teams.length > 1 && (
-          <Select value={filterTeam} onValueChange={setFilterTeam}>
+        {teamGroups.length > 1 && (
+          <Select value={filterTeamGroup} onValueChange={setFilterTeamGroup}>
             <SelectTrigger className="w-[180px] h-8 text-xs">
-              <SelectValue placeholder="All Teams" />
+              <SelectValue placeholder="All Team Groups" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Teams</SelectItem>
-              {teams.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              <SelectItem value="all">All Team Groups</SelectItem>
+              {teamGroups.map(tg => <SelectItem key={tg} value={tg}>{TEAM_GROUP_LABELS[tg] || tg}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
@@ -682,10 +736,10 @@ function AgentPerformanceRoster({ year }: { year: number }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Agents</SelectItem>
-            <SelectItem value="in_grace">🕐 In Grace Period</SelectItem>
-            <SelectItem value="at_risk">🔴 Grace At Risk</SelectItem>
-            <SelectItem value="no_deal">⚠️ Grace — No Deal</SelectItem>
-            <SelectItem value="established">✅ Established</SelectItem>
+            <SelectItem value="in_grace">In Grace Period</SelectItem>
+            <SelectItem value="at_risk">Grace At Risk</SelectItem>
+            <SelectItem value="no_deal">Grace — No Deal</SelectItem>
+            <SelectItem value="established">Established</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex gap-1 ml-auto">
@@ -705,6 +759,9 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                   <TableRow className="bg-muted/50">
                     <TableHead className="sticky left-0 bg-muted/50 z-10 cursor-pointer" onClick={() => toggleSort('name')}>
                       <div className="flex items-center gap-1">Agent <SortIcon field="name" /></div>
+                    </TableHead>
+                    <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('teamGroup')}>
+                      <div className="flex items-center justify-center gap-1">Team Group <SortIcon field="teamGroup" /></div>
                     </TableHead>
                     <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('graceStatus')}>
                       <div className="flex items-center justify-center gap-1">Status <SortIcon field="graceStatus" /></div>
@@ -734,10 +791,15 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                         <div>
                           <span className="text-sm">{a.displayName}</span>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            {a.teamName && <span className="text-[10px] text-muted-foreground">{a.teamName}</span>}
+                            <AgentStatusBadge status={a.agentStatus} />
                             {a.teamRole === 'leader' && <Badge variant="outline" className="text-[9px] h-4 px-1">Leader</Badge>}
                           </div>
                         </div>
+                      </TableCell>
+
+                      {/* Team Group */}
+                      <TableCell className="text-center">
+                        <span className="text-xs">{TEAM_GROUP_LABELS[a.teamGroup] || a.teamGroup || '—'}</span>
                       </TableCell>
 
                       {/* Grace / Status */}
@@ -822,8 +884,11 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                   <div>
                     <CardTitle className="text-base">{a.displayName}</CardTitle>
                     <CardDescription className="text-xs">
-                      {a.teamName || 'Independent'}
+                      {TEAM_GROUP_LABELS[a.teamGroup] || a.teamGroup || 'Independent'}
                       {a.teamRole === 'leader' && ' · Team Leader'}
+                      {a.agentStatus && a.agentStatus !== 'active' && (
+                        <span className="ml-1">· <AgentStatusBadge status={a.agentStatus} /></span>
+                      )}
                     </CardDescription>
                   </div>
                   <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
