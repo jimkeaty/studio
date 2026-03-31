@@ -36,6 +36,7 @@ import {
   Receipt,
   Upload,
   UserCog,
+  UsersRound,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -88,7 +89,7 @@ const adminMenuItems = [
   { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
   { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
   { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
-  { href: '/dashboard/admin/staff-users', label: 'Staff Users', icon: Users2 },
+  { href: '/dashboard/admin/staff-users', label: 'Staff Users', icon: UsersRound },
 ];
 
 
