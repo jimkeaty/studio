@@ -4,8 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
-
-const ADMIN_EMAIL = 'jim@keatyrealestate.com';
+import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -143,6 +142,18 @@ export async function PATCH(req: NextRequest) {
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
     const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });
 
+    // Rebuild rollup so leaderboards stay in sync
+    try {
+      const txData = updatedSnap.data() as any;
+      const agentId = String(txData?.agentId || '').trim();
+      const txYear = Number(txData?.year || updates.year || new Date().getFullYear());
+      if (agentId && txYear) {
+        await rebuildAgentRollup(adminDb, agentId, txYear);
+      }
+    } catch (rollupErr: any) {
+      console.warn('[api/admin/transactions PATCH] Rollup rebuild failed (non-fatal):', rollupErr?.message);
+    }
+
     return NextResponse.json({ ok: true, transaction: updated });
   } catch (err: any) {
     console.error('[api/admin/transactions PATCH]', err);
@@ -163,7 +174,21 @@ export async function DELETE(req: NextRequest) {
     const doc = await adminDb.collection('transactions').doc(id).get();
     if (!doc.exists) return jsonError(404, 'Transaction not found');
 
+    // Capture agentId + year before deleting
+    const txData = doc.data() as any;
+    const agentId = String(txData?.agentId || '').trim();
+    const txYear = Number(txData?.year || new Date().getFullYear());
+
     await adminDb.collection('transactions').doc(id).delete();
+
+    // Rebuild rollup so leaderboards reflect the deletion
+    try {
+      if (agentId && txYear) {
+        await rebuildAgentRollup(adminDb, agentId, txYear);
+      }
+    } catch (rollupErr: any) {
+      console.warn('[api/admin/transactions DELETE] Rollup rebuild failed (non-fatal):', rollupErr?.message);
+    }
 
     return NextResponse.json({ ok: true, deleted: id });
   } catch (err: any) {

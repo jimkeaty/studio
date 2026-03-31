@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, adminAuth } from '@/lib/firebase/admin'
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver'
+import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup'
+import { isAdminLike } from '@/lib/auth/staffAccess'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -40,9 +42,9 @@ export async function POST(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized: Missing token')
 
     const decoded = await adminAuth.verifyIdToken(token)
-    const email = decoded.email || ''
 
-    if (email !== 'jim@keatyrealestate.com') {
+    const isAdmin = await isAdminLike(decoded.uid)
+    if (!isAdmin) {
       return jsonError(403, 'Forbidden: Admin only')
     }
 
@@ -230,7 +232,14 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     }
 
-    const ref = await adminDb.collection('transactions').add(payload)
+     const ref = await adminDb.collection('transactions').add(payload)
+
+    // Rebuild the agent's year rollup so leaderboards stay in sync
+    try {
+      await rebuildAgentRollup(adminDb, agentId, year)
+    } catch (rollupErr: any) {
+      console.warn('[API/transactions] Rollup rebuild failed (non-fatal):', rollupErr?.message)
+    }
 
     return NextResponse.json({
       ok: true,

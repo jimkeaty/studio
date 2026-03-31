@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { deriveAnniversary } from '@/lib/agents/deriveAnniversary';
 import type { AgentProfileInput, AgentTier, TeamMemberCompMode, TeamMemberOverrideBand } from '@/lib/agents/types';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -23,7 +24,7 @@ async function requireAdmin(req: NextRequest) {
   const decoded = await adminAuth.verifyIdToken(token);
   const email = decoded.email || '';
 
-  if (email !== 'jim@keatyrealestate.com') {
+  if (!(await isAdminLike(decoded.uid))) {
     throw new Error('FORBIDDEN');
   }
 

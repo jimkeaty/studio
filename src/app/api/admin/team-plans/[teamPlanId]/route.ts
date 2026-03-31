@@ -5,6 +5,7 @@ import type {
   TeamPlanInput,
   TeamThresholdBand,
 } from '@/lib/teams/types';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -24,9 +25,8 @@ async function requireAdmin(req: NextRequest) {
   if (!token) throw new Error('UNAUTHORIZED');
 
   const decoded = await adminAuth.verifyIdToken(token);
-  const email = decoded.email || '';
 
-  if (email !== 'jim@keatyrealestate.com') {
+  if (!(await isAdminLike(decoded.uid))) {
     throw new Error('FORBIDDEN');
   }
 

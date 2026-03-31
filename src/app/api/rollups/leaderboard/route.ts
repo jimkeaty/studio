@@ -70,26 +70,36 @@ export async function GET(req: NextRequest) {
       getAgentProfileMap(db, year),
     ]);
 
-    const rows = (rollups || []).map((r: any) => {
-      const agentId = String(r.agentId || "").trim();
-      const profile = agentMap.get(agentId);
+    // Support optional ?includeInactive=true for admin views
+    const includeInactive = searchParams.get("includeInactive") === "true";
 
-      const displayName =
-        String(r.displayName || r.agentName || "").trim() ||
-        profile?.displayName ||
-        fallbackDisplayName(agentId);
+    const rows = (rollups || [])
+      .filter((r: any) => {
+        // Filter out inactive/on_leave agents unless explicitly requested
+        if (includeInactive) return true;
+        const status = String(r.agentStatus || 'active');
+        return status === 'active' || status === '';
+      })
+      .map((r: any) => {
+        const agentId = String(r.agentId || "").trim();
+        const profile = agentMap.get(agentId);
 
-      const avatarUrl =
-        (r.avatarUrl ?? null) ||
-        (profile?.avatarUrl ?? null);
+        const displayName =
+          String(r.displayName || r.agentName || "").trim() ||
+          profile?.displayName ||
+          fallbackDisplayName(agentId);
 
-      return {
-        ...r,
-        agentId,
-        displayName,
-        avatarUrl,
-      };
-    });
+        const avatarUrl =
+          (r.avatarUrl ?? null) ||
+          (profile?.avatarUrl ?? null);
+
+        return {
+          ...r,
+          agentId,
+          displayName,
+          avatarUrl,
+        };
+      });
 
 
       // Sort leaderboard so rank order is top-to-bottom (highest performers first)

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { nameSimilarity } from '@/lib/agents/fuzzyMatch';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -17,8 +18,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
     }
     const decoded = await adminAuth.verifyIdToken(token);
-    if (decoded.email !== 'jim@keatyrealestate.com') {
-      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+    if (!(await isAdminLike(decoded.uid))) {
+    return NextResponse.json({ ok: false, error: 'Forbidden'
+  }, { status: 403 });
     }
 
     const snap = await adminDb.collection('agentProfiles').get();

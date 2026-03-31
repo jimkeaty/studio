@@ -6,8 +6,18 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const year = Number(searchParams.get("year") || 2025);
+    // Support ?includeInactive=true for admin views that need all agents
+    const includeInactive = searchParams.get("includeInactive") === "true";
 
-    const rows = await getEffectiveRollups(adminDb(), year);
+    const allRows = await getEffectiveRollups(adminDb(), year);
+
+    // Filter to active agents only (unless admin explicitly requests all)
+    const rows = includeInactive
+      ? allRows
+      : allRows.filter((r: any) => {
+          const status = String(r.agentStatus || 'active');
+          return status === 'active' || status === '';
+        });
 
     return NextResponse.json({ ok: true, year, rows });
   } catch (e: any) {

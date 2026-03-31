@@ -7,8 +7,6 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { fuzzyLookupAgent, DEFAULT_SIMILARITY_THRESHOLD } from '@/lib/agents/fuzzyMatch';
 import { resolveGCI } from '@/lib/commissions';
 
-const ADMIN_EMAIL = 'jim@keatyrealestate.com';
-
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;

@@ -8,8 +8,6 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { resolveGCI } from '@/lib/commissions';
 
 const ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
-const ADMIN_EMAIL = 'jim@keatyrealestate.com';
-
 function serializeFirestore(val: any): any {
   if (val == null) return val;
   if (typeof val?.toDate === 'function') return val.toDate().toISOString();

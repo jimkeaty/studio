@@ -4,8 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_EMAIL = 'jim@keatyrealestate.com';
-
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('Authorization') || '';

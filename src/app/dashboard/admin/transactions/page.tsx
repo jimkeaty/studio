@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2, Save, X } from 'lucide-react';
+import { Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2, Save, X, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -59,6 +59,34 @@ export default function AdminTransactionLedgerPage() {
   const [deleteTx, setDeleteTx] = useState<Transaction | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Recalculate rollups
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcResult, setRecalcResult] = useState<{ rebuilt: number; year: number } | null>(null);
+  const [recalcError, setRecalcError] = useState<string | null>(null);
+
+  const handleRecalculateRollups = async () => {
+    if (!user) return;
+    const year = yearFilter === 'all' ? new Date().getFullYear() : Number(yearFilter);
+    setRecalculating(true);
+    setRecalcResult(null);
+    setRecalcError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/recalculate-rollups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ year }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Recalculation failed');
+      setRecalcResult({ rebuilt: data.rebuilt, year: data.year });
+    } catch (err: any) {
+      setRecalcError(err.message);
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   const loadTransactions = async () => {
     if (!user) return;
@@ -224,6 +252,15 @@ export default function AdminTransactionLedgerPage() {
           <p className="text-muted-foreground">All transactions feeding agent dashboards.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRecalculateRollups}
+            disabled={recalculating}
+            title={`Rebuild leaderboard rollups from ledger for ${yearFilter === 'all' ? new Date().getFullYear() : yearFilter}`}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
+            {recalculating ? 'Recalculating…' : 'Recalculate Rollups'}
+          </Button>
           <Link href="/dashboard/admin/import">
             <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Bulk Import</Button>
           </Link>
@@ -232,6 +269,24 @@ export default function AdminTransactionLedgerPage() {
           </Link>
         </div>
       </div>
+
+      {recalcResult && (
+        <Alert className="border-green-200 bg-green-50">
+          <RefreshCw className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-800">Rollups Rebuilt</AlertTitle>
+          <AlertDescription className="text-green-700">
+            Successfully rebuilt leaderboard data for {recalcResult.rebuilt} agent{recalcResult.rebuilt !== 1 ? 's' : ''} for {recalcResult.year}.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {recalcError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Recalculation Failed</AlertTitle>
+          <AlertDescription>{recalcError}</AlertDescription>
+        </Alert>
+      )}
 
       {pageError && (
         <Alert variant="destructive">

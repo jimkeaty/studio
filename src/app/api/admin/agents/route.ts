@@ -1,6 +1,7 @@
 // src/app/api/admin/agents/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -28,11 +29,10 @@ export async function GET(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized: Missing token');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const email = decoded.email || '';
 
-    if (email !== 'jim@keatyrealestate.com') {
-      return jsonError(403, 'Forbidden: This action is restricted to administrators.');
-    }
+    if (!(await isAdminLike(decoded.uid))) {
+    return jsonError(403, 'Forbidden: This action is restricted to administrators.');
+  }
 
     const url = new URL(req.url);
     const source = url.searchParams.get('source') || 'profiles';
@@ -58,9 +58,10 @@ export async function GET(req: NextRequest) {
         agents.push({ agentId, agentName });
       }
 
-      // Also include inactive profiles so we don't lose anyone
+      // Also include inactive/on_leave profiles so we don't lose anyone
+      // Note: 'onboarding' is not a valid AgentProfileStatus — valid values are 'active' | 'inactive' | 'on_leave'
       const inactiveSnap = await adminDb.collection('agentProfiles')
-        .where('status', 'in', ['inactive', 'onboarding'])
+        .where('status', 'in', ['inactive', 'on_leave'])
         .limit(5000)
         .get();
 

@@ -35,6 +35,9 @@ function isServerSafe(rel) {
   // Server-only auth helpers (all have 'server-only' import at top)
   if (r.startsWith("src/lib/auth/")) return true;
 
+  // Server-only rollup rebuild helpers
+  if (r.startsWith("src/lib/rollups/")) return true;
+
   return false;
 }
 

@@ -4,8 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
-const ADMIN_EMAIL = 'jim@keatyrealestate.com';
-
 function getMonthFromDoc(data: any): number | null {
   // Try closedDate first, then contractDate, then listingDate
   for (const field of ['closedDate', 'contractDate', 'listingDate']) {

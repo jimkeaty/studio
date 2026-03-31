@@ -7,8 +7,6 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { fuzzyLookupAgent, DEFAULT_SIMILARITY_THRESHOLD } from '@/lib/agents/fuzzyMatch';
 import type { ActivityImportRow, ActivityRecord } from '@/lib/types/activityTracking';
 
-const ADMIN_EMAIL = 'jim@keatyrealestate.com';
-
 function extractBearer(req: NextRequest): string | null {
   const h = req.headers.get('Authorization') || '';
   return h.startsWith('Bearer ') ? h.slice('Bearer '.length).trim() : null;
