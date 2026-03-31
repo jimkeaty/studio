@@ -1157,9 +1157,6 @@ export default function EditTransactionPage() {
                   <FormDescription>Gross Commission Income</FormDescription>
                 </FormItem>
               )} />
-              <FormField control={form.control} name="transactionFee" render={({ field }) => (
-                <FormItem><FormLabel>Transaction Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
-              )} />
             </Grid3>
 
             {/* Commission Split */}

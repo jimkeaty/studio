@@ -1071,7 +1071,7 @@ export default function AddTransactionPage() {
             {/* GCI & Commission % */}
             <Separator />
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
-            {isAdmin ? (
+            {isAdmin && (
               <Grid3>
                 <FormField control={form.control} name="commissionPercent" render={({ field }) => (
                   <FormItem>
@@ -1096,16 +1096,7 @@ export default function AddTransactionPage() {
                     <FormDescription>Gross Commission Income</FormDescription>
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="transactionFee" render={({ field }) => (
-                  <FormItem><FormLabel>Transaction Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
-                )} />
               </Grid3>
-            ) : (
-              <div className="max-w-xs">
-                <FormField control={form.control} name="transactionFee" render={({ field }) => (
-                  <FormItem><FormLabel>Transaction Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
-                )} />
-              </div>
             )}
 
             {/* Commission Split (Admin) */}
