@@ -58,10 +58,25 @@ export async function GET(req: NextRequest) {
         agents.push({ agentId, agentName });
       }
 
-      // Also include inactive/on_leave profiles so we don't lose anyone
-      // Note: 'onboarding' is not a valid AgentProfileStatus — valid values are 'active' | 'inactive' | 'on_leave'
+      // Also include grace_period agents in the active list
+      const graceSnap = await adminDb.collection('agentProfiles')
+        .where('status', '==', 'grace_period')
+        .limit(5000)
+        .get();
+
+      for (const doc of graceSnap.docs) {
+        const data = doc.data() || {};
+        const agentId = doc.id || String(data.agentId || '').trim();
+        if (!agentId) continue;
+        if (agents.some(a => a.agentId === agentId)) continue;
+        const agentName =
+          String(data.displayName || data.name || data.agentName || '').trim() || agentId;
+        agents.push({ agentId, agentName });
+      }
+
+      // Also include inactive/out profiles so we don't lose anyone
       const inactiveSnap = await adminDb.collection('agentProfiles')
-        .where('status', 'in', ['inactive', 'on_leave'])
+        .where('status', 'in', ['inactive', 'out'])
         .limit(5000)
         .get();
 
@@ -76,7 +91,8 @@ export async function GET(req: NextRequest) {
           String(data.displayName || data.name || data.agentName || '').trim() ||
           agentId;
 
-        agents.push({ agentId, agentName: `${agentName} (inactive)` });
+        const statusLabel = String(data.status || 'inactive');
+        agents.push({ agentId, agentName: `${agentName} (${statusLabel})` });
       }
 
       agents.sort((a, b) => a.agentName.localeCompare(b.agentName));

@@ -55,6 +55,37 @@ const INSPECTION_TYPE_OPTIONS = [
 
 type AgentOption = { agentId: string; agentName: string };
 
+type CommissionTier = {
+  tierName: string;
+  fromCompanyDollar: number;
+  toCompanyDollar: number | null;
+  agentSplitPercent: number;
+  companySplitPercent: number;
+  transactionFee: number | null;
+  capAmount: number | null;
+  notes: string;
+};
+
+type AgentCommissionData = {
+  agentType: string;
+  teamGroup: string;
+  commissionMode: string;
+  defaultTransactionFee: number | null;
+  tiers: CommissionTier[];
+};
+
+/** Find the matching tier for a given GCI amount */
+function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | null {
+  for (const tier of tiers) {
+    const from = tier.fromCompanyDollar;
+    const to = tier.toCompanyDollar;
+    if (gci >= from && (to === null || gci < to)) {
+      return tier;
+    }
+  }
+  return null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,6 +256,12 @@ export default function AddTransactionPage() {
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
 
+  // Commission auto-calculation state
+  const [agentCommission, setAgentCommission] = useState<AgentCommissionData | null>(null);
+  const [commissionLoading, setCommissionLoading] = useState(false);
+  const [activeTier, setActiveTier] = useState<CommissionTier | null>(null);
+  const commissionManualOverride = useRef(false);
+
   // When admin is impersonating an agent, treat the form as agent-mode
   // so commission split fields are hidden (same experience as the real agent).
   const isAdminUser = user?.uid === ADMIN_UID;
@@ -313,6 +350,69 @@ export default function AddTransactionPage() {
       form.setValue('agentDisplayName', user.displayName || user.email || user.uid);
     }
   }, [user, isAdmin, isImpersonating, effectiveUid, effectiveName]);
+
+  // Fetch agent commission structure when agent is selected (admin only)
+  const watchedAgentId = form.watch('agentId');
+  useEffect(() => {
+    if (!user || !isAdmin || !watchedAgentId) {
+      setAgentCommission(null);
+      setActiveTier(null);
+      return;
+    }
+    let cancelled = false;
+    const fetchCommission = async () => {
+      setCommissionLoading(true);
+      commissionManualOverride.current = false;
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/admin/agent-profiles/${watchedAgentId}/commission`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!cancelled && data.ok) {
+          setAgentCommission(data);
+          // Pre-fill transaction fee from agent's default
+          if (data.defaultTransactionFee != null) {
+            form.setValue('transactionFee', data.defaultTransactionFee as any);
+          }
+        }
+      } catch {
+        // silently ignore
+      } finally {
+        if (!cancelled) setCommissionLoading(false);
+      }
+    };
+    fetchCommission();
+    return () => { cancelled = true; };
+  }, [user, isAdmin, watchedAgentId]);
+
+  // Auto-calculate commission split when GCI changes and we have agent commission data
+  const watchedGCI = form.watch('gci');
+  useEffect(() => {
+    if (!isAdmin || !agentCommission || commissionManualOverride.current) return;
+    const gci = Number(watchedGCI) || 0;
+    if (gci <= 0) {
+      setActiveTier(null);
+      return;
+    }
+    const tier = findActiveTier(agentCommission.tiers, gci);
+    setActiveTier(tier);
+    if (tier) {
+      const agentPct = tier.agentSplitPercent;
+      const brokerPct = tier.companySplitPercent;
+      const agentNet = Number((gci * (agentPct / 100)).toFixed(2));
+      const brokerGci = Number((gci * (brokerPct / 100)).toFixed(2));
+      const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
+
+      form.setValue('agentPct', agentPct as any);
+      form.setValue('brokerPct', brokerPct as any);
+      form.setValue('agentDollar', agentNet as any);
+      form.setValue('brokerGci', brokerGci as any);
+      if (txFee > 0) {
+        form.setValue('transactionFee', txFee as any);
+      }
+    }
+  }, [watchedGCI, agentCommission, isAdmin]);
 
   // Helper: toggle inspection type checkbox
   const toggleInspectionType = (type: string) => {
@@ -777,22 +877,105 @@ export default function AddTransactionPage() {
             {isAdmin && (
               <>
                 <Separator />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Split (Admin)</p>
+                {/* Auto-calculation status banner */}
+                {agentCommission && (
+                  <div className={`rounded-md border px-4 py-3 text-sm ${
+                    activeTier
+                      ? 'border-green-200 bg-green-50 text-green-800'
+                      : commissionLoading
+                        ? 'border-blue-200 bg-blue-50 text-blue-800'
+                        : 'border-amber-200 bg-amber-50 text-amber-800'
+                  }`}>
+                    {commissionLoading ? (
+                      <span>Loading commission structure...</span>
+                    ) : activeTier ? (
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span>
+                          <strong>Auto-calculated</strong> using tier &quot;{activeTier.tierName}&quot; &mdash;
+                          Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
+                          {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee}`}
+                        </span>
+                        {commissionManualOverride.current && (
+                          <Badge variant="outline" className="text-amber-700 border-amber-300">Manual Override</Badge>
+                        )}
+                      </div>
+                    ) : (
+                      <span>
+                        Commission structure loaded ({agentCommission.tiers.length} tier{agentCommission.tiers.length !== 1 ? 's' : ''}).
+                        {Number(watchedGCI) > 0 ? ' No matching tier for this GCI amount.' : ' Enter GCI to auto-calculate split.'}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Split (Admin)</p>
+                  {agentCommission && commissionManualOverride.current && (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-blue-600 hover:underline"
+                      onClick={() => {
+                        commissionManualOverride.current = false;
+                        // Re-trigger auto-calc
+                        const gci = Number(form.getValues('gci')) || 0;
+                        if (gci > 0 && agentCommission) {
+                          const tier = findActiveTier(agentCommission.tiers, gci);
+                          setActiveTier(tier);
+                          if (tier) {
+                            form.setValue('agentPct', tier.agentSplitPercent as any);
+                            form.setValue('brokerPct', tier.companySplitPercent as any);
+                            form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+                            form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+                            const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
+                            if (txFee > 0) form.setValue('transactionFee', txFee as any);
+                          }
+                        }
+                      }}
+                    >
+                      Re-calculate from agent profile
+                    </button>
+                  )}
+                </div>
                 <Grid2>
                   <FormField control={form.control} name="brokerPct" render={({ field }) => (
-                    <FormItem><FormLabel>Broker %</FormLabel><FormControl><Input type="number" step="0.01" placeholder="30" {...field} /></FormControl></FormItem>
+                    <FormItem>
+                      <FormLabel>Broker %</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="30" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                    </FormItem>
                   )} />
                   <FormField control={form.control} name="brokerGci" render={({ field }) => (
-                    <FormItem><FormLabel>Broker GCI ($)</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl></FormItem>
+                    <FormItem>
+                      <FormLabel>Broker GCI ($)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                    </FormItem>
                   )} />
                   <FormField control={form.control} name="agentPct" render={({ field }) => (
-                    <FormItem><FormLabel>Agent % / % to Member</FormLabel><FormControl><Input type="number" step="0.01" placeholder="70" {...field} /></FormControl></FormItem>
+                    <FormItem>
+                      <FormLabel>Agent % / % to Member</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="70" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                    </FormItem>
                   )} />
                   <FormField control={form.control} name="agentDollar" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Agent Net $ (Primary GCI)</FormLabel>
-                      <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                      <FormDescription>If filled, overrides split calculation.</FormDescription>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0" {...field}
+                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        />
+                      </FormControl>
+                      <FormDescription>Auto-calculated from agent profile. Edit to override.</FormDescription>
                     </FormItem>
                   )} />
                 </Grid2>

@@ -76,6 +76,10 @@ export default function AgentProfileEditor({
           referringAgentDisplayNameSnapshot:
             agent.referringAgentDisplayNameSnapshot || '',
           tiers: Array.isArray(agent.tiers) ? agent.tiers : [],
+          teamGroup: agent.teamGroup || '',
+          commissionMode: agent.commissionMode || 'team_default',
+          defaultTransactionFee: agent.defaultTransactionFee ?? '',
+          gracePeriodEnabled: agent.gracePeriodEnabled ?? false,
           notes: agent.notes || '',
         });
       } catch (err: any) {

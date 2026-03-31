@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { getFirebaseAuth } from '@/lib/firebase';
+import {
+  getTeamDefaultTiers,
+  getTeamDefaultTransactionFee,
+  TEAM_GROUP_OPTIONS,
+  type CommissionTierTemplate,
+} from '@/lib/commissions/teamTemplates';
 
 export type AgentType = 'independent' | 'team';
 export type ProgressionMetric = 'companyDollar';
@@ -11,12 +17,16 @@ export type TeamRole = 'leader' | 'member' | null;
 export type PlanAssignmentType = 'individual' | 'teamMember' | 'teamLeader';
 export type TeamMemberCompMode = 'teamDefault' | 'custom';
 
+export type CommissionMode = 'team_default' | 'custom';
+
 export type AgentTierFormValue = {
   tierName: string;
   fromCompanyDollar: number;
   toCompanyDollar: number | null;
   agentSplitPercent: number;
   companySplitPercent: number;
+  transactionFee: number | null;
+  capAmount: number | null;
   notes: string;
 };
 
@@ -34,7 +44,7 @@ export type AgentProfileFormValues = {
   displayName: string;
   email: string;
   office: string;
-  status: 'active' | 'inactive' | 'on_leave';
+  status: 'active' | 'grace_period' | 'inactive' | 'out';
   startDate: string;
   agentType: AgentType;
   progressionMetric: ProgressionMetric;
@@ -46,7 +56,10 @@ export type AgentProfileFormValues = {
   teamMemberOverrideBands: TeamMemberTierFormValue[];
   referringAgentId: string;
   referringAgentDisplayNameSnapshot: string;
+  teamGroup: string;
+  commissionMode: CommissionMode;
   tiers: AgentTierFormValue[];
+  defaultTransactionFee: number | string;
   gracePeriodEnabled: boolean;
   notes: string;
 };
@@ -79,48 +92,23 @@ type MemberPlanOption = {
   status?: string;
 };
 
-const DEFAULT_INDEPENDENT_TIERS: AgentTierFormValue[] = [
-  {
-    tierName: 'Tier 1',
-    fromCompanyDollar: 0,
-    toCompanyDollar: 45000,
-    agentSplitPercent: 55,
-    companySplitPercent: 45,
-    notes: '',
-  },
-  {
-    tierName: 'Tier 2',
-    fromCompanyDollar: 45000,
-    toCompanyDollar: 90000,
-    agentSplitPercent: 60,
-    companySplitPercent: 40,
-    notes: '',
-  },
-  {
-    tierName: 'Tier 3',
-    fromCompanyDollar: 90000,
-    toCompanyDollar: 180000,
-    agentSplitPercent: 70,
-    companySplitPercent: 30,
-    notes: '',
-  },
-  {
-    tierName: 'Tier 4',
-    fromCompanyDollar: 180000,
-    toCompanyDollar: 240000,
-    agentSplitPercent: 80,
-    companySplitPercent: 20,
-    notes: '',
-  },
-  {
-    tierName: 'Tier 5',
-    fromCompanyDollar: 240000,
-    toCompanyDollar: null,
-    agentSplitPercent: 90,
-    companySplitPercent: 10,
-    notes: '',
-  },
-];
+/** Convert a CommissionTierTemplate to the form value shape */
+function templateToFormTier(t: CommissionTierTemplate): AgentTierFormValue {
+  return {
+    tierName: t.tierName,
+    fromCompanyDollar: t.fromCompanyDollar,
+    toCompanyDollar: t.toCompanyDollar,
+    agentSplitPercent: t.agentSplitPercent,
+    companySplitPercent: t.companySplitPercent,
+    transactionFee: t.transactionFee,
+    capAmount: t.capAmount,
+    notes: t.notes || '',
+  };
+}
+
+function getDefaultTiersForTeamGroup(teamGroup: string): AgentTierFormValue[] {
+  return getTeamDefaultTiers(teamGroup).map(templateToFormTier);
+}
 
 const DEFAULT_VALUES: AgentProfileFormValues = {
   firstName: '',
@@ -140,7 +128,10 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   teamMemberOverrideBands: [],
   referringAgentId: '',
   referringAgentDisplayNameSnapshot: '',
-  tiers: DEFAULT_INDEPENDENT_TIERS,
+  teamGroup: 'independent',
+  commissionMode: 'team_default',
+  tiers: getDefaultTiersForTeamGroup('independent'),
+  defaultTransactionFee: 395,
   gracePeriodEnabled: false,
   notes: '',
 };
@@ -148,6 +139,8 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
 function cloneTiers(tiers: AgentTierFormValue[]) {
   return tiers.map((tier) => ({
     ...tier,
+    transactionFee: tier.transactionFee ?? null,
+    capAmount: tier.capAmount ?? null,
     notes: tier.notes || '',
   }));
 }
@@ -159,12 +152,8 @@ function cloneTeamMemberTiers(tiers: TeamMemberTierFormValue[]) {
   }));
 }
 
-function getDefaultTiers(agentType: AgentType): AgentTierFormValue[] {
-  if (agentType === 'independent') {
-    return cloneTiers(DEFAULT_INDEPENDENT_TIERS);
-  }
-
-  return [];
+function getDefaultTiers(agentType: AgentType, teamGroup?: string): AgentTierFormValue[] {
+  return getDefaultTiersForTeamGroup(teamGroup || 'independent');
 }
 
 function isIndependentAgentType(agentType: AgentType) {
@@ -203,6 +192,8 @@ function createEmptyTier(nextIndex: number): AgentTierFormValue {
     toCompanyDollar: null,
     agentSplitPercent: 0,
     companySplitPercent: 0,
+    transactionFee: null,
+    capAmount: null,
     notes: '',
   };
 }
@@ -256,19 +247,27 @@ export default function AgentProfileForm({
 }: AgentProfileFormProps) {
   const router = useRouter();
 
-  const [values, setValues] = useState<AgentProfileFormValues>({
-    ...DEFAULT_VALUES,
-    ...initialValues,
-    progressionMetric: 'companyDollar',
-    tiers:
-      initialValues?.tiers && initialValues.tiers.length > 0
-        ? cloneTiers(initialValues.tiers)
-        : cloneTiers(DEFAULT_VALUES.tiers),
-    teamMemberOverrideBands:
-      initialValues?.teamMemberOverrideBands &&
-      initialValues.teamMemberOverrideBands.length > 0
-        ? cloneTeamMemberTiers(initialValues.teamMemberOverrideBands)
-        : [],
+  const [values, setValues] = useState<AgentProfileFormValues>(() => {
+    const teamGroup = initialValues?.teamGroup || 'independent';
+    const commissionMode = initialValues?.commissionMode || 'team_default';
+    return {
+      ...DEFAULT_VALUES,
+      ...initialValues,
+      progressionMetric: 'companyDollar',
+      teamGroup,
+      commissionMode,
+      tiers:
+        initialValues?.tiers && initialValues.tiers.length > 0
+          ? cloneTiers(initialValues.tiers)
+          : getDefaultTiersForTeamGroup(teamGroup),
+      defaultTransactionFee:
+        initialValues?.defaultTransactionFee ?? getTeamDefaultTransactionFee(teamGroup),
+      teamMemberOverrideBands:
+        initialValues?.teamMemberOverrideBands &&
+        initialValues.teamMemberOverrideBands.length > 0
+          ? cloneTeamMemberTiers(initialValues.teamMemberOverrideBands)
+          : [],
+    };
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -288,14 +287,20 @@ export default function AgentProfileForm({
   useEffect(() => {
     if (!initialValues) return;
 
+    const teamGroup = initialValues.teamGroup || 'independent';
+    const commissionMode = initialValues.commissionMode || 'team_default';
     setValues({
       ...DEFAULT_VALUES,
       ...initialValues,
       progressionMetric: 'companyDollar',
+      teamGroup,
+      commissionMode,
       tiers:
         initialValues.tiers && initialValues.tiers.length > 0
           ? cloneTiers(initialValues.tiers)
-          : getDefaultTiers((initialValues.agentType as AgentType) || 'independent'),
+          : getDefaultTiersForTeamGroup(teamGroup),
+      defaultTransactionFee:
+        initialValues.defaultTransactionFee ?? getTeamDefaultTransactionFee(teamGroup),
     });
   }, [initialValues]);
 
@@ -415,7 +420,63 @@ export default function AgentProfileForm({
         defaultPlanType: getDefaultPlanType(nextType, nextTeamRole),
         defaultPlanId: nextType === 'independent' ? '' : prev.defaultPlanId,
         primaryTeamId: nextType === 'independent' ? '' : prev.primaryTeamId,
-        tiers: getDefaultTiers(nextType),
+        tiers: prev.commissionMode === 'team_default'
+          ? getDefaultTiersForTeamGroup(prev.teamGroup)
+          : prev.tiers,
+      };
+    });
+  }
+
+  /** When team group changes and commission mode is team_default, auto-populate tiers */
+  function updateTeamGroup(nextGroup: string) {
+    setValues((prev) => {
+      const isDefault = prev.commissionMode === 'team_default';
+      return {
+        ...prev,
+        teamGroup: nextGroup,
+        tiers: isDefault ? getDefaultTiersForTeamGroup(nextGroup) : prev.tiers,
+        defaultTransactionFee: isDefault
+          ? getTeamDefaultTransactionFee(nextGroup)
+          : prev.defaultTransactionFee,
+      };
+    });
+  }
+
+  /** Toggle commission mode between team_default and custom */
+  function updateCommissionMode(nextMode: CommissionMode) {
+    setValues((prev) => {
+      if (nextMode === 'team_default') {
+        return {
+          ...prev,
+          commissionMode: 'team_default',
+          tiers: getDefaultTiersForTeamGroup(prev.teamGroup),
+          defaultTransactionFee: getTeamDefaultTransactionFee(prev.teamGroup),
+        };
+      }
+      return {
+        ...prev,
+        commissionMode: 'custom',
+      };
+    });
+  }
+
+  /** When any tier field is edited, auto-switch to custom mode */
+  function handleTierEdit(
+    index: number,
+    field: keyof AgentTierFormValue,
+    value: string | number | null
+  ) {
+    setValues((prev) => {
+      const nextTiers = [...prev.tiers];
+      nextTiers[index] = {
+        ...nextTiers[index],
+        [field]: value,
+      } as AgentTierFormValue;
+
+      return {
+        ...prev,
+        commissionMode: 'custom' as CommissionMode,
+        tiers: nextTiers,
       };
     });
   }
@@ -573,7 +634,9 @@ export default function AgentProfileForm({
       progressionMetric: 'companyDollar',
       teamRole: getDefaultTeamRole(prev.agentType),
       defaultPlanType: getDefaultPlanType(prev.agentType, prev.teamRole),
-      tiers: getDefaultTiers(prev.agentType),
+      commissionMode: 'team_default' as CommissionMode,
+      tiers: getDefaultTiersForTeamGroup(prev.teamGroup),
+      defaultTransactionFee: getTeamDefaultTransactionFee(prev.teamGroup),
     }));
   }
 
@@ -638,19 +701,31 @@ export default function AgentProfileForm({
         referringAgentId: values.referringAgentId || null,
         referringAgentDisplayNameSnapshot:
           values.referringAgentDisplayNameSnapshot || null,
-        tiers: isIndependentAgentType(values.agentType)
-          ? values.tiers.map((tier) => ({
-              tierName: tier.tierName,
-              fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
-              toCompanyDollar:
-                tier.toCompanyDollar === null || String(tier.toCompanyDollar) === ''
-                  ? null
-                  : Number(tier.toCompanyDollar),
-              agentSplitPercent: Number(tier.agentSplitPercent || 0),
-              companySplitPercent: Number(tier.companySplitPercent || 0),
-              notes: tier.notes || null,
-            }))
-          : [],
+        teamGroup: values.teamGroup || null,
+        commissionMode: values.commissionMode || 'team_default',
+        tiers: values.tiers.map((tier) => ({
+          tierName: tier.tierName,
+          fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
+          toCompanyDollar:
+            tier.toCompanyDollar === null || String(tier.toCompanyDollar) === ''
+              ? null
+              : Number(tier.toCompanyDollar),
+          agentSplitPercent: Number(tier.agentSplitPercent || 0),
+          companySplitPercent: Number(tier.companySplitPercent || 0),
+          transactionFee:
+            tier.transactionFee === null || tier.transactionFee === undefined || String(tier.transactionFee) === ''
+              ? null
+              : Number(tier.transactionFee),
+          capAmount:
+            tier.capAmount === null || tier.capAmount === undefined || String(tier.capAmount) === ''
+              ? null
+              : Number(tier.capAmount),
+          notes: tier.notes || null,
+        })),
+        defaultTransactionFee:
+          values.defaultTransactionFee === '' || values.defaultTransactionFee == null
+            ? null
+            : Number(values.defaultTransactionFee),
         gracePeriodEnabled: values.gracePeriodEnabled ?? false,
         notes: values.notes || null,
       };
@@ -845,9 +920,28 @@ export default function AgentProfileForm({
               }
             >
               <option value="active">Active</option>
+              <option value="grace_period">Grace Period</option>
               <option value="inactive">Inactive</option>
-              <option value="on_leave">On Leave</option>
+              <option value="out">Out</option>
             </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">Team Group</label>
+            <select
+              className="w-full rounded-md border px-3 py-2"
+              value={values.teamGroup}
+              onChange={(e) => updateTeamGroup(e.target.value)}
+            >
+              {TEAM_GROUP_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Used for commission defaults and reporting. Independent of Agent Type.
+            </p>
           </div>
         </div>
       </section>
@@ -900,20 +994,67 @@ export default function AgentProfileForm({
           <div>
             <h2 className="text-lg font-semibold">Commission Setup</h2>
             <p className="mt-1 text-sm text-gray-600">
-              Select the agent type and adjust tiers as needed.
+              {values.commissionMode === 'team_default'
+                ? `Using ${TEAM_GROUP_OPTIONS.find(o => o.value === values.teamGroup)?.label || values.teamGroup} default commission structure.`
+                : 'Using custom commission structure.'}
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={resetToDefaults}
-            className="rounded-md border px-3 py-2 text-sm font-medium"
-          >
-            Reset Defaults
-          </button>
+          <div className="flex items-center gap-2">
+            {values.commissionMode === 'custom' && (
+              <button
+                type="button"
+                onClick={resetToDefaults}
+                className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+              >
+                Reset to Team Default
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {/* Commission Mode Toggle */}
+        <div className="mt-4 flex items-center gap-4 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="radio"
+              name="commissionMode"
+              checked={values.commissionMode === 'team_default'}
+              onChange={() => updateCommissionMode('team_default')}
+              className="h-4 w-4"
+            />
+            <span className="font-medium">Use Team Default Commission</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="radio"
+              name="commissionMode"
+              checked={values.commissionMode === 'custom'}
+              onChange={() => updateCommissionMode('custom')}
+              className="h-4 w-4"
+            />
+            <span className="font-medium">Custom Commission Structure</span>
+          </label>
+        </div>
+
+        {/* Default Transaction Fee */}
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Default Transaction Fee ($)</label>
+            <input
+              type="number"
+              className="w-full rounded-md border px-3 py-2"
+              value={values.defaultTransactionFee}
+              onChange={(e) => {
+                updateField('defaultTransactionFee', e.target.value === '' ? '' : Number(e.target.value));
+                if (values.commissionMode === 'team_default') {
+                  setValues(prev => ({ ...prev, commissionMode: 'custom' as CommissionMode, defaultTransactionFee: e.target.value === '' ? '' : Number(e.target.value) }));
+                }
+              }}
+              placeholder="e.g. 395"
+            />
+          </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium">Agent Type</label>
             <select
@@ -925,8 +1066,6 @@ export default function AgentProfileForm({
               <option value="team">Team</option>
             </select>
           </div>
-
-
         </div>
 
         {!isIndependentAgentType(values.agentType) && (
@@ -1208,9 +1347,35 @@ export default function AgentProfileForm({
           </div>
         )}
 
-        {isIndependentAgentType(values.agentType) && (
-        <>
+        {/* Commission Tiers Table — shown for ALL agents */}
         <div className="mt-6 overflow-x-auto">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Commission Tiers
+              {values.commissionMode === 'team_default' && (
+                <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                  Team Default
+                </span>
+              )}
+              {values.commissionMode === 'custom' && (
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  Custom
+                </span>
+              )}
+            </h3>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
+              onClick={() => {
+                addTier();
+                if (values.commissionMode === 'team_default') {
+                  setValues(prev => ({ ...prev, commissionMode: 'custom' as CommissionMode }));
+                }
+              }}
+            >
+              + Add Tier
+            </button>
+          </div>
           <table className="min-w-full border-collapse text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -1219,6 +1384,8 @@ export default function AgentProfileForm({
                 <th className="border px-3 py-2 text-left">To Company $</th>
                 <th className="border px-3 py-2 text-left">Agent %</th>
                 <th className="border px-3 py-2 text-left">Company %</th>
+                <th className="border px-3 py-2 text-left">Txn Fee $</th>
+                <th className="border px-3 py-2 text-left">Cap $</th>
                 <th className="border px-3 py-2 text-left">Notes</th>
                 <th className="border px-3 py-2 text-left">Action</th>
               </tr>
@@ -1230,7 +1397,7 @@ export default function AgentProfileForm({
                     <input
                       className="w-full rounded-md border px-2 py-1"
                       value={tier.tierName}
-                      onChange={(e) => updateTier(index, 'tierName', e.target.value)}
+                      onChange={(e) => handleTierEdit(index, 'tierName', e.target.value)}
                     />
                   </td>
                   <td className="border px-3 py-2">
@@ -1239,7 +1406,7 @@ export default function AgentProfileForm({
                       type="number"
                       value={tier.fromCompanyDollar}
                       onChange={(e) =>
-                        updateTier(index, 'fromCompanyDollar', Number(e.target.value))
+                        handleTierEdit(index, 'fromCompanyDollar', Number(e.target.value))
                       }
                     />
                   </td>
@@ -1249,7 +1416,7 @@ export default function AgentProfileForm({
                       type="number"
                       value={tier.toCompanyDollar ?? ''}
                       onChange={(e) =>
-                        updateTier(
+                        handleTierEdit(
                           index,
                           'toCompanyDollar',
                           e.target.value === '' ? null : Number(e.target.value)
@@ -1264,7 +1431,7 @@ export default function AgentProfileForm({
                       type="number"
                       value={tier.agentSplitPercent}
                       onChange={(e) =>
-                        updateTier(index, 'agentSplitPercent', Number(e.target.value))
+                        handleTierEdit(index, 'agentSplitPercent', Number(e.target.value))
                       }
                     />
                   </td>
@@ -1274,22 +1441,57 @@ export default function AgentProfileForm({
                       type="number"
                       value={tier.companySplitPercent}
                       onChange={(e) =>
-                        updateTier(index, 'companySplitPercent', Number(e.target.value))
+                        handleTierEdit(index, 'companySplitPercent', Number(e.target.value))
                       }
                     />
                   </td>
                   <td className="border px-3 py-2">
                     <input
                       className="w-full rounded-md border px-2 py-1"
+                      type="number"
+                      value={tier.transactionFee ?? ''}
+                      onChange={(e) =>
+                        handleTierEdit(
+                          index,
+                          'transactionFee',
+                          e.target.value === '' ? null : Number(e.target.value)
+                        )
+                      }
+                      placeholder="—"
+                    />
+                  </td>
+                  <td className="border px-3 py-2">
+                    <input
+                      className="w-full rounded-md border px-2 py-1"
+                      type="number"
+                      value={tier.capAmount ?? ''}
+                      onChange={(e) =>
+                        handleTierEdit(
+                          index,
+                          'capAmount',
+                          e.target.value === '' ? null : Number(e.target.value)
+                        )
+                      }
+                      placeholder="—"
+                    />
+                  </td>
+                  <td className="border px-3 py-2">
+                    <input
+                      className="w-full rounded-md border px-2 py-1"
                       value={tier.notes}
-                      onChange={(e) => updateTier(index, 'notes', e.target.value)}
+                      onChange={(e) => handleTierEdit(index, 'notes', e.target.value)}
                     />
                   </td>
                   <td className="border px-3 py-2">
                     <button
                       type="button"
-                      className="rounded-md border px-3 py-1 text-sm"
-                      onClick={() => removeTier(index)}
+                      className="rounded-md border border-red-200 px-3 py-1 text-sm text-red-700 hover:bg-red-50"
+                      onClick={() => {
+                        removeTier(index);
+                        if (values.commissionMode === 'team_default') {
+                          setValues(prev => ({ ...prev, commissionMode: 'custom' as CommissionMode }));
+                        }
+                      }}
                       disabled={values.tiers.length <= 1}
                     >
                       Remove
@@ -1300,18 +1502,6 @@ export default function AgentProfileForm({
             </tbody>
           </table>
         </div>
-
-        <div className="mt-4">
-          <button
-            type="button"
-            className="rounded-md border px-4 py-2 text-sm font-medium"
-            onClick={addTier}
-          >
-            Add Tier
-          </button>
-        </div>
-        </>
-        )}
       </section>
 
       <section className="rounded-lg border bg-white p-6 shadow-sm">
@@ -1378,9 +1568,9 @@ export default function AgentProfileForm({
         </p>
       )}
 
-      {isIndependentAgentType(values.agentType) && values.tiers.length === 0 && (
+      {values.tiers.length === 0 && (
         <p className="text-sm text-amber-700">
-          Add at least one tier before saving this profile.
+          Add at least one commission tier before saving this profile.
         </p>
       )}
 
@@ -1398,7 +1588,7 @@ export default function AgentProfileForm({
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           disabled={
             isSaving ||
-            (isIndependentAgentType(values.agentType) && values.tiers.length === 0) ||
+            values.tiers.length === 0 ||
             (!isIndependentAgentType(values.agentType) && !teamSetupIsValid)
           }
         >

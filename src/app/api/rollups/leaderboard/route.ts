@@ -75,10 +75,10 @@ export async function GET(req: NextRequest) {
 
     const rows = (rollups || [])
       .filter((r: any) => {
-        // Filter out inactive/on_leave agents unless explicitly requested
+        // Filter out inactive/out agents unless explicitly requested
         if (includeInactive) return true;
         const status = String(r.agentStatus || 'active');
-        return status === 'active' || status === '';
+        return status === 'active' || status === 'grace_period' || status === '';
       })
       .map((r: any) => {
         const agentId = String(r.agentId || "").trim();

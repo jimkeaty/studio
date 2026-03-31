@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       ? allRows
       : allRows.filter((r: any) => {
           const status = String(r.agentStatus || 'active');
-          return status === 'active' || status === '';
+          return status === 'active' || status === 'grace_period' || status === '';
         });
 
     return NextResponse.json({ ok: true, year, rows });

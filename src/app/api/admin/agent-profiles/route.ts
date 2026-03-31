@@ -64,12 +64,23 @@ function normalizeTier(tier: AgentTier, index: number): AgentTier {
     throw new Error(`Invalid companySplitPercent in ${tierName}`);
   }
 
+  const transactionFee =
+    tier.transactionFee != null && Number.isFinite(Number(tier.transactionFee))
+      ? Number(tier.transactionFee)
+      : null;
+  const capAmount =
+    tier.capAmount != null && Number.isFinite(Number(tier.capAmount))
+      ? Number(tier.capAmount)
+      : null;
+
   return {
     tierName,
     fromCompanyDollar,
     toCompanyDollar,
     agentSplitPercent,
     companySplitPercent,
+    transactionFee,
+    capAmount,
     notes,
   };
 }
@@ -117,9 +128,8 @@ function normalizeInput(body: AgentProfileInput) {
   const isIndependent = body.agentType === 'independent';
   const isTeamAgent = body.agentType === 'team';
 
-  if (isIndependent && (!Array.isArray(body.tiers) || body.tiers.length === 0)) {
-    throw new Error('At least one tier is required for independent agents');
-  }
+  // Tiers are now stored on ALL agents (team-default or custom)
+  // so we no longer require tiers only for independent agents
 
   if (isTeamAgent && !body.primaryTeamId?.trim()) {
     throw new Error('Primary team is required for team agents');
@@ -185,7 +195,13 @@ function normalizeInput(body: AgentProfileInput) {
     referringAgentId,
     referringAgentDisplayNameSnapshot,
 
-    tiers: isIndependent ? (body.tiers || []).map(normalizeTier) : [],
+    teamGroup: body.teamGroup?.trim() || null,
+    commissionMode: body.commissionMode === 'custom' ? 'custom' : 'team_default',
+    tiers: (body.tiers || []).map(normalizeTier),
+    defaultTransactionFee:
+      body.defaultTransactionFee != null && Number.isFinite(Number(body.defaultTransactionFee))
+        ? Number(body.defaultTransactionFee)
+        : null,
     gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
   };
@@ -294,7 +310,10 @@ export async function POST(req: NextRequest) {
       teamMemberOverrideBands: normalized.teamMemberOverrideBands,
       referringAgentId: normalized.referringAgentId,
       referringAgentDisplayNameSnapshot: normalized.referringAgentDisplayNameSnapshot,
+      teamGroup: normalized.teamGroup,
+      commissionMode: normalized.commissionMode as import('@/lib/agents/types').CommissionMode,
       tiers: normalized.tiers,
+      defaultTransactionFee: normalized.defaultTransactionFee,
       notes: normalized.notes,
       gracePeriodEnabled: normalized.gracePeriodEnabled ?? false,
       createdAt: now,
