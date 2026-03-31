@@ -1056,7 +1056,10 @@ export default function EditTransactionPage() {
               )} />
             </div>
             <Separator />
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Breakdown</p>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Breakdown</p>
+              <p className="text-xs text-muted-foreground mt-1">This is the buyer closing cost amount the seller is paying toward the following: buyer agent commission, transaction fee, home warranty, and any other buyer closing costs.</p>
+            </div>
             <Grid3>
               <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
                 <FormItem>
