@@ -841,8 +841,8 @@ export default function AddTransactionPage() {
             )}
           </Section>
 
-          {/* ── Section 5: Other Agent ────────────────────────────────────── */}
-          <Section title="Cooperating Agent">
+          {/* ── Section 5: Other Agent (hidden for dual agent transactions) ──── */}
+          {watchedClosingType !== 'dual' && <Section title="Cooperating Agent">
             <Grid2>
               <FormField control={form.control} name="otherAgentName" render={({ field }) => (
                 <FormItem><FormLabel>Agent Name</FormLabel><FormControl><Input placeholder="Other agent on this deal" {...field} /></FormControl></FormItem>
@@ -857,7 +857,7 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-5678" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
-          </Section>
+          </Section>}
 
           {/* ── Section 6: Mortgage / Lender ──────────────────────────────── */}
           <Section title="Mortgage / Lender">

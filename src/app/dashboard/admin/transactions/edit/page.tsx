@@ -918,8 +918,8 @@ export default function EditTransactionPage() {
             )}
           </Section>
 
-          {/* ── Cooperating Agent ────────────────────────────────────── */}
-          <Section title="Cooperating Agent">
+          {/* ── Cooperating Agent (hidden for dual agent transactions) ──── */}
+          {watchedClosingType !== 'dual' && <Section title="Cooperating Agent">
             <Grid2>
               <FormField control={form.control} name="otherAgentName" render={({ field }) => (
                 <FormItem><FormLabel>Agent Name</FormLabel><FormControl><Input placeholder="Other agent on this deal" {...field} /></FormControl></FormItem>
@@ -934,9 +934,9 @@ export default function EditTransactionPage() {
                 <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-5678" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
-          </Section>
+          </Section>}
 
-          {/* ── Mortgage / Lender ──────────────────────────────── */}
+          {/* ── Mortgage / Lender ──────────────────────────────────────────── */}
           <Section title="Mortgage / Lender">
             <Grid2>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
