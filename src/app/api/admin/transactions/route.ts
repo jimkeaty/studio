@@ -101,6 +101,10 @@ const UPDATABLE_FIELDS = new Set([
   'splitSnapshot', 'brokerProfit',
   // Split fields stored individually alongside splitSnapshot
   'agentPct', 'brokerPct', 'agentDollar', 'brokerGci',
+  // Per-transaction commission override metadata
+  // When commissionOverridden=true, rollup engine and TC approval skip
+  // profile-based recalculation and use the saved split values directly.
+  'commissionOverridden', 'commissionOverriddenBy', 'commissionOverriddenAt',
 ]);
 
 export async function PATCH(req: NextRequest) {

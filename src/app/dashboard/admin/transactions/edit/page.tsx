@@ -240,6 +240,10 @@ export default function EditTransactionPage() {
   const commissionManualOverride = useRef(false);
   const cbpManuallyEdited = useRef(false);
   const commPctManuallyEdited = useRef(false);
+  // Per-transaction commission override state — loaded from Firestore, persisted on save
+  const [txCommissionOverridden, setTxCommissionOverridden] = useState(false);
+  const [txCommissionOverriddenBy, setTxCommissionOverriddenBy] = useState<string | null>(null);
+  const [txCommissionOverriddenAt, setTxCommissionOverriddenAt] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -420,6 +424,16 @@ export default function EditTransactionPage() {
         const split = tx.splitSnapshot || {};
         cbpManuallyEdited.current = !!(tx.commissionBasePrice && tx.commissionBasePrice !== tx.salePrice);
 
+        // Load per-transaction commission override metadata
+        // If override is active, lock auto-recalculation so the saved values are preserved
+        const hasOverride = !!tx.commissionOverridden;
+        setTxCommissionOverridden(hasOverride);
+        setTxCommissionOverriddenBy(tx.commissionOverriddenBy || null);
+        setTxCommissionOverriddenAt(tx.commissionOverriddenAt || null);
+        if (hasOverride) {
+          commissionManualOverride.current = true;
+        }
+
         form.reset({
           agentId: tx.agentId || '',
           agentDisplayName: tx.agentDisplayName || '',
@@ -559,6 +573,24 @@ export default function EditTransactionPage() {
         };
         payload.commission = gci;
         payload.brokerProfit = brokerGci;
+      }
+
+      // Persist per-transaction commission override metadata
+      // If the admin manually edited the split (commissionManualOverride.current = true),
+      // mark this transaction as overridden so future edits don't auto-recalculate.
+      if (commissionManualOverride.current || txCommissionOverridden) {
+        payload.commissionOverridden = true;
+        payload.commissionOverriddenBy = user.email || user.uid;
+        payload.commissionOverriddenAt = new Date().toISOString();
+        // Update local state to reflect the saved override
+        setTxCommissionOverridden(true);
+        setTxCommissionOverriddenBy(user.email || user.uid);
+        setTxCommissionOverriddenAt(new Date().toISOString());
+      } else {
+        // Override was cleared — remove the override flag
+        payload.commissionOverridden = false;
+        payload.commissionOverriddenBy = null;
+        payload.commissionOverriddenAt = null;
       }
 
       const res = await fetch('/api/admin/transactions', {
@@ -1317,6 +1349,59 @@ export default function EditTransactionPage() {
 
                 {/* Commission Split */}
                 <Separator />
+
+                {/* Per-transaction commission override banner */}
+                {txCommissionOverridden && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="font-semibold text-amber-900">Commission Override Active</p>
+                        <p className="mt-0.5 text-amber-800">
+                          The split values below are locked to the manually saved amounts and will not
+                          be recalculated from the agent&apos;s commission profile.
+                        </p>
+                        {txCommissionOverriddenBy && (
+                          <p className="mt-1 text-xs text-amber-700">
+                            Set by {txCommissionOverriddenBy}
+                            {txCommissionOverriddenAt && (
+                              <> on {new Date(txCommissionOverriddenAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                        onClick={() => {
+                          // Clear the override — allow auto-recalculation from agent profile
+                          setTxCommissionOverridden(false);
+                          setTxCommissionOverriddenBy(null);
+                          setTxCommissionOverriddenAt(null);
+                          commissionManualOverride.current = false;
+                          // Trigger recalculation from agent profile
+                          const gci = Number(form.getValues('gci')) || 0;
+                          if (gci > 0 && agentCommission) {
+                            const ytd = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+                            const tierLookup = ytd > 0 ? ytd : gci;
+                            const tier = findActiveTier(agentCommission.tiers, tierLookup);
+                            setActiveTier(tier);
+                            if (tier) {
+                              form.setValue('agentPct', tier.agentSplitPercent as any);
+                              form.setValue('brokerPct', tier.companySplitPercent as any);
+                              form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+                              form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+                              const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
+                              if (txFee > 0) form.setValue('transactionFee', txFee as any);
+                            }
+                          }
+                        }}
+                      >
+                        Clear Override &amp; Recalculate from Profile
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Auto-calculation status banner */}
                 {agentCommission && (
                   <div className={`rounded-md border px-4 py-3 text-sm ${
