@@ -254,6 +254,9 @@ export async function GET(req: NextRequest) {
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
       const srcKey = (t.dealSource || 'other').toLowerCase();
+      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+      const isDual = String((t as any).closingType || '').toLowerCase() === 'dual';
+      const sideCount = isDual ? 2 : 1;
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -270,7 +273,7 @@ export async function GET(req: NextRequest) {
         md.grossMargin += companyRetained;
         md.transactionFees += txFee;
         md.closedVolume += dealValue;
-        md.closedCount += 1;
+        md.closedCount += sideCount;
 
         // Yearly totals
         totals.totalGCI += gci;
@@ -278,10 +281,10 @@ export async function GET(req: NextRequest) {
         totals.agentNetCommission += Math.max(0, gci - companyRetained);
         totals.transactionFees += txFee;
         totals.closedVolume += dealValue;
-        totals.closedCount += 1;
+        totals.closedCount += sideCount;
 
         // Category
-        categoryBreakdown.closed[catKey].count += 1;
+        categoryBreakdown.closed[catKey].count += sideCount;
         categoryBreakdown.closed[catKey].netRevenue += companyRetained;
         categoryBreakdown.closed[catKey].volume += dealValue;
 
@@ -294,16 +297,16 @@ export async function GET(req: NextRequest) {
 
         // Pending totals always count for the year
         totals.pendingVolume += dealValue;
-        totals.pendingCount += 1;
+        totals.pendingCount += sideCount;
 
         // Monthly (use contract month if available)
         if (txMonth !== null && contractDate && contractDate.getFullYear() === year) {
           months[txMonth].pendingVolume += dealValue;
-          months[txMonth].pendingCount += 1;
+          months[txMonth].pendingCount += sideCount;
         }
 
         // Category
-        categoryBreakdown.pending[catKey].count += 1;
+        categoryBreakdown.pending[catKey].count += sideCount;
         categoryBreakdown.pending[catKey].netRevenue += companyRetained;
         categoryBreakdown.pending[catKey].volume += dealValue;
 
