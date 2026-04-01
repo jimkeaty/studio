@@ -20,3 +20,5 @@ environments:
         value: "1:349178824168:web:96a4ebb72e96deb3b8505d"
       - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
         value: "G-X4687TJXZV"
+      - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
+        value: "BCk3pJFrmws5C37z5YGwv2yq9i5B_ecUNBsEY_aUnEvUfkv7jxPacJKFKUWk9uOKMlqIDOEz0zIZ7Nl7osd67ts"
