@@ -23,7 +23,7 @@ function toStr(v: any): string | null {
   return s || null;
 }
 
-const VALID_CLOSING_TYPES = new Set(['buyer', 'listing', 'referral']);
+const VALID_CLOSING_TYPES = new Set(['buyer', 'listing', 'referral', 'dual']);
 const VALID_DEAL_TYPES = new Set([
   'residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease',
 ]);
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const closingType = toStr(body.closingType);
     if (!closingType || !VALID_CLOSING_TYPES.has(closingType)) {
-      return jsonError(400, 'closingType must be: buyer, listing, or referral');
+      return jsonError(400, 'closingType must be: buyer, listing, dual, or referral');
     }
 
     const dealType = toStr(body.dealType) || 'residential_sale';
