@@ -42,12 +42,13 @@ import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 
 // ─── Mobile Bottom Tab Bar ────────────────────────────────────────────────────
+// 4-tab layout: Home | Tracker | [Add Deal center] | Compete | Leaderboard
 const mobileTabItems = [
   { href: '/dashboard',                   label: 'Home',        icon: LayoutGrid },
   { href: '/dashboard/tracker',           label: 'Tracker',     icon: ClipboardPen },
   { href: '/dashboard/transactions/new',  label: 'Add Deal',    icon: Plus },
-  { href: '/dashboard/plan',              label: 'Plan',        icon: Target },
   { href: '/dashboard/admin/competitions',label: 'Compete',     icon: Trophy },
+  { href: '/leaderboard',                 label: 'Board',       icon: BarChart3 },
 ];
 
 export function MobileBottomTabBar() {
@@ -114,22 +115,47 @@ const tvModeMenuItems = [
   { href: '/new-activity', label: 'Activity Board TV', icon: Newspaper },
 ];
 
-const adminMenuItems = [
-  { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
-  { href: '/dashboard/admin/recruiting', label: 'Recruiting & Dev', icon: UserPlus },
-  { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
-  { href: '/dashboard/admin/agents', label: 'Agents', icon: Users },
-  { href: '/dashboard/admin/agents/new', label: 'New Agent', icon: UserPlus },
-  { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
-  { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
-  { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
-  { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
-  { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
-  { href: '/dashboard/admin/competitions', label: 'Competition Center', icon: Gamepad2 },
-  { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
-  { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
-  { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
-  { href: '/dashboard/admin/staff-users', label: 'Staff Users', icon: UsersRound },
+// ── Grouped admin menu sections ───────────────────────────────────────────────
+const adminMenuGroups = [
+  {
+    label: 'Command',
+    items: [
+      { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
+      { href: '/dashboard/admin/recruiting', label: 'Recruiting & Dev', icon: UserPlus },
+    ],
+  },
+  {
+    label: 'People',
+    items: [
+      { href: '/dashboard/admin/agents', label: 'Agents', icon: Users },
+      { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
+      { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
+      { href: '/dashboard/admin/staff-users', label: 'Staff & Users', icon: UsersRound },
+    ],
+  },
+  {
+    label: 'Transactions',
+    items: [
+      { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
+      { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
+      { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
+      { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
+    ],
+  },
+  {
+    label: 'Engage',
+    items: [
+      { href: '/dashboard/admin/competitions', label: 'Competition Center', icon: Gamepad2 },
+      { href: '/dashboard/admin/leaderboard', label: 'Leaderboard Config', icon: Settings },
+      { href: '/dashboard/admin/new-activity', label: 'Activity Board Config', icon: Settings },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
+    ],
+  },
 ];
 
 
@@ -241,28 +267,31 @@ export function SidebarNav() {
         {!isImpersonating && showAdminMenu && (
           <>
             <SidebarSeparator className="my-2" />
-
-            <SidebarMenu>
-              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Admin</p>
-              {adminMenuItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <Link href={item.href}>
-                    <SidebarMenuButton
-                      isActive={
-                        item.href === '/dashboard/broker'
-                          ? pathname === item.href
-                          : pathname === item.href || pathname.startsWith(`${item.href}/`)
-                      }
-                      tooltip={item.label}
-                      className="justify-start"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {adminMenuGroups.map((group) => (
+              <div key={group.label} className="mb-1">
+                <p className="px-2 pt-2 pb-0.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{group.label}</p>
+                <SidebarMenu>
+                  {group.items.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <Link href={item.href}>
+                        <SidebarMenuButton
+                          isActive={
+                            item.href === '/dashboard/broker'
+                              ? pathname === item.href
+                              : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                          }
+                          tooltip={item.label}
+                          className="justify-start"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </Link>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </div>
+            ))}
           </>
         )}
       </SidebarContent>

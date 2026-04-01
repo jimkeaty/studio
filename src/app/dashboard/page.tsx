@@ -759,6 +759,7 @@ function AgentDashboardPage() {
         closedCount={closedCount}
         pendingCount={pendingCount}
         isImpersonating={isImpersonating}
+        tierProgress={dashboard?.tierProgress ?? null}
       />
       {/* ═══ QUICK ACTION BAR (Improvement #8) ══════════════════════════ */}
       <QuickActionBar />
@@ -787,6 +788,10 @@ function AgentDashboardPage() {
           2. TIER / CAP PROGRESS
          ════════════════════════════════════════════════════════════════════ */}
       {!loading && dashboard && <TierProgressCard dashboard={dashboard} />}
+      {/* ════════════════════════════════════════════════════════════════════
+          THIS WEEK SUMMARY
+         ════════════════════════════════════════════════════════════════════ */}
+      {!loading && dashboard && <ThisWeekCard transactions={transactions} dashboard={dashboard} />}
 
       {/* ════════════════════════════════════════════════════════════════════
           3. REPORT CARD — Hero Grade Cards
@@ -1044,7 +1049,10 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
 
 function MetricTile({ title, value, subtitle, icon: Icon, highlight }: { title: string; value: string; subtitle: string; icon: React.ElementType; highlight?: boolean }) {
   return (
-    <div className={cn('rounded-lg border p-4 space-y-1', highlight ? 'border-primary/50 bg-primary/5' : '')}>
+    <div className={cn(
+      'rounded-lg border p-4 space-y-1 transition-all duration-200 hover:scale-[1.02] hover:shadow-md cursor-default',
+      highlight ? 'border-primary/50 bg-primary/5 hover:border-primary/70' : 'hover:border-border/80 hover:bg-muted/30'
+    )}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">{title}</span>
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -1059,7 +1067,7 @@ function MetricTileWithDelta({ title, value, previous, icon: Icon }: { title: st
   const currentNum = parseFloat(value.replace(/[^0-9.-]/g, ''));
   const delta = previous && previous > 0 && currentNum > 0 ? ((currentNum - previous) / previous) * 100 : null;
   return (
-    <div className="rounded-lg border p-4 space-y-1">
+    <div className="rounded-lg border p-4 space-y-1 transition-all duration-200 hover:scale-[1.02] hover:shadow-md hover:border-border/80 hover:bg-muted/30 cursor-default">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">{title}</span>
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -1074,6 +1082,100 @@ function MetricTileWithDelta({ title, value, previous, icon: Icon }: { title: st
         <p className="text-xs text-muted-foreground">—</p>
       )}
     </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// THIS WEEK SUMMARY CARD
+// ═══════════════════════════════════════════════════════════════════════════════
+function ThisWeekCard({ transactions, dashboard }: { transactions: Transaction[]; dashboard: AgentDashboardData }) {
+  const now = new Date();
+  // Start of current week (Monday)
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - daysFromMonday);
+  weekStart.setHours(0, 0, 0, 0);
+
+  // Start of last week
+  const lastWeekStart = new Date(weekStart);
+  lastWeekStart.setDate(weekStart.getDate() - 7);
+  const lastWeekEnd = new Date(weekStart);
+
+  const isThisWeek = (dateStr?: string | null) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d >= weekStart && d <= now;
+  };
+  const isLastWeek = (dateStr?: string | null) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d >= lastWeekStart && d < lastWeekEnd;
+  };
+
+  const thisWeekClosed = transactions.filter(t => t.status === 'closed' && isThisWeek(t.closedDate ?? (t as any).closingDate));
+  const lastWeekClosed = transactions.filter(t => t.status === 'closed' && isLastWeek(t.closedDate ?? (t as any).closingDate));
+
+  const thisWeekNet = thisWeekClosed.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? (t as any).netCommission ?? 0), 0);
+  const lastWeekNet = lastWeekClosed.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? (t as any).netCommission ?? 0), 0);
+
+  const callsThisWeek = dashboard.kpis?.calls?.actual ?? 0;
+  const apptThisWeek = dashboard.kpis?.appointmentsHeld?.actual ?? 0;
+
+  const dealDelta = thisWeekClosed.length - lastWeekClosed.length;
+  const netDelta = lastWeekNet > 0 ? ((thisWeekNet - lastWeekNet) / lastWeekNet) * 100 : null;
+
+  const weekLabel = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base font-semibold">This Week</CardTitle>
+            <CardDescription className="text-xs">{weekLabel}</CardDescription>
+          </div>
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </CardHeader>
+      <CardContent className="pb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Deals closed */}
+          <div className="rounded-lg bg-muted/40 p-3 text-center space-y-0.5">
+            <p className="text-2xl font-black">{thisWeekClosed.length}</p>
+            <p className="text-xs text-muted-foreground">Deals Closed</p>
+            {dealDelta !== 0 && (
+              <p className={cn('text-[10px] font-semibold flex items-center justify-center gap-0.5', dealDelta > 0 ? 'text-green-600' : 'text-red-500')}>
+                {dealDelta > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                {Math.abs(dealDelta)} vs last wk
+              </p>
+            )}
+          </div>
+          {/* Net earned */}
+          <div className="rounded-lg bg-muted/40 p-3 text-center space-y-0.5">
+            <p className="text-2xl font-black">{fmtCurrencyCompact(thisWeekNet)}</p>
+            <p className="text-xs text-muted-foreground">Net Earned</p>
+            {netDelta != null && (
+              <p className={cn('text-[10px] font-semibold flex items-center justify-center gap-0.5', netDelta >= 0 ? 'text-green-600' : 'text-red-500')}>
+                {netDelta >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                {Math.abs(netDelta).toFixed(0)}% vs last wk
+              </p>
+            )}
+          </div>
+          {/* Calls */}
+          <div className="rounded-lg bg-muted/40 p-3 text-center space-y-0.5">
+            <p className="text-2xl font-black">{callsThisWeek}</p>
+            <p className="text-xs text-muted-foreground">Calls Logged</p>
+          </div>
+          {/* Appointments */}
+          <div className="rounded-lg bg-muted/40 p-3 text-center space-y-0.5">
+            <p className="text-2xl font-black">{apptThisWeek}</p>
+            <p className="text-xs text-muted-foreground">Appts Held</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -2893,11 +2995,13 @@ function ClosedTable({ transactions, year }: { transactions: Transaction[]; year
 function SmartHeader({
   greeting, agentName, todayLabel, tierLabel, tierSplit,
   ytdNetIncome, closedCount, pendingCount, isImpersonating,
+  tierProgress,
 }: {
   greeting: string; agentName: string; todayLabel: string;
   tierLabel: string | null; tierSplit: number | undefined;
   ytdNetIncome: number | null; closedCount: number; pendingCount: number;
   isImpersonating: boolean;
+  tierProgress?: { grossGCIYTD: number; nextTierThreshold: number | null; currentTierIndex: number; tiers: { fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number }[]; capReached?: boolean } | null;
 }) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white shadow-xl">

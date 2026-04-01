@@ -560,7 +560,63 @@ export default function AdminTransactionLedgerPage() {
               </Link>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              {/* ── Mobile card layout (sm and below) ─────────────────────────── */}
+              <div className="flex flex-col gap-3 sm:hidden">
+                {filtered.map((t) => {
+                  const net = t.splitSnapshot?.agentNetCommission ?? (t as any).netCommission ?? 0;
+                  const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
+                  const sc = statusConfig[t.status] || statusConfig.pending;
+                  return (
+                    <div
+                      key={t.id}
+                      className="rounded-xl border bg-card p-4 space-y-3 cursor-pointer hover:bg-muted/40 transition-colors active:scale-[0.99]"
+                      onClick={() => openEdit(t)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm leading-tight truncate">{t.address || '—'}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{t.agentDisplayName ?? '—'}</p>
+                        </div>
+                        <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0', sc.color)}>
+                          {sc.label}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Sale Price</p>
+                          <p className="text-sm font-semibold">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Gross GCI</p>
+                          <p className="text-sm font-semibold">{gross ? formatCurrency(gross) : '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Net to Agent</p>
+                          <p className="text-sm font-semibold text-primary">{net ? formatCurrency(net) : '—'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '—'}</span>
+                        <span>{formatDate(t.closedDate ?? (t as any).closingDate) || formatDate(t.contractDate) || '—'}</span>
+                      </div>
+                      <div className="flex items-center gap-1 pt-1 border-t">
+                        <Button variant="ghost" size="sm" className="h-7 flex-1 text-xs" onClick={(e) => { e.stopPropagation(); openEdit(t); }}>
+                          <Pencil className="h-3 w-3 mr-1" /> Edit
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 flex-1 text-xs" onClick={(e) => { e.stopPropagation(); openTransfer(t); }}>
+                          <ArrowRightLeft className="h-3 w-3 mr-1" /> Transfer
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 flex-1 text-xs text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDelete(t); }}>
+                          <Trash2 className="h-3 w-3 mr-1" /> Delete
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* ── Desktop table layout (sm and above) ───────────────────────── */}
+              <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -663,7 +719,8 @@ export default function AdminTransactionLedgerPage() {
                   })}
                 </TableBody>
               </Table>
-            </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
