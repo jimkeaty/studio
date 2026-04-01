@@ -624,10 +624,7 @@ export default function AdminTransactionLedgerPage() {
                       <span className="flex items-center">Status<SortIcon col="status" /></span>
                     </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('address')}>
-                      <span className="flex items-center">Address<SortIcon col="address" /></span>
-                    </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('agent')}>
-                      <span className="flex items-center">Agent<SortIcon col="agent" /></span>
+                      <span className="flex items-center">Address / Agent<SortIcon col="address" /></span>
                     </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('closingType')}>
                       <span className="flex items-center">Side<SortIcon col="closingType" /></span>
