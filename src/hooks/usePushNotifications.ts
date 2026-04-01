@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { getMessaging, getToken, onMessage, MessagePayload } from 'firebase/messaging';
-import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useUser } from '@/firebase';
 import { getFirebaseApp } from '@/lib/firebase';
 
@@ -37,23 +36,15 @@ export function usePushNotifications() {
     setPermission(Notification.permission as PushPermissionState);
   }, []);
 
-  // Register FCM token with Firestore so server can send targeted notifications
-  const saveFcmToken = useCallback(async (token: string, userId: string) => {
+  // Register FCM token via API route (keeps Firestore writes server-side)
+  const saveFcmToken = useCallback(async (token: string, _userId: string) => {
     try {
-      const app = getFirebaseApp();
-      const db = getFirestore(app);
-      await setDoc(
-        doc(db, 'fcmTokens', userId),
-        {
-          token,
-          userId,
-          updatedAt: serverTimestamp(),
-          platform: 'web',
-          userAgent: navigator.userAgent,
-        },
-        { merge: true }
-      );
-      console.log('[FCM] Token saved to Firestore');
+      await fetch('/api/notifications/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, platform: 'web', userAgent: navigator.userAgent }),
+      });
+      console.log('[FCM] Token saved via API');
     } catch (err) {
       console.error('[FCM] Failed to save token:', err);
     }
