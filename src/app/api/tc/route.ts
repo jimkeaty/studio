@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     if (!clientName) return jsonError(400, 'clientName is required');
 
     const contractDate = toStr(body.contractDate);
-    if (!contractDate) return jsonError(400, 'contractDate (under contract date) is required');
+    // contractDate is optional — listings may not yet be under contract
 
     const closingType = toStr(body.closingType);
     if (!closingType || !VALID_CLOSING_TYPES.has(closingType)) {
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
       // Dates
       listingDate: toStr(body.listingDate),
-      contractDate,
+      contractDate: contractDate || null,
       optionExpiration: toStr(body.optionExpiration),
       inspectionDeadline: toStr(body.inspectionDeadline),
       surveyDeadline: toStr(body.surveyDeadline),

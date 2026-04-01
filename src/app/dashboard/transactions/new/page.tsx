@@ -20,7 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2 } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
@@ -63,37 +63,97 @@ type AgentCommissionData = {
   tiersSource?: string;
   defaultTransactionFee: number | null;
   tiers: CommissionTier[];
-  /** YTD cumulative companyDollar for tier band lookup. For team leaders this
-   * includes team member production credits. 0 if rollup not yet available. */
   ytdTierProgressionCompanyDollar?: number;
 };
 
-/** Find the matching tier for a given GCI amount.
- * Falls back to the last (highest) tier if the amount exceeds all defined bands.
- * This prevents a silent no-match when YTD production exceeds the top threshold. */
 function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | null {
   if (!tiers || tiers.length === 0) return null;
   for (const tier of tiers) {
     const from = tier.fromCompanyDollar;
     const to = tier.toCompanyDollar;
-    if (gci >= from && (to === null || gci < to)) {
-      return tier;
-    }
+    if (gci >= from && (to === null || gci < to)) return tier;
   }
-  // No exact match — agent has exceeded all defined band ceilings.
-  // Return the last tier (highest band) as the safe fallback.
   return tiers[tiers.length - 1];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Currency formatting helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Format a raw number string with commas for display (e.g. "1000000" → "1,000,000") */
+function formatCurrencyDisplay(raw: string | number | undefined): string {
+  if (raw === '' || raw === undefined || raw === null) return '';
+  const str = String(raw).replace(/,/g, '');
+  const num = parseFloat(str);
+  if (isNaN(num)) return String(raw);
+  // Preserve decimal places from the raw input
+  const decimalMatch = str.match(/\.(\d+)$/);
+  const decimals = decimalMatch ? decimalMatch[1].length : 0;
+  return num.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: Math.max(decimals, 2),
+  });
+}
+
+/** Strip commas to get the clean numeric string for the form value */
+function parseCurrencyInput(val: string): string {
+  return val.replace(/,/g, '');
+}
+
+/** A currency input that displays with commas but stores as a plain number string */
+function CurrencyInput({
+  value,
+  onChange,
+  placeholder,
+  readOnly,
+  className,
+}: {
+  value: string | number | undefined;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  className?: string;
+}) {
+  const [displayVal, setDisplayVal] = useState(() => formatCurrencyDisplay(value));
+
+  // Sync display when form value changes externally (e.g. auto-calc)
+  useEffect(() => {
+    const formatted = formatCurrencyDisplay(value);
+    setDisplayVal(formatted);
+  }, [value]);
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      readOnly={readOnly}
+      className={className}
+      value={displayVal}
+      onChange={(e) => {
+        const raw = parseCurrencyInput(e.target.value);
+        setDisplayVal(e.target.value); // let user type freely
+        onChange(raw);
+      }}
+      onBlur={() => {
+        // Reformat on blur for clean display
+        const raw = parseCurrencyInput(displayVal);
+        const formatted = formatCurrencyDisplay(raw);
+        setDisplayVal(formatted);
+      }}
+    />
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
-  // Agent — admin can select any agent; agents use their own account
+  // Agent
   agentId: z.string().min(1, 'Agent is required'),
   agentDisplayName: z.string().min(1),
 
-  // Status — admin can override; defaults to pending/closed based on closedDate
+  // Status
   status: z.enum(['pending', 'under_contract', 'closed', 'cancelled']).optional(),
 
   // Basics
@@ -118,9 +178,9 @@ const schema = z.object({
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   agentDollar: z.coerce.number().min(0).optional().or(z.literal('')),
 
-  // Dates
+  // Dates — contractDate is now OPTIONAL
   listingDate: z.string().optional().or(z.literal('')),
-  contractDate: z.string().min(1, 'Under contract date is required'),
+  contractDate: z.string().optional().or(z.literal('')),
   optionExpiration: z.string().optional().or(z.literal('')),
   inspectionDeadline: z.string().optional().or(z.literal('')),
   surveyDeadline: z.string().optional().or(z.literal('')),
@@ -131,12 +191,12 @@ const schema = z.object({
   titleDeadline: z.string().optional().or(z.literal('')),
   finalLoanCommitmentDeadline: z.string().optional().or(z.literal('')),
 
-  // Client contact info (legacy — still used)
+  // Client contact info (legacy)
   clientEmail: z.string().email().optional().or(z.literal('')),
   clientPhone: z.string().optional(),
   clientNewAddress: z.string().optional(),
 
-  // Second client (co-buyer, spouse, etc.) — legacy
+  // Second client (legacy)
   client2Name: z.string().optional(),
   client2Email: z.string().email().optional().or(z.literal('')),
   client2Phone: z.string().optional(),
@@ -165,10 +225,10 @@ const schema = z.object({
   // TC Working File
   tcWorking: z.enum(['yes', 'no']).optional(),
 
-  // Client Type — for TC working file client info
+  // Client Type
   clientType: z.enum(['buyer', 'seller', 'dual']).optional(),
 
-  // Buyer info (when clientType is 'buyer' or 'dual')
+  // Buyer info
   buyerName: z.string().optional(),
   buyerEmail: z.string().email().optional().or(z.literal('')),
   buyerPhone: z.string().optional(),
@@ -176,7 +236,7 @@ const schema = z.object({
   buyer2Email: z.string().email().optional().or(z.literal('')),
   buyer2Phone: z.string().optional(),
 
-  // Seller info (when clientType is 'seller' or 'dual')
+  // Seller info
   sellerName: z.string().optional(),
   sellerEmail: z.string().email().optional().or(z.literal('')),
   sellerPhone: z.string().optional(),
@@ -192,7 +252,7 @@ const schema = z.object({
   tcScheduleInspectionsOther: z.string().optional(),
   inspectorName: z.string().optional(),
 
-  // Commission paid by seller — stored as % of Commission Base Price
+  // Commission paid by seller
   sellerPayingListingAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   sellerPayingListingAgentUnknown: z.boolean().optional(),
   sellerPayingBuyerAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
@@ -215,9 +275,7 @@ const schema = z.object({
   shortageAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
 
-  // Additional comments (replaces notes)
   additionalComments: z.string().optional(),
-
   notes: z.string().optional(),
 });
 
@@ -249,56 +307,6 @@ function Grid3({ children }: { children: React.ReactNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Wizard Step Definitions
-// ─────────────────────────────────────────────────────────────────────────────
-const WIZARD_STEPS = [
-  { id: 1, label: 'The Deal',       description: 'Address, dates, and deal value' },
-  { id: 2, label: 'The People',     description: 'Clients, agents, lender, title' },
-  { id: 3, label: 'Inspections',    description: 'Inspections, costs & commission' },
-  { id: 4, label: 'Final Details',  description: 'Additional info & submit' },
-];
-
-function WizardProgressBar({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
-  return (
-    <div className="w-full">
-      {/* Step labels */}
-      <div className="flex items-start justify-between mb-3">
-        {WIZARD_STEPS.map((step) => {
-          const isDone    = step.id < currentStep;
-          const isCurrent = step.id === currentStep;
-          return (
-            <div key={step.id} className="flex flex-col items-center flex-1 min-w-0">
-              <div className={[
-                'flex items-center justify-center w-8 h-8 rounded-full border-2 text-sm font-bold mb-1 transition-all',
-                isDone    ? 'bg-primary border-primary text-primary-foreground' : '',
-                isCurrent ? 'border-primary text-primary bg-primary/10' : '',
-                !isDone && !isCurrent ? 'border-muted-foreground/30 text-muted-foreground' : '',
-              ].join(' ')}>
-                {isDone ? <Check className="h-4 w-4" /> : step.id}
-              </div>
-              <span className={[
-                'text-[10px] font-semibold text-center leading-tight hidden sm:block',
-                isCurrent ? 'text-primary' : isDone ? 'text-primary/70' : 'text-muted-foreground',
-              ].join(' ')}>{step.label}</span>
-            </div>
-          );
-        })}
-      </div>
-      {/* Progress track */}
-      <div className="relative h-1.5 bg-muted rounded-full overflow-hidden">
-        <div
-          className="absolute left-0 top-0 h-full bg-primary rounded-full transition-all duration-500"
-          style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
-        />
-      </div>
-      <p className="text-xs text-muted-foreground mt-2">
-        Step {currentStep} of {totalSteps} &mdash; {WIZARD_STEPS[currentStep - 1]?.description}
-      </p>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AddTransactionPage() {
@@ -310,9 +318,7 @@ export default function AddTransactionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
-  // Wizard step state (1-indexed, 1..4)
-  const [wizardStep, setWizardStep] = useState(1);
-  const TOTAL_STEPS = 4;
+
   // Draft auto-save
   const DRAFT_KEY = 'sb_add_transaction_draft';
   const [hasDraft, setHasDraft] = useState(false);
@@ -325,8 +331,6 @@ export default function AddTransactionPage() {
   const commissionManualOverride = useRef(false);
 
   const { isAdmin: isAdminUser } = useIsAdminLike();
-  // When admin is impersonating an agent, treat the form as agent-mode
-  // so commission split fields are hidden (same experience as the real agent).
   const isAdmin = isAdminUser && !isImpersonating;
 
   const form = useForm<FormValues>({
@@ -347,6 +351,7 @@ export default function AddTransactionPage() {
 
   // Watched values for conditional rendering
   const clientType = form.watch('clientType');
+  const watchedClosingType = form.watch('closingType');
   const inspectionOrdered = form.watch('inspectionOrdered');
   const warrantyAtClosing = form.watch('warrantyAtClosing');
   const txComplianceFee = form.watch('txComplianceFee');
@@ -355,27 +360,26 @@ export default function AddTransactionPage() {
   const occupancyAgreement = form.watch('occupancyAgreement');
   const inspectionTypes = form.watch('inspectionTypes') || [];
 
+  // Seller info is only relevant when NOT purely buyer-side
+  // closingType: 'buyer' → hide seller; 'listing' | 'dual' | 'referral' → show seller
+  const showSellerInfo = watchedClosingType !== 'buyer';
+
   // Watched values for commission auto-calc
   const watchedSalePrice = form.watch('salePrice');
   const watchedCommPct = form.watch('commissionPercent');
   const watchedCBP = form.watch('commissionBasePrice');
-  const watchedClosingType = form.watch('closingType');
   const watchedSellerPayingListing = form.watch('sellerPayingListingAgent');
   const watchedSellerPayingBuyer = form.watch('sellerPayingBuyerAgent');
 
-  // Track if user manually edited commissionBasePrice (prevents salePrice from overwriting it)
   const cbpManuallyEdited = useRef(false);
-  // Track if user manually edited commissionPercent (prevents auto-assign from overwriting it)
   const commPctManuallyEdited = useRef(false);
 
-  // Auto-fill commissionBasePrice from salePrice when not manually overridden
   useEffect(() => {
     if (cbpManuallyEdited.current) return;
     const sp = Number(watchedSalePrice) || 0;
     if (sp > 0) form.setValue('commissionBasePrice', sp as any);
   }, [watchedSalePrice]);
 
-  // Auto-assign commissionPercent from seller-paying % based on deal side
   useEffect(() => {
     if (commPctManuallyEdited.current) return;
     const listingPct = Number(watchedSellerPayingListing) || 0;
@@ -387,7 +391,6 @@ export default function AddTransactionPage() {
     if (autoPct > 0) form.setValue('commissionPercent', autoPct as any);
   }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer]);
 
-  // Auto-calculate GCI when commissionBasePrice × commissionPercent both set
   useEffect(() => {
     const cbp = Number(watchedCBP) || 0;
     const pct = Number(watchedCommPct) || 0;
@@ -397,7 +400,7 @@ export default function AddTransactionPage() {
     }
   }, [watchedCBP, watchedCommPct]);
 
-  // Admin: load agent list for the dropdown
+  // Admin: load agent list
   useEffect(() => {
     if (!user || !isAdmin) return;
     const load = async () => {
@@ -409,16 +412,13 @@ export default function AddTransactionPage() {
         });
         const data = await res.json();
         if (data.ok) setAgents(data.agents ?? []);
-      } catch {
-        // silently ignore — admin can still type
-      } finally {
-        setAgentsLoading(false);
-      }
+      } catch {}
+      finally { setAgentsLoading(false); }
     };
     load();
   }, [user, isAdmin]);
 
-  // Agent: pre-fill their own agentId from profile; admin impersonating pre-fills the agent's
+  // Pre-fill agent
   useEffect(() => {
     if (!user) return;
     if (isImpersonating && effectiveUid && effectiveName) {
@@ -430,7 +430,7 @@ export default function AddTransactionPage() {
     }
   }, [user, isAdmin, isImpersonating, effectiveUid, effectiveName]);
 
-  // Fetch agent commission structure when agent is selected (admin + agent users)
+  // Fetch agent commission structure
   const watchedAgentId = form.watch('agentId');
   useEffect(() => {
     if (!user || !watchedAgentId) {
@@ -450,32 +450,23 @@ export default function AddTransactionPage() {
         const data = await res.json();
         if (!cancelled && data.ok) {
           setAgentCommission(data);
-          // Pre-fill transaction fee from agent's default
           if (data.defaultTransactionFee != null) {
             form.setValue('transactionFee', data.defaultTransactionFee as any);
           }
         }
-      } catch {
-        // silently ignore
-      } finally {
-        if (!cancelled) setCommissionLoading(false);
-      }
+      } catch {}
+      finally { if (!cancelled) setCommissionLoading(false); }
     };
     fetchCommission();
     return () => { cancelled = true; };
   }, [user, isAdmin, watchedAgentId]);
 
-  // Auto-calculate commission split when GCI changes and we have agent commission data
+  // Auto-calculate commission split
   const watchedGCI = form.watch('gci');
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(watchedGCI) || 0;
-    if (gci <= 0) {
-      setActiveTier(null);
-      return;
-    }
-    // Use cumulative YTD companyDollar for tier band lookup so team leaders
-    // progress through bands based on total team production, not per-transaction GCI.
+    if (gci <= 0) { setActiveTier(null); return; }
     const ytd = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
     const tierLookupAmount = ytd > 0 ? ytd : gci;
     const tier = findActiveTier(agentCommission.tiers, tierLookupAmount);
@@ -486,18 +477,15 @@ export default function AddTransactionPage() {
       const agentNet = Number((gci * (agentPct / 100)).toFixed(2));
       const brokerGci = Number((gci * (brokerPct / 100)).toFixed(2));
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-
       form.setValue('agentPct', agentPct as any);
       form.setValue('brokerPct', brokerPct as any);
       form.setValue('agentDollar', agentNet as any);
       form.setValue('brokerGci', brokerGci as any);
-      if (txFee > 0) {
-        form.setValue('transactionFee', txFee as any);
-      }
+      if (txFee > 0) form.setValue('transactionFee', txFee as any);
     }
   }, [watchedGCI, agentCommission]);
 
-  // Sync additionalComments → notes (hidden field) for backward compatibility
+  // Sync additionalComments → notes
   const watchedAdditionalComments = form.watch('additionalComments');
   useEffect(() => {
     form.setValue('notes', watchedAdditionalComments || '');
@@ -506,7 +494,6 @@ export default function AddTransactionPage() {
   // Auto-save draft to localStorage every 30 seconds
   useEffect(() => {
     if (submitted) return;
-    // Check for existing draft on mount
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (saved) setHasDraft(true);
@@ -516,24 +503,23 @@ export default function AddTransactionPage() {
         const values = form.getValues();
         const hasContent = values.address || values.clientName || values.salePrice;
         if (hasContent) {
-          localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step: wizardStep, savedAt: Date.now() }));
+          localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, savedAt: Date.now() }));
         }
       } catch {}
     }, 30000);
     return () => clearInterval(interval);
-  }, [submitted, wizardStep]);
+  }, [submitted]);
 
   const restoreDraft = () => {
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (!saved) return;
-      const { values, step } = JSON.parse(saved);
+      const { values } = JSON.parse(saved);
       Object.entries(values).forEach(([key, val]) => {
         if (val !== undefined && val !== null && val !== '') {
           form.setValue(key as any, val as any);
         }
       });
-      if (step) setWizardStep(step);
       setHasDraft(false);
       setDraftRestored(true);
       toast({ title: 'Draft restored', description: 'Your previous form data has been loaded.' });
@@ -545,7 +531,6 @@ export default function AddTransactionPage() {
     setHasDraft(false);
   };
 
-  // Helper: toggle inspection type checkbox
   const toggleInspectionType = (type: string) => {
     const current = form.getValues('inspectionTypes') || [];
     if (current.includes(type)) {
@@ -572,7 +557,6 @@ export default function AddTransactionPage() {
   if (submitted) {
     return (
       <div className="max-w-xl mx-auto text-center space-y-6 py-16 relative overflow-hidden">
-        {/* Confetti burst */}
         <div className="absolute inset-0 pointer-events-none select-none" aria-hidden>
           {Array.from({ length: 18 }).map((_, i) => (
             <span
@@ -602,7 +586,21 @@ export default function AddTransactionPage() {
             <p className="mt-2 font-mono text-xs text-muted-foreground">Ref: {resultId}</p>
           )}
           <div className="flex justify-center gap-3 flex-wrap mt-8">
-            <Button onClick={() => { setSubmitted(false); setResultId(null); form.reset({ agentId: isAdmin ? '' : user.uid, agentDisplayName: isAdmin ? '' : (user.displayName || user.email || ''), closingType: 'buyer', dealType: 'residential_sale', address: '', clientName: '', contractDate: '', inspectionTypes: [], sellerPayingListingAgentUnknown: false }); }}>
+            <Button onClick={() => {
+              setSubmitted(false);
+              setResultId(null);
+              form.reset({
+                agentId: isAdmin ? '' : user.uid,
+                agentDisplayName: isAdmin ? '' : (user.displayName || user.email || ''),
+                closingType: 'buyer',
+                dealType: 'residential_sale',
+                address: '',
+                clientName: '',
+                contractDate: '',
+                inspectionTypes: [],
+                sellerPayingListingAgentUnknown: false,
+              });
+            }}>
               Add Another Deal
             </Button>
             <Link href="/dashboard/admin/tc">
@@ -623,8 +621,6 @@ export default function AddTransactionPage() {
     setSubmitting(true);
     try {
       const token = await user.getIdToken();
-
-      // All transactions (admin and agent) go to TC Queue for approval first
       const res = await fetch('/api/tc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -633,7 +629,8 @@ export default function AddTransactionPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Submission failed');
       setResultId(data.id);
-
+      // Clear draft on successful submit
+      try { localStorage.removeItem(DRAFT_KEY); } catch {}
       setSubmitted(true);
       toast({
         title: 'Transaction submitted to TC Queue',
@@ -648,13 +645,13 @@ export default function AddTransactionPage() {
 
   // ───────────────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-32">
+    <div className="max-w-4xl mx-auto space-y-6 pb-24">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Add Transaction</h1>
           <p className="text-muted-foreground mt-1">
-            Transaction will be submitted to the TC Queue for review and approval before appearing in the ledger.
+            Fill in all relevant details below. Transaction will be submitted to the TC Queue for review before appearing in the ledger.
           </p>
         </div>
         <Badge variant="outline" className="mt-1">
@@ -679,21 +676,13 @@ export default function AddTransactionPage() {
         </div>
       )}
 
-      {/* Wizard progress bar */}
-      <Card className="p-5">
-        <WizardProgressBar currentStep={wizardStep} totalSteps={TOTAL_STEPS} />
-      </Card>
-
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-          {/* ───────────────────────────────────────────────────────────────────────────
-              STEP 1 — THE DEAL
-          ─────────────────────────────────────────────────────────────────────────── */}
-          <div className={wizardStep === 1 ? 'space-y-6' : 'hidden'}>
-
-          {/* ── Section 1: Agent + Basics ────────────────────────────────────────── */}
-          <Section title="Transaction Basics">
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION 1 — PROPERTY / TRANSACTION DETAILS
+          ═══════════════════════════════════════════════════════════════════ */}
+          <Section title="Property / Transaction Details">
             {/* Agent selector — admin only */}
             {isAdmin && (
               <FormField control={form.control} name="agentId" render={({ field }) => (
@@ -789,10 +778,8 @@ export default function AddTransactionPage() {
                 </FormItem>
               )} />
             </Grid2>
-          </Section>
 
-          {/* ── TC Working File ───────────────────────────────────────────── */}
-          <Section title="TC Working File">
+            {/* TC Working File */}
             <FormField control={form.control} name="tcWorking" render={({ field }) => (
               <FormItem>
                 <FormLabel>Send to TC Working File?</FormLabel>
@@ -808,21 +795,25 @@ export default function AddTransactionPage() {
             )} />
           </Section>
 
-          {/* ── Section 2: Key Dates ─────────────────────────────────────── */}
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION 2 — KEY DATES
+          ═══════════════════════════════════════════════════════════════════ */}
           <Section title="Key Dates">
             <Grid3>
               <FormField control={form.control} name="listingDate" render={({ field }) => (
                 <FormItem><FormLabel>Listing Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
               )} />
+              {/* Under Contract Date — OPTIONAL */}
               <FormField control={form.control} name="contractDate" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Under Contract Date <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel>Under Contract Date</FormLabel>
                   <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormDescription>Leave blank if not yet under contract.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="optionExpiration" render={({ field }) => (
-                <FormItem><FormLabel>Expiration</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Option Expiration</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
               )} />
             </Grid3>
             <Grid3>
@@ -851,8 +842,6 @@ export default function AddTransactionPage() {
               <FormField control={form.control} name="finalLoanCommitmentDeadline" render={({ field }) => (
                 <FormItem><FormLabel>Final Loan Commitment Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
               )} />
-            </Grid3>
-            <Grid2>
               <FormField control={form.control} name="closedDate" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Actual Close Date</FormLabel>
@@ -879,61 +868,17 @@ export default function AddTransactionPage() {
                         <SelectItem value="cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
-                    <FormDescription>Override status manually, or leave blank to auto-detect from close date.</FormDescription>
+                    <FormDescription>Override status manually, or leave blank to auto-detect.</FormDescription>
                   </FormItem>
                 )} />
               )}
-            </Grid2>
+            </Grid3>
           </Section>
 
-          {/* ── Section 3: Deal Value ─────────────────────────────────── */}
-          <Section title="Deal Value">
-            <Grid2>
-              <FormField control={form.control} name="listPrice" render={({ field }) => (
-                <FormItem><FormLabel>List Price / Buyer Rep Price ($)</FormLabel><FormControl><Input type="number" inputMode="numeric" step="1" placeholder="0" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="salePrice" render={({ field }) => (
-                <FormItem><FormLabel>Sale Price ($)</FormLabel><FormControl><Input type="number" inputMode="numeric" step="1" placeholder="0" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid2>
-            <Grid2>
-              <FormField control={form.control} name="earnestMoney" render={({ field }) => (
-                <FormItem><FormLabel>Earnest Money / Deposit ($)</FormLabel><FormControl><Input type="number" inputMode="numeric" step="1" placeholder="0" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="depositHolder" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Who is holding the deposit?</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="listing_broker">Listing Broker</SelectItem>
-                      <SelectItem value="selling_broker">Selling Broker</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )} />
-            </Grid2>
-            {form.watch('depositHolder') === 'other' && (
-              <div className="max-w-xs">
-                <FormField control={form.control} name="depositHolderOther" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Specify deposit holder</FormLabel>
-                    <FormControl><Input placeholder="Name or company..." {...field} /></FormControl>
-                  </FormItem>
-                )} />
-              </div>
-            )}
-          </Section>
-          </div>{/* end step 1 */}
-
-          {/* ───────────────────────────────────────────────────────────────────────────
-              STEP 2 — THE PEOPLE
-          ─────────────────────────────────────────────────────────────────────────── */}
-          <div className={wizardStep === 2 ? 'space-y-6' : 'hidden'}>
-
-          {/* ── Section 4: Client Info ────────────────────────────────────────── */}
-          <Section title="Client Info" description="Select client type to show the appropriate contact fields.">
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION 3 — BUYER / SELLER INFORMATION
+          ═══════════════════════════════════════════════════════════════════ */}
+          <Section title="Buyer / Seller Information" description="Select client type to show the appropriate contact fields.">
             <FormField control={form.control} name="clientType" render={({ field }) => (
               <FormItem>
                 <FormLabel>Client Type</FormLabel>
@@ -979,8 +924,8 @@ export default function AddTransactionPage() {
               </>
             )}
 
-            {/* Seller section */}
-            {(clientType === 'seller' || clientType === 'dual') && (
+            {/* Seller section — hidden when closingType is 'buyer' */}
+            {showSellerInfo && (clientType === 'seller' || clientType === 'dual') && (
               <>
                 <Separator className="my-2" />
                 <p className="text-sm font-semibold text-primary">Seller Information</p>
@@ -1008,7 +953,11 @@ export default function AddTransactionPage() {
                   )} />
                 </Grid3>
                 <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
-                  <FormItem><FormLabel>Client New Address</FormLabel><FormDescription>Where the seller is moving to (for mailers)</FormDescription><FormControl><Input placeholder="New address after closing" {...field} /></FormControl></FormItem>
+                  <FormItem>
+                    <FormLabel>Client New Address</FormLabel>
+                    <FormDescription>Where the seller is moving to (for mailers)</FormDescription>
+                    <FormControl><Input placeholder="New address after closing" {...field} /></FormControl>
+                  </FormItem>
                 )} />
               </>
             )}
@@ -1033,25 +982,27 @@ export default function AddTransactionPage() {
             )}
           </Section>
 
-          {/* ── Section 5: Other Agent (hidden for dual agent transactions) ──── */}
-          {watchedClosingType !== 'dual' && <Section title="Cooperating Agent">
-            <Grid2>
-              <FormField control={form.control} name="otherAgentName" render={({ field }) => (
-                <FormItem><FormLabel>Agent Name</FormLabel><FormControl><Input placeholder="Other agent on this deal" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="otherBrokerage" render={({ field }) => (
-                <FormItem><FormLabel>Brokerage</FormLabel><FormControl><Input placeholder="Their brokerage" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="otherAgentEmail" render={({ field }) => (
-                <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="agent@brokerage.com" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="otherAgentPhone" render={({ field }) => (
-                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-5678" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid2>
-          </Section>}
+          {/* ── Cooperating Agent (hidden for dual) ──────────────────────────── */}
+          {watchedClosingType !== 'dual' && (
+            <Section title="Cooperating Agent">
+              <Grid2>
+                <FormField control={form.control} name="otherAgentName" render={({ field }) => (
+                  <FormItem><FormLabel>Agent Name</FormLabel><FormControl><Input placeholder="Other agent on this deal" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="otherBrokerage" render={({ field }) => (
+                  <FormItem><FormLabel>Brokerage</FormLabel><FormControl><Input placeholder="Their brokerage" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="otherAgentEmail" render={({ field }) => (
+                  <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="agent@brokerage.com" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="otherAgentPhone" render={({ field }) => (
+                  <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-5678" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid2>
+            </Section>
+          )}
 
-          {/* ── Section 6: Mortgage / Lender ──────────────────────────────── */}
+          {/* ── Mortgage / Lender ─────────────────────────────────────────── */}
           <Section title="Mortgage / Lender">
             <Grid2>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
@@ -1074,7 +1025,7 @@ export default function AddTransactionPage() {
             </div>
           </Section>
 
-          {/* ── Section 7: Title Company ──────────────────────────────────── */}
+          {/* ── Title Company ─────────────────────────────────────────────── */}
           <Section title="Title Company">
             <Grid2>
               <FormField control={form.control} name="titleCompany" render={({ field }) => (
@@ -1099,14 +1050,80 @@ export default function AddTransactionPage() {
               )} />
             </Grid2>
           </Section>
-          </div>{/* end step 2 */}
 
-          {/* ───────────────────────────────────────────────────────────────────────────
-              STEP 3 — INSPECTIONS & COMMISSION
-          ─────────────────────────────────────────────────────────────────────────── */}
-          <div className={wizardStep === 3 ? 'space-y-6' : 'hidden'}>
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION 4 — FINANCIAL DETAILS
+          ═══════════════════════════════════════════════════════════════════ */}
+          <Section title="Financial Details">
+            <Grid2>
+              <FormField control={form.control} name="listPrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>List Price / Buyer Rep Price ($)</FormLabel>
+                  <FormControl>
+                    <CurrencyInput
+                      value={field.value as any}
+                      onChange={(val) => field.onChange(val)}
+                      placeholder="0"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="salePrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Sale Price ($)</FormLabel>
+                  <FormControl>
+                    <CurrencyInput
+                      value={field.value as any}
+                      onChange={(val) => field.onChange(val)}
+                      placeholder="0"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </Grid2>
+            <Grid2>
+              <FormField control={form.control} name="earnestMoney" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Earnest Money / Deposit ($)</FormLabel>
+                  <FormControl>
+                    <CurrencyInput
+                      value={field.value as any}
+                      onChange={(val) => field.onChange(val)}
+                      placeholder="0"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="depositHolder" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Who is holding the deposit?</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="listing_broker">Listing Broker</SelectItem>
+                      <SelectItem value="selling_broker">Selling Broker</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+            </Grid2>
+            {form.watch('depositHolder') === 'other' && (
+              <div className="max-w-xs">
+                <FormField control={form.control} name="depositHolderOther" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Specify deposit holder</FormLabel>
+                    <FormControl><Input placeholder="Name or company..." {...field} /></FormControl>
+                  </FormItem>
+                )} />
+              </div>
+            )}
+          </Section>
 
-          {/* ── Section 8: Inspections ────────────────────────────────────────── */}
+          {/* ── Inspections ───────────────────────────────────────────────── */}
           <Section title="Inspections">
             <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
               <FormItem>
@@ -1121,119 +1138,127 @@ export default function AddTransactionPage() {
               </FormItem>
             )} />
 
-            {/* All inspection fields always visible regardless of Yes/No selection */}
-                <div className="max-w-xs">
-                  <FormField control={form.control} name="targetInspectionDate" render={({ field }) => (
-                    <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-                  )} />
-                </div>
+            <div className="max-w-xs">
+              <FormField control={form.control} name="targetInspectionDate" render={({ field }) => (
+                <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+            </div>
 
-                <div>
-                  <p className="text-sm font-medium mb-3">Check all that apply:</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                    {INSPECTION_TYPE_OPTIONS.map((type) => (
-                      <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
-                        <input
-                          type="checkbox"
-                          checked={inspectionTypes.includes(type)}
-                          onChange={() => toggleInspectionType(type)}
-                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        {type}
-                      </label>
-                    ))}
-                  </div>
-                </div>
+            <div>
+              <p className="text-sm font-medium mb-3">Check all that apply:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {INSPECTION_TYPE_OPTIONS.map((type) => (
+                  <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={inspectionTypes.includes(type)}
+                      onChange={() => toggleInspectionType(type)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </div>
 
-                <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Do you want TC to help schedule inspections?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="yes">Yes</SelectItem>
-                        <SelectItem value="no">No</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )} />
-
-                {tcScheduleInspections === 'other' && (
-                  <FormField control={form.control} name="tcScheduleInspectionsOther" render={({ field }) => (
-                    <FormItem><FormLabel>Please specify</FormLabel><FormControl><Input placeholder="Describe what you need..." {...field} /></FormControl></FormItem>
-                  )} />
-                )}
-
-                <div className="max-w-md">
-                  <FormField control={form.control} name="inspectorName" render={({ field }) => (
-                    <FormItem><FormLabel>Inspector Name / Company</FormLabel><FormControl><Input placeholder="Inspector name or company" {...field} /></FormControl></FormItem>
-                  )} />
-                </div>
+            <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Do you want TC to help schedule inspections?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {tcScheduleInspections === 'other' && (
+              <FormField control={form.control} name="tcScheduleInspectionsOther" render={({ field }) => (
+                <FormItem><FormLabel>Please specify</FormLabel><FormControl><Input placeholder="Describe what you need..." {...field} /></FormControl></FormItem>
+              )} />
+            )}
+            <div className="max-w-md">
+              <FormField control={form.control} name="inspectorName" render={({ field }) => (
+                <FormItem><FormLabel>Inspector Name / Company</FormLabel><FormControl><Input placeholder="Inspector name or company" {...field} /></FormControl></FormItem>
+              )} />
+            </div>
           </Section>
 
-          <Section title="Buyer Closing Cost Paid by Seller">
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION 5 — COMMISSION & FEES
+          ═══════════════════════════════════════════════════════════════════ */}
+          <Section title="Commission & Fees">
+            {/* Buyer closing cost paid by seller */}
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buyer Closing Cost Paid by Seller</p>
             <div className="max-w-xs">
               <FormField control={form.control} name="buyerClosingCostTotal" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Total Buyer&apos;s Closing Cost Paid by Seller ($)</FormLabel>
-                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl>
+                    <CurrencyInput
+                      value={field.value as any}
+                      onChange={(val) => field.onChange(val)}
+                      placeholder="0"
+                    />
+                  </FormControl>
                 </FormItem>
               )} />
             </div>
-            <Separator />
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Breakdown</p>
-              <p className="text-xs text-muted-foreground mt-1">This is the buyer closing cost amount the seller is paying toward the following: buyer agent commission, transaction fee, home warranty, and any other buyer closing costs.</p>
+              <p className="text-xs text-muted-foreground mt-1">This is the buyer closing cost amount the seller is paying toward: buyer agent commission, transaction fee, home warranty, and any other buyer closing costs.</p>
             </div>
             <Grid3>
               <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Buyer&apos;s Agent Commission ($)</FormLabel>
-                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl>
+                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                  </FormControl>
                 </FormItem>
               )} />
               <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Transaction Fee ($)</FormLabel>
-                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl>
+                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                  </FormControl>
                 </FormItem>
               )} />
               <FormField control={form.control} name="buyerClosingCostOther" render={({ field }) => (
                 <FormItem>
                   <FormLabel>All Other Buyer&apos;s Closing Costs ($)</FormLabel>
-                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl>
+                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                  </FormControl>
                 </FormItem>
               )} />
             </Grid3>
-          </Section>
 
-          {/* ── Commission & Fees (unified section) ────────────────────────── */}
-          <Section title="Commission & Fees">
-            {/* Commission base price — visible to all users */}
+            <Separator />
+
+            {/* Commission base price */}
             <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
               <FormItem>
                 <FormLabel>Price Commission Is Based On (Sale Price – Seller Concessions)</FormLabel>
                 <FormControl>
-                  <Input
-                    type="number"
-                    step="1"
-                    placeholder="Auto-filled from Sale Price"
-                    {...field}
-                    onChange={(e) => {
+                  <CurrencyInput
+                    value={field.value as any}
+                    onChange={(val) => {
                       cbpManuallyEdited.current = true;
-                      field.onChange(e);
+                      field.onChange(val);
                     }}
+                    placeholder="Auto-filled from Sale Price"
                   />
                 </FormControl>
-                <FormDescription>
-                  Defaults to Sale Price. Edit if seller concessions reduce the commission base.
-                </FormDescription>
+                <FormDescription>Defaults to Sale Price. Edit if seller concessions reduce the commission base.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
 
-            {/* Commission paid by seller — visible to all users */}
+            {/* Commission paid by seller */}
             <Separator />
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Paid by Seller</p>
             <div className="space-y-4">
@@ -1278,7 +1303,7 @@ export default function AddTransactionPage() {
               </div>
             </div>
 
-            {/* Agent view: Gross Commission % + Agent Net $ only (read-only) */}
+            {/* Agent view: Gross Commission % + Agent Net $ (read-only) */}
             {!isAdmin && (
               <>
                 <Separator />
@@ -1304,13 +1329,12 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent Net $</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => field.onChange(val)}
                           placeholder="Auto-calculated"
                           readOnly
                           className="bg-background cursor-default"
-                          {...field}
                         />
                       </FormControl>
                       <FormDescription>Calculated from your commission profile and tier.</FormDescription>
@@ -1320,7 +1344,7 @@ export default function AddTransactionPage() {
               </>
             )}
 
-            {/* GCI & Commission % — admin only */}
+            {/* Admin: GCI & Commission % */}
             {isAdmin && (
               <>
                 <Separator />
@@ -1345,8 +1369,26 @@ export default function AddTransactionPage() {
                   <FormField control={form.control} name="gci" render={({ field }) => (
                     <FormItem>
                       <FormLabel>GCI ($)</FormLabel>
-                      <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                      <FormControl>
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => field.onChange(val)}
+                          placeholder="0"
+                        />
+                      </FormControl>
                       <FormDescription>Gross Commission Income</FormDescription>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="transactionFee" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Transaction Fee ($)</FormLabel>
+                      <FormControl>
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => field.onChange(val)}
+                          placeholder="0"
+                        />
+                      </FormControl>
                     </FormItem>
                   )} />
                 </Grid3>
@@ -1357,7 +1399,6 @@ export default function AddTransactionPage() {
             {isAdmin && (
               <>
                 <Separator />
-                {/* Auto-calculation status banner */}
                 {agentCommission && (
                   <div className={`rounded-md border px-4 py-3 text-sm ${
                     activeTier
@@ -1373,7 +1414,7 @@ export default function AddTransactionPage() {
                         <span>
                           <strong>Auto-calculated</strong> using tier &quot;{activeTier.tierName}&quot; &mdash;
                           Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
-                          {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee}`}
+                          {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee.toLocaleString('en-US')}`}
                         </span>
                         {commissionManualOverride.current && (
                           <Badge variant="outline" className="text-amber-700 border-amber-300">Manual Override</Badge>
@@ -1384,7 +1425,7 @@ export default function AddTransactionPage() {
                         {agentCommission.tiers.length === 0
                           ? 'No commission tiers found for this agent. Please set up their commission profile.'
                           : Number(watchedGCI) > 0
-                            ? `Commission structure loaded (${agentCommission.tiers.length} tier${agentCommission.tiers.length !== 1 ? 's' : ''}). No matching tier for GCI $${Number(watchedGCI).toLocaleString()}.`
+                            ? `Commission structure loaded (${agentCommission.tiers.length} tier${agentCommission.tiers.length !== 1 ? 's' : ''}). No matching tier for GCI $${Number(watchedGCI).toLocaleString('en-US')}.`
                             : `Commission structure loaded (${agentCommission.tiers.length} tier${agentCommission.tiers.length !== 1 ? 's' : ''}${agentCommission.tiersSource === 'team_template' ? ' — from team default' : ''}). Enter GCI to auto-calculate split.`
                         }
                       </span>
@@ -1434,8 +1475,10 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Broker GCI ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field}
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => { commissionManualOverride.current = true; field.onChange(val); }}
+                          placeholder="0"
                         />
                       </FormControl>
                     </FormItem>
@@ -1454,8 +1497,10 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent Net $</FormLabel>
                       <FormControl>
-                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field}
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => { commissionManualOverride.current = true; field.onChange(val); }}
+                          placeholder="0"
                         />
                       </FormControl>
                       <FormDescription>Auto-calculated from agent profile. Edit to override.</FormDescription>
@@ -1463,7 +1508,7 @@ export default function AddTransactionPage() {
                   )} />
                 </Grid2>
 
-                {/* ── Inline Commission Preview ──────────────────────────── */}
+                {/* Inline Commission Preview */}
                 {(() => {
                   const gci = Number(form.watch('gci')) || 0;
                   const agentDollar = Number(form.watch('agentDollar')) || 0;
@@ -1472,27 +1517,28 @@ export default function AddTransactionPage() {
                   if (gci <= 0) return null;
                   const agentNet = agentDollar - txFee;
                   const agentPct = gci > 0 ? Math.round((agentDollar / gci) * 100) : 0;
+                  const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   return (
                     <div className="mt-4 rounded-xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 dark:border-green-700 p-4">
                       <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-3">💰 Your Estimated Earnings on This Deal</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="text-center">
                           <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
-                          <p className="text-lg font-black text-foreground">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(gci)}</p>
+                          <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-muted-foreground mb-0.5">Your Split ({agentPct}%)</p>
-                          <p className="text-lg font-black text-foreground">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(agentDollar)}</p>
+                          <p className="text-lg font-black text-foreground">{fmt(agentDollar)}</p>
                         </div>
                         {txFee > 0 && (
                           <div className="text-center">
                             <p className="text-xs text-muted-foreground mb-0.5">Transaction Fee</p>
-                            <p className="text-lg font-black text-red-600">-{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(txFee)}</p>
+                            <p className="text-lg font-black text-red-600">-{fmt(txFee)}</p>
                           </div>
                         )}
                         <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
                           <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
-                          <p className="text-xl font-black text-green-700 dark:text-green-300">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(agentNet)}</p>
+                          <p className="text-xl font-black text-green-700 dark:text-green-300">{fmt(agentNet)}</p>
                         </div>
                       </div>
                     </div>
@@ -1501,14 +1547,10 @@ export default function AddTransactionPage() {
               </>
             )}
           </Section>
-          </div>{/* end step 3 */}
 
-          {/* ───────────────────────────────────────────────────────────────────────────
-              STEP 4 — FINAL DETAILS
-          ─────────────────────────────────────────────────────────────────────────── */}
-          <div className={wizardStep === 4 ? 'space-y-6' : 'hidden'}>
-
-          {/* ── Additional Info ─────────────────────────────────────────────── */}
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION 6 — ADDITIONAL INFO / COMMENTS
+          ═══════════════════════════════════════════════════════════════════ */}
           <Section title="Additional Info">
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
@@ -1561,7 +1603,9 @@ export default function AddTransactionPage() {
                 <FormField control={form.control} name="txComplianceFeeAmount" render={({ field }) => (
                   <FormItem>
                     <FormLabel>How much? ($)</FormLabel>
-                    <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="txComplianceFeePaidBy" render={({ field }) => (
@@ -1625,20 +1669,24 @@ export default function AddTransactionPage() {
                 <FormField control={form.control} name="shortageAmount" render={({ field }) => (
                   <FormItem>
                     <FormLabel>How much? ($)</FormLabel>
-                    <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Buyer will bring to closing ($)</FormLabel>
-                    <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
                   </FormItem>
                 )} />
               </Grid2>
             )}
           </Section>
 
-          {/* ── Section 12: Additional Comments ──────────────────────────── */}
+          {/* ── Additional Comments ───────────────────────────────────────── */}
           <Section title="Additional Comments">
             <FormField control={form.control} name="additionalComments" render={({ field }) => (
               <FormItem>
@@ -1653,73 +1701,25 @@ export default function AddTransactionPage() {
             )} />
           </Section>
 
-          {/* ── Legacy Notes merged into Additional Comments ───────────────── */}
-          {/* notes field kept hidden for backward compat — value mirrors additionalComments */}
+          {/* Hidden fields */}
           <input type="hidden" {...form.register('notes')} />
-
-          </div>{/* end step 4 */}
-
-          {/* Hidden field */}
           <input type="hidden" {...form.register('agentDisplayName')} />
-        </form>
-      </Form>
 
-      {/* ───────────────────────────────────────────────────────────────────────────
-          STICKY WIZARD FOOTER
-      ─────────────────────────────────────────────────────────────────────────── */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
-        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2 sm:gap-4">
-          {/* Left: Back button */}
-          <Button
-            type="button"
-            variant="outline"
-            size="default"
-            onClick={() => setWizardStep(s => Math.max(1, s - 1))}
-            disabled={wizardStep === 1}
-            className="flex-1 sm:flex-none sm:min-w-[100px] max-w-[120px] sm:max-w-none"
-          >
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            <span>Back</span>
-          </Button>
-
-          {/* Center: step indicator */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {WIZARD_STEPS.map((step) => (
-              <div
-                key={step.id}
-                className={[
-                  'h-2 rounded-full transition-all duration-300',
-                  step.id === wizardStep ? 'w-5 sm:w-6 bg-primary' : step.id < wizardStep ? 'w-2 bg-primary/50' : 'w-2 bg-muted-foreground/20',
-                ].join(' ')}
-              />
-            ))}
-          </div>
-
-          {/* Right: Next / Submit */}
-          {wizardStep < TOTAL_STEPS ? (
-            <Button
-              type="button"
-              size="default"
-              onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setWizardStep(s => Math.min(TOTAL_STEPS, s + 1)); }}
-              className="flex-1 sm:flex-none sm:min-w-[120px] max-w-[120px] sm:max-w-none"
-            >
-              <span>Next</span> <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-          ) : (
+          {/* ── Submit Button ─────────────────────────────────────────────── */}
+          <div className="flex justify-end pt-2 pb-8">
             <Button
               type="submit"
-              form="add-transaction-form"
-              size="default"
+              size="lg"
               disabled={submitting || (isAdmin && agentsLoading)}
-              className="flex-1 sm:flex-none sm:min-w-[160px]"
-              onClick={() => form.handleSubmit(onSubmit)()}
+              className="min-w-[200px]"
             >
-              <Send className="mr-1.5 h-4 w-4" />
-              <span className="truncate">{submitting ? 'Submitting...' : 'Submit to TC'}</span>
+              <Send className="mr-2 h-4 w-4" />
+              {submitting ? 'Submitting...' : 'Submit to TC Queue'}
             </Button>
-          )}
-        </div>
-      </div>
+          </div>
+
+        </form>
+      </Form>
     </div>
   );
 }
