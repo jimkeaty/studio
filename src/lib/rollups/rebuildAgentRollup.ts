@@ -145,21 +145,50 @@ export async function rebuildAgentRollup(
     const status = String(t.status || '').toLowerCase();
     const txType = String(t.transactionType || '').toLowerCase();
     const isDual = String(t.closingType || '').toLowerCase() === 'dual';
-    const sideCount = isDual ? 2 : 1;
+
+    // ── Co-agent side credit ─────────────────────────────────────────────
+    // Determine whether this agent is the primary or the co-agent on this tx.
+    // If co-agent, use coAgent.splitSnapshot and coAgent.sideCredit for stats.
+    // This prevents double-counting: the primary agent's rollup uses the
+    // primary splitSnapshot; the co-agent's rollup uses coAgent.splitSnapshot.
+    const isCoAgentOnTx = t.hasCoAgent && t.coAgent?.agentId === agentId;
+    const activeSplitSnapshot = isCoAgentOnTx ? t.coAgent.splitSnapshot : t.splitSnapshot;
+
+    // Side credit: fractional for co-agent transactions, 2 for dual agent, 1 otherwise.
+    // Co-agent side credit = coAgent.sideCredit (e.g. 0.4 for a 40% split).
+    // Primary agent side credit = primaryAgentSideCredit (e.g. 0.6 for a 60% split).
+    let sideCredit: number;
+    if (t.hasCoAgent) {
+      if (isCoAgentOnTx) {
+        sideCredit = num(t.coAgent?.sideCredit ?? 0.5);
+      } else {
+        sideCredit = num(t.primaryAgentSideCredit ?? 0.5);
+      }
+      if (isDual) sideCredit *= 2;
+    } else {
+      sideCredit = isDual ? 2 : 1;
+    }
+
+    // Volume credit: proportional to side credit for co-agent transactions
+    const volumeCredit = t.hasCoAgent
+      ? num(t.dealValue) * (isCoAgentOnTx
+          ? num(t.coAgent?.sideCredit ?? 0.5)
+          : num(t.primaryAgentSideCredit ?? 0.5))
+      : num(t.dealValue);
 
     if (txYear === year) {
       // Closed transactions — calendar year
       if (status === 'closed') {
-        closed += sideCount;
-        closedVolume += num(t.dealValue);
-        totalGCI += num(t.commission);
-        agentNetCommission += num(t.splitSnapshot?.agentNetCommission ?? t.commission);
-        companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+        closed += sideCredit;
+        closedVolume += volumeCredit;
+        totalGCI += num(activeSplitSnapshot?.grossCommission ?? t.commission);
+        agentNetCommission += num(activeSplitSnapshot?.agentNetCommission ?? t.commission);
+        companyDollar += num(activeSplitSnapshot?.companyRetained ?? 0);
       }
 
       // Pending / under contract — calendar year
       if (status === 'pending' || status === 'under_contract') {
-        pending += sideCount;
+        pending += sideCredit;
       }
 
       // Listings (active, canceled, expired) — calendar year
@@ -174,14 +203,63 @@ export async function rebuildAgentRollup(
       }
     }
 
-    // ── Anniversary cycle filter (for tier progression) ─────────────────────
+    // ── Anniversary cycle filter (for tier progression) ─────────────────
     if (status === 'closed') {
       const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
       if (txDateUtc && isInCycle(txDateUtc, cycle)) {
-        const personalCompanyDollar = num(t.splitSnapshot?.companyRetained ?? 0);
+        const personalCompanyDollar = num(activeSplitSnapshot?.companyRetained ?? 0);
         tierProgressionCompanyDollar += personalCompanyDollar;
       }
     }
+  }
+
+  // ── 2a. Also fetch transactions where this agent is the co-agent ─────────────
+  // The primary query above uses .where('agentId', '==', agentId) which only
+  // returns transactions where this agent is the primary. We must also pick up
+  // transactions where this agent is the co-agent.
+  try {
+    const coSnap = await db
+      .collection('transactions')
+      .where('coAgent.agentId', '==', agentId)
+      .get();
+
+    for (const doc of coSnap.docs) {
+      // Skip if already counted via primary query (shouldn't happen, but guard)
+      if (snap.docs.some(d => d.id === doc.id)) continue;
+
+      const t = doc.data() as any;
+      const txYear =
+        toYear(t.closedDate) ??
+        toYear(t.contractDate) ??
+        (num(t.year) || null);
+      const status = String(t.status || '').toLowerCase();
+      const isDual = String(t.closingType || '').toLowerCase() === 'dual';
+      const coSideCredit = num(t.coAgent?.sideCredit ?? 0.5) * (isDual ? 2 : 1);
+      const coVolumeCredit = num(t.dealValue) * num(t.coAgent?.sideCredit ?? 0.5);
+      const coSplitSnapshot = t.coAgent?.splitSnapshot;
+
+      if (txYear === year) {
+        if (status === 'closed') {
+          closed += coSideCredit;
+          closedVolume += coVolumeCredit;
+          totalGCI += num(coSplitSnapshot?.grossCommission ?? 0);
+          agentNetCommission += num(coSplitSnapshot?.agentNetCommission ?? 0);
+          companyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
+        }
+        if (status === 'pending' || status === 'under_contract') {
+          pending += coSideCredit;
+        }
+      }
+
+      if (status === 'closed') {
+        const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
+        if (txDateUtc && isInCycle(txDateUtc, cycle)) {
+          tierProgressionCompanyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
+        }
+      }
+    }
+  } catch {
+    // Non-fatal: Firestore composite index may not exist yet for coAgent.agentId query
   }
 
   // ── 2b. Add team member production to tier progression (leader only) ──────

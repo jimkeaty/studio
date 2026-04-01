@@ -277,7 +277,23 @@ const schema = z.object({
 
   additionalComments: z.string().optional(),
   notes: z.string().optional(),
-});
+
+  // Co-agent fields
+  hasCoAgent: z.boolean().optional(),
+  coAgentId: z.string().optional(),
+  coAgentDisplayName: z.string().optional(),
+  coAgentRole: z.enum(['co_list', 'co_buyer', 'referral', 'other']).optional(),
+  primaryAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  coAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+}).refine(
+  (data) => {
+    if (!data.hasCoAgent) return true;
+    const p = Number(data.primaryAgentSplitPercent || 0);
+    const c = Number(data.coAgentSplitPercent || 0);
+    return Math.abs(p + c - 100) < 0.01;
+  },
+  { message: 'Primary and co-agent split percentages must total 100%', path: ['coAgentSplitPercent'] }
+);
 
 type FormValues = z.infer<typeof schema>;
 
@@ -346,6 +362,12 @@ export default function AddTransactionPage() {
       contractDate: '',
       inspectionTypes: [],
       sellerPayingListingAgentUnknown: false,
+      hasCoAgent: false,
+      coAgentId: '',
+      coAgentDisplayName: '',
+      coAgentRole: 'co_list',
+      primaryAgentSplitPercent: 50,
+      coAgentSplitPercent: 50,
     },
   });
 
@@ -363,6 +385,12 @@ export default function AddTransactionPage() {
   // Seller info is only relevant when NOT purely buyer-side
   // closingType: 'buyer' → hide seller; 'listing' | 'dual' | 'referral' → show seller
   const showSellerInfo = watchedClosingType !== 'buyer';
+
+  // Co-agent watched values
+  const hasCoAgent = form.watch('hasCoAgent');
+  const watchedPrimaryPct = Number(form.watch('primaryAgentSplitPercent') || 0);
+  const watchedCoPct = Number(form.watch('coAgentSplitPercent') || 0);
+  const splitTotal = watchedPrimaryPct + watchedCoPct;
 
   // Watched values for commission auto-calc
   const watchedSalePrice = form.watch('salePrice');
@@ -793,6 +821,167 @@ export default function AddTransactionPage() {
                 <FormDescription>If Yes, this transaction will appear in the TC Queue for processing.</FormDescription>
               </FormItem>
             )} />
+          </Section>
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION 1B — AGENT PARTICIPATION (CO-AGENT)
+          ═══════════════════════════════════════════════════════════════════ */}
+          <Section
+            title="Agent Participation"
+            description="Is another internal agent co-representing on this transaction?"
+          >
+            {/* Co-agent toggle */}
+            <FormField control={form.control} name="hasCoAgent" render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Co-Agent on This Transaction</FormLabel>
+                  <FormDescription>
+                    Enable if another agent from this brokerage is sharing this side with you.
+                    Their commission will be calculated separately from their own profile.
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!!field.value}
+                    onClick={() => field.onChange(!field.value)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      field.value ? 'bg-primary' : 'bg-input'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                        field.value ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </FormControl>
+              </FormItem>
+            )} />
+
+            {/* Co-agent fields — shown only when hasCoAgent is true */}
+            {hasCoAgent && (
+              <div className="space-y-5 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                  Co-Agent Details
+                </p>
+
+                <Grid2>
+                  {/* Co-agent selector */}
+                  <FormField control={form.control} name="coAgentId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Co-Agent <span className="text-destructive">*</span></FormLabel>
+                      <Select
+                        onValueChange={(val) => {
+                          field.onChange(val);
+                          const found = agents.find(a => a.agentId === val);
+                          form.setValue('coAgentDisplayName', found?.agentName || '');
+                        }}
+                        value={field.value}
+                        disabled={agentsLoading}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={agentsLoading ? 'Loading agents...' : 'Select co-agent'} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {agents.map(a => (
+                            <SelectItem key={a.agentId} value={a.agentId}>{a.agentName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* Co-agent role */}
+                  <FormField control={form.control} name="coAgentRole" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Co-Agent Role</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="co_list">Co-Listing Agent</SelectItem>
+                          <SelectItem value="co_buyer">Co-Buyer Agent</SelectItem>
+                          <SelectItem value="referral">Referral</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </Grid2>
+
+                {/* Split percentages */}
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Commission Split</p>
+                  <p className="text-xs text-muted-foreground">
+                    The side gross commission will be divided by these percentages first.
+                    Each agent&apos;s own commission structure (tiers or fixed) is then applied
+                    to their respective share.
+                  </p>
+                  <Grid2>
+                    <FormField control={form.control} name="primaryAgentSplitPercent" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Primary Agent Split %</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            placeholder="50"
+                            {...field}
+                            onChange={(e) => {
+                              field.onChange(e);
+                              const p = Number(e.target.value || 0);
+                              form.setValue('coAgentSplitPercent', 100 - p);
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="coAgentSplitPercent" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Co-Agent Split %</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            placeholder="50"
+                            {...field}
+                            onChange={(e) => {
+                              field.onChange(e);
+                              const c = Number(e.target.value || 0);
+                              form.setValue('primaryAgentSplitPercent', 100 - c);
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </Grid2>
+                  {/* Live split total indicator */}
+                  <div className={`flex items-center gap-2 text-sm font-medium ${
+                    Math.abs(splitTotal - 100) < 0.01 ? 'text-green-600' : 'text-destructive'
+                  }`}>
+                    <span>Total: {splitTotal.toFixed(1)}%</span>
+                    {Math.abs(splitTotal - 100) < 0.01
+                      ? <span className="text-xs font-normal text-muted-foreground">✓ Splits are balanced</span>
+                      : <span className="text-xs font-normal">— must equal 100%</span>
+                    }
+                  </div>
+                </div>
+
+                {/* Hidden field for co-agent display name */}
+                <input type="hidden" {...form.register('coAgentDisplayName')} />
+              </div>
+            )}
           </Section>
 
           {/* ═══════════════════════════════════════════════════════════════════

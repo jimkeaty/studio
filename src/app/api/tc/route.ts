@@ -143,6 +143,16 @@ export async function POST(req: NextRequest) {
 
       notes: toStr(body.notes),
 
+      // Co-agent fields — stored for TC review; commission calculated on approval
+      hasCoAgent: !!body.hasCoAgent,
+      ...(body.hasCoAgent ? {
+        coAgentId: toStr(body.coAgentId),
+        coAgentDisplayName: toStr(body.coAgentDisplayName),
+        coAgentRole: toStr(body.coAgentRole) || 'other',
+        primaryAgentSplitPercent: toNum(body.primaryAgentSplitPercent),
+        coAgentSplitPercent: toNum(body.coAgentSplitPercent),
+      } : {}),
+
       submittedAt: now,
       updatedAt: now,
     };

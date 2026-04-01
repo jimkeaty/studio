@@ -239,6 +239,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       let creditSnapshot: Record<string, any>;
       let agentType = 'independent';
       let calculationModel = 'individual';
+      let pendingCoAgentData: Record<string, any> | null = null;
+      let pendingPrimarySplitPct: number | null = null;
 
       if (rawAgentDollar !== null && rawAgentDollar > 0) {
         // ── Historical / manual override: use supplied numbers directly ──────
@@ -273,13 +275,71 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           progressionCompanyDollarCredit: companyRetained,
         };
       } else {
-        // ── Live calculation via team resolver ───────────────────────────────
+        // ── Live calculation via team resolver ────────────────────────────────────────
         const commission = rawGci;
-        const calc = await resolveTransactionCalculation({ agentId, agentDisplayName, commission });
+
+        // If co-agent is present, split the gross first then calculate each agent independently
+        const hasCoAgent = !!intake.hasCoAgent;
+        const coAgentId = hasCoAgent ? String(intake.coAgentId || '').trim() : '';
+        const coAgentDisplayName = hasCoAgent ? String(intake.coAgentDisplayName || '').trim() : '';
+        const primarySplitPct = hasCoAgent ? toNum(intake.primaryAgentSplitPercent ?? 50) : 100;
+        const coSplitPct = hasCoAgent ? toNum(intake.coAgentSplitPercent ?? 50) : 0;
+
+        const primaryShare = hasCoAgent && coAgentId ? commission * (primarySplitPct / 100) : commission;
+        const coShare = hasCoAgent && coAgentId ? commission * (coSplitPct / 100) : 0;
+
+        const calc = await resolveTransactionCalculation({ agentId, agentDisplayName, commission: primaryShare });
         splitSnapshot = calc.splitSnapshot as any;
         creditSnapshot = calc.creditSnapshot as any;
         agentType = calc.agentType;
         calculationModel = calc.calculationModel;
+
+        // Co-agent calculation
+        if (hasCoAgent && coAgentId && coAgentDisplayName) {
+          let coSplitSnapshot: any = null;
+          let coCreditSnapshot: any = null;
+          try {
+            const coCalc = await resolveTransactionCalculation({
+              agentId: coAgentId,
+              agentDisplayName: coAgentDisplayName,
+              commission: coShare,
+            });
+            coSplitSnapshot = coCalc.splitSnapshot;
+            coCreditSnapshot = coCalc.creditSnapshot;
+          } catch {
+            coSplitSnapshot = {
+              primaryTeamId: null, teamPlanId: null, memberPlanId: null,
+              grossCommission: coShare,
+              agentSplitPercent: null, companySplitPercent: null,
+              agentNetCommission: 0,
+              leaderStructurePercent: null, leaderStructureGross: null,
+              memberPercentOfLeaderSide: null, memberPaid: null,
+              leaderRetainedAfterMember: null,
+              companyRetained: 0,
+            };
+          }
+          if (!coCreditSnapshot) {
+            coCreditSnapshot = {
+              leaderboardAgentId: coAgentId,
+              leaderboardAgentDisplayName: coAgentDisplayName,
+              progressionMemberAgentId: coAgentId,
+              progressionLeaderAgentId: null,
+              progressionTeamId: null,
+              progressionCompanyDollarCredit: coShare,
+            };
+          }
+          // Store co-agent data in outer-scope variables to be merged into txPayload below
+          pendingCoAgentData = {
+            agentId: coAgentId,
+            agentDisplayName: coAgentDisplayName,
+            role: intake.coAgentRole || 'other',
+            splitPercent: coSplitPct,
+            sideCredit: coSplitPct / 100,
+            splitSnapshot: coSplitSnapshot,
+            creditSnapshot: coCreditSnapshot,
+          };
+          pendingPrimarySplitPct = primarySplitPct;
+        }
       }
 
       // Determine year from dates
@@ -347,6 +407,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         updatedAt: now,
       };
 
+      // Merge co-agent data into payload
+      if (pendingCoAgentData) {
+        txPayload.hasCoAgent = true;
+        txPayload.primaryAgentSplitPercent = pendingPrimarySplitPct;
+        txPayload.primaryAgentSideCredit = pendingPrimarySplitPct != null ? pendingPrimarySplitPct / 100 : null;
+        txPayload.coAgent = pendingCoAgentData;
+      } else {
+        txPayload.hasCoAgent = !!intake.hasCoAgent;
+      }
+
       const txRef = await adminDb.collection('transactions').add(txPayload);
 
       // Mark intake approved
@@ -357,6 +427,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         reviewedBy: decoded.email,
         updatedAt: now,
       });
+
+      // Rebuild rollups for primary agent
+      try {
+        const { rebuildAgentRollup } = await import('@/lib/rollups/rebuildAgentRollup');
+        await rebuildAgentRollup(adminDb, agentId, year);
+        // Also rebuild co-agent rollup if present
+        if (pendingCoAgentData?.agentId) {
+          await rebuildAgentRollup(adminDb, pendingCoAgentData.agentId, year);
+        }
+      } catch (rollupErr) {
+        console.warn('[TC approve] Rollup rebuild failed (non-fatal):', rollupErr);
+      }
 
       return NextResponse.json({
         ok: true,

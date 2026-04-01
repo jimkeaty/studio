@@ -122,6 +122,90 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Co-Agent Calculation ─────────────────────────────────────────────────
+    // If a co-agent is present, the side gross commission is split first by
+    // the agreed percentages, then each agent's own commission structure is
+    // applied independently to their respective share.
+    const hasCoAgent = !!body.hasCoAgent
+    let coAgentData: Record<string, any> | null = null
+
+    if (hasCoAgent) {
+      const coAgentId = String(body.coAgentId || '').trim()
+      const coAgentDisplayName = String(body.coAgentDisplayName || '').trim()
+      const coAgentRole = String(body.coAgentRole || 'other').trim()
+      const primarySplitPct = toNumber(body.primaryAgentSplitPercent)
+      const coSplitPct = toNumber(body.coAgentSplitPercent)
+
+      if (coAgentId && coAgentDisplayName && primarySplitPct + coSplitPct === 100) {
+        // Step 1: Determine each agent's share of the gross commission
+        const primaryShare = commission * (primarySplitPct / 100)
+        const coShare = commission * (coSplitPct / 100)
+
+        // Step 2: Re-run primary agent calculation on their reduced share
+        try {
+          const primaryCalc = await resolveTransactionCalculation({
+            agentId,
+            agentDisplayName,
+            commission: primaryShare,
+          })
+          splitSnapshot = primaryCalc.splitSnapshot
+          creditSnapshot = primaryCalc.creditSnapshot
+          agentType = primaryCalc.agentType
+          calculationModel = primaryCalc.calculationModel
+        } catch {
+          // Keep existing splitSnapshot if recalc fails
+        }
+
+        // Step 3: Run co-agent calculation on their share
+        let coSplitSnapshot: any = null
+        let coCreditSnapshot: any = null
+        try {
+          const coCalc = await resolveTransactionCalculation({
+            agentId: coAgentId,
+            agentDisplayName: coAgentDisplayName,
+            commission: coShare,
+          })
+          coSplitSnapshot = coCalc.splitSnapshot
+          coCreditSnapshot = coCalc.creditSnapshot
+        } catch {
+          coSplitSnapshot = {
+            primaryTeamId: null, teamPlanId: null, memberPlanId: null,
+            grossCommission: coShare,
+            agentSplitPercent: null, companySplitPercent: null,
+            agentNetCommission: 0,
+            leaderStructurePercent: null, leaderStructureGross: null,
+            memberPercentOfLeaderSide: null, memberPaid: null,
+            leaderRetainedAfterMember: null,
+            companyRetained: 0,
+          }
+        }
+        if (!coCreditSnapshot) {
+          coCreditSnapshot = {
+            leaderboardAgentId: coAgentId,
+            leaderboardAgentDisplayName: coAgentDisplayName,
+            progressionMemberAgentId: coAgentId,
+            progressionLeaderAgentId: null,
+            progressionTeamId: null,
+            progressionCompanyDollarCredit: coShare,
+          }
+        }
+
+        // Step 4: Store co-agent data alongside the transaction
+        coAgentData = {
+          agentId: coAgentId,
+          agentDisplayName: coAgentDisplayName,
+          role: coAgentRole,
+          splitPercent: coSplitPct,
+          sideCredit: coSplitPct / 100,
+          splitSnapshot: coSplitSnapshot,
+          creditSnapshot: coCreditSnapshot,
+        }
+
+        // Update primary agent's side credit fraction
+        // (stored on the top-level transaction for rollup use)
+      }
+    }
+
     const payload: Record<string, any> = {
       agentId,
       agentDisplayName,
@@ -143,6 +227,14 @@ export async function POST(req: NextRequest) {
 
       splitSnapshot,
       creditSnapshot,
+
+      // Co-agent fields
+      hasCoAgent,
+      ...(hasCoAgent && coAgentData ? {
+        primaryAgentSplitPercent: toNumber(body.primaryAgentSplitPercent),
+        primaryAgentSideCredit: toNumber(body.primaryAgentSplitPercent) / 100,
+        coAgent: coAgentData,
+      } : {}),
 
       // Pass through additional fields from the form
       ...(body.closingType ? { closingType: body.closingType } : {}),
