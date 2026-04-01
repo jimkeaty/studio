@@ -27,12 +27,16 @@ export type TeamPlanFormValues = {
   leaderStructureBands: TeamThresholdBandFormValue[];
   memberDefaultBands: MemberDefaultBandFormValue[];
   notes: string;
+  /** Inherited from the parent team — controls whether Leader Structure Bands are shown */
+  teamStructureType?: 'with_leader' | 'no_leader';
 };
 
 type TeamPlanFormProps = {
   teamPlanId?: string;
   initialValues?: Partial<TeamPlanFormValues>;
   submitLabel?: string;
+  /** When true, hides the Leader Structure Bands section */
+  isLeaderless?: boolean;
 };
 
 const DEFAULT_VALUES: TeamPlanFormValues = {
@@ -88,6 +92,7 @@ export default function TeamPlanForm({
   teamPlanId,
   initialValues,
   submitLabel = teamPlanId ? 'Update Team Plan' : 'Create Team Plan',
+  isLeaderless = false,
 }: TeamPlanFormProps) {
   const router = useRouter();
 
@@ -341,6 +346,7 @@ export default function TeamPlanForm({
         </div>
       </section>
 
+      {!isLeaderless && (
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
@@ -428,13 +434,16 @@ export default function TeamPlanForm({
           ))}
         </div>
       </section>
+      )}
 
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Member Default Bands</h2>
+            <h2 className="text-lg font-semibold">{isLeaderless ? 'Agent Payout Bands' : 'Member Default Bands'}</h2>
             <p className="mt-1 text-sm text-gray-600">
-              Defines the default member payout from the leader side when no member-specific plan is assigned.
+              {isLeaderless
+                ? 'Defines the agent vs. company split for this leaderless team.'
+                : 'Defines the default member payout from the leader side when no member-specific plan is assigned.'}
             </p>
           </div>
 

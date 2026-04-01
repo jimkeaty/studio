@@ -190,14 +190,57 @@ export async function resolveTransactionCalculation(
 
   const team = await getTeam(profile.primaryTeamId);
   const teamPlan = await getTeamPlan(team.teamPlanId);
+
+  // ─── Leaderless team path (CGL, SGL, Referral Group, etc.) ───────────────────
+  // Commission splits are agent vs. company only — no leader band lookup needed.
+  if ((team.structureType || 'with_leader') === 'no_leader') {
+    // Use the agent's own tiers (stored on the profile) for the split
+    const tier = getActiveIndividualTier(profile.tiers || [], commission);
+    if (!tier) {
+      throw new Error(`No active tier found for leaderless team member ${profile.agentId}`);
+    }
+    const agentSplitPercent = Number(tier.agentSplitPercent || 0);
+    const companySplitPercent = Number(tier.companySplitPercent || 0);
+    const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
+    const companyRetained = asMoney(commission * (companySplitPercent / 100));
+    return {
+      calculationModel: 'individual',
+      agentType: profile.agentType,
+      splitSnapshot: {
+        primaryTeamId: team.teamId,
+        teamPlanId: teamPlan.teamPlanId,
+        memberPlanId: null,
+        grossCommission: commission,
+        agentSplitPercent,
+        companySplitPercent,
+        agentNetCommission,
+        leaderStructurePercent: null,
+        leaderStructureGross: null,
+        memberPercentOfLeaderSide: null,
+        memberPaid: null,
+        leaderRetainedAfterMember: null,
+        companyRetained,
+      },
+      creditSnapshot: {
+        leaderboardAgentId: profile.agentId,
+        leaderboardAgentDisplayName: input.agentDisplayName,
+        progressionMemberAgentId: profile.agentId,
+        progressionLeaderAgentId: null,
+        progressionTeamId: team.teamId,
+        progressionCompanyDollarCredit: commission,
+      },
+    };
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const leaderBand = getActiveLeaderBand(teamPlan.leaderStructureBands || [], commission);
 
   if (!leaderBand) {
     throw new Error(`No active leader structure band found for ${team.teamId}`);
   }
 
-  const leaderProfile = await getAgentProfile(team.leaderAgentId);
-  await getActiveMembership(team.teamId, team.leaderAgentId, 'leader');
+  const leaderProfile = await getAgentProfile(team.leaderAgentId!);
+  await getActiveMembership(team.teamId, team.leaderAgentId!, 'leader');
 
   const leaderStructurePercent = Number(leaderBand.leaderPercent || 0);
   const companyRetained = asMoney(commission * (Number(leaderBand.companyPercent || 0) / 100));

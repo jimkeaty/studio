@@ -201,14 +201,29 @@ export function getTeamDefaultTransactionFee(
 
 /**
  * All known team group options for the dropdown.
+ * `leaderless: true` marks groups where no team leader split applies —
+ * commission is agent vs. company only (CGL, SGL, Referral Group).
  */
 export const TEAM_GROUP_OPTIONS = [
-  { value: 'referral_group', label: 'Referral Group' },
-  { value: 'cgl', label: 'CGL' },
-  { value: 'sgl', label: 'SGL' },
-  { value: 'charles_ditch_team', label: 'Charles Ditch Team' },
-  { value: 'independent', label: 'Independent' },
+  { value: 'referral_group', label: 'Referral Group', leaderless: true },
+  { value: 'cgl', label: 'CGL', leaderless: true },
+  { value: 'sgl', label: 'SGL', leaderless: true },
+  { value: 'charles_ditch_team', label: 'Charles Ditch Team', leaderless: false },
+  { value: 'independent', label: 'Independent', leaderless: false },
 ] as const;
+
+/**
+ * Set of team group slugs that are leaderless (agent vs. company split only).
+ * CGL, SGL, and Referral Group have no team leader — commission splits
+ * involve only the agent and the company/broker.
+ *
+ * Use this to suppress leader-related UI and commission logic.
+ */
+export const LEADERLESS_TEAM_GROUPS = new Set<string>([
+  'cgl',
+  'sgl',
+  'referral_group',
+]);
 
 /**
  * Map from team name (as stored in teams collection) to team group slug.

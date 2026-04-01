@@ -54,6 +54,7 @@ export default function TeamEditor({ teamId }: TeamEditorProps) {
 
         setInitialValues({
           teamName: team.teamName || '',
+          structureType: team.structureType || 'with_leader',
           leaderAgentId: team.leaderAgentId || '',
           teamPlanId: team.teamPlanId || '',
           status: team.status || 'active',

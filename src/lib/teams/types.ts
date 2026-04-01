@@ -4,6 +4,15 @@ export type ThresholdMetric = 'companyDollar';
 
 export type TeamStructureModel = 'leaderFirst';
 
+/**
+ * Whether this team has a designated leader who receives a leader-side split.
+ *
+ * - `with_leader`  — classic team structure: leader takes a cut before member payout
+ * - `no_leader`    — leaderless team (CGL, SGL, Referral Group, etc.):
+ *                    commission splits are agent vs. company only; no leader fields apply
+ */
+export type TeamStructureType = 'with_leader' | 'no_leader';
+
 export type TeamMembershipRole = 'leader' | 'member';
 
 export type TeamThresholdBand = {
@@ -26,9 +35,12 @@ export type TeamAnniversaryCycleRules = {
 export type Team = {
   teamId: string;
   teamName: string;
-  leaderAgentId: string;
+  /** Only required when structureType === 'with_leader' */
+  leaderAgentId: string | null;
   teamPlanId: string;
   status: TeamStatus;
+  /** Defaults to 'with_leader' for backward compatibility */
+  structureType: TeamStructureType;
   office: string | null;
   createdAt: string;
   updatedAt: string;
@@ -37,9 +49,12 @@ export type Team = {
 
 export type TeamInput = {
   teamName: string;
-  leaderAgentId: string;
+  /** Required when structureType === 'with_leader'; omit or pass null for no_leader teams */
+  leaderAgentId?: string | null;
   teamPlanId: string;
   status?: TeamStatus;
+  /** Defaults to 'with_leader' when omitted */
+  structureType?: TeamStructureType;
   office?: string | null;
   notes?: string | null;
 };

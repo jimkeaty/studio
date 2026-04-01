@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
-import type { TeamInput } from '@/lib/teams/types';
+import type { TeamInput, TeamStructureType } from '@/lib/teams/types';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
@@ -31,8 +31,15 @@ async function requireAdmin(req: NextRequest) {
 
 function normalizeInput(body: TeamInput) {
   if (!body.teamName?.trim()) throw new Error('Team name is required');
-  if (!body.leaderAgentId?.trim()) throw new Error('Leader agent is required');
   if (!body.teamPlanId?.trim()) throw new Error('Team plan is required');
+
+  const structureType: TeamStructureType =
+    body.structureType === 'no_leader' ? 'no_leader' : 'with_leader';
+
+  // leaderAgentId is required only for teams with a leader
+  if (structureType === 'with_leader' && !body.leaderAgentId?.trim()) {
+    throw new Error('Leader agent is required for teams with a leader');
+  }
 
   const status = body.status || 'active';
   if (status !== 'active' && status !== 'inactive') {
@@ -41,7 +48,8 @@ function normalizeInput(body: TeamInput) {
 
   return {
     teamName: body.teamName.trim(),
-    leaderAgentId: body.leaderAgentId.trim(),
+    structureType,
+    leaderAgentId: structureType === 'no_leader' ? null : (body.leaderAgentId?.trim() || null),
     teamPlanId: body.teamPlanId.trim(),
     status,
     office: body.office?.trim() || null,
@@ -103,6 +111,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     const updated = {
       teamName: normalized.teamName,
+      structureType: normalized.structureType,
       leaderAgentId: normalized.leaderAgentId,
       teamPlanId: normalized.teamPlanId,
       status: normalized.status,

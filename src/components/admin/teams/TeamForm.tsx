@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getFirebaseAuth } from '@/lib/firebase';
+import type { TeamStructureType } from '@/lib/teams/types';
 
 export type TeamFormValues = {
   teamName: string;
+  structureType: TeamStructureType;
   leaderAgentId: string;
   teamPlanId: string;
   status: 'active' | 'inactive';
@@ -21,6 +23,7 @@ type TeamFormProps = {
 
 const DEFAULT_VALUES: TeamFormValues = {
   teamName: '',
+  structureType: 'with_leader',
   leaderAgentId: '',
   teamPlanId: '',
   status: 'active',
@@ -43,6 +46,8 @@ export default function TeamForm({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  const isLeaderless = values.structureType === 'no_leader';
 
   function updateField<K extends keyof TeamFormValues>(
     field: K,
@@ -73,7 +78,8 @@ export default function TeamForm({
 
       const payload = {
         teamName: values.teamName.trim(),
-        leaderAgentId: values.leaderAgentId.trim(),
+        structureType: values.structureType,
+        leaderAgentId: isLeaderless ? null : values.leaderAgentId.trim() || null,
         teamPlanId: values.teamPlanId.trim(),
         status: values.status,
         office: values.office.trim() || null,
@@ -121,25 +127,65 @@ export default function TeamForm({
         <h2 className="text-lg font-semibold">Team Details</h2>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {/* Team Name */}
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Team Name</span>
             <input
               value={values.teamName}
               onChange={(e) => updateField('teamName', e.target.value)}
               className="w-full rounded-md border px-3 py-2 text-sm"
+              required
             />
           </label>
 
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-gray-700">Leader Agent ID</span>
-            <input
-              value={values.leaderAgentId}
-              onChange={(e) => updateField('leaderAgentId', e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              placeholder="jim-keaty"
-            />
-          </label>
+          {/* Structure Type */}
+          <div className="space-y-1">
+            <span className="block text-sm font-medium text-gray-700">Team Structure Type</span>
+            <div className="flex gap-4 pt-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="structureType"
+                  value="with_leader"
+                  checked={values.structureType === 'with_leader'}
+                  onChange={() => updateField('structureType', 'with_leader')}
+                  className="accent-blue-600"
+                />
+                <span className="text-sm text-gray-700">Team with Leader</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="structureType"
+                  value="no_leader"
+                  checked={values.structureType === 'no_leader'}
+                  onChange={() => updateField('structureType', 'no_leader')}
+                  className="accent-blue-600"
+                />
+                <span className="text-sm text-gray-700">Team without Leader</span>
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {isLeaderless
+                ? 'Commission splits are agent vs. company only — no leader fields apply.'
+                : 'Leader receives a split before member payout is calculated.'}
+            </p>
+          </div>
 
+          {/* Leader Agent ID — only shown for teams with a leader */}
+          {!isLeaderless && (
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-gray-700">Leader Agent ID</span>
+              <input
+                value={values.leaderAgentId}
+                onChange={(e) => updateField('leaderAgentId', e.target.value)}
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                placeholder="jim-keaty"
+              />
+            </label>
+          )}
+
+          {/* Team Plan ID */}
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Team Plan ID</span>
             <input
@@ -150,6 +196,7 @@ export default function TeamForm({
             />
           </label>
 
+          {/* Status */}
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Status</span>
             <select
@@ -162,6 +209,7 @@ export default function TeamForm({
             </select>
           </label>
 
+          {/* Office */}
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Office</span>
             <input
@@ -171,6 +219,7 @@ export default function TeamForm({
             />
           </label>
 
+          {/* Notes */}
           <label className="space-y-1 md:col-span-2">
             <span className="text-sm font-medium text-gray-700">Notes</span>
             <textarea

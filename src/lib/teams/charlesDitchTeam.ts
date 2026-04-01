@@ -22,6 +22,7 @@ export const CHARLES_DITCH_THRESHOLD_MARKERS = [
 export const charlesDitchTeam: Team = {
   teamId: CHARLES_DITCH_TEAM_ID,
   teamName: 'Charles Ditch Team',
+  structureType: 'with_leader',
   leaderAgentId: 'charles-ditch',
   teamPlanId: CHARLES_DITCH_TEAM_PLAN_ID,
   status: 'active',

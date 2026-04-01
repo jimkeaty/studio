@@ -77,6 +77,8 @@ type TeamOption = {
   teamName: string;
   teamPlanId?: string;
   status?: string;
+  /** 'with_leader' | 'no_leader' — defaults to 'with_leader' for legacy records */
+  structureType?: string;
 };
 
 type TeamPlanLeaderBand = {
@@ -684,6 +686,8 @@ export default function AgentProfileForm({
     }
     if (teamId) {
       const team = teams.find((t) => t.teamId.toLowerCase() === teamIdLower);
+      // Leaderless teams never show the leader compensation block
+      if (team?.structureType === 'no_leader') return [];
       if (team?.teamPlanId) {
         const planIdLower = team.teamPlanId.toLowerCase();
         const plan = teamPlans.find((p) => p.teamPlanId.toLowerCase() === planIdLower);

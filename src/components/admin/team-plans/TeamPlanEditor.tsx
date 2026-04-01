@@ -16,6 +16,7 @@ export default function TeamPlanEditor({
 }: TeamPlanEditorProps) {
   const [initialValues, setInitialValues] =
     useState<Partial<TeamPlanFormValues> | null>(null);
+  const [isLeaderless, setIsLeaderless] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -53,6 +54,24 @@ export default function TeamPlanEditor({
         if (!isMounted) return;
 
         const teamPlan = result.teamPlan || {};
+
+        // Fetch the parent team to determine structureType
+        let parentTeamIsLeaderless = false;
+        if (teamPlan.teamId) {
+          try {
+            const teamRes = await fetch(`/api/admin/teams/${teamPlan.teamId}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const teamData = await teamRes.json();
+            if (teamData?.ok && teamData?.team?.structureType === 'no_leader') {
+              parentTeamIsLeaderless = true;
+            }
+          } catch {
+            // non-fatal — fall back to showing leader bands
+          }
+        }
+
+        if (isMounted) setIsLeaderless(parentTeamIsLeaderless);
 
         setInitialValues({
           teamId: teamPlan.teamId || '',
@@ -108,6 +127,7 @@ export default function TeamPlanEditor({
       teamPlanId={teamPlanId}
       initialValues={initialValues || {}}
       submitLabel="Update Team Plan"
+      isLeaderless={isLeaderless}
     />
   );
 }
