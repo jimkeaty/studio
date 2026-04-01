@@ -1173,52 +1173,7 @@ export default function AgentProfileForm({
       </section>
 
       <section className="rounded-lg border bg-white p-6 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Commission Setup</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              {values.commissionMode === 'team_default'
-                ? `Using ${TEAM_GROUP_OPTIONS.find(o => o.value === values.teamGroup)?.label || values.teamGroup} default commission structure.`
-                : 'Using custom commission structure.'}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {values.commissionMode === 'custom' && (
-              <button
-                type="button"
-                onClick={resetToDefaults}
-                className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
-              >
-                Reset to Team Default
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Commission Mode Toggle */}
-        <div className="mt-4 flex items-center gap-4 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="radio"
-              name="commissionMode"
-              checked={values.commissionMode === 'team_default'}
-              onChange={() => updateCommissionMode('team_default')}
-              className="h-4 w-4"
-            />
-            <span className="font-medium">Use Team Default Commission</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="radio"
-              name="commissionMode"
-              checked={values.commissionMode === 'custom'}
-              onChange={() => updateCommissionMode('custom')}
-              className="h-4 w-4"
-            />
-            <span className="font-medium">Custom Commission Structure</span>
-          </label>
-        </div>
+        <h2 className="text-lg font-semibold">Commission Setup</h2>
 
         {/* Default Transaction Fee */}
         <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -1230,9 +1185,6 @@ export default function AgentProfileForm({
               value={values.defaultTransactionFee}
               onChange={(e) => {
                 updateField('defaultTransactionFee', e.target.value === '' ? '' : Number(e.target.value));
-                if (values.commissionMode === 'team_default') {
-                  setValues(prev => ({ ...prev, commissionMode: 'custom' as CommissionMode, defaultTransactionFee: e.target.value === '' ? '' : Number(e.target.value) }));
-                }
               }}
               placeholder="e.g. 395"
             />
@@ -1565,132 +1517,112 @@ export default function AgentProfileForm({
           </div>
         )}
 
-        {/* Commission Tiers Table — shown for ALL agents */}
-        <div className="mt-6 overflow-x-auto">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-700">
-              Commission Tiers
-              {values.commissionMode === 'team_default' && (
-                <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                  Team Default{selectedTeam ? ` — ${selectedTeam.teamName}` : ''}
-                </span>
-              )}
-              {values.commissionMode === 'custom' && (
-                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                  Custom
-                </span>
-              )}
-            </h3>
-            <button
-              type="button"
-              className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
-              onClick={() => {
-                addTier();
-                if (values.commissionMode === 'team_default') {
-                  setValues(prev => ({ ...prev, commissionMode: 'custom' as CommissionMode }));
-                }
-              }}
-            >
-              + Add Tier
-            </button>
-          </div>
-          <p className="mb-3 text-xs text-gray-500">
-            Tier thresholds represent <strong>Total GCI into the company</strong> (before agent/company split).
-          </p>
-          <table className="min-w-full border-collapse text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="border px-3 py-2 text-left">Tier Name</th>
-                <th className="border px-3 py-2 text-left">From GCI $</th>
-                <th className="border px-3 py-2 text-left">To GCI $</th>
-                <th className="border px-3 py-2 text-left">Agent %</th>
-                <th className="border px-3 py-2 text-left">Company %</th>
-                <th className="border px-3 py-2 text-left">Notes</th>
-                <th className="border px-3 py-2 text-left">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {values.tiers.map((tier, index) => (
-                <tr key={`${tier.tierName}-${index}`}>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      value={tier.tierName}
-                      onChange={(e) => handleTierEdit(index, 'tierName', e.target.value)}
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      type="number"
-                      value={tier.fromCompanyDollar}
-                      onChange={(e) =>
-                        handleTierEdit(index, 'fromCompanyDollar', Number(e.target.value))
-                      }
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      type="number"
-                      value={tier.toCompanyDollar ?? ''}
-                      onChange={(e) =>
-                        handleTierEdit(
-                          index,
-                          'toCompanyDollar',
-                          e.target.value === '' ? null : Number(e.target.value)
-                        )
-                      }
-                      placeholder="No max"
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      type="number"
-                      value={tier.agentSplitPercent}
-                      onChange={(e) =>
-                        handleTierEdit(index, 'agentSplitPercent', Number(e.target.value))
-                      }
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      type="number"
-                      value={tier.companySplitPercent}
-                      onChange={(e) =>
-                        handleTierEdit(index, 'companySplitPercent', Number(e.target.value))
-                      }
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      value={tier.notes}
-                      onChange={(e) => handleTierEdit(index, 'notes', e.target.value)}
-                    />
-                  </td>
-                  <td className="border px-3 py-2">
-                    <button
-                      type="button"
-                      className="rounded-md border border-red-200 px-3 py-1 text-sm text-red-700 hover:bg-red-50"
-                      onClick={() => {
-                        removeTier(index);
-                        if (values.commissionMode === 'team_default') {
-                          setValues(prev => ({ ...prev, commissionMode: 'custom' as CommissionMode }));
-                        }
-                      }}
-                      disabled={values.tiers.length <= 1}
-                    >
-                      Remove
-                    </button>
-                  </td>
+        {/* Individual Commission Tiers — only shown for independent agents */}
+        {isIndependentAgentType(values.agentType) && (
+          <div className="mt-6 overflow-x-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-gray-700">Commission Tiers</h3>
+              <button
+                type="button"
+                className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
+                onClick={addTier}
+              >
+                + Add Tier
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-gray-500">
+              Tier thresholds represent <strong>Total GCI into the company</strong> (before agent/company split).
+            </p>
+            <table className="min-w-full border-collapse text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="border px-3 py-2 text-left">Tier Name</th>
+                  <th className="border px-3 py-2 text-left">From GCI $</th>
+                  <th className="border px-3 py-2 text-left">To GCI $</th>
+                  <th className="border px-3 py-2 text-left">Agent %</th>
+                  <th className="border px-3 py-2 text-left">Company %</th>
+                  <th className="border px-3 py-2 text-left">Notes</th>
+                  <th className="border px-3 py-2 text-left">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {values.tiers.map((tier, index) => (
+                  <tr key={`${tier.tierName}-${index}`}>
+                    <td className="border px-3 py-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1"
+                        value={tier.tierName}
+                        onChange={(e) => handleTierEdit(index, 'tierName', e.target.value)}
+                      />
+                    </td>
+                    <td className="border px-3 py-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1"
+                        type="number"
+                        value={tier.fromCompanyDollar}
+                        onChange={(e) =>
+                          handleTierEdit(index, 'fromCompanyDollar', Number(e.target.value))
+                        }
+                      />
+                    </td>
+                    <td className="border px-3 py-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1"
+                        type="number"
+                        value={tier.toCompanyDollar ?? ''}
+                        onChange={(e) =>
+                          handleTierEdit(
+                            index,
+                            'toCompanyDollar',
+                            e.target.value === '' ? null : Number(e.target.value)
+                          )
+                        }
+                        placeholder="No max"
+                      />
+                    </td>
+                    <td className="border px-3 py-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1"
+                        type="number"
+                        value={tier.agentSplitPercent}
+                        onChange={(e) =>
+                          handleTierEdit(index, 'agentSplitPercent', Number(e.target.value))
+                        }
+                      />
+                    </td>
+                    <td className="border px-3 py-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1"
+                        type="number"
+                        value={tier.companySplitPercent}
+                        onChange={(e) =>
+                          handleTierEdit(index, 'companySplitPercent', Number(e.target.value))
+                        }
+                      />
+                    </td>
+                    <td className="border px-3 py-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1"
+                        value={tier.notes}
+                        onChange={(e) => handleTierEdit(index, 'notes', e.target.value)}
+                      />
+                    </td>
+                    <td className="border px-3 py-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-red-200 px-3 py-1 text-sm text-red-700 hover:bg-red-50"
+                        onClick={() => removeTier(index)}
+                        disabled={values.tiers.length <= 1}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border bg-white p-6 shadow-sm">
@@ -1757,7 +1689,7 @@ export default function AgentProfileForm({
         </p>
       )}
 
-      {values.tiers.length === 0 && (
+      {isIndependentAgentType(values.agentType) && values.tiers.length === 0 && (
         <p className="text-sm text-amber-700">
           Add at least one commission tier before saving this profile.
         </p>
@@ -1777,7 +1709,7 @@ export default function AgentProfileForm({
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           disabled={
             isSaving ||
-            values.tiers.length === 0 ||
+            (isIndependentAgentType(values.agentType) && values.tiers.length === 0) ||
             (!isIndependentAgentType(values.agentType) && !teamSetupIsValid)
           }
         >
