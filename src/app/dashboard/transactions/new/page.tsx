@@ -20,7 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2 } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
@@ -249,6 +249,56 @@ function Grid3({ children }: { children: React.ReactNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Wizard Step Definitions
+// ─────────────────────────────────────────────────────────────────────────────
+const WIZARD_STEPS = [
+  { id: 1, label: 'The Deal',       description: 'Address, dates, and deal value' },
+  { id: 2, label: 'The People',     description: 'Clients, agents, lender, title' },
+  { id: 3, label: 'Inspections',    description: 'Inspections, costs & commission' },
+  { id: 4, label: 'Final Details',  description: 'Additional info & submit' },
+];
+
+function WizardProgressBar({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
+  return (
+    <div className="w-full">
+      {/* Step labels */}
+      <div className="flex items-start justify-between mb-3">
+        {WIZARD_STEPS.map((step) => {
+          const isDone    = step.id < currentStep;
+          const isCurrent = step.id === currentStep;
+          return (
+            <div key={step.id} className="flex flex-col items-center flex-1 min-w-0">
+              <div className={[
+                'flex items-center justify-center w-8 h-8 rounded-full border-2 text-sm font-bold mb-1 transition-all',
+                isDone    ? 'bg-primary border-primary text-primary-foreground' : '',
+                isCurrent ? 'border-primary text-primary bg-primary/10' : '',
+                !isDone && !isCurrent ? 'border-muted-foreground/30 text-muted-foreground' : '',
+              ].join(' ')}>
+                {isDone ? <Check className="h-4 w-4" /> : step.id}
+              </div>
+              <span className={[
+                'text-[10px] font-semibold text-center leading-tight hidden sm:block',
+                isCurrent ? 'text-primary' : isDone ? 'text-primary/70' : 'text-muted-foreground',
+              ].join(' ')}>{step.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      {/* Progress track */}
+      <div className="relative h-1.5 bg-muted rounded-full overflow-hidden">
+        <div
+          className="absolute left-0 top-0 h-full bg-primary rounded-full transition-all duration-500"
+          style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground mt-2">
+        Step {currentStep} of {totalSteps} &mdash; {WIZARD_STEPS[currentStep - 1]?.description}
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AddTransactionPage() {
@@ -260,6 +310,9 @@ export default function AddTransactionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  // Wizard step state (1-indexed, 1..4)
+  const [wizardStep, setWizardStep] = useState(1);
+  const TOTAL_STEPS = 4;
 
   // Commission auto-calculation state
   const [agentCommission, setAgentCommission] = useState<AgentCommissionData | null>(null);
@@ -521,9 +574,9 @@ export default function AddTransactionPage() {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 pb-32">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -537,10 +590,20 @@ export default function AddTransactionPage() {
         </Badge>
       </div>
 
+      {/* Wizard progress bar */}
+      <Card className="p-5">
+        <WizardProgressBar currentStep={wizardStep} totalSteps={TOTAL_STEPS} />
+      </Card>
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-          {/* ── Section 1: Agent + Basics ────────────────────────────────── */}
+          {/* ───────────────────────────────────────────────────────────────────────────
+              STEP 1 — THE DEAL
+          ─────────────────────────────────────────────────────────────────────────── */}
+          <div className={wizardStep === 1 ? 'space-y-6' : 'hidden'}>
+
+          {/* ── Section 1: Agent + Basics ────────────────────────────────────────── */}
           <Section title="Transaction Basics">
             {/* Agent selector — admin only */}
             {isAdmin && (
@@ -773,7 +836,14 @@ export default function AddTransactionPage() {
               </div>
             )}
           </Section>
-          {/* ── Section 4: Client Info ─────────────────────────────────── */}
+          </div>{/* end step 1 */}
+
+          {/* ───────────────────────────────────────────────────────────────────────────
+              STEP 2 — THE PEOPLE
+          ─────────────────────────────────────────────────────────────────────────── */}
+          <div className={wizardStep === 2 ? 'space-y-6' : 'hidden'}>
+
+          {/* ── Section 4: Client Info ────────────────────────────────────────── */}
           <Section title="Client Info" description="Select client type to show the appropriate contact fields.">
             <FormField control={form.control} name="clientType" render={({ field }) => (
               <FormItem>
@@ -940,8 +1010,14 @@ export default function AddTransactionPage() {
               )} />
             </Grid2>
           </Section>
+          </div>{/* end step 2 */}
 
-          {/* ── Section 8: Inspections ────────────────────────────────────── */}
+          {/* ───────────────────────────────────────────────────────────────────────────
+              STEP 3 — INSPECTIONS & COMMISSION
+          ─────────────────────────────────────────────────────────────────────────── */}
+          <div className={wizardStep === 3 ? 'space-y-6' : 'hidden'}>
+
+          {/* ── Section 8: Inspections ────────────────────────────────────────── */}
           <Section title="Inspections">
             <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
               <FormItem>
@@ -1300,8 +1376,14 @@ export default function AddTransactionPage() {
               </>
             )}
           </Section>
+          </div>{/* end step 3 */}
 
-          {/* ── Additional Info ───────────────────────────────── */}
+          {/* ───────────────────────────────────────────────────────────────────────────
+              STEP 4 — FINAL DETAILS
+          ─────────────────────────────────────────────────────────────────────────── */}
+          <div className={wizardStep === 4 ? 'space-y-6' : 'hidden'}>
+
+          {/* ── Additional Info ─────────────────────────────────────────────── */}
           <Section title="Additional Info">
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
@@ -1446,40 +1528,72 @@ export default function AddTransactionPage() {
             )} />
           </Section>
 
-          {/* ── Legacy Notes (hidden, for backward compat) ────────────────── */}
-          <Section title="Notes">
-            <FormField control={form.control} name="notes" render={({ field }) => (
-              <FormItem>
-                <FormControl>
-                  <Textarea
-                    placeholder="Special conditions, contingencies, HOA info, key location, anything important..."
-                    className="min-h-[100px]"
-                    {...field}
-                  />
-                </FormControl>
-              </FormItem>
-            )} />
-          </Section>
+          {/* ── Legacy Notes merged into Additional Comments ───────────────── */}
+          {/* notes field kept hidden for backward compat — value mirrors additionalComments */}
+          <input type="hidden" {...form.register('notes')} />
 
-          {/* ── Submit ───────────────────────────────────────────────────── */}
-          <div className="flex items-center gap-4 pb-8">
-            <Button type="submit" size="lg" disabled={submitting || (isAdmin && agentsLoading)}>
-              <Send className="mr-2 h-4 w-4" />
-              {submitting
-                ? 'Submitting...'
-                : isAdmin
-                  ? 'Submit to TC Queue'
-                  : 'Submit to TC Queue'}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              All transactions go to the TC Queue for review before appearing in the ledger.
-            </p>
-          </div>
+          </div>{/* end step 4 */}
 
           {/* Hidden field */}
           <input type="hidden" {...form.register('agentDisplayName')} />
         </form>
       </Form>
+
+      {/* ───────────────────────────────────────────────────────────────────────────
+          STICKY WIZARD FOOTER
+      ─────────────────────────────────────────────────────────────────────────── */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          {/* Left: Back button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={() => setWizardStep(s => Math.max(1, s - 1))}
+            disabled={wizardStep === 1}
+            className="min-w-[100px]"
+          >
+            <ChevronLeft className="mr-1.5 h-4 w-4" /> Back
+          </Button>
+
+          {/* Center: step indicator */}
+          <div className="flex items-center gap-1.5">
+            {WIZARD_STEPS.map((step) => (
+              <div
+                key={step.id}
+                className={[
+                  'h-2 rounded-full transition-all duration-300',
+                  step.id === wizardStep ? 'w-6 bg-primary' : step.id < wizardStep ? 'w-2 bg-primary/50' : 'w-2 bg-muted-foreground/20',
+                ].join(' ')}
+              />
+            ))}
+          </div>
+
+          {/* Right: Next / Submit */}
+          {wizardStep < TOTAL_STEPS ? (
+            <Button
+              type="button"
+              size="lg"
+              onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setWizardStep(s => Math.min(TOTAL_STEPS, s + 1)); }}
+              className="min-w-[120px]"
+            >
+              Next <ChevronRight className="ml-1.5 h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              form="add-transaction-form"
+              size="lg"
+              disabled={submitting || (isAdmin && agentsLoading)}
+              className="min-w-[160px]"
+              onClick={() => form.handleSubmit(onSubmit)()}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              {submitting ? 'Submitting...' : 'Submit to TC Queue'}
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
