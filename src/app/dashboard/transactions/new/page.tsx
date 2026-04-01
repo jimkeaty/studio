@@ -118,6 +118,10 @@ const schema = z.object({
   surveyDeadline: z.string().optional().or(z.literal('')),
   projectedCloseDate: z.string().optional().or(z.literal('')),
   closedDate: z.string().optional().or(z.literal('')),
+  loanApplicationDeadline: z.string().optional().or(z.literal('')),
+  appraisalDeadline: z.string().optional().or(z.literal('')),
+  titleDeadline: z.string().optional().or(z.literal('')),
+  finalLoanCommitmentDeadline: z.string().optional().or(z.literal('')),
 
   // Client contact info (legacy — still used)
   clientEmail: z.string().email().optional().or(z.literal('')),
@@ -654,7 +658,7 @@ export default function AddTransactionPage() {
                 </FormItem>
               )} />
               <FormField control={form.control} name="optionExpiration" render={({ field }) => (
-                <FormItem><FormLabel>Option Period Expiration</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Expiration</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
               )} />
             </Grid3>
             <Grid3>
@@ -666,6 +670,22 @@ export default function AddTransactionPage() {
               )} />
               <FormField control={form.control} name="projectedCloseDate" render={({ field }) => (
                 <FormItem><FormLabel>Projected Close Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="loanApplicationDeadline" render={({ field }) => (
+                <FormItem><FormLabel>Loan Application Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="appraisalDeadline" render={({ field }) => (
+                <FormItem><FormLabel>Appraisal Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="titleDeadline" render={({ field }) => (
+                <FormItem><FormLabel>Title Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="finalLoanCommitmentDeadline" render={({ field }) => (
+                <FormItem><FormLabel>Final Loan Commitment Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
               )} />
             </Grid3>
             <Grid2>
