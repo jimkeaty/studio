@@ -99,6 +99,10 @@ type TeamPlanOption = {
   teamId: string;
   planName: string;
   status?: string;
+  /** 'tiered' | 'fixed' — defaults to 'tiered' for legacy records */
+  commissionModelType?: string;
+  /** Only present when commissionModelType === 'fixed' */
+  fixedSplit?: { agentPercent: number; companyPercent: number } | null;
   leaderStructureBands?: TeamPlanLeaderBand[];
   memberDefaultBands?: TeamPlanMemberBand[];
 };
@@ -400,6 +404,26 @@ export default function AgentProfileForm({
     if (!values.primaryTeamId) return null;
     return teams.find((team) => team.teamId === values.primaryTeamId) || null;
   }, [teams, values.primaryTeamId]);
+
+  /** The team plan linked to the currently selected team */
+  const selectedTeamPlan = useMemo((): TeamPlanOption | null => {
+    if (!selectedTeam) return null;
+    // Prefer the plan ID stored on the team doc
+    if (selectedTeam.teamPlanId) {
+      const byId = teamPlans.find(
+        (p) => p.teamPlanId.toLowerCase() === selectedTeam.teamPlanId!.toLowerCase()
+      );
+      if (byId) return byId;
+    }
+    // Fallback: any plan whose teamId matches
+    return teamPlans.find((p) => p.teamId === selectedTeam.teamId) || null;
+  }, [selectedTeam, teamPlans]);
+
+  /** True when the selected team has structureType 'no_leader' */
+  const teamIsLeaderless = (selectedTeam?.structureType || 'with_leader') === 'no_leader';
+
+  /** True when the selected team plan uses a fixed (flat) commission model */
+  const teamIsFixed = (selectedTeamPlan?.commissionModelType || 'tiered') === 'fixed';
 
   const availableLeaderPlans = useMemo(() => {
     if (!values.primaryTeamId) return [];
@@ -1303,6 +1327,26 @@ export default function AgentProfileForm({
               individual tiers do not apply here.
             </p>
 
+            {/* Commission model badge */}
+            {values.primaryTeamId && (
+              <div className="mt-3 flex items-center gap-2">
+                {teamIsFixed ? (
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                    Fixed Commission
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                    Tiered Commission
+                  </span>
+                )}
+                {teamIsLeaderless && (
+                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
+                    No Leader
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <div className="mb-1 flex items-center justify-between gap-2">
@@ -1336,6 +1380,7 @@ export default function AgentProfileForm({
                 </select>
               </div>
 
+              {!teamIsLeaderless && (
               <div>
                 <label className="mb-1 block text-sm font-medium">Team Role</label>
                 <select
@@ -1347,6 +1392,7 @@ export default function AgentProfileForm({
                   <option value="member">Member</option>
                 </select>
               </div>
+              )}
 
               {showCreateTeam && (
                 <div className="md:col-span-2 rounded-md border border-gray-200 bg-white p-4">
@@ -1410,7 +1456,32 @@ export default function AgentProfileForm({
               )}
 
               <div className="md:col-span-2">
-                {values.teamRole === 'leader' ? (
+                {/* ── Fixed Commission Model ─────────────────────────────────── */}
+                {teamIsFixed ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+                    <h4 className="text-sm font-semibold text-amber-900">Fixed Commission Plan</h4>
+                    <p className="mt-1 text-sm text-amber-800">
+                      This team uses a flat split on every transaction — no tier progression.
+                    </p>
+                    {selectedTeamPlan?.fixedSplit ? (
+                      <div className="mt-3 flex items-center gap-6">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-amber-900">{selectedTeamPlan.fixedSplit.agentPercent}%</p>
+                          <p className="text-xs text-amber-700">Agent</p>
+                        </div>
+                        <div className="text-lg font-light text-amber-400">/</div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-amber-900">{selectedTeamPlan.fixedSplit.companyPercent}%</p>
+                          <p className="text-xs text-amber-700">Company</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-amber-700">Fixed split not yet configured. Edit the team plan to set percentages.</p>
+                    )}
+                    <p className="mt-3 text-xs text-amber-600">To change the split, edit the team plan in the Team Plans tab.</p>
+                  </div>
+                ) : !teamIsLeaderless && values.teamRole === 'leader' ? (
+                  /* ── Leader Plan selector (with_leader teams only) ─────────── */
                   <>
                     <label className="mb-1 block text-sm font-medium">Leader Plan</label>
                     <select
