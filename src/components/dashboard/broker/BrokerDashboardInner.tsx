@@ -1164,6 +1164,59 @@ export function BrokerDashboardInner() {
         </Select>
       </div>
 
+      {/* ── Team Pulse Bar ─────────────────────────────────────────────── */}
+      {isCurrentYear && (gradeMargin !== null || gradeVolume !== null || gradeSales !== null) && (() => {
+        const scores = [gradeMargin, gradeVolume, gradeSales].filter(g => g !== null) as number[];
+        const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+        if (avgScore === null) return null;
+        const isOnTrack = avgScore >= 90;
+        const isClose = avgScore >= 70;
+        const statusLabel = isOnTrack ? '✓ On Track' : isClose ? '⚡ Needs Attention' : '⚠ Behind Pace';
+        const statusBg = isOnTrack
+          ? 'from-green-900 to-green-800'
+          : isClose
+          ? 'from-amber-900 to-amber-800'
+          : 'from-red-900 to-red-800';
+        const metrics = [
+          { label: 'Gross Margin', score: gradeMargin },
+          { label: 'Volume', score: gradeVolume },
+          { label: 'Sales Count', score: gradeSales },
+        ].filter(m => m.score !== null);
+        return (
+          <div className={`rounded-xl bg-gradient-to-r ${statusBg} text-white px-5 py-4`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="text-2xl">{isOnTrack ? '🏆' : isClose ? '⚡' : '🚨'}</div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-white/70 mb-0.5">Team Pulse — {year}</p>
+                  <p className="text-lg font-black">{statusLabel} &mdash; {avgScore}% of YTD Goal</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {metrics.map(m => (
+                  <div key={m.label} className="text-center">
+                    <p className="text-xs text-white/60 mb-0.5">{m.label}</p>
+                    <p className={`text-lg font-black ${
+                      (m.score ?? 0) >= 90 ? 'text-green-300' :
+                      (m.score ?? 0) >= 70 ? 'text-amber-300' : 'text-red-300'
+                    }`}>{m.score}%</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="mt-3 h-2 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${
+                  isOnTrack ? 'bg-green-400' : isClose ? 'bg-amber-400' : 'bg-red-400'
+                }`}
+                style={{ width: `${Math.min(avgScore, 100)}%` }}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── YTD Summary Hero Row ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Total Team Volume YTD */}

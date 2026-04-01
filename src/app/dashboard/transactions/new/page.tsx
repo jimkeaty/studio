@@ -313,6 +313,10 @@ export default function AddTransactionPage() {
   // Wizard step state (1-indexed, 1..4)
   const [wizardStep, setWizardStep] = useState(1);
   const TOTAL_STEPS = 4;
+  // Draft auto-save
+  const DRAFT_KEY = 'sb_add_transaction_draft';
+  const [hasDraft, setHasDraft] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   // Commission auto-calculation state
   const [agentCommission, setAgentCommission] = useState<AgentCommissionData | null>(null);
@@ -499,6 +503,48 @@ export default function AddTransactionPage() {
     form.setValue('notes', watchedAdditionalComments || '');
   }, [watchedAdditionalComments]);
 
+  // Auto-save draft to localStorage every 30 seconds
+  useEffect(() => {
+    if (submitted) return;
+    // Check for existing draft on mount
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) setHasDraft(true);
+    } catch {}
+    const interval = setInterval(() => {
+      try {
+        const values = form.getValues();
+        const hasContent = values.address || values.clientName || values.salePrice;
+        if (hasContent) {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step: wizardStep, savedAt: Date.now() }));
+        }
+      } catch {}
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [submitted, wizardStep]);
+
+  const restoreDraft = () => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (!saved) return;
+      const { values, step } = JSON.parse(saved);
+      Object.entries(values).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== '') {
+          form.setValue(key as any, val as any);
+        }
+      });
+      if (step) setWizardStep(step);
+      setHasDraft(false);
+      setDraftRestored(true);
+      toast({ title: 'Draft restored', description: 'Your previous form data has been loaded.' });
+    } catch {}
+  };
+
+  const discardDraft = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
+    setHasDraft(false);
+  };
+
   // Helper: toggle inspection type checkbox
   const toggleInspectionType = (type: string) => {
     const current = form.getValues('inspectionTypes') || [];
@@ -525,27 +571,47 @@ export default function AddTransactionPage() {
   // ── Success screen ─────────────────────────────────────────────────────────
   if (submitted) {
     return (
-      <div className="max-w-xl mx-auto text-center space-y-6 py-16">
-        <CheckCircle2 className="h-20 w-20 text-green-500 mx-auto" />
-        <h1 className="text-3xl font-bold">
-          Transaction Submitted!
-        </h1>
-        <p className="text-muted-foreground">
-          Your transaction has been submitted to the TC Queue for review. It will appear in the ledger once approved.
+      <div className="max-w-xl mx-auto text-center space-y-6 py-16 relative overflow-hidden">
+        {/* Confetti burst */}
+        <div className="absolute inset-0 pointer-events-none select-none" aria-hidden>
+          {Array.from({ length: 18 }).map((_, i) => (
+            <span
+              key={i}
+              className="absolute text-2xl animate-bounce"
+              style={{
+                left: `${5 + (i * 5.5) % 90}%`,
+                top: `${10 + (i * 7) % 60}%`,
+                animationDelay: `${(i * 0.12).toFixed(2)}s`,
+                animationDuration: `${0.8 + (i % 4) * 0.2}s`,
+                opacity: 0.7,
+              }}
+            >
+              {['🎉','🏠','⭐','💰','🎊','✨'][i % 6]}
+            </span>
+          ))}
+        </div>
+        <div className="relative z-10">
+          <div className="w-24 h-24 rounded-full bg-green-100 dark:bg-green-950/40 border-4 border-green-400 flex items-center justify-center mx-auto mb-2">
+            <CheckCircle2 className="h-12 w-12 text-green-500" />
+          </div>
+          <h1 className="text-3xl font-black text-foreground">Deal Submitted! 🎉</h1>
+          <p className="text-muted-foreground mt-2">
+            Your transaction is in the TC Queue for review and will appear in the ledger once approved.
+          </p>
           {resultId && (
-            <span className="block mt-2 font-mono text-xs">Ref: {resultId}</span>
+            <p className="mt-2 font-mono text-xs text-muted-foreground">Ref: {resultId}</p>
           )}
-        </p>
-        <div className="flex justify-center gap-3 flex-wrap">
-          <Button onClick={() => { setSubmitted(false); setResultId(null); form.reset({ agentId: isAdmin ? '' : user.uid, agentDisplayName: isAdmin ? '' : (user.displayName || user.email || ''), closingType: 'buyer', dealType: 'residential_sale', address: '', clientName: '', contractDate: '', inspectionTypes: [], sellerPayingListingAgentUnknown: false }); }}>
-            Add Another
-          </Button>
-          <Link href="/dashboard/admin/tc">
-            <Button variant="outline"><ClipboardList className="mr-2 h-4 w-4" /> TC Queue</Button>
-          </Link>
-          <Link href={isAdmin ? '/dashboard/admin/transactions' : '/dashboard'}>
-            <Button variant="outline">{isAdmin ? 'View Ledger' : 'Back to Dashboard'}</Button>
-          </Link>
+          <div className="flex justify-center gap-3 flex-wrap mt-8">
+            <Button onClick={() => { setSubmitted(false); setResultId(null); form.reset({ agentId: isAdmin ? '' : user.uid, agentDisplayName: isAdmin ? '' : (user.displayName || user.email || ''), closingType: 'buyer', dealType: 'residential_sale', address: '', clientName: '', contractDate: '', inspectionTypes: [], sellerPayingListingAgentUnknown: false }); }}>
+              Add Another Deal
+            </Button>
+            <Link href="/dashboard/admin/tc">
+              <Button variant="outline"><ClipboardList className="mr-2 h-4 w-4" /> TC Queue</Button>
+            </Link>
+            <Link href={isAdmin ? '/dashboard/admin/transactions' : '/dashboard'}>
+              <Button variant="outline">{isAdmin ? 'View Ledger' : 'Back to Dashboard'}</Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -595,6 +661,23 @@ export default function AddTransactionPage() {
           <ClipboardList className="h-3 w-3 mr-1" /> TC Queue Review
         </Badge>
       </div>
+
+      {/* Draft restore banner */}
+      {hasDraft && !draftRestored && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">📝</span>
+            <div>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-300">You have an unsaved draft</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">Would you like to restore your previous form data?</p>
+            </div>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <Button size="sm" variant="outline" onClick={discardDraft} className="text-xs border-amber-300 text-amber-700 hover:bg-amber-100">Discard</Button>
+            <Button size="sm" onClick={restoreDraft} className="text-xs bg-amber-600 hover:bg-amber-700 text-white">Restore Draft</Button>
+          </div>
+        </div>
+      )}
 
       {/* Wizard progress bar */}
       <Card className="p-5">
@@ -1379,6 +1462,42 @@ export default function AddTransactionPage() {
                     </FormItem>
                   )} />
                 </Grid2>
+
+                {/* ── Inline Commission Preview ──────────────────────────── */}
+                {(() => {
+                  const gci = Number(form.watch('gci')) || 0;
+                  const agentDollar = Number(form.watch('agentDollar')) || 0;
+                  const brokerGci = Number(form.watch('brokerGci')) || 0;
+                  const txFee = Number(form.watch('transactionFee')) || 0;
+                  if (gci <= 0) return null;
+                  const agentNet = agentDollar - txFee;
+                  const agentPct = gci > 0 ? Math.round((agentDollar / gci) * 100) : 0;
+                  return (
+                    <div className="mt-4 rounded-xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 dark:border-green-700 p-4">
+                      <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-3">💰 Your Estimated Earnings on This Deal</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
+                          <p className="text-lg font-black text-foreground">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(gci)}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground mb-0.5">Your Split ({agentPct}%)</p>
+                          <p className="text-lg font-black text-foreground">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(agentDollar)}</p>
+                        </div>
+                        {txFee > 0 && (
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground mb-0.5">Transaction Fee</p>
+                            <p className="text-lg font-black text-red-600">-{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(txFee)}</p>
+                          </div>
+                        )}
+                        <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
+                          <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
+                          <p className="text-xl font-black text-green-700 dark:text-green-300">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0}).format(agentNet)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </Section>

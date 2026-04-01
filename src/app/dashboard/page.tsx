@@ -3086,7 +3086,12 @@ function PipelineKanban({
           </div>
           <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
             {opportunities.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No active leads</p>
+              <div className="py-6 px-3 flex flex-col items-center text-center">
+                <div className="text-3xl mb-2">🏠</div>
+                <p className="text-xs font-bold text-foreground mb-1">No active leads</p>
+                <p className="text-[11px] text-muted-foreground mb-3 leading-snug">Start building your pipeline by adding your first opportunity.</p>
+                <a href="/dashboard/transactions/new" className="text-xs font-bold text-primary hover:underline">+ Add a Deal →</a>
+              </div>
             ) : opportunities.slice(0, 8).map(opp => (
               <div key={opp.id} className="bg-white rounded-lg border p-3 hover:shadow-sm transition-shadow">
                 <p className="text-xs font-semibold text-foreground truncate">{opp.contactName}</p>
@@ -3124,7 +3129,11 @@ function PipelineKanban({
           </div>
           <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
             {pending.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No pending deals</p>
+              <div className="py-6 px-3 flex flex-col items-center text-center">
+                <div className="text-3xl mb-2">📋</div>
+                <p className="text-xs font-bold text-foreground mb-1">No deals under contract</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">Deals you submit will appear here once they go under contract.</p>
+              </div>
             ) : pending.map(t => {
               const projNet = (t as any).netIncome ?? (t as any).netCommission ?? null;
               return (
@@ -3156,7 +3165,11 @@ function PipelineKanban({
           </div>
           <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
             {closed.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No closed deals yet this year</p>
+              <div className="py-6 px-3 flex flex-col items-center text-center">
+                <div className="text-3xl mb-2">🎉</div>
+                <p className="text-xs font-bold text-foreground mb-1">No closed deals yet</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">Your first closing of the year will appear here. You've got this!</p>
+              </div>
             ) : closed.slice(0, 8).map(t => {
               const net = (t as any).netIncome ?? (t as any).netCommission ?? null;
               return (

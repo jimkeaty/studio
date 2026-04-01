@@ -23,7 +23,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -231,6 +231,7 @@ export default function EditTransactionPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [wizardStep, setWizardStep] = useState(1);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentCommission, setAgentCommission] = useState<AgentCommissionData | null>(null);
   const [commissionLoading, setCommissionLoading] = useState(false);
@@ -635,6 +636,50 @@ export default function EditTransactionPage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+
+          {/* ── Wizard Progress Bar ──────────────────────────────────────── */}
+          {(() => {
+            const steps = [
+              { id: 1, label: 'The Deal' },
+              { id: 2, label: 'The People' },
+              { id: 3, label: 'Inspections' },
+              { id: 4, label: 'Final Details' },
+            ];
+            return (
+              <div className="flex items-center gap-0 mb-2">
+                {steps.map((step, idx) => (
+                  <div key={step.id} className="flex items-center flex-1">
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(step.id)}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                        wizardStep === step.id
+                          ? 'bg-primary text-primary-foreground shadow-md scale-110'
+                          : wizardStep > step.id
+                          ? 'bg-green-500 text-white'
+                          : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {wizardStep > step.id ? <Check className="h-4 w-4" /> : step.id}
+                      </div>
+                      <span className={`text-xs font-medium hidden sm:block ${
+                        wizardStep === step.id ? 'text-primary' : 'text-muted-foreground'
+                      }`}>{step.label}</span>
+                    </button>
+                    {idx < steps.length - 1 && (
+                      <div className={`flex-1 h-0.5 mx-2 transition-all ${
+                        wizardStep > step.id ? 'bg-green-500' : 'bg-muted'
+                      }`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* ── Step 1: The Deal ─────────────────────────────────────────── */}
+          <div className={wizardStep !== 1 ? 'hidden' : ''}>
           {/* ── Section 1: Transaction Basics ────────────────────────────── */}
           <Section title="Transaction Basics">
             {/* Agent selector */}
@@ -857,7 +902,11 @@ export default function EditTransactionPage() {
               </div>
             )}
           </Section>
-          {/* ── Client Info ─────────────────────────────────── */}
+          </div>{/* end Step 1 */}
+
+          {/* ── Step 2: The People ──────────────────────────────────────── */}
+          <div className={wizardStep !== 2 ? 'hidden' : ''}>
+          {/* ── Client Info ─────────────────────────────────────────────── */}
           <Section title="Client Info" description="Select client type to show the appropriate contact fields.">
             <FormField control={form.control} name="clientType" render={({ field }) => (
               <FormItem>
@@ -1021,8 +1070,11 @@ export default function EditTransactionPage() {
               )} />
             </Grid2>
           </Section>
+          </div>{/* end Step 2 */}
 
-          {/* ── Inspections ────────────────────────────────────── */}
+          {/* ── Step 3: Inspections & Commission ───────────────────────────── */}
+          <div className={wizardStep !== 3 ? 'hidden' : ''}>
+          {/* ── Inspections ─────────────────────────────────────────────────────────────── */}
           <Section title="Inspections">
             <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
               <FormItem>
@@ -1369,8 +1421,11 @@ export default function EditTransactionPage() {
               </>
             )}
           </Section>
+          </div>{/* end Step 3 */}
 
-          {/* ── Additional Info ───────────────────────────────── */}
+          {/* ── Step 4: Final Details ────────────────────────────────────────────── */}
+          <div className={wizardStep !== 4 ? 'hidden' : ''}>
+          {/* ── Additional Info ────────────────────────────────────────────────────────────────────── */}
           <Section title="Additional Info">
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
@@ -1524,18 +1579,39 @@ export default function EditTransactionPage() {
             )} />
           </Section>
 
-          {/* ── Save ───────────────────────────────────────────── */}
-          <div className="flex items-center gap-4 pb-8">
-            <Button type="submit" size="lg" disabled={saving}>
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
-            <Link href="/dashboard/admin/transactions">
-              <Button type="button" variant="outline" size="lg">Cancel</Button>
-            </Link>
-            <p className="text-sm text-muted-foreground">
-              Changes save directly to the ledger.
-            </p>
+          </div>{/* end Step 4 */}
+
+          {/* ── Sticky Wizard Footer ─────────────────────────────────────── */}
+          <div className="sticky bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border shadow-lg">
+            <div className="max-w-4xl mx-auto flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                {wizardStep > 1 && (
+                  <Button type="button" variant="outline" size="lg" onClick={() => setWizardStep(s => s - 1)}>
+                    <ChevronLeft className="mr-1 h-4 w-4" /> Back
+                  </Button>
+                )}
+                {wizardStep === 1 && (
+                  <Link href="/dashboard/admin/transactions">
+                    <Button type="button" variant="ghost" size="lg">Cancel</Button>
+                  </Link>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground hidden sm:block">
+                  Step {wizardStep} of 4
+                </span>
+                {wizardStep < 4 ? (
+                  <Button type="button" size="lg" onClick={() => setWizardStep(s => s + 1)}>
+                    Next <ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button type="submit" size="lg" disabled={saving} className="bg-green-600 hover:bg-green-700 text-white">
+                    <Save className="mr-2 h-4 w-4" />
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Hidden field */}

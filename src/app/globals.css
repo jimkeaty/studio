@@ -8,48 +8,53 @@ body {
 
 @layer base {
   :root {
-    --background: 220 17% 95%; /* Light Gray */
-    --foreground: 222 20% 25%;
+    --background: 220 20% 97%;       /* Near-white — cards pop against this */
+    --foreground: 222 47% 11%;       /* Slate-900 equivalent */
     --card: 0 0% 100%;
-    --card-foreground: 222 20% 25%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 20% 25%;
-    --primary: 231 48% 48%; /* Deep Blue */
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;          /* Blue-600 — more vibrant */
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 16% 91%;
-    --secondary-foreground: 222 20% 25%;
-    --muted: 220 16% 91%;
-    --muted-foreground: 220 9% 45%;
-    --accent: 36 100% 50%; /* Orange */
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 16% 94%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 36 100% 50%;           /* Orange — kept for brand */
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 13% 89%;
-    --input: 220 13% 89%;
-    --ring: 231 48% 48%;
-    --chart-1: 231 48% 48%;
-    --chart-2: 45 95% 55%; /* Yellow */
-    --chart-3: 140 60% 40%; /* Green */
+    --border: 220 13% 92%;           /* Lighter border — cleaner look */
+    --input: 220 13% 92%;
+    --ring: 221 83% 53%;
+    /* Semantic status colors */
+    --success: 160 84% 39%;          /* Emerald-500 */
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;           /* Amber-500 */
+    --warning-foreground: 0 0% 100%;
+    --chart-1: 221 83% 53%;
+    --chart-2: 38 92% 50%;           /* Amber */
+    --chart-3: 160 84% 39%;          /* Emerald */
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;               /* Rounder corners — more modern */
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 20% 25%;
-    --sidebar-primary: 231 48% 48%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 221 83% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 16% 91%;
-    --sidebar-accent-foreground: 222 20% 25%;
-    --sidebar-border: 220 13% 89%;
-    --sidebar-ring: 231 48% 48%;
+    --sidebar-accent: 220 16% 94%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 92%;
+    --sidebar-ring: 221 83% 53%;
   }
   .dark {
     --background: 222 47% 11%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 11%;
+    --card: 222 47% 14%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;
+    --popover: 222 47% 14%;
     --popover-foreground: 210 40% 98%;
-    --primary: 231 52% 68%;
+    --primary: 221 83% 65%;
     --primary-foreground: 222 47% 11%;
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
@@ -59,22 +64,26 @@ body {
     --accent-foreground: 222 47% 11%;
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 231 52% 68%;
-    --chart-1: 231 52% 68%;
-    --chart-2: 45 95% 55%; /* Yellow */
-    --chart-3: 140 60% 60%; /* Green */
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 221 83% 65%;
+    --success: 160 84% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --chart-1: 221 83% 65%;
+    --chart-2: 38 92% 55%;
+    --chart-3: 160 84% 50%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 231 52% 68%;
+    --sidebar-primary: 221 83% 65%;
     --sidebar-primary-foreground: 222 47% 11%;
     --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 231 52% 68%;
+    --sidebar-border: 217 33% 20%;
+    --sidebar-ring: 221 83% 65%;
   }
 }
 
@@ -84,5 +93,49 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 15px;
+  }
+}
+
+/* ─── Semantic status utility classes ─────────────────────────────────────── */
+@layer utilities {
+  .status-success {
+    @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+  }
+  .status-warning {
+    @apply bg-amber-50 text-amber-700 border-amber-200;
+  }
+  .status-alert {
+    @apply bg-red-50 text-red-700 border-red-200;
+  }
+  .status-neutral {
+    @apply bg-slate-50 text-slate-600 border-slate-200;
+  }
+
+  /* Hero number — used for YTD Net Income on dashboard */
+  .text-hero {
+    @apply text-5xl font-black tracking-tight leading-none;
+  }
+
+  /* KPI number — used for card-level metrics */
+  .text-kpi {
+    @apply text-3xl font-bold leading-none;
+  }
+
+  /* Sticky form footer — used on all multi-section forms */
+  .form-footer {
+    @apply sticky bottom-0 z-10 flex items-center justify-between
+           gap-4 border-t bg-white/95 backdrop-blur px-6 py-4
+           shadow-[0_-2px_8px_rgba(0,0,0,0.06)];
+  }
+
+  /* Card with elevated shadow — for hero/primary cards */
+  .card-elevated {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-md;
+  }
+
+  /* Standard card */
+  .card-base {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
   }
 }
