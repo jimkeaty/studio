@@ -43,7 +43,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
         <div className="flex flex-1 flex-col">
           <Header />
           <ImpersonationBanner />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-20 sm:pb-6 lg:pb-8">
+          <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-24 sm:pb-6 lg:pb-8 max-w-full overflow-x-hidden">
             {children}
           </main>
         </div>

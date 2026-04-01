@@ -346,7 +346,8 @@ export default function ProjectionsPage() {
                     <CardDescription>Your business plan benchmarks for the full year.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+                    <div className="overflow-x-auto -mx-2 px-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 min-w-[320px]">
                         {[
                             { label: 'Income Goal', value: formatCurrency(projectionData.annualIncomeGoal) },
                             { label: 'Calls', value: formatNumber(projectionData.planAnnualTargets.calls) },
@@ -362,10 +363,10 @@ export default function ProjectionsPage() {
                             </div>
                         ))}
                     </div>
+                    </div>
                 </CardContent>
             </Card>
-
-            {/* ── Catch-Up Calculator ────────────────────────────────────── */}
+            {/* ── Catch-Up Calculatorr ────────────────────────────────────── */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Catch-Up Calculator</CardTitle>

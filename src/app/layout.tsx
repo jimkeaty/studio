@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
@@ -7,6 +7,16 @@ import BuildBadge from '@/components/BuildBadge';
 export const metadata: Metadata = {
   title: 'Smart Broker USA',
   description: 'Performance and accountability dashboard for real estate agents and brokers.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f5f7fa' },
+    { media: '(prefers-color-scheme: dark)',  color: '#0f172a' },
+  ],
 };
 
 export default function RootLayout({

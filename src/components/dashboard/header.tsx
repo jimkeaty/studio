@@ -132,7 +132,7 @@ export function Header() {
 
           {/* Dropdown panel */}
           {notifOpen && (
-            <div className="absolute right-0 top-11 z-50 w-80 rounded-xl border bg-background shadow-xl overflow-hidden">
+            <div className="absolute right-0 top-11 z-50 w-[calc(100vw-2rem)] sm:w-80 rounded-xl border bg-background shadow-xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                 <span className="text-sm font-semibold">Notifications</span>
                 <div className="flex items-center gap-2">

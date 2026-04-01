@@ -426,7 +426,7 @@ export default function BusinessPlanPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main form area */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 order-2 lg:order-1">
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>{wizardStep === 1 ? 'Your Goal' : wizardStep === 2 ? 'Advanced Assumptions' : 'Your Daily Targets'}</CardTitle>
@@ -543,7 +543,7 @@ export default function BusinessPlanPage() {
         {/* ── STEP 2: ASSUMPTIONS ───────────────────────────────────────── */}
         {wizardStep === 2 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 order-2 lg:order-1">
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Advanced Assumptions</CardTitle>

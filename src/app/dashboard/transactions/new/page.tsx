@@ -890,15 +890,15 @@ export default function AddTransactionPage() {
           <Section title="Deal Value">
             <Grid2>
               <FormField control={form.control} name="listPrice" render={({ field }) => (
-                <FormItem><FormLabel>List Price / Buyer Rep Price ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>List Price / Buyer Rep Price ($)</FormLabel><FormControl><Input type="number" inputMode="numeric" step="1" placeholder="0" {...field} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="salePrice" render={({ field }) => (
-                <FormItem><FormLabel>Sale Price ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Sale Price ($)</FormLabel><FormControl><Input type="number" inputMode="numeric" step="1" placeholder="0" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
             <Grid2>
               <FormField control={form.control} name="earnestMoney" render={({ field }) => (
-                <FormItem><FormLabel>Earnest Money / Deposit ($)</FormLabel><FormControl><Input type="number" step="1" placeholder="0" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Earnest Money / Deposit ($)</FormLabel><FormControl><Input type="number" inputMode="numeric" step="1" placeholder="0" {...field} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="depositHolder" render={({ field }) => (
                 <FormItem>
@@ -1177,7 +1177,7 @@ export default function AddTransactionPage() {
               <FormField control={form.control} name="buyerClosingCostTotal" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Total Buyer&apos;s Closing Cost Paid by Seller ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                 </FormItem>
               )} />
             </div>
@@ -1190,19 +1190,19 @@ export default function AddTransactionPage() {
               <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Buyer&apos;s Agent Commission ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                 </FormItem>
               )} />
               <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Transaction Fee ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                 </FormItem>
               )} />
               <FormField control={form.control} name="buyerClosingCostOther" render={({ field }) => (
                 <FormItem>
                   <FormLabel>All Other Buyer&apos;s Closing Costs ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                 </FormItem>
               )} />
             </Grid3>
@@ -1331,7 +1331,7 @@ export default function AddTransactionPage() {
                       <FormLabel>Gross Commission %</FormLabel>
                       <FormControl>
                         <Input
-                          type="number" step="0.01" placeholder="3"
+                          type="number" inputMode="decimal" step="0.01" placeholder="3"
                           {...field}
                           onChange={(e) => {
                             commPctManuallyEdited.current = true;
@@ -1345,7 +1345,7 @@ export default function AddTransactionPage() {
                   <FormField control={form.control} name="gci" render={({ field }) => (
                     <FormItem>
                       <FormLabel>GCI ($)</FormLabel>
-                      <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                      <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                       <FormDescription>Gross Commission Income</FormDescription>
                     </FormItem>
                   )} />
@@ -1424,7 +1424,7 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Broker %</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="30" {...field}
+                        <Input type="number" inputMode="decimal" step="0.01" placeholder="30" {...field}
                           onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
                         />
                       </FormControl>
@@ -1434,7 +1434,7 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Broker GCI ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="0" {...field}
+                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field}
                           onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
                         />
                       </FormControl>
@@ -1444,7 +1444,7 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent %</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="70" {...field}
+                        <Input type="number" inputMode="decimal" step="0.01" placeholder="70" {...field}
                           onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
                         />
                       </FormControl>
@@ -1454,7 +1454,7 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent Net $</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="0" {...field}
+                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field}
                           onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
                         />
                       </FormControl>
@@ -1561,7 +1561,7 @@ export default function AddTransactionPage() {
                 <FormField control={form.control} name="txComplianceFeeAmount" render={({ field }) => (
                   <FormItem>
                     <FormLabel>How much? ($)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                    <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="txComplianceFeePaidBy" render={({ field }) => (
@@ -1625,13 +1625,13 @@ export default function AddTransactionPage() {
                 <FormField control={form.control} name="shortageAmount" render={({ field }) => (
                   <FormItem>
                     <FormLabel>How much? ($)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                    <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Buyer will bring to closing ($)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                    <FormControl><Input type="number" inputMode="decimal" step="0.01" placeholder="0" {...field} /></FormControl>
                   </FormItem>
                 )} />
               </Grid2>
@@ -1668,27 +1668,28 @@ export default function AddTransactionPage() {
           STICKY WIZARD FOOTER
       ─────────────────────────────────────────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2 sm:gap-4">
           {/* Left: Back button */}
           <Button
             type="button"
             variant="outline"
-            size="lg"
+            size="default"
             onClick={() => setWizardStep(s => Math.max(1, s - 1))}
             disabled={wizardStep === 1}
-            className="min-w-[100px]"
+            className="flex-1 sm:flex-none sm:min-w-[100px] max-w-[120px] sm:max-w-none"
           >
-            <ChevronLeft className="mr-1.5 h-4 w-4" /> Back
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            <span>Back</span>
           </Button>
 
           {/* Center: step indicator */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             {WIZARD_STEPS.map((step) => (
               <div
                 key={step.id}
                 className={[
                   'h-2 rounded-full transition-all duration-300',
-                  step.id === wizardStep ? 'w-6 bg-primary' : step.id < wizardStep ? 'w-2 bg-primary/50' : 'w-2 bg-muted-foreground/20',
+                  step.id === wizardStep ? 'w-5 sm:w-6 bg-primary' : step.id < wizardStep ? 'w-2 bg-primary/50' : 'w-2 bg-muted-foreground/20',
                 ].join(' ')}
               />
             ))}
@@ -1698,23 +1699,23 @@ export default function AddTransactionPage() {
           {wizardStep < TOTAL_STEPS ? (
             <Button
               type="button"
-              size="lg"
+              size="default"
               onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setWizardStep(s => Math.min(TOTAL_STEPS, s + 1)); }}
-              className="min-w-[120px]"
+              className="flex-1 sm:flex-none sm:min-w-[120px] max-w-[120px] sm:max-w-none"
             >
-              Next <ChevronRight className="ml-1.5 h-4 w-4" />
+              <span>Next</span> <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           ) : (
             <Button
               type="submit"
               form="add-transaction-form"
-              size="lg"
+              size="default"
               disabled={submitting || (isAdmin && agentsLoading)}
-              className="min-w-[160px]"
+              className="flex-1 sm:flex-none sm:min-w-[160px]"
               onClick={() => form.handleSubmit(onSubmit)()}
             >
-              <Send className="mr-2 h-4 w-4" />
-              {submitting ? 'Submitting...' : 'Submit to TC Queue'}
+              <Send className="mr-1.5 h-4 w-4" />
+              <span className="truncate">{submitting ? 'Submitting...' : 'Submit to TC'}</span>
             </Button>
           )}
         </div>

@@ -418,7 +418,7 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                   <span className="text-xs text-muted-foreground">Enter any field — others auto-calculate</span>
                 )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="agent-yearly-income" className="text-xs">Net Income Goal ($)</Label>
                   <Input id="agent-yearly-income" type="number" value={yearlyIncome} onChange={e => handleIncomeChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${fmtCurrency((prevYearStats.totalGrossMargin ?? 0))}` : 'e.g. 120000'} />
@@ -2903,49 +2903,49 @@ function SmartHeader({
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white shadow-xl">
       {/* subtle grid texture */}
       <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-      <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-6 py-5">
-        {/* Left: greeting + name + subtitle */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-0.5">
-            {isImpersonating ? 'Viewing as' : greeting + ','}
-          </p>
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight leading-tight">{agentName}</h1>
-          <p className="text-sm text-blue-200 mt-1">
-            {todayLabel}
-            {tierLabel && (
-              <span className="ml-2 inline-flex items-center gap-1 bg-white/10 border border-white/20 rounded-full px-2.5 py-0.5 text-xs font-semibold">
-                <Award className="h-3 w-3" />
-                {tierLabel}{tierSplit != null ? ` — ${tierSplit}% split` : ''}
-              </span>
-            )}
-          </p>
-        </div>
-        {/* Right: key stats */}
-        <div className="flex items-center gap-4 md:gap-6">
-          <div className="h-10 w-px bg-white/20 hidden md:block" />
-          <div className="flex gap-6">
-            <div className="text-center">
-              <p className="text-xl md:text-2xl font-black leading-none">
-                {ytdNetIncome != null ? fmtCurrencyCompact(ytdNetIncome) : '—'}
-              </p>
-              <p className="text-[11px] text-blue-300 mt-1 font-medium">YTD Net Income</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xl md:text-2xl font-black leading-none">{closedCount}</p>
-              <p className="text-[11px] text-blue-300 mt-1 font-medium">Closed Deals</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xl md:text-2xl font-black leading-none">{pendingCount}</p>
-              <p className="text-[11px] text-blue-300 mt-1 font-medium">Pending</p>
-            </div>
+      <div className="relative flex flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5">
+        {/* Top row: greeting + Add Deal button */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-0.5">
+              {isImpersonating ? 'Viewing as' : greeting + ','}
+            </p>
+            <h1 className="text-xl sm:text-3xl font-black tracking-tight leading-tight truncate">{agentName}</h1>
+            <p className="text-xs sm:text-sm text-blue-200 mt-1 flex flex-wrap items-center gap-1.5">
+              <span className="truncate">{todayLabel}</span>
+              {tierLabel && (
+                <span className="inline-flex items-center gap-1 bg-white/10 border border-white/20 rounded-full px-2 py-0.5 text-[10px] sm:text-xs font-semibold whitespace-nowrap">
+                  <Award className="h-3 w-3 shrink-0" />
+                  {tierLabel}{tierSplit != null ? ` — ${tierSplit}%` : ''}
+                </span>
+              )}
+            </p>
           </div>
-          <div className="h-10 w-px bg-white/20 hidden md:block" />
-          <a href="/dashboard/transactions/new">
-            <button className="flex items-center gap-2 bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap">
+          <a href="/dashboard/transactions/new" className="shrink-0">
+            <button className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/30 text-white text-xs sm:text-sm font-semibold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-colors whitespace-nowrap">
               <PlusCircle className="h-4 w-4" />
-              Add Deal
+              <span>Add Deal</span>
             </button>
           </a>
+        </div>
+        {/* Stats row — scrollable on very small screens */}
+        <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="text-center shrink-0">
+            <p className="text-lg sm:text-2xl font-black leading-none">
+              {ytdNetIncome != null ? fmtCurrencyCompact(ytdNetIncome) : '—'}
+            </p>
+            <p className="text-[10px] sm:text-[11px] text-blue-300 mt-1 font-medium">YTD Net</p>
+          </div>
+          <div className="h-8 w-px bg-white/20 shrink-0" />
+          <div className="text-center shrink-0">
+            <p className="text-lg sm:text-2xl font-black leading-none">{closedCount}</p>
+            <p className="text-[10px] sm:text-[11px] text-blue-300 mt-1 font-medium">Closed</p>
+          </div>
+          <div className="h-8 w-px bg-white/20 shrink-0" />
+          <div className="text-center shrink-0">
+            <p className="text-lg sm:text-2xl font-black leading-none">{pendingCount}</p>
+            <p className="text-[10px] sm:text-[11px] text-blue-300 mt-1 font-medium">Pending</p>
+          </div>
         </div>
       </div>
     </div>
@@ -3081,7 +3081,7 @@ function PipelineKanban({
           <p className="text-sm text-muted-foreground">Active opportunities, pending deals, and closed transactions for {year}.</p>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Column 1: Active Leads */}
         <div className={cn('rounded-xl border border-t-[3px] bg-card overflow-hidden', colConfig[0].color)}>
           <div className={cn('px-4 py-3 flex items-center justify-between border-b', colConfig[0].headerBg)}>
@@ -3261,17 +3261,17 @@ function QuickActionBar() {
     { label: 'Set Goals', icon: Target, href: '#goals', primary: false },
   ];
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
       {actions.map(({ label, icon: Icon, href, primary }) => (
         <a key={label} href={href}>
           <div className={cn(
-            'flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer transition-all hover:shadow-md',
+            'flex items-center gap-2 sm:gap-3 rounded-xl border px-3 sm:px-4 py-3 sm:py-3 cursor-pointer transition-all active:scale-95 hover:shadow-md min-h-[52px]',
             primary
               ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90'
               : 'bg-card hover:border-primary/50 hover:bg-primary/5'
           )}>
             <Icon className={cn('h-5 w-5 flex-shrink-0', primary ? 'text-primary-foreground' : 'text-primary')} />
-            <span className={cn('text-sm font-semibold', primary ? 'text-primary-foreground' : 'text-foreground')}>
+            <span className={cn('text-sm font-semibold leading-tight', primary ? 'text-primary-foreground' : 'text-foreground')}>
               {label}
             </span>
           </div>

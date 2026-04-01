@@ -538,7 +538,7 @@ export default function DailyTrackerPage() {
 
             {/* Side Panel — Selected Day Editor */}
             <div>
-              <Card className="sticky top-4">
+              <Card className="lg:sticky lg:top-4">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">
@@ -624,7 +624,7 @@ export default function DailyTrackerPage() {
               <div className="flex flex-col md:flex-row gap-3 md:items-end">
                 <div className="space-y-1">
                   <Label>Date</Label>
-                  <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-[180px]" />
+                  <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full sm:w-[180px]" />
                 </div>
                 <div className="md:ml-auto">
                   <Button onClick={saveDailyActivity} disabled={saving}>
@@ -685,8 +685,8 @@ export default function DailyTrackerPage() {
                   {appointments.map((a) => (
                     <div key={a.id} className="rounded-lg border p-3 space-y-3">
                       <div className="flex flex-col md:flex-row gap-3">
-                        <div className="space-y-1"><Label>Date</Label><Input type="date" value={a.date} onChange={(e) => setAppointments((prev) => prev.map((x) => (x.id === a.id ? { ...x, date: e.target.value } : x)))} className="w-[180px]" /></div>
-                        <div className="space-y-1"><Label>Time</Label><Input type="time" value={a.time || ''} onChange={(e) => setAppointments((prev) => prev.map((x) => (x.id === a.id ? { ...x, time: e.target.value } : x)))} className="w-[140px]" /></div>
+                        <div className="space-y-1"><Label>Date</Label><Input type="date" value={a.date} onChange={(e) => setAppointments((prev) => prev.map((x) => (x.id === a.id ? { ...x, date: e.target.value } : x)))} className="w-full sm:w-[180px]" /></div>
+                        <div className="space-y-1"><Label>Time</Label><Input type="time" value={a.time || ''} onChange={(e) => setAppointments((prev) => prev.map((x) => (x.id === a.id ? { ...x, time: e.target.value } : x)))} className="w-full sm:w-[140px]" /></div>
                         <div className="space-y-1 flex-1"><Label>Contact Name</Label><Input value={a.contactName} placeholder="Buyer consult, listing appointment..." onChange={(e) => setAppointments((prev) => prev.map((x) => (x.id === a.id ? { ...x, contactName: e.target.value } : x)))} /></div>
                       </div>
                       <div className="space-y-1"><Label>Notes</Label><Input value={a.notes || ''} placeholder="Optional" onChange={(e) => setAppointments((prev) => prev.map((x) => (x.id === a.id ? { ...x, notes: e.target.value } : x)))} /></div>
