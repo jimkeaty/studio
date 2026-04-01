@@ -664,6 +664,57 @@ export default function AgentProfileForm({
     [values.primaryTeamId, values.teamGroup, teams, teamPlans]
   );
 
+  /** Resolved leader structure bands for the current team selection (read-only preview) */
+  function resolveTeamLeaderBands(teamId: string, teamGroupSlug: string): TeamPlanLeaderBand[] {
+    const teamIdLower = teamId.toLowerCase();
+    function extractLeaderBands(plan: TeamPlanOption | undefined): TeamPlanLeaderBand[] | null {
+      if (plan?.leaderStructureBands && plan.leaderStructureBands.length > 0) {
+        return plan.leaderStructureBands;
+      }
+      return null;
+    }
+    if (teamId) {
+      const team = teams.find((t) => t.teamId.toLowerCase() === teamIdLower);
+      if (team?.teamPlanId) {
+        const planIdLower = team.teamPlanId.toLowerCase();
+        const plan = teamPlans.find((p) => p.teamPlanId.toLowerCase() === planIdLower);
+        const bands = extractLeaderBands(plan);
+        if (bands) return bands;
+        const planByPrefix = teamPlans.find(
+          (p) => p.teamPlanId.toLowerCase().startsWith(planIdLower) && p.teamId.toLowerCase() === teamIdLower
+        );
+        const bands2 = extractLeaderBands(planByPrefix);
+        if (bands2) return bands2;
+      }
+      const planByTeamId = teamPlans.find((p) => p.teamId.toLowerCase() === teamIdLower);
+      const bands3 = extractLeaderBands(planByTeamId);
+      if (bands3) return bands3;
+    }
+    if (teamGroupSlug) {
+      const groupTeamIds = new Set<string>();
+      for (const [tid, grp] of Object.entries(TEAM_NAME_TO_GROUP)) {
+        if (grp === teamGroupSlug) groupTeamIds.add(tid.toLowerCase());
+      }
+      for (const t of teams) {
+        if ((t as any).teamGroup === teamGroupSlug) groupTeamIds.add(t.teamId.toLowerCase());
+      }
+      for (const plan of teamPlans) {
+        if (plan.status === 'inactive') continue;
+        if (groupTeamIds.has(plan.teamId.toLowerCase())) {
+          const bands = extractLeaderBands(plan);
+          if (bands) return bands;
+        }
+      }
+    }
+    return [];
+  }
+
+  const resolvedLeaderBands = useMemo(
+    () => resolveTeamLeaderBands(values.primaryTeamId || '', values.teamGroup),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [values.primaryTeamId, values.teamGroup, teams, teamPlans]
+  );
+
   function updatePrimaryTeamId(nextTeamId: string) {
     setValues((prev) => {
       // Auto-detect team group from the selected team's teamId
@@ -1513,6 +1564,42 @@ export default function AgentProfileForm({
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Team Leader Compensation Structure — read-only, shown only when team has a leader plan */}
+        {!isIndependentAgentType(values.agentType) && resolvedLeaderBands.length > 0 && (
+          <div className="mt-6 rounded-md border border-purple-100 bg-purple-50 p-4">
+            <h3 className="mb-1 text-sm font-semibold text-purple-900">Team Leader Compensation Structure</h3>
+            <p className="mb-3 text-xs text-purple-700">
+              Read-only. This is the leader&apos;s payout structure — your production contributes to the leader&apos;s tier progression.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="bg-purple-100">
+                  <tr>
+                    <th className="border border-purple-200 px-3 py-2 text-left text-purple-900">Tier Name</th>
+                    <th className="border border-purple-200 px-3 py-2 text-left text-purple-900">From GCI $</th>
+                    <th className="border border-purple-200 px-3 py-2 text-left text-purple-900">To GCI $</th>
+                    <th className="border border-purple-200 px-3 py-2 text-left text-purple-900">Leader %</th>
+                    <th className="border border-purple-200 px-3 py-2 text-left text-purple-900">Company %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resolvedLeaderBands.map((band, i) => (
+                    <tr key={i} className="bg-white">
+                      <td className="border border-purple-200 px-3 py-2 text-gray-700">Tier {i + 1}</td>
+                      <td className="border border-purple-200 px-3 py-2 text-gray-700">${(band.fromCompanyDollar ?? 0).toLocaleString()}</td>
+                      <td className="border border-purple-200 px-3 py-2 text-gray-700">
+                        {band.toCompanyDollar != null ? `$${band.toCompanyDollar.toLocaleString()}` : 'No max'}
+                      </td>
+                      <td className="border border-purple-200 px-3 py-2 text-gray-700">{band.leaderPercent}%</td>
+                      <td className="border border-purple-200 px-3 py-2 text-gray-700">{band.companyPercent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
