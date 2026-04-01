@@ -620,43 +620,43 @@ export default function AdminTransactionLedgerPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('status')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap w-[100px]" onClick={() => toggleSort('status')}>
                       <span className="flex items-center">Status<SortIcon col="status" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('address')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[160px] max-w-[220px]" onClick={() => toggleSort('address')}>
                       <span className="flex items-center">Address<SortIcon col="address" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('agent')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[140px]" onClick={() => toggleSort('agent')}>
                       <span className="flex items-center">Agent<SortIcon col="agent" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('closingType')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[90px]" onClick={() => toggleSort('closingType')}>
                       <span className="flex items-center">Side<SortIcon col="closingType" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('dealType')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px]" onClick={() => toggleSort('dealType')}>
                       <span className="flex items-center">Deal Type<SortIcon col="dealType" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('contractDate')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[120px]" onClick={() => toggleSort('contractDate')}>
                       <span className="flex items-center">Contract Date<SortIcon col="contractDate" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('closedDate')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px]" onClick={() => toggleSort('closedDate')}>
                       <span className="flex items-center">Close Date<SortIcon col="closedDate" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('dealValue')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('dealValue')}>
                       <span className="flex items-center justify-end">Deal Value<SortIcon col="dealValue" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('grossComm')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('grossComm')}>
                       <span className="flex items-center justify-end">Gross Comm.<SortIcon col="grossComm" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('netAgent')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('netAgent')}>
                       <span className="flex items-center justify-end">Net to Agent<SortIcon col="netAgent" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap text-right" onClick={() => toggleSort('companyRetained')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('companyRetained')}>
                       <span className="flex items-center justify-end">Co. Retained<SortIcon col="companyRetained" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('source')}>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[90px]" onClick={() => toggleSort('source')}>
                       <span className="flex items-center">Source<SortIcon col="source" /></span>
                     </TableHead>
-                    <TableHead className="w-[80px]"></TableHead>
+                    <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -671,7 +671,7 @@ export default function AdminTransactionLedgerPage() {
                         className="cursor-pointer hover:bg-muted/40 transition-colors group"
                         onClick={() => openEdit(t)}
                       >
-                        <TableCell>
+                        <TableCell className="w-[100px]">
                           <span className={cn(
                             'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap',
                             sc.color
@@ -679,37 +679,37 @@ export default function AdminTransactionLedgerPage() {
                             {sc.label}
                           </span>
                         </TableCell>
-                        <TableCell className="max-w-[220px]">
+                        <TableCell className="min-w-[160px] max-w-[220px]">
                           <div className="font-medium truncate text-sm">{t.address || '—'}</div>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
+                        <TableCell className="min-w-[140px] whitespace-nowrap">
                           <div className="flex flex-col gap-0.5">
-                            <span>{t.agentDisplayName ?? '—'}</span>
+                            <span className="font-medium text-sm">{t.agentDisplayName ?? '—'}</span>
                             {(t as any).hasCoAgent && (t as any).coAgent?.agentDisplayName && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-700 dark:text-blue-400">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-1a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v1h-3zM4.75 12.094A5.973 5.973 0 004 15v1H1v-1a3 3 0 013.75-2.906z" /></svg>
-                                w∕ {(t as any).coAgent.agentDisplayName}
+                                w/ {(t as any).coAgent.agentDisplayName}
                               </span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-[90px]">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border bg-muted/50 whitespace-nowrap">
                             {closingTypeLabel[(t as any).closingType] ?? (t as any).closingType ?? '—'}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-[110px]">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border bg-muted/50 whitespace-nowrap">
                             {txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '—'}
                           </span>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDate(t.contractDate)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{gross ? formatCurrency(gross) : '—'}</TableCell>
-                        <TableCell className="text-right font-semibold text-primary whitespace-nowrap">{net ? formatCurrency(net) : '—'}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{broker ? formatCurrency(broker) : '—'}</TableCell>
-                        <TableCell><Badge variant="secondary" className="text-xs capitalize">{t.source ?? 'manual'}</Badge></TableCell>
+                        <TableCell className="min-w-[120px] whitespace-nowrap">{formatDate(t.contractDate)}</TableCell>
+                        <TableCell className="min-w-[110px] whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
+                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</TableCell>
+                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{gross ? formatCurrency(gross) : '—'}</TableCell>
+                        <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">{net ? formatCurrency(net) : '—'}</TableCell>
+                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{broker ? formatCurrency(broker) : '—'}</TableCell>
+                        <TableCell className="min-w-[90px]"><Badge variant="secondary" className="text-xs capitalize">{t.source ?? 'manual'}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(t); }} title="Edit">
