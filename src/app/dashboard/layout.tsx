@@ -10,6 +10,7 @@ import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
 import { UserX } from 'lucide-react';
 import { CommandPalette } from '@/components/dashboard/command-palette';
+import { PushNotificationPrompt } from '@/components/dashboard/push-notification-prompt';
 
 function ImpersonationBanner() {
   const { isImpersonating, agent, stopImpersonation } = useImpersonation();
@@ -43,6 +44,8 @@ function DashboardShell({ children }: { children: ReactNode }) {
         <div className="flex flex-1 flex-col">
           <Header />
           <ImpersonationBanner />
+          {/* Push notification opt-in prompt — shown once, dismissible */}
+          <PushNotificationPrompt />
           <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-24 sm:pb-6 lg:pb-8 max-w-full overflow-x-hidden">
             {children}
           </main>
