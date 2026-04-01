@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 // src/app/dashboard/admin/import-activities/page.tsx
 // Bulk Activity Tracking Import — mirrors the transaction import flow
 

@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 import { useUser } from '@/firebase';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import AgentProfileForm from '@/components/admin/agents/AgentProfileForm';

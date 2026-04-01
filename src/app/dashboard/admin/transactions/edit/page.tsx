@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 // Full-edit transaction page — mirrors Add Transaction form exactly.
 // Opened from Transaction Ledger via /dashboard/admin/transactions/edit?id=<txId>
 // Saves directly via PATCH /api/admin/transactions (no TC Queue).

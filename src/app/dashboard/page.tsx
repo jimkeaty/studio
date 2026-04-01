@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useUser } from '@/firebase';
 import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist';
@@ -3319,7 +3320,7 @@ function PipelineKanban({
 // IMPROVEMENT #7 — GOALS PROGRESS RINGS
 // SVG ring component used inside ReportCardSection
 // ═══════════════════════════════════════════════════════════════════════════════
-export function GoalRing({
+function GoalRing({
   pct, grade, size = 80,
 }: {
   pct: number; grade: string; size?: number;
