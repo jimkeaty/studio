@@ -196,13 +196,47 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (action === 'update') {
       const updates: Record<string, any> = { updatedAt: now };
       const editableFields = [
-        'closingType', 'dealType', 'address', 'clientName',
-        'listPrice', 'salePrice', 'commissionPercent', 'gci',
-        'transactionFee', 'earnestMoney', 'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
+        // Core
+        'closingType', 'dealType', 'address', 'clientName', 'dealSource',
+        // Financial
+        'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'gci',
+        'transactionFee', 'earnestMoney', 'depositHolderOther',
+        'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
+        // Dates
         'listingDate', 'contractDate', 'optionExpiration', 'inspectionDeadline',
         'surveyDeadline', 'projectedCloseDate', 'closedDate',
-        'dealSource', 'mortgageCompany', 'loanOfficer', 'titleCompany', 'titleOfficer',
-        'otherAgentName', 'otherBrokerage', 'notes',
+        'loanApplicationDeadline', 'appraisalDeadline', 'titleDeadline', 'finalLoanCommitmentDeadline',
+        // Client contact
+        'clientEmail', 'clientPhone', 'clientNewAddress',
+        'client2Name', 'client2Email', 'client2Phone',
+        // Buyer contact
+        'buyerName', 'buyerEmail', 'buyerPhone',
+        'buyer2Name', 'buyer2Email', 'buyer2Phone',
+        // Seller contact
+        'sellerName', 'sellerEmail', 'sellerPhone',
+        'seller2Name', 'seller2Email', 'seller2Phone',
+        // Other agent
+        'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
+        // Lender
+        'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone', 'lenderOffice',
+        // Title
+        'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
+        'titleAttorney', 'titleOffice',
+        // Inspection
+        'targetInspectionDate', 'inspectionTypes', 'tcScheduleInspectionsOther', 'inspectorName',
+        // Seller commission
+        'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+        // Buyer closing costs
+        'buyerClosingCostTotal', 'buyerClosingCostAgentCommission',
+        'buyerClosingCostTxFee', 'buyerClosingCostOther',
+        // Compliance / warranty
+        'warrantyPaidBy', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+        'occupancyDates', 'shortageAmount', 'buyerBringToClosing',
+        // Notes
+        'notes', 'additionalComments',
+        // Co-agent
+        'hasCoAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
+        'primaryAgentSplitPercent', 'coAgentSplitPercent',
       ];
       for (const field of editableFields) {
         if (field in body) {
@@ -242,7 +276,37 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       let pendingCoAgentData: Record<string, any> | null = null;
       let pendingPrimarySplitPct: number | null = null;
 
-      if (rawAgentDollar !== null && rawAgentDollar > 0) {
+      // ── Commission override: if TC/Admin set an explicit override, use it directly ──
+      if (intake.commissionOverride && (rawAgentDollar !== null || intake.agentPct != null)) {
+        const grossCommission = rawGci > 0 ? rawGci : 0;
+        const overrideAgentDollar = rawAgentDollar !== null ? rawAgentDollar : (intake.agentPct ? grossCommission * (toNum(intake.agentPct) / 100) : 0);
+        const overrideBrokerGci = rawBrokerGci !== null ? rawBrokerGci : Math.max(0, grossCommission - overrideAgentDollar);
+
+        splitSnapshot = {
+          primaryTeamId: null, teamPlanId: null, memberPlanId: null,
+          grossCommission,
+          agentSplitPercent: intake.agentPct ? toNum(intake.agentPct) : null,
+          companySplitPercent: intake.brokerPct ? toNum(intake.brokerPct) : null,
+          agentNetCommission: overrideAgentDollar,
+          leaderStructurePercent: null, leaderStructureGross: null,
+          memberPercentOfLeaderSide: null, memberPaid: null, leaderRetainedAfterMember: null,
+          companyRetained: overrideBrokerGci,
+          commissionOverride: true,
+          commissionOverrideBy: intake.commissionOverrideBy || null,
+          commissionOverrideAt: intake.commissionOverrideAt || null,
+        };
+
+        creditSnapshot = {
+          leaderboardAgentId: agentId,
+          leaderboardAgentDisplayName: agentDisplayName,
+          progressionMemberAgentId: null,
+          progressionLeaderAgentId: null,
+          progressionTeamId: null,
+          progressionCompanyDollarCredit: overrideBrokerGci,
+        };
+        agentType = 'independent';
+        calculationModel = 'override';
+      } else if (rawAgentDollar !== null && rawAgentDollar > 0) {
         // ── Historical / manual override: use supplied numbers directly ──────
         const grossCommission = rawGci > 0 ? rawGci : 0;
         const companyRetained =
@@ -388,14 +452,72 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         projectedCloseDate: toOptStr(intake.projectedCloseDate),
         closedDate,
 
-        mortgageCompany: toOptStr(intake.mortgageCompany),
-        loanOfficer: toOptStr(intake.loanOfficer),
-        titleCompany: toOptStr(intake.titleCompany),
-        titleOfficer: toOptStr(intake.titleOfficer),
+        // Extended dates
+        loanApplicationDeadline: toOptStr(intake.loanApplicationDeadline),
+        appraisalDeadline: toOptStr(intake.appraisalDeadline),
+        titleDeadline: toOptStr(intake.titleDeadline),
+        finalLoanCommitmentDeadline: toOptStr(intake.finalLoanCommitmentDeadline),
+
+        // Client contact
+        clientEmail: toOptStr(intake.clientEmail),
+        clientPhone: toOptStr(intake.clientPhone),
+        clientNewAddress: toOptStr(intake.clientNewAddress),
+        client2Name: toOptStr(intake.client2Name),
+        client2Email: toOptStr(intake.client2Email),
+        client2Phone: toOptStr(intake.client2Phone),
+
+        // Buyer contact
+        buyerName: toOptStr(intake.buyerName),
+        buyerEmail: toOptStr(intake.buyerEmail),
+        buyerPhone: toOptStr(intake.buyerPhone),
+        buyer2Name: toOptStr(intake.buyer2Name),
+        buyer2Email: toOptStr(intake.buyer2Email),
+        buyer2Phone: toOptStr(intake.buyer2Phone),
+
+        // Seller contact
+        sellerName: toOptStr(intake.sellerName),
+        sellerEmail: toOptStr(intake.sellerEmail),
+        sellerPhone: toOptStr(intake.sellerPhone),
+        seller2Name: toOptStr(intake.seller2Name),
+        seller2Email: toOptStr(intake.seller2Email),
+        seller2Phone: toOptStr(intake.seller2Phone),
+
+        // Other agent
         otherAgentName: toOptStr(intake.otherAgentName),
+        otherAgentEmail: toOptStr(intake.otherAgentEmail),
+        otherAgentPhone: toOptStr(intake.otherAgentPhone),
         otherBrokerage: toOptStr(intake.otherBrokerage),
 
+        // Lender
+        mortgageCompany: toOptStr(intake.mortgageCompany),
+        loanOfficer: toOptStr(intake.loanOfficer),
+        loanOfficerEmail: toOptStr(intake.loanOfficerEmail),
+        loanOfficerPhone: toOptStr(intake.loanOfficerPhone),
+        lenderOffice: toOptStr(intake.lenderOffice),
+
+        // Title
+        titleCompany: toOptStr(intake.titleCompany),
+        titleOfficer: toOptStr(intake.titleOfficer),
+        titleOfficerEmail: toOptStr(intake.titleOfficerEmail),
+        titleOfficerPhone: toOptStr(intake.titleOfficerPhone),
+        titleAttorney: toOptStr(intake.titleAttorney),
+        titleOffice: toOptStr(intake.titleOffice),
+
+        // Compliance / warranty
+        warrantyPaidBy: toOptStr(intake.warrantyPaidBy),
+        txComplianceFeeAmount: intake.txComplianceFeeAmount ?? null,
+        txComplianceFeePaidBy: toOptStr(intake.txComplianceFeePaidBy),
+        occupancyDates: toOptStr(intake.occupancyDates),
+        shortageAmount: intake.shortageAmount ?? null,
+        buyerBringToClosing: intake.buyerBringToClosing ?? null,
+
+        // Commission override metadata
+        commissionOverride: !!intake.commissionOverride,
+        commissionOverrideBy: intake.commissionOverride ? toOptStr(intake.commissionOverrideBy) : null,
+        commissionOverrideAt: intake.commissionOverride ? intake.commissionOverrideAt : null,
+
         notes: toOptStr(intake.notes),
+        additionalComments: toOptStr(intake.additionalComments),
 
         splitSnapshot,
         creditSnapshot,
@@ -447,7 +569,45 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       });
     }
 
-    return jsonError(400, `Unknown action: "${action}". Use: update, approve, reject, in_review`);
+    // ── COMMISSION OVERRIDE ────────────────────────────────────────────────────
+    if (action === 'commission_override') {
+      // TC/Admin can manually set commission split fields and flag the override
+      const overrideFields: Record<string, any> = {
+        updatedAt: now,
+        commissionOverride: true,
+        commissionOverrideBy: decoded.email || decoded.uid,
+        commissionOverrideAt: now,
+      };
+      const financialFields = ['brokerPct', 'brokerGci', 'agentPct', 'agentDollar', 'gci', 'commissionPercent', 'salePrice'];
+      for (const field of financialFields) {
+        if (field in body) {
+          const val = body[field];
+          overrideFields[field] = val === '' || val === null ? null : val;
+        }
+      }
+      await docRef.update(overrideFields);
+      return NextResponse.json({ ok: true, status: 'commission_override_saved' });
+    }
+
+    // ── ARCHIVE (remove from active queue, keep record) ──────────────────────
+    if (action === 'archive') {
+      await docRef.update({
+        status: 'archived',
+        archivedAt: now,
+        archivedBy: decoded.email || decoded.uid,
+        archiveReason: toOptStr(body.archiveReason) || 'Manually archived',
+        updatedAt: now,
+      });
+      return NextResponse.json({ ok: true, status: 'archived' });
+    }
+
+    // ── REMOVE (hard-delete from queue — admin only) ─────────────────────────
+    if (action === 'remove') {
+      await docRef.delete();
+      return NextResponse.json({ ok: true, status: 'removed' });
+    }
+
+    return jsonError(400, `Unknown action: "${action}". Use: update, approve, reject, in_review, commission_override, archive, remove`);
   } catch (err: any) {
     console.error('[PATCH /api/admin/tc/[id]]', err);
     return jsonError(500, err.message || 'Internal Server Error');

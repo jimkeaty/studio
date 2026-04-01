@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type IntakeStatus = 'submitted' | 'in_review' | 'approved' | 'rejected';
+type IntakeStatus = 'submitted' | 'in_review' | 'approved' | 'rejected' | 'archived';
 
 type Intake = {
   id: string;
@@ -80,6 +80,11 @@ const STATUS_CONFIG: Record<IntakeStatus, { label: string; color: string; icon: 
     label: 'Rejected',
     color: 'bg-red-500/80 text-white',
     icon: <XCircle className="h-3 w-3" />,
+  },
+  archived: {
+    label: 'Archived',
+    color: 'bg-gray-500/80 text-white',
+    icon: <Eye className="h-3 w-3" />,
   },
 };
 
@@ -148,7 +153,10 @@ export default function TcQueuePage() {
     setError(null);
     try {
       const token = await getToken();
-      const url = statusFilter === 'all'
+      // 'active' tab shows only submitted + in_review (the working queue)
+      const url = statusFilter === 'active'
+        ? '/api/admin/tc?active=true'
+        : statusFilter === 'all'
         ? '/api/admin/tc'
         : `/api/admin/tc?status=${statusFilter}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -249,6 +257,7 @@ export default function TcQueuePage() {
     return acc;
   }, {} as Record<string, number>);
   const allCount = intakes.length;
+  const activeCount = (counts.submitted ?? 0) + (counts.in_review ?? 0);
 
   return (
     <div className="space-y-6">
@@ -290,8 +299,21 @@ export default function TcQueuePage() {
           )}
 
           {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {(['submitted', 'in_review', 'approved', 'rejected'] as IntakeStatus[]).map((s) => {
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <Card
+              className={cn('cursor-pointer transition-all col-span-2 sm:col-span-1', statusFilter === 'active' && 'ring-2 ring-primary')}
+              onClick={() => setStatusFilter(statusFilter === 'active' ? 'all' : 'active')}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> Active Queue
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">{activeCount}</p>
+              </CardContent>
+            </Card>
+            {(['submitted', 'in_review', 'approved', 'rejected', 'archived'] as IntakeStatus[]).map((s) => {
               const cfg = STATUS_CONFIG[s];
               return (
                 <Card
@@ -321,11 +343,13 @@ export default function TcQueuePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="active">Active Queue ({activeCount})</SelectItem>
                   <SelectItem value="all">All ({allCount})</SelectItem>
                   <SelectItem value="submitted">Submitted ({counts.submitted ?? 0})</SelectItem>
                   <SelectItem value="in_review">In Review ({counts.in_review ?? 0})</SelectItem>
                   <SelectItem value="approved">Approved ({counts.approved ?? 0})</SelectItem>
                   <SelectItem value="rejected">Rejected ({counts.rejected ?? 0})</SelectItem>
+                  <SelectItem value="archived">Archived ({counts.archived ?? 0})</SelectItem>
                 </SelectContent>
               </Select>
             </CardContent>

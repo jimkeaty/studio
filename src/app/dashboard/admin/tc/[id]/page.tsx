@@ -29,9 +29,13 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, AlertTriangle, ExternalLink,
-  ClipboardList, UserCheck, Clock, Activity,
+  ClipboardList, UserCheck, Clock, Activity, Archive, Trash2, DollarSign,
+  Phone, Mail, Building2, User, Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
+
+const SOURCES = CANONICAL_SOURCES;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -45,7 +49,6 @@ type ChecklistItem = {
   completedAt: string | null;
 };
 
-// TC coordinators now come from staffUsers (role tc or tc_admin)
 type TcProfile = {
   id: string;
   displayName: string;
@@ -61,14 +64,17 @@ type ActivityEntry = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Form schema (mirrors submit form)
+// Form schema — full field set matching Add Transaction
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
+  // Core
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual']),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5),
   clientName: z.string().min(1),
   dealSource: z.string().optional(),
+
+  // Financial
   listPrice: z.coerce.number().min(0).optional().or(z.literal('')),
   salePrice: z.coerce.number().min(0).optional().or(z.literal('')),
   commissionPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
@@ -79,6 +85,8 @@ const schema = z.object({
   brokerGci: z.coerce.number().min(0).optional().or(z.literal('')),
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   agentDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Dates
   listingDate: z.string().optional().or(z.literal('')),
   contractDate: z.string().optional().or(z.literal('')),
   optionExpiration: z.string().optional().or(z.literal('')),
@@ -86,29 +94,62 @@ const schema = z.object({
   surveyDeadline: z.string().optional().or(z.literal('')),
   projectedCloseDate: z.string().optional().or(z.literal('')),
   closedDate: z.string().optional().or(z.literal('')),
+  loanApplicationDeadline: z.string().optional().or(z.literal('')),
+  appraisalDeadline: z.string().optional().or(z.literal('')),
+  titleDeadline: z.string().optional().or(z.literal('')),
+  finalLoanCommitmentDeadline: z.string().optional().or(z.literal('')),
+
+  // Client contact
+  clientEmail: z.string().optional().or(z.literal('')),
+  clientPhone: z.string().optional(),
+  clientNewAddress: z.string().optional(),
+  client2Name: z.string().optional(),
+  client2Email: z.string().optional().or(z.literal('')),
+  client2Phone: z.string().optional(),
+
+  // Buyer contact
+  buyerName: z.string().optional(),
+  buyerEmail: z.string().optional().or(z.literal('')),
+  buyerPhone: z.string().optional(),
+  buyer2Name: z.string().optional(),
+  buyer2Email: z.string().optional().or(z.literal('')),
+  buyer2Phone: z.string().optional(),
+
+  // Seller contact
+  sellerName: z.string().optional(),
+  sellerEmail: z.string().optional().or(z.literal('')),
+  sellerPhone: z.string().optional(),
+  seller2Name: z.string().optional(),
+  seller2Email: z.string().optional().or(z.literal('')),
+  seller2Phone: z.string().optional(),
+
+  // Other agent
+  otherAgentName: z.string().optional(),
+  otherAgentEmail: z.string().optional().or(z.literal('')),
+  otherAgentPhone: z.string().optional(),
+  otherBrokerage: z.string().optional(),
+
+  // Lender
   mortgageCompany: z.string().optional(),
   loanOfficer: z.string().optional(),
+  loanOfficerEmail: z.string().optional().or(z.literal('')),
+  loanOfficerPhone: z.string().optional(),
+  lenderOffice: z.string().optional(),
+
+  // Title
   titleCompany: z.string().optional(),
   titleOfficer: z.string().optional(),
-  otherAgentName: z.string().optional(),
-  otherBrokerage: z.string().optional(),
+  titleOfficerEmail: z.string().optional().or(z.literal('')),
+  titleOfficerPhone: z.string().optional(),
+  titleAttorney: z.string().optional(),
+  titleOffice: z.string().optional(),
+
+  // Notes
   notes: z.string().optional(),
+  additionalComments: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
-
-const SOURCES = [
-  { value: 'boomtown', label: 'Boomtown' },
-  { value: 'referral', label: 'Referral' },
-  { value: 'sphere', label: 'Sphere of Influence' },
-  { value: 'sign_call', label: 'Sign Call' },
-  { value: 'company_gen', label: 'Company Generated' },
-  { value: 'social', label: 'Social Media' },
-  { value: 'open_house', label: 'Open House' },
-  { value: 'fsbo', label: 'FSBO' },
-  { value: 'expired_listing', label: 'Expired Listing' },
-  { value: 'other', label: 'Other' },
-];
 
 function formatDateFull(s?: string | null) {
   if (!s) return '—';
@@ -137,12 +178,43 @@ function Grid3({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 md:grid-cols-3 gap-5">{children}</div>;
 }
 
-function SectionCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function SectionCard({ title, description, icon, children }: {
+  title: string; description?: string; icon?: React.ReactNode; children: React.ReactNode;
+}) {
   return (
     <Card>
-      <CardHeader><CardTitle className="text-base">{title}</CardTitle>{description && <CardDescription>{description}</CardDescription>}</CardHeader>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          {icon}{title}
+        </CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
       <CardContent className="space-y-5">{children}</CardContent>
     </Card>
+  );
+}
+
+function ContactRow({ label, name, email, phone }: {
+  label: string; name?: string | null; email?: string | null; phone?: string | null;
+}) {
+  if (!name && !email && !phone) return null;
+  return (
+    <div className="space-y-0.5">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
+      {name && <p className="text-sm font-medium">{name}</p>}
+      {email && (
+        <p className="text-sm text-muted-foreground flex items-center gap-1">
+          <Mail className="h-3 w-3" />
+          <a href={`mailto:${email}`} className="hover:underline text-primary">{email}</a>
+        </p>
+      )}
+      {phone && (
+        <p className="text-sm text-muted-foreground flex items-center gap-1">
+          <Phone className="h-3 w-3" />
+          <a href={`tel:${phone}`} className="hover:underline">{phone}</a>
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -151,6 +223,7 @@ const STATUS_BADGE: Record<string, string> = {
   in_review: 'bg-yellow-500/80 text-white',
   approved: 'bg-green-600/80 text-white',
   rejected: 'bg-red-500/80 text-white',
+  archived: 'bg-gray-500/80 text-white',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,10 +242,13 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const [acting, setActing] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideValues, setOverrideValues] = useState({ brokerPct: '', agentPct: '', agentDollar: '', gci: '' });
 
-  // TC Workflow state
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
-  const [checklistLoading, setChecklistLoading] = useState(false);
   const [tcProfiles, setTcProfiles] = useState<TcProfile[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
 
@@ -189,14 +265,11 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
       if (!user) return;
       try {
         const token = await user.getIdToken();
-
-        // Load intake from both APIs (old transactionIntakes and new tcIntakes)
         const res = await fetch(`/api/admin/tc/${id}`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
         setIntake(data.intake);
 
-        // Populate form
         const i = data.intake;
         form.reset({
           closingType: i.closingType || 'buyer',
@@ -221,67 +294,59 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           surveyDeadline: i.surveyDeadline || '',
           projectedCloseDate: i.projectedCloseDate || '',
           closedDate: i.closedDate || '',
+          loanApplicationDeadline: i.loanApplicationDeadline || '',
+          appraisalDeadline: i.appraisalDeadline || '',
+          titleDeadline: i.titleDeadline || '',
+          finalLoanCommitmentDeadline: i.finalLoanCommitmentDeadline || '',
+          clientEmail: i.clientEmail || '',
+          clientPhone: i.clientPhone || '',
+          clientNewAddress: i.clientNewAddress || '',
+          client2Name: i.client2Name || '',
+          client2Email: i.client2Email || '',
+          client2Phone: i.client2Phone || '',
+          buyerName: i.buyerName || '',
+          buyerEmail: i.buyerEmail || '',
+          buyerPhone: i.buyerPhone || '',
+          buyer2Name: i.buyer2Name || '',
+          buyer2Email: i.buyer2Email || '',
+          buyer2Phone: i.buyer2Phone || '',
+          sellerName: i.sellerName || '',
+          sellerEmail: i.sellerEmail || '',
+          sellerPhone: i.sellerPhone || '',
+          seller2Name: i.seller2Name || '',
+          seller2Email: i.seller2Email || '',
+          seller2Phone: i.seller2Phone || '',
+          otherAgentName: i.otherAgentName || '',
+          otherAgentEmail: i.otherAgentEmail || '',
+          otherAgentPhone: i.otherAgentPhone || '',
+          otherBrokerage: i.otherBrokerage || '',
           mortgageCompany: i.mortgageCompany || '',
           loanOfficer: i.loanOfficer || '',
+          loanOfficerEmail: i.loanOfficerEmail || '',
+          loanOfficerPhone: i.loanOfficerPhone || '',
+          lenderOffice: i.lenderOffice || '',
           titleCompany: i.titleCompany || '',
           titleOfficer: i.titleOfficer || '',
-          otherAgentName: i.otherAgentName || '',
-          otherBrokerage: i.otherBrokerage || '',
+          titleOfficerEmail: i.titleOfficerEmail || '',
+          titleOfficerPhone: i.titleOfficerPhone || '',
+          titleAttorney: i.titleAttorney || '',
+          titleOffice: i.titleOffice || '',
           notes: i.notes || '',
+          additionalComments: i.additionalComments || '',
         });
 
-        // Try to load checklist from the new tcIntakes workflow API
-        try {
-          const wfRes = await fetch(`/api/admin/tc/${id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const wfData = await wfRes.json();
-          if (wfData.ok && wfData.checklist) {
-            setChecklist(wfData.checklist);
-          }
-        } catch {
-          // Checklist may not exist for old intakes
-        }
+        if (data.checklist) setChecklist(data.checklist);
 
-        // Build activity log from intake data
+        // Build activity log
         const log: ActivityEntry[] = [];
-        if (i.submittedAt) {
-          log.push({
-            timestamp: i.submittedAt,
-            action: 'Submitted',
-            detail: `Intake submitted by ${i.agentDisplayName || i.submittedByEmail || 'agent'}`,
-          });
-        }
-        if (i.reviewedAt && i.status === 'in_review') {
-          log.push({
-            timestamp: i.reviewedAt,
-            action: 'In Review',
-            detail: `Marked in review by ${i.reviewedBy || 'admin'}`,
-          });
-        }
-        if (i.reviewedAt && i.status === 'approved') {
-          log.push({
-            timestamp: i.reviewedAt,
-            action: 'Approved',
-            detail: `Approved by ${i.reviewedBy || 'admin'}${i.approvedTransactionId ? ` (TX: ${i.approvedTransactionId})` : ''}`,
-          });
-        }
-        if (i.reviewedAt && i.status === 'rejected') {
-          log.push({
-            timestamp: i.reviewedAt,
-            action: 'Rejected',
-            detail: `Rejected by ${i.reviewedBy || 'admin'}${i.rejectionReason ? `: ${i.rejectionReason}` : ''}`,
-          });
-        }
-        if (i.updatedAt && i.updatedAt !== i.submittedAt) {
-          log.push({
-            timestamp: i.updatedAt,
-            action: 'Updated',
-            detail: 'Intake data updated',
-          });
-        }
+        if (i.submittedAt) log.push({ timestamp: i.submittedAt, action: 'Submitted', detail: `Submitted by ${i.agentDisplayName || i.submittedByEmail || 'agent'}` });
+        if (i.reviewedAt && i.status === 'in_review') log.push({ timestamp: i.reviewedAt, action: 'In Review', detail: `Marked in review by ${i.reviewedBy || 'admin'}` });
+        if (i.reviewedAt && i.status === 'approved') log.push({ timestamp: i.reviewedAt, action: 'Approved', detail: `Approved by ${i.reviewedBy || 'admin'}${i.approvedTransactionId ? ` (TX: ${i.approvedTransactionId})` : ''}` });
+        if (i.reviewedAt && i.status === 'rejected') log.push({ timestamp: i.reviewedAt, action: 'Rejected', detail: `Rejected by ${i.reviewedBy || 'admin'}${i.rejectionReason ? `: ${i.rejectionReason}` : ''}` });
+        if (i.commissionOverrideAt) log.push({ timestamp: i.commissionOverrideAt, action: 'Commission Override', detail: `Override set by ${i.commissionOverrideBy || 'admin'}` });
+        if (i.archivedAt) log.push({ timestamp: i.archivedAt, action: 'Archived', detail: `Archived by ${i.archivedBy || 'admin'}${i.archiveReason ? `: ${i.archiveReason}` : ''}` });
+        if (i.updatedAt && i.updatedAt !== i.submittedAt) log.push({ timestamp: i.updatedAt, action: 'Updated', detail: 'Intake data updated' });
         setActivityLog(log.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-
       } catch (err: any) {
         toast({ title: 'Error', description: err.message, variant: 'destructive' });
       } finally {
@@ -300,16 +365,9 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         const res = await fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
         if (data.ok) {
-          // Only show active TC and TC Admin staff in the assignment dropdown
-          setTcProfiles(
-            (data.users as TcProfile[]).filter(
-              (u) => (u.role === 'tc' || u.role === 'tc_admin') && u.status === 'active'
-            )
-          );
+          setTcProfiles((data.users as TcProfile[]).filter((u) => (u.role === 'tc' || u.role === 'tc_admin') && u.status === 'active'));
         }
-      } catch {
-        // Profiles may not exist yet
-      }
+      } catch { /* profiles may not exist */ }
     };
     if (!userLoading && user) loadProfiles();
   }, [user, userLoading]);
@@ -366,10 +424,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const handleApprove = async () => {
     try {
       const result = await callAction('approve');
-      toast({
-        title: 'Transaction Approved',
-        description: `Transaction ID: ${result.transactionId}`,
-      });
+      toast({ title: 'Transaction Approved', description: `Transaction ID: ${result.transactionId}` });
       setIntake((prev: any) => ({ ...prev, status: 'approved', approvedTransactionId: result.transactionId }));
     } catch (err: any) {
       toast({ title: 'Approval Failed', description: err.message, variant: 'destructive' });
@@ -391,7 +446,61 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     }
   };
 
-  // ── Assign TC ────────────────────────────────────────────────────────────
+  const handleArchive = async () => {
+    try {
+      await callAction('archive', { archiveReason: archiveReason || 'Manually archived' });
+      toast({ title: 'Intake Archived', description: 'Removed from active queue.' });
+      setIntake((prev: any) => ({ ...prev, status: 'archived' }));
+      setArchiveOpen(false);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleRemove = async () => {
+    try {
+      await callAction('remove');
+      toast({ title: 'Intake Removed', description: 'Permanently deleted from queue.' });
+      router.push('/dashboard/admin/tc');
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleCommissionOverride = async () => {
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch(`/api/admin/tc/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'commission_override',
+          brokerPct: overrideValues.brokerPct !== '' ? Number(overrideValues.brokerPct) : null,
+          agentPct: overrideValues.agentPct !== '' ? Number(overrideValues.agentPct) : null,
+          agentDollar: overrideValues.agentDollar !== '' ? Number(overrideValues.agentDollar) : null,
+          gci: overrideValues.gci !== '' ? Number(overrideValues.gci) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Override failed');
+      toast({ title: 'Commission Override Saved', description: 'Override will be used on approval.' });
+      setIntake((prev: any) => ({
+        ...prev,
+        commissionOverride: true,
+        commissionOverrideBy: user?.email,
+        commissionOverrideAt: new Date().toISOString(),
+        ...Object.fromEntries(
+          Object.entries(overrideValues)
+            .filter(([, v]) => v !== '')
+            .map(([k, v]) => [k, Number(v)])
+        ),
+      }));
+      setOverrideOpen(false);
+    } catch (err: any) {
+      toast({ title: 'Override Failed', description: err.message, variant: 'destructive' });
+    }
+  };
+
   const assignTc = async (profileId: string | null) => {
     try {
       const token = await getToken();
@@ -401,55 +510,36 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         body: JSON.stringify({ assignedTcProfileId: profileId }),
       });
       setIntake((prev: any) => ({ ...prev, assignedTcProfileId: profileId }));
-      toast({ title: 'TC Assigned', description: profileId ? 'TC coordinator assigned to this intake.' : 'TC coordinator unassigned.' });
+      toast({ title: 'TC Assigned' });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   };
 
-  // ── Toggle checklist item ────────────────────────────────────────────────
   const toggleChecklistItem = async (item: ChecklistItem) => {
     const newCompleted = !item.completed;
-    // Optimistic update
     setChecklist((prev) =>
       prev.map((ci) =>
         ci.id === item.id
-          ? {
-              ...ci,
-              completed: newCompleted,
-              completedBy: newCompleted ? (user?.email || user?.uid || null) : null,
-              completedAt: newCompleted ? new Date().toISOString() : null,
-            }
+          ? { ...ci, completed: newCompleted, completedBy: newCompleted ? (user?.email || null) : null, completedAt: newCompleted ? new Date().toISOString() : null }
           : ci
       )
     );
-
     try {
       const token = await getToken();
       await fetch(`/api/admin/tc/${id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          checklist: [
-            {
-              itemId: item.id,
-              completed: newCompleted,
-              completedBy: newCompleted ? (user?.email || user?.uid || null) : null,
-              completedAt: newCompleted ? new Date().toISOString() : null,
-            },
-          ],
+          checklist: [{ itemId: item.id, completed: newCompleted, completedBy: newCompleted ? (user?.email || null) : null, completedAt: newCompleted ? new Date().toISOString() : null }],
         }),
       });
-    } catch (err: any) {
-      // Revert on error
-      setChecklist((prev) =>
-        prev.map((ci) => (ci.id === item.id ? item : ci))
-      );
+    } catch {
+      setChecklist((prev) => prev.map((ci) => (ci.id === item.id ? item : ci)));
       toast({ title: 'Error', description: 'Failed to update checklist item', variant: 'destructive' });
     }
   };
 
-  // ── Status change via workflow API ───────────────────────────────────────
   const changeStatus = async (newStatus: string) => {
     try {
       const token = await getToken();
@@ -459,7 +549,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         body: JSON.stringify({ status: newStatus }),
       });
       setIntake((prev: any) => ({ ...prev, status: newStatus }));
-      toast({ title: 'Status Updated', description: `Status changed to ${newStatus.replace('_', ' ')}` });
+      toast({ title: 'Status Updated' });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
@@ -476,7 +566,8 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     return <Alert><AlertTitle>Not Found</AlertTitle><AlertDescription>Intake not found.</AlertDescription></Alert>;
   }
 
-  const isReadOnly = intake.status === 'approved' || intake.status === 'rejected';
+  const isReadOnly = intake.status === 'approved' || intake.status === 'rejected' || intake.status === 'archived';
+  const isActive = intake.status === 'submitted' || intake.status === 'in_review';
   const assignedTc = tcProfiles.find((p) => p.id === intake.assignedTcProfileId);
   const checklistCompleted = checklist.filter((c) => c.completed).length;
   const checklistTotal = checklist.length;
@@ -495,12 +586,17 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{intake.address}</h1>
-            <p className="text-muted-foreground">{intake.agentDisplayName} -- {intake.clientName}</p>
+            <p className="text-muted-foreground">{intake.agentDisplayName} — {intake.clientName}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge className={cn('text-sm px-3 py-1', STATUS_BADGE[intake.status] || 'bg-muted text-foreground')}>
               {intake.status?.replace('_', ' ').toUpperCase()}
             </Badge>
+            {intake.commissionOverride && (
+              <Badge variant="outline" className="text-orange-600 border-orange-400">
+                <DollarSign className="h-3 w-3 mr-1" /> Commission Override
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -523,8 +619,82 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               </div>
             )}
           </dl>
+          {intake.commissionOverride && (
+            <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
+              <p className="text-xs text-orange-600 dark:text-orange-400">
+                <strong>Commission Override</strong> set by {intake.commissionOverrideBy} on {formatDateShort(intake.commissionOverrideAt)}.
+                Auto-calculation will be skipped on approval.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Contact Info — read-only summary card */}
+      {(intake.buyerName || intake.sellerName || intake.loanOfficer || intake.titleOfficer ||
+        intake.clientEmail || intake.otherAgentName) && (
+        <SectionCard title="Contact Information" icon={<Users className="h-4 w-4" />}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {(intake.buyerName || intake.buyerEmail || intake.buyerPhone) && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buyer</p>
+                <ContactRow label="" name={intake.buyerName} email={intake.buyerEmail} phone={intake.buyerPhone} />
+                {(intake.buyer2Name || intake.buyer2Email) && (
+                  <ContactRow label="Buyer 2" name={intake.buyer2Name} email={intake.buyer2Email} phone={intake.buyer2Phone} />
+                )}
+              </div>
+            )}
+            {(intake.sellerName || intake.sellerEmail || intake.sellerPhone) && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Seller</p>
+                <ContactRow label="" name={intake.sellerName} email={intake.sellerEmail} phone={intake.sellerPhone} />
+                {(intake.seller2Name || intake.seller2Email) && (
+                  <ContactRow label="Seller 2" name={intake.seller2Name} email={intake.seller2Email} phone={intake.seller2Phone} />
+                )}
+              </div>
+            )}
+            {(intake.loanOfficer || intake.mortgageCompany) && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lender</p>
+                {intake.mortgageCompany && <p className="text-sm font-medium flex items-center gap-1"><Building2 className="h-3 w-3" />{intake.mortgageCompany}</p>}
+                <ContactRow label="" name={intake.loanOfficer} email={intake.loanOfficerEmail} phone={intake.loanOfficerPhone} />
+              </div>
+            )}
+            {(intake.titleOfficer || intake.titleCompany) && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Title</p>
+                {intake.titleCompany && <p className="text-sm font-medium flex items-center gap-1"><Building2 className="h-3 w-3" />{intake.titleCompany}</p>}
+                <ContactRow label="" name={intake.titleOfficer} email={intake.titleOfficerEmail} phone={intake.titleOfficerPhone} />
+              </div>
+            )}
+            {(intake.otherAgentName || intake.otherBrokerage) && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Other Agent</p>
+                <ContactRow label="" name={intake.otherAgentName} email={intake.otherAgentEmail} phone={intake.otherAgentPhone} />
+                {intake.otherBrokerage && <p className="text-sm text-muted-foreground">{intake.otherBrokerage}</p>}
+              </div>
+            )}
+            {(intake.clientEmail || intake.clientPhone) && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Client</p>
+                <ContactRow label="" name={intake.clientName} email={intake.clientEmail} phone={intake.clientPhone} />
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Co-agent info */}
+      {intake.hasCoAgent && intake.coAgentDisplayName && (
+        <SectionCard title="Co-Agent" icon={<User className="h-4 w-4" />}>
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Dl label="Co-Agent" value={intake.coAgentDisplayName} />
+            <Dl label="Role" value={intake.coAgentRole?.replace('_', ' ')} />
+            <Dl label="Primary Split" value={intake.primaryAgentSplitPercent != null ? `${intake.primaryAgentSplitPercent}%` : null} />
+            <Dl label="Co-Agent Split" value={intake.coAgentSplitPercent != null ? `${intake.coAgentSplitPercent}%` : null} />
+          </dl>
+        </SectionCard>
+      )}
 
       {/* Assigned TC Coordinator */}
       <Card>
@@ -540,46 +710,35 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               onValueChange={(val) => assignTc(val === 'unassigned' ? null : val)}
             >
               <SelectTrigger className="w-[250px]">
-                <SelectValue>
-                  {assignedTc ? assignedTc.displayName : 'Unassigned'}
-                </SelectValue>
+                <SelectValue>{assignedTc ? assignedTc.displayName : 'Unassigned'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unassigned">Unassigned</SelectItem>
                 {tcProfiles.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.displayName} ({p.email})
-                  </SelectItem>
+                  <SelectItem key={p.id} value={p.id}>{p.displayName} ({p.email})</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {assignedTc && (
-              <span className="text-sm text-muted-foreground">{assignedTc.email}</span>
-            )}
+            {assignedTc && <span className="text-sm text-muted-foreground">{assignedTc.email}</span>}
           </div>
         </CardContent>
       </Card>
 
-      {/* Status change buttons */}
+      {/* Status workflow + lifecycle actions */}
       {!isReadOnly && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Status Workflow</CardTitle>
-            <CardDescription>Change intake status through the workflow stages.</CardDescription>
+            <CardTitle className="text-base">Actions</CardTitle>
+            <CardDescription>Workflow actions and queue lifecycle management.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-3">
               {intake.status === 'submitted' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => changeStatus('in_review')}
-                  disabled={acting}
-                >
+                <Button variant="outline" size="sm" onClick={handleMarkInReview} disabled={acting}>
                   <Eye className="mr-2 h-4 w-4" /> Mark In Review
                 </Button>
               )}
-              {(intake.status === 'submitted' || intake.status === 'in_review') && (
+              {isActive && (
                 <>
                   <Button
                     size="sm"
@@ -588,24 +747,56 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                     disabled={acting}
                   >
                     <CheckCircle2 className="mr-2 h-4 w-4" />
-                    {acting ? 'Processing...' : 'Approve -> Create Transaction'}
+                    {acting ? 'Processing...' : 'Approve → Create Transaction'}
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setRejectOpen(true)}
-                    disabled={acting}
-                  >
+                  <Button variant="destructive" size="sm" onClick={() => setRejectOpen(true)} disabled={acting}>
                     <XCircle className="mr-2 h-4 w-4" /> Reject
                   </Button>
                 </>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Approving will create a live transaction in the ledger based on the data below. Save any edits first.
+            <Separator />
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setOverrideValues({
+                    brokerPct: String(intake.brokerPct ?? ''),
+                    agentPct: String(intake.agentPct ?? ''),
+                    agentDollar: String(intake.agentDollar ?? ''),
+                    gci: String(intake.gci ?? ''),
+                  });
+                  setOverrideOpen(true);
+                }}
+              >
+                <DollarSign className="mr-2 h-4 w-4" />
+                {intake.commissionOverride ? 'Edit Commission Override' : 'Set Commission Override'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)} disabled={acting}>
+                <Archive className="mr-2 h-4 w-4" /> Archive
+              </Button>
+              <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => setRemoveOpen(true)} disabled={acting}>
+                <Trash2 className="mr-2 h-4 w-4" /> Remove
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Approving will create a live transaction in the ledger. Save any edits first.
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Archived notice */}
+      {intake.status === 'archived' && (
+        <Alert className="border-gray-400">
+          <Archive className="h-4 w-4" />
+          <AlertTitle>Archived</AlertTitle>
+          <AlertDescription>
+            Archived by {intake.archivedBy} on {formatDateShort(intake.archivedAt)}.
+            {intake.archiveReason && ` Reason: ${intake.archiveReason}`}
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Rejection notice */}
@@ -623,15 +814,13 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           <AlertTitle className="text-green-700 dark:text-green-400">Approved</AlertTitle>
           <AlertDescription>
-            This TC was approved and added to the Transaction Ledger.
-            {intake.approvedTransactionId && (
-              <span className="block font-mono text-xs mt-1">TX: {intake.approvedTransactionId}</span>
-            )}
+            Approved and added to the Transaction Ledger.
+            {intake.approvedTransactionId && <span className="block font-mono text-xs mt-1">TX: {intake.approvedTransactionId}</span>}
           </AlertDescription>
         </Alert>
       )}
 
-      {/* ── Workflow Checklist ──────────────────────────────────────────────── */}
+      {/* Workflow Checklist */}
       {checklist.length > 0 && (
         <Card>
           <CardHeader>
@@ -640,52 +829,26 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             </CardTitle>
             <CardDescription>
               {checklistCompleted} of {checklistTotal} items completed
-              {checklistTotal > 0 && (
-                <span className="ml-2 text-xs">
-                  ({Math.round((checklistCompleted / checklistTotal) * 100)}%)
-                </span>
-              )}
+              {checklistTotal > 0 && <span className="ml-2 text-xs">({Math.round((checklistCompleted / checklistTotal) * 100)}%)</span>}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Progress bar */}
             {checklistTotal > 0 && (
               <div className="w-full bg-muted rounded-full h-2 mb-4">
-                <div
-                  className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(checklistCompleted / checklistTotal) * 100}%` }}
-                />
+                <div className="bg-green-600 h-2 rounded-full transition-all duration-300" style={{ width: `${(checklistCompleted / checklistTotal) * 100}%` }} />
               </div>
             )}
-
             <div className="space-y-3">
               {checklist.map((item) => (
-                <div
-                  key={item.id}
-                  className={cn(
-                    'flex items-start gap-3 p-3 rounded-md border transition-colors',
-                    item.completed ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-background'
-                  )}
-                >
-                  <Checkbox
-                    checked={item.completed}
-                    onCheckedChange={() => toggleChecklistItem(item)}
-                    className="mt-0.5"
-                  />
+                <div key={item.id} className={cn('flex items-start gap-3 p-3 rounded-md border transition-colors', item.completed ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-background')}>
+                  <Checkbox checked={item.completed} onCheckedChange={() => toggleChecklistItem(item)} className="mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <p className={cn('text-sm', item.completed && 'line-through text-muted-foreground')}>
-                      {item.label}
-                    </p>
+                    <p className={cn('text-sm', item.completed && 'line-through text-muted-foreground')}>{item.label}</p>
                     {item.completed && item.completedBy && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Completed by {item.completedBy}
-                        {item.completedAt && ` on ${formatDateShort(item.completedAt)}`}
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Completed by {item.completedBy}{item.completedAt && ` on ${formatDateShort(item.completedAt)}`}</p>
                     )}
                   </div>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    #{item.order}
-                  </span>
+                  <span className="text-xs text-muted-foreground font-mono">#{item.order}</span>
                 </div>
               ))}
             </div>
@@ -762,26 +925,19 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           {/* Section 2: Key Dates */}
           <SectionCard title="Key Dates">
             <Grid3>
-              {[
-                { name: 'listingDate' as const, label: 'Listing Date' },
-                { name: 'contractDate' as const, label: 'Under Contract Date' },
-                { name: 'optionExpiration' as const, label: 'Option Expiration' },
-              ].map(({ name, label }) => (
-                <FormField key={name} control={form.control} name={name} render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{label}</FormLabel>
-                    <FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl>
-                  </FormItem>
-                )} />
-              ))}
-            </Grid3>
-            <Grid3>
-              {[
-                { name: 'inspectionDeadline' as const, label: 'Inspection Deadline' },
-                { name: 'surveyDeadline' as const, label: 'Survey Deadline' },
-                { name: 'projectedCloseDate' as const, label: 'Projected Close Date' },
-              ].map(({ name, label }) => (
-                <FormField key={name} control={form.control} name={name} render={({ field }) => (
+              {([
+                ['listingDate', 'Listing Date'],
+                ['contractDate', 'Under Contract Date'],
+                ['optionExpiration', 'Option Expiration'],
+                ['inspectionDeadline', 'Inspection Deadline'],
+                ['surveyDeadline', 'Survey Deadline'],
+                ['projectedCloseDate', 'Projected Close Date'],
+                ['loanApplicationDeadline', 'Loan Application Deadline'],
+                ['appraisalDeadline', 'Appraisal Deadline'],
+                ['titleDeadline', 'Title Deadline'],
+                ['finalLoanCommitmentDeadline', 'Final Loan Commitment'],
+              ] as const).map(([name, label]) => (
+                <FormField key={name} control={form.control} name={name as any} render={({ field }) => (
                   <FormItem>
                     <FormLabel>{label}</FormLabel>
                     <FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl>
@@ -823,6 +979,14 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             </Grid3>
             <Separator />
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Split</p>
+            {intake.commissionOverride && (
+              <Alert className="border-orange-300 bg-orange-50 dark:bg-orange-950/20 py-2">
+                <DollarSign className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-orange-700 dark:text-orange-400 text-xs">
+                  Manual override active — these values will be used directly on approval instead of auto-calculation.
+                </AlertDescription>
+              </Alert>
+            )}
             <Grid2>
               <FormField control={form.control} name="brokerPct" render={({ field }) => (
                 <FormItem><FormLabel>Broker %</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
@@ -848,34 +1012,159 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             </div>
           </SectionCard>
 
-          {/* Section 4: Parties */}
-          <SectionCard title="Transaction Parties">
-            <Grid2>
-              {[
-                { name: 'mortgageCompany' as const, label: 'Mortgage Company', placeholder: 'First Federal Bank' },
-                { name: 'loanOfficer' as const, label: 'Loan Officer', placeholder: '' },
-                { name: 'titleCompany' as const, label: 'Title Company', placeholder: 'Acadian Title' },
-                { name: 'titleOfficer' as const, label: 'Title Officer', placeholder: '' },
-                { name: 'otherAgentName' as const, label: 'Other Agent Name', placeholder: '' },
-                { name: 'otherBrokerage' as const, label: 'Other Brokerage', placeholder: '' },
-              ].map(({ name, label, placeholder }) => (
-                <FormField key={name} control={form.control} name={name} render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{label}</FormLabel>
-                    <FormControl><Input placeholder={placeholder} {...field} disabled={isReadOnly} /></FormControl>
-                  </FormItem>
-                )} />
-              ))}
-            </Grid2>
+          {/* Section 4: Client Contact */}
+          <SectionCard title="Client Contact" icon={<User className="h-4 w-4" />}>
+            <Grid3>
+              <FormField control={form.control} name="clientEmail" render={({ field }) => (
+                <FormItem><FormLabel>Client Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="clientPhone" render={({ field }) => (
+                <FormItem><FormLabel>Client Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
+                <FormItem><FormLabel>Client New Address</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="client2Name" render={({ field }) => (
+                <FormItem><FormLabel>Client 2 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="client2Email" render={({ field }) => (
+                <FormItem><FormLabel>Client 2 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="client2Phone" render={({ field }) => (
+                <FormItem><FormLabel>Client 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
           </SectionCard>
 
-          {/* Section 5: Notes */}
-          <SectionCard title="Notes">
+          {/* Section 5: Buyer Contact */}
+          <SectionCard title="Buyer Contact" icon={<User className="h-4 w-4" />}>
+            <Grid3>
+              <FormField control={form.control} name="buyerName" render={({ field }) => (
+                <FormItem><FormLabel>Buyer Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerEmail" render={({ field }) => (
+                <FormItem><FormLabel>Buyer Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerPhone" render={({ field }) => (
+                <FormItem><FormLabel>Buyer Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="buyer2Name" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 2 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer2Email" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 2 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer2Phone" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* Section 6: Seller Contact */}
+          <SectionCard title="Seller Contact" icon={<User className="h-4 w-4" />}>
+            <Grid3>
+              <FormField control={form.control} name="sellerName" render={({ field }) => (
+                <FormItem><FormLabel>Seller Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="sellerEmail" render={({ field }) => (
+                <FormItem><FormLabel>Seller Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="sellerPhone" render={({ field }) => (
+                <FormItem><FormLabel>Seller Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="seller2Name" render={({ field }) => (
+                <FormItem><FormLabel>Seller 2 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller2Email" render={({ field }) => (
+                <FormItem><FormLabel>Seller 2 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller2Phone" render={({ field }) => (
+                <FormItem><FormLabel>Seller 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* Section 7: Lender */}
+          <SectionCard title="Lender / Mortgage" icon={<Building2 className="h-4 w-4" />}>
+            <Grid3>
+              <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
+                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="lenderOffice" render={({ field }) => (
+                <FormItem><FormLabel>Lender Office</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="loanOfficer" render={({ field }) => (
+                <FormItem><FormLabel>Loan Officer</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="loanOfficerEmail" render={({ field }) => (
+                <FormItem><FormLabel>Loan Officer Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="loanOfficerPhone" render={({ field }) => (
+                <FormItem><FormLabel>Loan Officer Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* Section 8: Title */}
+          <SectionCard title="Title Company" icon={<Building2 className="h-4 w-4" />}>
+            <Grid3>
+              <FormField control={form.control} name="titleCompany" render={({ field }) => (
+                <FormItem><FormLabel>Title Company</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="titleOffice" render={({ field }) => (
+                <FormItem><FormLabel>Title Office</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="titleOfficer" render={({ field }) => (
+                <FormItem><FormLabel>Title Officer</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="titleOfficerEmail" render={({ field }) => (
+                <FormItem><FormLabel>Title Officer Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="titleOfficerPhone" render={({ field }) => (
+                <FormItem><FormLabel>Title Officer Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="titleAttorney" render={({ field }) => (
+                <FormItem><FormLabel>Title Attorney</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* Section 9: Other Agent */}
+          <SectionCard title="Other Agent / Brokerage">
+            <Grid3>
+              <FormField control={form.control} name="otherAgentName" render={({ field }) => (
+                <FormItem><FormLabel>Other Agent Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="otherAgentEmail" render={({ field }) => (
+                <FormItem><FormLabel>Other Agent Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="otherAgentPhone" render={({ field }) => (
+                <FormItem><FormLabel>Other Agent Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="otherBrokerage" render={({ field }) => (
+                <FormItem><FormLabel>Other Brokerage</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* Section 10: Notes */}
+          <SectionCard title="Notes & Comments">
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem>
-                <FormControl>
-                  <Textarea className="min-h-[100px]" {...field} disabled={isReadOnly} />
-                </FormControl>
+                <FormLabel>Notes</FormLabel>
+                <FormControl><Textarea className="min-h-[80px]" {...field} disabled={isReadOnly} /></FormControl>
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="additionalComments" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Additional Comments</FormLabel>
+                <FormControl><Textarea className="min-h-[80px]" {...field} disabled={isReadOnly} /></FormControl>
               </FormItem>
             )} />
           </SectionCard>
@@ -894,7 +1183,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 disabled={acting}
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                {acting ? 'Approving...' : 'Approve -> Create Transaction'}
+                {acting ? 'Approving...' : 'Approve → Create Transaction'}
               </Button>
               <Button type="button" variant="destructive" onClick={() => setRejectOpen(true)} disabled={acting}>
                 <XCircle className="mr-2 h-4 w-4" /> Reject
@@ -904,7 +1193,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         </form>
       </Form>
 
-      {/* ── Activity Log ──────────────────────────────────────────────────── */}
+      {/* Activity Log */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -919,23 +1208,20 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               {activityLog.map((entry, index) => (
                 <div key={index} className="flex gap-3">
                   <div className="flex flex-col items-center">
-                    <div className={cn(
-                      'w-2 h-2 rounded-full mt-2',
+                    <div className={cn('w-2 h-2 rounded-full mt-2',
                       entry.action === 'Approved' ? 'bg-green-500' :
                       entry.action === 'Rejected' ? 'bg-red-500' :
                       entry.action === 'In Review' ? 'bg-yellow-500' :
+                      entry.action === 'Commission Override' ? 'bg-orange-500' :
+                      entry.action === 'Archived' ? 'bg-gray-500' :
                       'bg-blue-500'
                     )} />
-                    {index < activityLog.length - 1 && (
-                      <div className="w-px flex-1 bg-border mt-1" />
-                    )}
+                    {index < activityLog.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                   </div>
                   <div className="pb-4">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{entry.action}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateFull(entry.timestamp)}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{formatDateFull(entry.timestamp)}</span>
                     </div>
                     <p className="text-sm text-muted-foreground">{entry.detail}</p>
                   </div>
@@ -951,20 +1237,82 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reject TC Submission</DialogTitle>
-            <DialogDescription>
-              Provide a reason for rejecting this submission. The agent will see this note.
-            </DialogDescription>
+            <DialogDescription>Provide a reason for rejecting this submission.</DialogDescription>
           </DialogHeader>
-          <Textarea
-            placeholder="e.g. Missing contract date, GCI doesn't match commission structure..."
-            className="min-h-[100px]"
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-          />
+          <Textarea placeholder="e.g. Missing contract date, GCI doesn't match..." className="min-h-[100px]" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleReject} disabled={acting}>
               <XCircle className="mr-2 h-4 w-4" /> Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Archive dialog */}
+      <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Archive Intake</DialogTitle>
+            <DialogDescription>This will remove the intake from the active queue but keep the record.</DialogDescription>
+          </DialogHeader>
+          <Input placeholder="Reason (optional)" value={archiveReason} onChange={(e) => setArchiveReason(e.target.value)} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setArchiveOpen(false)}>Cancel</Button>
+            <Button onClick={handleArchive} disabled={acting}>
+              <Archive className="mr-2 h-4 w-4" /> Archive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove dialog */}
+      <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Intake</DialogTitle>
+            <DialogDescription>This will permanently delete this intake from the queue. This cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleRemove} disabled={acting}>
+              <Trash2 className="mr-2 h-4 w-4" /> Permanently Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Commission Override dialog */}
+      <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Commission Override</DialogTitle>
+            <DialogDescription>
+              Manually set commission split values. When override is active, auto-calculation from the agent&apos;s tier plan is skipped on approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Broker %</label>
+              <Input type="number" step="0.01" value={overrideValues.brokerPct} onChange={(e) => setOverrideValues(v => ({ ...v, brokerPct: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Agent %</label>
+              <Input type="number" step="0.01" value={overrideValues.agentPct} onChange={(e) => setOverrideValues(v => ({ ...v, agentPct: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Agent Net $ (GCI)</label>
+              <Input type="number" step="0.01" value={overrideValues.agentDollar} onChange={(e) => setOverrideValues(v => ({ ...v, agentDollar: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Total GCI ($)</label>
+              <Input type="number" step="0.01" value={overrideValues.gci} onChange={(e) => setOverrideValues(v => ({ ...v, gci: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOverrideOpen(false)}>Cancel</Button>
+            <Button onClick={handleCommissionOverride}>
+              <DollarSign className="mr-2 h-4 w-4" /> Save Override
             </Button>
           </DialogFooter>
         </DialogContent>

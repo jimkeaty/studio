@@ -1,9 +1,8 @@
 // GET /api/admin/tc — admin fetches all TC intakes
-// POST /api/admin/tc — create a new TC intake (agent submits to TC queue)
+// POST /api/admin/tc — create a new TC intake (admin-side, full field set)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
-
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -29,6 +28,22 @@ function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
+function toNum(v: any): number | null {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Number(String(v).replace(/[$,%]/g, '').trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function toStr(v: any): string | null {
+  const s = String(v ?? '').trim();
+  return s || null;
+}
+
+const VALID_CLOSING_TYPES = new Set(['buyer', 'listing', 'referral', 'dual']);
+const VALID_DEAL_TYPES = new Set([
+  'residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease',
+]);
+
 export async function GET(req: NextRequest) {
   try {
     const token = extractBearer(req);
@@ -39,12 +54,20 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url);
     const statusFilter = url.searchParams.get('status'); // optional
+    // active=true returns only non-approved/non-rejected records (the working queue)
+    const activeOnly = url.searchParams.get('active') === 'true';
 
     let query: FirebaseFirestore.Query = adminDb
       .collection('tcIntakes')
       .limit(500);
 
-    if (statusFilter && statusFilter !== 'all') {
+    if (activeOnly) {
+      // Active queue: submitted + in_review only
+      query = adminDb
+        .collection('tcIntakes')
+        .where('status', 'in', ['submitted', 'in_review'])
+        .limit(500);
+    } else if (statusFilter && statusFilter !== 'all') {
       query = adminDb
         .collection('tcIntakes')
         .where('status', '==', statusFilter)
@@ -81,42 +104,161 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    const {
-      agentId,
-      agentDisplayName,
-      address,
-      clientName,
-      closingType,
-      dealType,
-      salePrice,
-      gci,
-      contractDate,
-      projectedCloseDate,
-      transactionId,
-    } = body;
-
-    if (!agentId || !address) {
+    if (!body.agentId || !body.address) {
       return jsonError(400, 'Missing required fields: agentId and address');
+    }
+
+    const closingType = toStr(body.closingType);
+    if (closingType && !VALID_CLOSING_TYPES.has(closingType)) {
+      return jsonError(400, 'closingType must be: buyer, listing, dual, or referral');
+    }
+
+    const dealType = toStr(body.dealType) || 'residential_sale';
+    if (!VALID_DEAL_TYPES.has(dealType)) {
+      return jsonError(400, 'invalid dealType');
     }
 
     const now = new Date();
 
     const intakeData: Record<string, any> = {
-      agentId: agentId.trim(),
-      agentDisplayName: (agentDisplayName || '').trim(),
-      address: address.trim(),
-      clientName: (clientName || '').trim(),
-      closingType: closingType || null,
-      dealType: dealType || null,
+      // Identity
+      agentId: toStr(body.agentId),
+      agentDisplayName: toStr(body.agentDisplayName) || '',
+      submittedByUid: decoded.uid,
+      submittedByEmail: decoded.email || '',
+
       status: 'submitted',
+
+      // Core
+      closingType: closingType || null,
+      dealType,
+      address: toStr(body.address),
+      clientName: toStr(body.clientName) || '',
+      dealSource: toStr(body.dealSource),
+
+      // Financial
+      listPrice: toNum(body.listPrice),
+      salePrice: toNum(body.salePrice),
+      commissionPercent: toNum(body.commissionPercent),
+      commissionBasePrice: toNum(body.commissionBasePrice) || toNum(body.salePrice) || null,
+      gci: toNum(body.gci),
+      transactionFee: toNum(body.transactionFee),
+      earnestMoney: toNum(body.earnestMoney),
+      depositHolderOther: toStr(body.depositHolderOther),
+
+      // Commission split (admin can set these directly)
+      brokerPct: toNum(body.brokerPct),
+      brokerGci: toNum(body.brokerGci),
+      agentPct: toNum(body.agentPct),
+      agentDollar: toNum(body.agentDollar),
+
+      // Commission override metadata
+      commissionOverride: !!body.commissionOverride,
+      commissionOverrideBy: body.commissionOverride ? (decoded.email || decoded.uid) : null,
+      commissionOverrideAt: body.commissionOverride ? now : null,
+
+      // Dates
+      listingDate: toStr(body.listingDate),
+      contractDate: toStr(body.contractDate),
+      optionExpiration: toStr(body.optionExpiration),
+      inspectionDeadline: toStr(body.inspectionDeadline),
+      surveyDeadline: toStr(body.surveyDeadline),
+      projectedCloseDate: toStr(body.projectedCloseDate),
+      closedDate: toStr(body.closedDate),
+      loanApplicationDeadline: toStr(body.loanApplicationDeadline),
+      appraisalDeadline: toStr(body.appraisalDeadline),
+      titleDeadline: toStr(body.titleDeadline),
+      finalLoanCommitmentDeadline: toStr(body.finalLoanCommitmentDeadline),
+
+      // Client contact
+      clientEmail: toStr(body.clientEmail),
+      clientPhone: toStr(body.clientPhone),
+      clientNewAddress: toStr(body.clientNewAddress),
+      client2Name: toStr(body.client2Name),
+      client2Email: toStr(body.client2Email),
+      client2Phone: toStr(body.client2Phone),
+
+      // Buyer contact
+      buyerName: toStr(body.buyerName),
+      buyerEmail: toStr(body.buyerEmail),
+      buyerPhone: toStr(body.buyerPhone),
+      buyer2Name: toStr(body.buyer2Name),
+      buyer2Email: toStr(body.buyer2Email),
+      buyer2Phone: toStr(body.buyer2Phone),
+
+      // Seller contact
+      sellerName: toStr(body.sellerName),
+      sellerEmail: toStr(body.sellerEmail),
+      sellerPhone: toStr(body.sellerPhone),
+      seller2Name: toStr(body.seller2Name),
+      seller2Email: toStr(body.seller2Email),
+      seller2Phone: toStr(body.seller2Phone),
+
+      // Other agent / brokerage
+      otherAgentName: toStr(body.otherAgentName),
+      otherAgentEmail: toStr(body.otherAgentEmail),
+      otherAgentPhone: toStr(body.otherAgentPhone),
+      otherBrokerage: toStr(body.otherBrokerage),
+
+      // Lender / mortgage
+      mortgageCompany: toStr(body.mortgageCompany),
+      loanOfficer: toStr(body.loanOfficer),
+      loanOfficerEmail: toStr(body.loanOfficerEmail),
+      loanOfficerPhone: toStr(body.loanOfficerPhone),
+      lenderOffice: toStr(body.lenderOffice),
+
+      // Title
+      titleCompany: toStr(body.titleCompany),
+      titleOfficer: toStr(body.titleOfficer),
+      titleOfficerEmail: toStr(body.titleOfficerEmail),
+      titleOfficerPhone: toStr(body.titleOfficerPhone),
+      titleAttorney: toStr(body.titleAttorney),
+      titleOffice: toStr(body.titleOffice),
+
+      // Inspection
+      targetInspectionDate: toStr(body.targetInspectionDate),
+      inspectionTypes: Array.isArray(body.inspectionTypes) ? body.inspectionTypes : [],
+      tcScheduleInspectionsOther: toStr(body.tcScheduleInspectionsOther),
+      inspectorName: toStr(body.inspectorName),
+
+      // Seller commission fields
+      sellerPayingListingAgent: toNum(body.sellerPayingListingAgent),
+      sellerPayingListingAgentUnknown: !!body.sellerPayingListingAgentUnknown,
+      sellerPayingBuyerAgent: toNum(body.sellerPayingBuyerAgent),
+
+      // Buyer closing costs
+      buyerClosingCostTotal: toNum(body.buyerClosingCostTotal),
+      buyerClosingCostAgentCommission: toNum(body.buyerClosingCostAgentCommission),
+      buyerClosingCostTxFee: toNum(body.buyerClosingCostTxFee),
+      buyerClosingCostOther: toNum(body.buyerClosingCostOther),
+
+      // Compliance / warranty
+      warrantyPaidBy: toStr(body.warrantyPaidBy),
+      txComplianceFeeAmount: toNum(body.txComplianceFeeAmount),
+      txComplianceFeePaidBy: toStr(body.txComplianceFeePaidBy),
+      occupancyDates: toStr(body.occupancyDates),
+      shortageAmount: toNum(body.shortageAmount),
+      buyerBringToClosing: toNum(body.buyerBringToClosing),
+
+      notes: toStr(body.notes),
+      additionalComments: toStr(body.additionalComments),
+
+      // Co-agent
+      hasCoAgent: !!body.hasCoAgent,
+      ...(body.hasCoAgent ? {
+        coAgentId: toStr(body.coAgentId),
+        coAgentDisplayName: toStr(body.coAgentDisplayName),
+        coAgentRole: toStr(body.coAgentRole) || 'other',
+        primaryAgentSplitPercent: toNum(body.primaryAgentSplitPercent),
+        coAgentSplitPercent: toNum(body.coAgentSplitPercent),
+      } : {}),
+
+      // Legacy / reference
+      transactionId: toStr(body.transactionId),
+      assignedTcProfileId: null,
+
       submittedAt: now,
       updatedAt: now,
-      salePrice: salePrice != null ? Number(salePrice) : null,
-      gci: gci != null ? Number(gci) : null,
-      contractDate: contractDate || null,
-      projectedCloseDate: projectedCloseDate || null,
-      transactionId: transactionId || null,
-      assignedTcProfileId: null,
     };
 
     const docRef = await adminDb.collection('tcIntakes').add(intakeData);
