@@ -68,8 +68,11 @@ type AgentCommissionData = {
   ytdTierProgressionCompanyDollar?: number;
 };
 
-/** Find the matching tier for a given GCI amount */
+/** Find the matching tier for a given GCI amount.
+ * Falls back to the last (highest) tier if the amount exceeds all defined bands.
+ * This prevents a silent no-match when YTD production exceeds the top threshold. */
 function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | null {
+  if (!tiers || tiers.length === 0) return null;
   for (const tier of tiers) {
     const from = tier.fromCompanyDollar;
     const to = tier.toCompanyDollar;
@@ -77,7 +80,9 @@ function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | 
       return tier;
     }
   }
-  return null;
+  // No exact match — agent has exceeded all defined band ceilings.
+  // Return the last tier (highest band) as the safe fallback.
+  return tiers[tiers.length - 1];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
