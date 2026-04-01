@@ -162,7 +162,7 @@ export function SidebarNav() {
       : branding?.logoUrl;
 
   return (
-    <Sidebar className="border-r bg-slate-900 dark:bg-slate-950 text-slate-100">
+    <Sidebar className="border-r">
       <SidebarHeader className="border-b border-slate-700/60">
         <div className="flex h-16 items-center gap-3 px-4">
           {activeLogo ? (

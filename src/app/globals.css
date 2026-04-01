@@ -38,14 +38,15 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.75rem;               /* Rounder corners — more modern */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 221 83% 53%;
+    /* Sidebar is always dark regardless of light/dark mode */
+    --sidebar-background: 222 47% 11%;      /* slate-900 */
+    --sidebar-foreground: 210 40% 88%;      /* light slate — readable on dark */
+    --sidebar-primary: 221 83% 65%;         /* bright blue for active items */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 16% 94%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 220 13% 92%;
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-accent: 217 33% 22%;          /* slate-700 for hover bg */
+    --sidebar-accent-foreground: 210 40% 98%; /* white text on hover */
+    --sidebar-border: 217 33% 20%;          /* subtle dark border */
+    --sidebar-ring: 221 83% 65%;
   }
   .dark {
     --background: 222 47% 11%;
@@ -76,14 +77,15 @@ body {
     --chart-3: 160 84% 50%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 221 83% 65%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 217 33% 17%;
+    /* Sidebar stays dark in dark mode too */
+    --sidebar-background: 215 28% 8%;       /* even darker slate in dark mode */
+    --sidebar-foreground: 210 40% 88%;
+    --sidebar-primary: 221 83% 70%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 18%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 20%;
-    --sidebar-ring: 221 83% 65%;
+    --sidebar-border: 217 33% 15%;
+    --sidebar-ring: 221 83% 70%;
   }
 }
 
