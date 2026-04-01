@@ -80,6 +80,8 @@ export async function GET(
     const teamRole: string | null = data.teamRole || null;
 
     // ── 0. Flat commission plan — synthetic single-tier, no progression ────────
+    // Applies to both independent agents with commissionMode='flat' AND team agents
+    // whose team uses a fixed commission model (commissionMode auto-set to 'flat' on save).
     if (commissionMode === 'flat') {
       const flatAgent = Number(data.flatAgentPercent ?? 0);
       const flatCompany = Number(data.flatCompanyPercent ?? 0);
@@ -109,6 +111,60 @@ export async function GET(
         cycleStart: null,
         cycleEnd: null,
       });
+    }
+
+    // ── 0b. Team agent with team_default mode — check if team plan is fixed ────
+    // If the team plan uses a fixed commission model but the agent profile still
+    // has commissionMode='team_default' (e.g., saved before the auto-populate logic),
+    // fall back to the team plan's fixedSplit and return a flat-rate tier.
+    if (commissionMode === 'team_default' && agentType === 'team' && primaryTeamId) {
+      try {
+        const teamSnap0 = await adminDb.collection('teams').doc(primaryTeamId).get();
+        if (teamSnap0.exists) {
+          const teamData0 = teamSnap0.data() || {};
+          const teamPlanId0: string | null = teamData0.teamPlanId || null;
+          if (teamPlanId0) {
+            const planSnap0 = await adminDb.collection('teamPlans').doc(teamPlanId0).get();
+            if (planSnap0.exists) {
+              const planData0 = planSnap0.data() || {};
+              if (planData0.commissionModelType === 'fixed' && planData0.fixedSplit) {
+                const flatAgent0 = Number(planData0.fixedSplit.agentPercent ?? 0);
+                const flatCompany0 = Number(planData0.fixedSplit.companyPercent ?? 0);
+                const defaultTransactionFee0 =
+                  data.defaultTransactionFee != null
+                    ? Number(data.defaultTransactionFee)
+                    : getTeamDefaultTransactionFee(teamGroup);
+                return NextResponse.json({
+                  ok: true,
+                  agentId,
+                  agentType,
+                  teamGroup,
+                  commissionMode: 'flat',
+                  tiersSource: 'team_plan_fixed',
+                  defaultTransactionFee: defaultTransactionFee0,
+                  tiers: [
+                    {
+                      tierName: 'Flat Rate',
+                      fromCompanyDollar: 0,
+                      toCompanyDollar: null,
+                      agentSplitPercent: flatAgent0,
+                      companySplitPercent: flatCompany0,
+                      transactionFee: null,
+                      capAmount: null,
+                      notes: 'Fixed commission plan from team plan',
+                    },
+                  ],
+                  ytdTierProgressionCompanyDollar: 0,
+                  cycleStart: null,
+                  cycleEnd: null,
+                });
+              }
+            }
+          }
+        }
+      } catch {
+        // Silently fall through to tiered resolution
+      }
     }
 
     // ── 1. Try agent's own stored tiers ──────────────────────────────────────

@@ -756,12 +756,41 @@ export default function AgentProfileForm({
     setValues((prev) => {
       // Auto-detect team group from the selected team's teamId
       const mappedGroup = TEAM_NAME_TO_GROUP[nextTeamId] || prev.teamGroup;
-      const isDefault = prev.commissionMode === 'team_default';
+
+      // Resolve the team plan for the newly selected team
+      const selectedTeamObj = teams.find((t) => t.teamId === nextTeamId);
+      const resolvedPlan = selectedTeamObj?.teamPlanId
+        ? teamPlans.find((p) => p.teamPlanId === selectedTeamObj.teamPlanId) ||
+          teamPlans.find((p) => p.teamId === nextTeamId)
+        : teamPlans.find((p) => p.teamId === nextTeamId);
+
+      const planIsFixed = (resolvedPlan?.commissionModelType || 'tiered') === 'fixed';
+
+      if (planIsFixed) {
+        // Auto-populate flat split from the team plan's fixedSplit
+        const agentPct = resolvedPlan?.fixedSplit?.agentPercent ?? 70;
+        const companyPct = resolvedPlan?.fixedSplit?.companyPercent ?? 30;
+        return {
+          ...prev,
+          primaryTeamId: nextTeamId,
+          defaultPlanId: '',
+          teamGroup: mappedGroup,
+          commissionMode: 'flat' as CommissionMode,
+          flatAgentPercent: agentPct,
+          flatCompanyPercent: companyPct,
+          tiers: prev.tiers,
+          defaultTransactionFee: getTeamDefaultTransactionFee(mappedGroup),
+        };
+      }
+
+      // Tiered team — populate tiers from plan bands
+      const isDefault = prev.commissionMode === 'team_default' || prev.commissionMode === 'flat';
       return {
         ...prev,
         primaryTeamId: nextTeamId,
         defaultPlanId: '',
         teamGroup: mappedGroup,
+        commissionMode: isDefault ? 'team_default' as CommissionMode : prev.commissionMode,
         tiers: isDefault ? resolveTeamDefaultTiers(nextTeamId, mappedGroup) : prev.tiers,
         defaultTransactionFee: isDefault
           ? getTeamDefaultTransactionFee(mappedGroup)
@@ -1462,23 +1491,75 @@ export default function AgentProfileForm({
                     <h4 className="text-sm font-semibold text-amber-900">Fixed Commission Plan</h4>
                     <p className="mt-1 text-sm text-amber-800">
                       This team uses a flat split on every transaction — no tier progression.
+                      The team default is shown below. You may override the split for this agent.
                     </p>
-                    {selectedTeamPlan?.fixedSplit ? (
-                      <div className="mt-3 flex items-center gap-6">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-amber-900">{selectedTeamPlan.fixedSplit.agentPercent}%</p>
-                          <p className="text-xs text-amber-700">Agent</p>
-                        </div>
-                        <div className="text-lg font-light text-amber-400">/</div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-amber-900">{selectedTeamPlan.fixedSplit.companyPercent}%</p>
-                          <p className="text-xs text-amber-700">Company</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-amber-700">Fixed split not yet configured. Edit the team plan to set percentages.</p>
+                    {selectedTeamPlan?.fixedSplit && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        Team default: {selectedTeamPlan.fixedSplit.agentPercent}% Agent / {selectedTeamPlan.fixedSplit.companyPercent}% Company
+                      </p>
                     )}
-                    <p className="mt-3 text-xs text-amber-600">To change the split, edit the team plan in the Team Plans tab.</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-amber-900">Agent Split % (this agent)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.5}
+                          className="w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm"
+                          value={values.flatAgentPercent}
+                          onChange={(e) => {
+                            const v = e.target.value === '' ? '' : Number(e.target.value);
+                            const company = typeof v === 'number' ? Math.max(0, 100 - v) : '';
+                            setValues((prev) => ({
+                              ...prev,
+                              commissionMode: 'flat' as CommissionMode,
+                              flatAgentPercent: v,
+                              flatCompanyPercent: company,
+                            }));
+                          }}
+                          placeholder="e.g. 75"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-amber-900">Company Split % (this agent)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.5}
+                          className="w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm"
+                          value={values.flatCompanyPercent}
+                          onChange={(e) => {
+                            const v = e.target.value === '' ? '' : Number(e.target.value);
+                            const agent = typeof v === 'number' ? Math.max(0, 100 - v) : '';
+                            setValues((prev) => ({
+                              ...prev,
+                              commissionMode: 'flat' as CommissionMode,
+                              flatCompanyPercent: v,
+                              flatAgentPercent: agent,
+                            }));
+                          }}
+                          placeholder="e.g. 25"
+                        />
+                      </div>
+                    </div>
+                    {selectedTeamPlan?.fixedSplit && (
+                      <button
+                        type="button"
+                        className="mt-3 text-xs text-amber-700 underline hover:text-amber-900"
+                        onClick={() => {
+                          setValues((prev) => ({
+                            ...prev,
+                            commissionMode: 'flat' as CommissionMode,
+                            flatAgentPercent: selectedTeamPlan!.fixedSplit!.agentPercent,
+                            flatCompanyPercent: selectedTeamPlan!.fixedSplit!.companyPercent,
+                          }));
+                        }}
+                      >
+                        Reset to team default ({selectedTeamPlan.fixedSplit.agentPercent}% / {selectedTeamPlan.fixedSplit.companyPercent}%)
+                      </button>
+                    )}
                   </div>
                 ) : !teamIsLeaderless && values.teamRole === 'leader' ? (
                   /* ── Leader Plan selector (with_leader teams only) ─────────── */
