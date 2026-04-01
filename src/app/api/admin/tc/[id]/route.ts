@@ -3,7 +3,7 @@
 // Also supports: checklist workflow, TC assignment, status updates (tcIntakes)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { isAdminLike } from '@/lib/auth/staffAccess';
+import { isAdminLike, isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { resolveGCI } from '@/lib/commissions';
 
@@ -58,14 +58,15 @@ async function findIntake(id: string) {
   return null;
 }
 
-// ── GET single intake ───────────────────────────────────────────────────────
+// // ── GET single intake ──────────────────────────────────────────────────
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
+    // TC staff (tc, tc_admin, office_admin) can all view intake details
+    if (!(await isStaff(decoded.uid))) return jsonError(403, 'Forbidden');
 
     const { id } = await params;
     const result = await findIntake(id);
@@ -114,7 +115,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden');
+    // TC role (tc, tc_admin, office_admin) can all update and approve intakes
+    if (!(await isStaff(decoded.uid))) return jsonError(403, 'Forbidden');
+    const callerRole = await getStaffRole(decoded.uid);
 
     const { id } = await params;
     const body = await req.json();

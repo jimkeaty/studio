@@ -2,7 +2,7 @@
 // POST /api/admin/tc — create a new TC intake (admin-side, full field set)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { isAdminLike } from '@/lib/auth/staffAccess';
+import { isAdminLike, isStaff } from '@/lib/auth/staffAccess';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
+    // TC staff (tc, tc_admin, office_admin) can all view the queue
+    if (!(await isStaff(decoded.uid))) return jsonError(403, 'Forbidden: Staff only');
 
     const url = new URL(req.url);
     const statusFilter = url.searchParams.get('status'); // optional
@@ -100,7 +101,8 @@ export async function POST(req: NextRequest) {
     if (!token) return jsonError(401, 'Unauthorized');
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
+    // TC staff (tc, tc_admin, office_admin) can all view the queue
+    if (!(await isStaff(decoded.uid))) return jsonError(403, 'Forbidden: Staff only');
 
     const body = await req.json();
 

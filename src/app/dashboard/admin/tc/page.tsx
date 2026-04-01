@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@/firebase';
-import { useIsAdminLike } from '@/hooks/useIsAdminLike';
+import { useIsStaff } from '@/hooks/useIsStaff';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -125,7 +125,7 @@ const DEFAULT_CHECKLIST = [
 
 export default function TcQueuePage() {
   const { user, loading: userLoading } = useUser();
-  const { isAdmin, loading: adminLoading } = useIsAdminLike();
+  const { isStaff, isAdmin, loading: adminLoading } = useIsStaff();
 
   // ── TC Queue state ──────────────────────────────────────────────────────────
   const [intakes, setIntakes] = useState<Intake[]>([]);
@@ -247,8 +247,8 @@ export default function TcQueuePage() {
     return <Alert><AlertTitle>Authentication Required</AlertTitle><AlertDescription>Please sign in.</AlertDescription></Alert>;
   }
 
-  if (!isAdmin) {
-    return <Alert variant="destructive"><AlertTitle>Access Denied</AlertTitle><AlertDescription>Admin only.</AlertDescription></Alert>;
+  if (!isStaff) {
+    return <Alert variant="destructive"><AlertTitle>Access Denied</AlertTitle><AlertDescription>TC staff access required.</AlertDescription></Alert>;
   }
 
   // Summary counts
