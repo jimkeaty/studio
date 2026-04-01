@@ -783,18 +783,22 @@ export default function AgentProfileForm({
         };
       }
 
-      // Tiered team — populate tiers from plan bands
-      const isDefault = prev.commissionMode === 'team_default' || prev.commissionMode === 'flat';
+      // Tiered team — always populate teamMemberOverrideBands from the team plan as the starting template
+      const memberBands = resolvedPlan?.memberDefaultBands && resolvedPlan.memberDefaultBands.length > 0
+        ? teamPlanMemberBandsToFormTiers(resolvedPlan.memberDefaultBands)
+        : prev.teamMemberOverrideBands.length > 0
+          ? prev.teamMemberOverrideBands
+          : [createEmptyTeamMemberTier(1)];
       return {
         ...prev,
         primaryTeamId: nextTeamId,
         defaultPlanId: '',
         teamGroup: mappedGroup,
-        commissionMode: isDefault ? 'team_default' as CommissionMode : prev.commissionMode,
-        tiers: isDefault ? resolveTeamDefaultTiers(nextTeamId, mappedGroup) : prev.tiers,
-        defaultTransactionFee: isDefault
-          ? getTeamDefaultTransactionFee(mappedGroup)
-          : prev.defaultTransactionFee,
+        commissionMode: 'team_default' as CommissionMode,
+        tiers: resolveTeamDefaultTiers(nextTeamId, mappedGroup),
+        teamMemberCompMode: 'custom' as TeamMemberCompMode,
+        teamMemberOverrideBands: memberBands,
+        defaultTransactionFee: getTeamDefaultTransactionFee(mappedGroup),
       };
     });
   }
@@ -985,14 +989,9 @@ export default function AgentProfileForm({
           values.agentType === 'team' && values.teamRole === 'leader'
             ? values.defaultPlanId || null
             : null,
-        teamMemberCompMode:
-          values.agentType === 'team' && values.teamRole === 'member'
-            ? values.teamMemberCompMode
-            : 'teamDefault',
+        teamMemberCompMode: 'custom',
         teamMemberOverrideBands:
-          values.agentType === 'team' &&
-          values.teamRole === 'member' &&
-          values.teamMemberCompMode === 'custom'
+          values.agentType === 'team' && values.teamRole === 'member'
             ? values.teamMemberOverrideBands.map((tier) => ({
                 tierName: tier.tierName,
                 fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
@@ -1591,167 +1590,117 @@ export default function AgentProfileForm({
                   </>
                 ) : (
                   <div className="rounded-md border border-gray-200 bg-white p-4">
-                    <h4 className="text-sm font-semibold">Team Member Compensation</h4>
-                    <p className="mt-1 text-sm text-gray-600">
-                      Use the team default payout ladder, or create a custom payout ladder for this agent.
-                    </p>
-
-                    <div className="mt-4 space-y-3">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="teamMemberCompMode"
-                          checked={values.teamMemberCompMode === 'teamDefault'}
-                          onChange={() => updateField('teamMemberCompMode', 'teamDefault')}
-                        />
-                        <span>Use Team Default</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="teamMemberCompMode"
-                          checked={values.teamMemberCompMode === 'custom'}
-                          onChange={() => {
-                            updateField('teamMemberCompMode', 'custom');
-                            if (values.teamMemberOverrideBands.length === 0) {
-                              setValues((current) => ({
-                                ...current,
-                                teamMemberOverrideBands: [createEmptyTeamMemberTier(1)],
-                              }));
-                            }
-                          }}
-                        />
-                        <span>Use Custom Member Tiers</span>
-                      </label>
-                    </div>
-
-                    {values.teamMemberCompMode === 'teamDefault' ? (
-                      <div className="mt-4">
-                        {resolvedMemberDefaults.length > 0 ? (
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                                Team Default Member Tiers
-                              </span>
-                            </div>
-                            <div className="overflow-x-auto rounded-md border">
-                              <table className="min-w-full text-sm">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Tier</th>
-                                    <th className="px-3 py-2 text-left font-medium text-gray-600">From GCI $</th>
-                                    <th className="px-3 py-2 text-left font-medium text-gray-600">To GCI $</th>
-                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Member %</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                  {resolvedMemberDefaults.map((tier, i) => (
-                                    <tr key={i} className="bg-white">
-                                      <td className="px-3 py-2 font-medium">{tier.tierName}</td>
-                                      <td className="px-3 py-2">${tier.fromCompanyDollar.toLocaleString()}</td>
-                                      <td className="px-3 py-2">{tier.toCompanyDollar != null ? `$${tier.toCompanyDollar.toLocaleString()}` : 'No Cap'}</td>
-                                      <td className="px-3 py-2 font-semibold">{tier.memberPercent}%</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                            <p className="text-xs text-gray-500">These tiers are defined in the team plan. Edit them in the Team Plans tab.</p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-amber-700">
-                            No member default tiers found for this team plan. You may want to set up member tiers in the Team Plans tab, or use custom tiers below.
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mt-4 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h5 className="text-sm font-semibold">Custom Member Tiers</h5>
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-sm font-semibold">Member Commission Tiers</h4>
+                      <div className="flex items-center gap-3">
+                        {resolvedMemberDefaults.length > 0 && (
                           <button
                             type="button"
-                            className="rounded-md border px-3 py-2 text-sm font-medium"
-                            onClick={addTeamMemberTier}
+                            className="text-xs text-blue-600 underline hover:text-blue-800"
+                            onClick={() => {
+                              setValues((prev) => ({
+                                ...prev,
+                                teamMemberCompMode: 'custom' as TeamMemberCompMode,
+                                teamMemberOverrideBands: resolvedMemberDefaults.map((t, i) => ({
+                                  id: `reset-${i}`,
+                                  tierName: t.tierName,
+                                  fromCompanyDollar: t.fromCompanyDollar,
+                                  toCompanyDollar: t.toCompanyDollar,
+                                  memberPercent: t.memberPercent,
+                                  notes: '',
+                                })),
+                              }));
+                            }}
                           >
-                            Add Custom Tier
+                            Reset to team default
                           </button>
+                        )}
+                        <button
+                          type="button"
+                          className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
+                          onClick={addTeamMemberTier}
+                        >
+                          + Add Tier
+                        </button>
+                      </div>
+                    </div>
+                    <p className="mb-4 text-xs text-gray-500">
+                      Tiers loaded from the team plan — edit as needed for this agent. Changes are saved to this agent&apos;s profile only.
+                    </p>
+
+                    {values.teamMemberOverrideBands.map((tier, index) => (
+                      <div key={index} className="grid gap-4 rounded-lg border p-4 md:grid-cols-6 mb-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">Tier Name</label>
+                          <input
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={tier.tierName}
+                            onChange={(e) => updateTeamMemberTier(index, 'tierName', e.target.value)}
+                          />
                         </div>
 
-                        {values.teamMemberOverrideBands.map((tier, index) => (
-                          <div key={index} className="grid gap-4 rounded-lg border p-4 md:grid-cols-6">
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-gray-600">Tier Name</label>
-                              <input
-                                className="w-full rounded-md border px-3 py-2 text-sm"
-                                value={tier.tierName}
-                                onChange={(e) => updateTeamMemberTier(index, 'tierName', e.target.value)}
-                              />
-                            </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">From GCI $</label>
+                          <input
+                            type="number"
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={tier.fromCompanyDollar}
+                            onChange={(e) =>
+                              updateTeamMemberTier(index, 'fromCompanyDollar', Number(e.target.value || 0))
+                            }
+                          />
+                        </div>
 
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-gray-600">From</label>
-                              <input
-                                type="number"
-                                className="w-full rounded-md border px-3 py-2 text-sm"
-                                value={tier.fromCompanyDollar}
-                                onChange={(e) =>
-                                  updateTeamMemberTier(index, 'fromCompanyDollar', Number(e.target.value || 0))
-                                }
-                              />
-                            </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">To GCI $</label>
+                          <input
+                            type="number"
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={tier.toCompanyDollar ?? ''}
+                            onChange={(e) =>
+                              updateTeamMemberTier(
+                                index,
+                                'toCompanyDollar',
+                                e.target.value === '' ? null : Number(e.target.value)
+                              )
+                            }
+                            placeholder="No cap"
+                          />
+                        </div>
 
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-gray-600">To</label>
-                              <input
-                                type="number"
-                                className="w-full rounded-md border px-3 py-2 text-sm"
-                                value={tier.toCompanyDollar ?? ''}
-                                onChange={(e) =>
-                                  updateTeamMemberTier(
-                                    index,
-                                    'toCompanyDollar',
-                                    e.target.value === '' ? null : Number(e.target.value)
-                                  )
-                                }
-                              />
-                            </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">Member %</label>
+                          <input
+                            type="number"
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={tier.memberPercent}
+                            onChange={(e) =>
+                              updateTeamMemberTier(index, 'memberPercent', Number(e.target.value || 0))
+                            }
+                          />
+                        </div>
 
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-gray-600">Member %</label>
-                              <input
-                                type="number"
-                                className="w-full rounded-md border px-3 py-2 text-sm"
-                                value={tier.memberPercent}
-                                onChange={(e) =>
-                                  updateTeamMemberTier(index, 'memberPercent', Number(e.target.value || 0))
-                                }
-                              />
-                            </div>
+                        <div className="md:col-span-2">
+                          <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                          <input
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={tier.notes}
+                            onChange={(e) => updateTeamMemberTier(index, 'notes', e.target.value)}
+                          />
+                        </div>
 
-                            <div className="md:col-span-2">
-                              <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
-                              <input
-                                className="w-full rounded-md border px-3 py-2 text-sm"
-                                value={tier.notes}
-                                onChange={(e) => updateTeamMemberTier(index, 'notes', e.target.value)}
-                              />
-                            </div>
-
-                            <div className="md:col-span-6 flex justify-end">
-                              <button
-                                type="button"
-                                className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700"
-                                onClick={() => removeTeamMemberTier(index)}
-                                disabled={values.teamMemberOverrideBands.length === 1}
-                              >
-                                Remove Tier
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                        <div className="md:col-span-6 flex justify-end">
+                          <button
+                            type="button"
+                            className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700"
+                            onClick={() => removeTeamMemberTier(index)}
+                            disabled={values.teamMemberOverrideBands.length === 1}
+                          >
+                            Remove Tier
+                          </button>
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
               </div>
