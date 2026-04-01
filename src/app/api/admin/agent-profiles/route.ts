@@ -196,8 +196,19 @@ function normalizeInput(body: AgentProfileInput) {
     referringAgentDisplayNameSnapshot,
 
     teamGroup: body.teamGroup?.trim() || null,
-    commissionMode: body.commissionMode === 'custom' ? 'custom' : 'team_default',
+    commissionMode:
+      body.commissionMode === 'custom' ? 'custom'
+      : body.commissionMode === 'flat' ? 'flat'
+      : 'team_default',
     tiers: (body.tiers || []).map(normalizeTier),
+    flatAgentPercent:
+      body.flatAgentPercent != null && Number.isFinite(Number(body.flatAgentPercent))
+        ? Number(body.flatAgentPercent)
+        : null,
+    flatCompanyPercent:
+      body.flatCompanyPercent != null && Number.isFinite(Number(body.flatCompanyPercent))
+        ? Number(body.flatCompanyPercent)
+        : null,
     defaultTransactionFee:
       body.defaultTransactionFee != null && Number.isFinite(Number(body.defaultTransactionFee))
         ? Number(body.defaultTransactionFee)
@@ -313,6 +324,8 @@ export async function POST(req: NextRequest) {
       teamGroup: normalized.teamGroup,
       commissionMode: normalized.commissionMode as import('@/lib/agents/types').CommissionMode,
       tiers: normalized.tiers,
+      flatAgentPercent: normalized.flatAgentPercent ?? null,
+      flatCompanyPercent: normalized.flatCompanyPercent ?? null,
       defaultTransactionFee: normalized.defaultTransactionFee,
       notes: normalized.notes,
       gracePeriodEnabled: normalized.gracePeriodEnabled ?? false,

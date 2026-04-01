@@ -18,7 +18,7 @@ export type TeamRole = 'leader' | 'member' | null;
 export type PlanAssignmentType = 'individual' | 'teamMember' | 'teamLeader';
 export type TeamMemberCompMode = 'teamDefault' | 'custom';
 
-export type CommissionMode = 'team_default' | 'custom';
+export type CommissionMode = 'team_default' | 'custom' | 'flat';
 
 export type AgentTierFormValue = {
   tierName: string;
@@ -58,6 +58,9 @@ export type AgentProfileFormValues = {
   teamGroup: string;
   commissionMode: CommissionMode;
   tiers: AgentTierFormValue[];
+  /** Flat commission plan fields — only used when commissionMode === 'flat' */
+  flatAgentPercent: number | string;
+  flatCompanyPercent: number | string;
   defaultTransactionFee: number | string;
   gracePeriodEnabled: boolean;
   notes: string;
@@ -166,6 +169,8 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   teamGroup: 'independent',
   commissionMode: 'team_default',
   tiers: getDefaultTiersForTeamGroup('independent'),
+  flatAgentPercent: 70,
+  flatCompanyPercent: 30,
   defaultTransactionFee: 395,
   gracePeriodEnabled: false,
   notes: '',
@@ -291,6 +296,8 @@ export default function AgentProfileForm({
         initialValues?.tiers && initialValues.tiers.length > 0
           ? cloneTiers(initialValues.tiers)
           : getDefaultTiersForTeamGroup(teamGroup),
+      flatAgentPercent: initialValues?.flatAgentPercent ?? 70,
+      flatCompanyPercent: initialValues?.flatCompanyPercent ?? 30,
       defaultTransactionFee:
         initialValues?.defaultTransactionFee ?? getTeamDefaultTransactionFee(teamGroup),
       teamMemberOverrideBands:
@@ -330,6 +337,8 @@ export default function AgentProfileForm({
         initialValues.tiers && initialValues.tiers.length > 0
           ? cloneTiers(initialValues.tiers)
           : getDefaultTiersForTeamGroup(teamGroup),
+      flatAgentPercent: initialValues.flatAgentPercent ?? 70,
+      flatCompanyPercent: initialValues.flatCompanyPercent ?? 30,
       defaultTransactionFee:
         initialValues.defaultTransactionFee ?? getTeamDefaultTransactionFee(teamGroup),
     });
@@ -943,6 +952,14 @@ export default function AgentProfileForm({
           values.referringAgentDisplayNameSnapshot || null,
         teamGroup: values.teamGroup || null,
         commissionMode: values.commissionMode || 'team_default',
+        flatAgentPercent:
+          values.commissionMode === 'flat'
+            ? (values.flatAgentPercent === '' || values.flatAgentPercent == null ? null : Number(values.flatAgentPercent))
+            : null,
+        flatCompanyPercent:
+          values.commissionMode === 'flat'
+            ? (values.flatCompanyPercent === '' || values.flatCompanyPercent == null ? null : Number(values.flatCompanyPercent))
+            : null,
         tiers: values.tiers.map((tier) => ({
           tierName: tier.tierName,
           fromCompanyDollar: Number(tier.fromCompanyDollar || 0),
@@ -1252,6 +1269,24 @@ export default function AgentProfileForm({
               <option value="team">Team</option>
             </select>
           </div>
+          {isIndependentAgentType(values.agentType) && (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Commission Mode</label>
+              <select
+                className="w-full rounded-md border px-3 py-2"
+                value={values.commissionMode}
+                onChange={(e) => updateField('commissionMode', e.target.value as CommissionMode)}
+              >
+                <option value="team_default">Tiered (Standard)</option>
+                <option value="flat">Flat Commission Plan</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                {values.commissionMode === 'flat'
+                  ? 'Fixed split on every transaction — no tier progression.'
+                  : 'Split advances through GCI thresholds over the commission cycle.'}
+              </p>
+            </div>
+          )}
         </div>
 
         {!isIndependentAgentType(values.agentType) && (
@@ -1604,8 +1639,50 @@ export default function AgentProfileForm({
           </div>
         )}
 
-        {/* Individual Commission Tiers — only shown for independent agents */}
-        {isIndependentAgentType(values.agentType) && (
+        {/* Flat Commission Plan — only shown when commissionMode is 'flat' and agent is independent */}
+        {isIndependentAgentType(values.agentType) && values.commissionMode === 'flat' && (
+          <div className="mt-6 rounded-md border border-amber-100 bg-amber-50 p-4">
+            <h3 className="text-sm font-semibold text-amber-900">Flat Commission Split</h3>
+            <p className="mt-1 text-sm text-amber-800">
+              Fixed split applied to every transaction — no tier progression, no GCI thresholds.
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Agent % <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  className="w-full rounded-md border px-3 py-2"
+                  value={values.flatAgentPercent}
+                  onChange={(e) =>
+                    updateField('flatAgentPercent', e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                  placeholder="e.g. 70"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Company % <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  className="w-full rounded-md border px-3 py-2"
+                  value={values.flatCompanyPercent}
+                  onChange={(e) =>
+                    updateField('flatCompanyPercent', e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                  placeholder="e.g. 30"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Individual Commission Tiers — only shown for independent agents using tiered plans */}
+        {isIndependentAgentType(values.agentType) && values.commissionMode !== 'flat' && (
           <div className="mt-6 overflow-x-auto">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-700">Commission Tiers</h3>
@@ -1776,7 +1853,7 @@ export default function AgentProfileForm({
         </p>
       )}
 
-      {isIndependentAgentType(values.agentType) && values.tiers.length === 0 && (
+      {isIndependentAgentType(values.agentType) && values.commissionMode !== 'flat' && values.tiers.length === 0 && (
         <p className="text-sm text-amber-700">
           Add at least one commission tier before saving this profile.
         </p>
@@ -1796,7 +1873,7 @@ export default function AgentProfileForm({
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           disabled={
             isSaving ||
-            (isIndependentAgentType(values.agentType) && values.tiers.length === 0) ||
+            (isIndependentAgentType(values.agentType) && values.commissionMode !== 'flat' && values.tiers.length === 0) ||
             (!isIndependentAgentType(values.agentType) && !teamSetupIsValid)
           }
         >

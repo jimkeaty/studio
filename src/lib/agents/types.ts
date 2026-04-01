@@ -12,8 +12,8 @@ export type AgentTeamGroup =
   | 'independent'
   | string; // allows custom / future teams
 
-/** Whether the agent uses team-default commission tiers or a custom structure. */
-export type CommissionMode = 'team_default' | 'custom';
+/** Whether the agent uses team-default commission tiers, a custom tiered structure, or a flat fixed split. */
+export type CommissionMode = 'team_default' | 'custom' | 'flat';
 
 export type AgentType = 'independent' | 'team';
 
@@ -71,9 +71,13 @@ export type AgentProfile = {
 
   /** Reporting / grouping team (separate from compensation team) */
   teamGroup: AgentTeamGroup | null;
-  /** Whether using team-default or custom commission structure */
+  /** Whether using team-default tiers, custom tiers, or a flat fixed split */
   commissionMode: CommissionMode;
   tiers: AgentTier[];
+  /** Flat commission plan: fixed agent split percentage (no tiers, no progression) */
+  flatAgentPercent: number | null;
+  /** Flat commission plan: fixed company split percentage */
+  flatCompanyPercent: number | null;
   /** Default per-transaction fee for this agent */
   defaultTransactionFee: number | null;
   gracePeriodEnabled: boolean;
@@ -107,6 +111,8 @@ export type AgentProfileInput = {
   teamGroup?: AgentTeamGroup | null;
   commissionMode?: CommissionMode;
   tiers?: AgentTier[];
+  flatAgentPercent?: number | null;
+  flatCompanyPercent?: number | null;
   defaultTransactionFee?: number | null;
   gracePeriodEnabled?: boolean;
   notes?: string | null;

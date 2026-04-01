@@ -79,6 +79,38 @@ export async function GET(
     const primaryTeamId: string | null = data.primaryTeamId || null;
     const teamRole: string | null = data.teamRole || null;
 
+    // ── 0. Flat commission plan — synthetic single-tier, no progression ────────
+    if (commissionMode === 'flat') {
+      const flatAgent = Number(data.flatAgentPercent ?? 0);
+      const flatCompany = Number(data.flatCompanyPercent ?? 0);
+      const defaultTransactionFee =
+        data.defaultTransactionFee != null ? Number(data.defaultTransactionFee) : 0;
+      return NextResponse.json({
+        ok: true,
+        agentId,
+        agentType,
+        teamGroup,
+        commissionMode: 'flat',
+        tiersSource: 'flat',
+        defaultTransactionFee,
+        tiers: [
+          {
+            tierName: 'Flat Rate',
+            fromCompanyDollar: 0,
+            toCompanyDollar: null,
+            agentSplitPercent: flatAgent,
+            companySplitPercent: flatCompany,
+            transactionFee: null,
+            capAmount: null,
+            notes: 'Flat commission plan — no tier progression',
+          },
+        ],
+        ytdTierProgressionCompanyDollar: 0,
+        cycleStart: null,
+        cycleEnd: null,
+      });
+    }
+
     // ── 1. Try agent's own stored tiers ──────────────────────────────────────
     let tiers: ReturnType<typeof normalizeTier>[] = (data.tiers || []).map(normalizeTier);
     let tiersSource = 'agent_custom';
