@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2,
-  Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft,
+  Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft, Download,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -115,6 +115,10 @@ export default function AdminTransactionLedgerPage() {
   const [transferAgentName, setTransferAgentName] = useState('');
   const [transferring, setTransferring] = useState(false);
 
+  // Export CSV
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   // Recalculate rollups
   const [recalculating, setRecalculating] = useState(false);
   const [recalcResult, setRecalcResult] = useState<{ rebuilt: number; year: number } | null>(null);
@@ -187,6 +191,43 @@ export default function AdminTransactionLedgerPage() {
       setRecalcError(err.message);
     } finally {
       setRecalculating(false);
+    }
+  };
+
+  /* ─── Export CSV ──────────────────────────────────────────────────── */
+
+  const handleExport = async () => {
+    if (!user) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams();
+      if (agentFilter !== 'all') params.set('agentId', agentFilter);
+      if (yearFilter !== 'all') params.set('year', yearFilter);
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+      const url = `/api/admin/transactions/export${params.toString() ? `?${params}` : ''}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as any).error || `Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] || 'transactions.csv';
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) {
+      setExportError(err.message);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -375,6 +416,15 @@ export default function AdminTransactionLedgerPage() {
           <Link href="/dashboard/admin/import">
             <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Bulk Import</Button>
           </Link>
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={exporting}
+            title={`Export current view to CSV`}
+          >
+            <Download className={`mr-2 h-4 w-4 ${exporting ? 'animate-pulse' : ''}`} />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </Button>
           <Link href="/dashboard/transactions/new">
             <Button><Plus className="mr-2 h-4 w-4" /> Add Transaction</Button>
           </Link>
@@ -403,6 +453,13 @@ export default function AdminTransactionLedgerPage() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{pageError}</AlertDescription>
+        </Alert>
+      )}
+      {exportError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Export Failed</AlertTitle>
+          <AlertDescription>{exportError}</AlertDescription>
         </Alert>
       )}
 
