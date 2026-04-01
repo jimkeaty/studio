@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs && tsc --noEmit",
+    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs && tsc --noEmit --skipLibCheck",
     "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
