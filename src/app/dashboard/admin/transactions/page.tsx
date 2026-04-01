@@ -612,25 +612,31 @@ export default function AdminTransactionLedgerPage() {
                     return (
                       <TableRow
                         key={t.id}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        className="cursor-pointer hover:bg-muted/40 transition-colors group"
                         onClick={() => openEdit(t)}
                       >
                         <TableCell>
-                          <Badge className={cn(sc.color, 'text-xs capitalize whitespace-nowrap')}>
+                          <span className={cn(
+                            'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap',
+                            sc.color
+                          )}>
                             {sc.label}
-                          </Badge>
+                          </span>
                         </TableCell>
-                        <TableCell className="font-medium max-w-[200px] truncate">{t.address}</TableCell>
-                        <TableCell className="text-sm whitespace-nowrap">{t.agentDisplayName ?? '—'}</TableCell>
+                        {/* Stacked address + agent */}
+                        <TableCell className="max-w-[220px]">
+                          <div className="font-medium truncate text-sm">{t.address || '—'}</div>
+                          <div className="text-xs text-muted-foreground truncate mt-0.5">{t.agentDisplayName ?? '—'}</div>
+                        </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border bg-muted/50 whitespace-nowrap">
                             {closingTypeLabel[(t as any).closingType] ?? (t as any).closingType ?? '—'}
-                          </Badge>
+                          </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border bg-muted/50 whitespace-nowrap">
                             {txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '—'}
-                          </Badge>
+                          </span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{formatDate(t.contractDate)}</TableCell>
                         <TableCell className="whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>

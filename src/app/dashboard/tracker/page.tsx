@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { TrackerPageSkeleton } from '@/components/ui/page-skeleton';
 
 type DailyActivity = {
   callsCount: number;
@@ -335,9 +336,7 @@ export default function DailyTrackerPage() {
     }
   }
 
-  if (userLoading) return (
-    <div className="space-y-6"><Skeleton className="h-10 w-64" /><Skeleton className="h-64 w-full" /></div>
-  );
+  if (userLoading) return <TrackerPageSkeleton />;
 
   if (!user) return (
     <Alert variant="destructive">

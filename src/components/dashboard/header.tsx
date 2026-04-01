@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, Bell, X, TrendingUp, Award, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Menu, Bell, X, TrendingUp, Award, CheckCircle2, AlertCircle, Sun, Moon } from 'lucide-react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { UserNav } from './user-nav';
 import { cn } from '@/lib/utils';
@@ -17,13 +17,12 @@ type Notification = {
   read: boolean;
 };
 
-// Static sample notifications — in production these would come from Firestore
 const SAMPLE_NOTIFICATIONS: Notification[] = [
   {
     id: '1',
     type: 'tier_upgrade',
     title: 'Tier Upgrade Unlocked!',
-    body: 'You\'ve crossed the threshold for your next commission tier. Your split just improved.',
+    body: "You've crossed the threshold for your next commission tier. Your split just improved.",
     time: 'Today',
     read: false,
   },
@@ -31,7 +30,7 @@ const SAMPLE_NOTIFICATIONS: Notification[] = [
     id: '2',
     type: 'goal_milestone',
     title: '75% of Annual Goal Reached',
-    body: 'You\'re 75% of the way to your annual income goal. Keep pushing!',
+    body: "You're 75% of the way to your annual income goal. Keep pushing!",
     time: 'Yesterday',
     read: false,
   },
@@ -53,6 +52,43 @@ const notifIcon = (type: Notification['type']) => {
   return <AlertCircle className="h-4 w-4 text-red-500" />;
 };
 
+// ─── Simple dark-mode toggle (no next-themes dependency needed) ───────────────
+function DarkModeToggle() {
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    // Initialize from localStorage or system preference
+    const stored = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const dark = stored === 'dark' || (!stored && prefersDark);
+    setIsDark(dark);
+    document.documentElement.classList.toggle('dark', dark);
+  }, []);
+
+  const toggle = () => {
+    const next = !isDark;
+    setIsDark(next);
+    document.documentElement.classList.toggle('dark', next);
+    localStorage.setItem('theme', next ? 'dark' : 'light');
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-9 w-9 rounded-full"
+      onClick={toggle}
+      aria-label="Toggle dark mode"
+    >
+      {isDark ? (
+        <Sun className="h-4 w-4 text-amber-400" />
+      ) : (
+        <Moon className="h-4 w-4" />
+      )}
+    </Button>
+  );
+}
+
 export function Header() {
   const { toggleSidebar } = useSidebar();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -73,7 +109,10 @@ export function Header() {
         <span className="sr-only">Toggle navigation menu</span>
       </Button>
 
-      <div className="flex w-full items-center justify-end gap-3">
+      <div className="flex w-full items-center justify-end gap-2">
+        {/* ── Dark Mode Toggle ──────────────────────────────────────── */}
+        <DarkModeToggle />
+
         {/* ── Notification Bell ─────────────────────────────────────── */}
         <div className="relative">
           <Button
@@ -94,7 +133,6 @@ export function Header() {
           {/* Dropdown panel */}
           {notifOpen && (
             <div className="absolute right-0 top-11 z-50 w-80 rounded-xl border bg-background shadow-xl overflow-hidden">
-              {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                 <span className="text-sm font-semibold">Notifications</span>
                 <div className="flex items-center gap-2">
@@ -111,7 +149,6 @@ export function Header() {
                   </button>
                 </div>
               </div>
-              {/* List */}
               <div className="max-h-72 overflow-y-auto divide-y">
                 {notifications.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8">No notifications</p>

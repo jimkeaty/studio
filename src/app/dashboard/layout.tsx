@@ -9,6 +9,7 @@ import { useUser } from '@/firebase';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
 import { UserX } from 'lucide-react';
+import { CommandPalette } from '@/components/dashboard/command-palette';
 
 function ImpersonationBanner() {
   const { isImpersonating, agent, stopImpersonation } = useImpersonation();
@@ -49,6 +50,8 @@ function DashboardShell({ children }: { children: ReactNode }) {
       </div>
       {/* Mobile bottom tab bar — only visible on small screens */}
       <MobileBottomTabBar />
+      {/* Command Palette — ⌘K / Ctrl+K */}
+      <CommandPalette />
     </SidebarProvider>
   );
 }

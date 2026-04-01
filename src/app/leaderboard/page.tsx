@@ -61,6 +61,23 @@ const RaceIcon = ({ rank }: { rank: number }) => {
   return <Zap className="h-6 w-6 text-blue-500" />;
 };
 
+const AVATAR_GRADIENTS = [
+  'from-blue-500 to-violet-600',
+  'from-violet-500 to-pink-600',
+  'from-amber-500 to-red-500',
+  'from-emerald-500 to-blue-500',
+  'from-cyan-500 to-indigo-600',
+  'from-rose-500 to-orange-500',
+  'from-teal-500 to-emerald-600',
+  'from-indigo-500 to-purple-600',
+];
+
+const RANK_STYLES: Record<number, { border: string; rankColor: string; shadow: string }> = {
+  0: { border: 'border-yellow-400/60', rankColor: 'text-yellow-400', shadow: 'shadow-yellow-500/10' },
+  1: { border: 'border-slate-400/40', rankColor: 'text-slate-300', shadow: '' },
+  2: { border: 'border-amber-700/40', rankColor: 'text-amber-600', shadow: '' },
+};
+
 const LeaderboardSkeleton = () => (
   <div className="space-y-4">
     {[...Array(5)].map((_, i) => (
@@ -222,76 +239,76 @@ export default function LeaderboardPage() {
             <p className="text-sm text-gray-500">Leaderboard data for {periodLabel} is not yet available.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {rows.map((agent, index) => {
               const progress = leaderScore > 0 ? (agent.closed / leaderScore) * 100 : 0;
+              const rankStyle = RANK_STYLES[index] ?? { border: 'border-white/10', rankColor: 'text-slate-500', shadow: '' };
+              const gradientClass = AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length];
+              const initials = (agent.displayName ?? '?').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
               return (
-                <Card
+                <div
                   key={agent.agentId ?? `${index}`}
                   className={cn(
-                    'bg-gray-800/50 border-2 transition-all duration-300 ease-out',
-                    index === 0 && 'border-yellow-400 shadow-2xl shadow-yellow-500/20',
-                    index === 1 && 'border-gray-500',
-                    index === 2 && 'border-orange-700',
-                    index > 2 && 'border-gray-700'
+                    'flex items-center gap-4 p-4 rounded-2xl border-2 bg-white/5 backdrop-blur-sm transition-all duration-200 hover:bg-white/10',
+                    rankStyle.border,
+                    index === 0 && `shadow-2xl ${rankStyle.shadow}`
                   )}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex-shrink-0 text-3xl font-bold text-gray-500 w-12 text-center">
-                        {index + 1}
-                      </div>
-                      <Avatar className="h-16 w-16 border-2 border-gray-600">
-                        <AvatarImage src={agent.avatarUrl ?? undefined} alt={agent.displayName} />
-                        <AvatarFallback>{(agent.displayName ?? '—').charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-grow min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <div className="text-xl sm:text-2xl font-bold truncate">{agent.displayName ?? 'Unknown Agent'}</div>
-                          {agent.isCorrected && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Badge variant="outline" className="border-yellow-400 text-yellow-400">Corrected</Badge>
-                                </TooltipTrigger>
-                                <TooltipContent className="max-w-xs bg-gray-800 text-white border-gray-600">
-                                  <p className="font-semibold">Reason for Correction:</p>
-                                  <p>{agent.correctionReason}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
-                        <div className="mt-2 h-6 w-full bg-gray-700/50 rounded-full overflow-hidden border border-gray-600">
-                          <div
-                            className={cn(
-                              'h-full rounded-full bg-gradient-to-r from-blue-500 to-primary transition-all duration-500 ease-out flex items-center justify-end pr-2',
-                              index === 0 && 'from-yellow-500 to-orange-400'
-                            )}
-                            style={{ width: `${progress}%` }}
-                          >
-                            <RaceIcon rank={index} />
-                          </div>
-                        </div>
-                        {/* Stats row */}
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
-                          <span>Volume: <span className="text-gray-200 font-medium">{fmtCurrency(agent.closedVolume)}</span></span>
-                          <span>GCI: <span className="text-gray-200 font-medium">{fmtCurrency(agent.totalGCI)}</span></span>
-                          {agent.listings > 0 && (
-                            <span>Listings: <span className="text-gray-200 font-medium">{agent.listings}</span></span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex-shrink-0 text-right w-32 sm:w-48">
-                        <div className="text-3xl sm:text-4xl font-black tabular-nums">{agent.closed}</div>
-                        <div className="text-sm text-gray-400 font-medium">Closed</div>
-                        <div className="text-lg text-gray-500 font-semibold mt-1">
-                          {agent.pending} Pending
-                        </div>
-                      </div>
+                  {/* Rank */}
+                  <div className={cn('flex-shrink-0 w-10 text-center text-2xl font-black', rankStyle.rankColor)}>
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                  </div>
+
+                  {/* Avatar */}
+                  <div className={cn('flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br flex items-center justify-center font-black text-lg text-white border-2 border-white/20', gradientClass)}>
+                    {agent.avatarUrl ? (
+                      <img src={agent.avatarUrl} alt={agent.displayName} className="w-full h-full rounded-full object-cover" />
+                    ) : initials}
+                  </div>
+
+                  {/* Name + bar */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-lg font-bold truncate">{agent.displayName ?? 'Unknown Agent'}</span>
+                      {agent.isCorrected && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Badge variant="outline" className="border-yellow-400 text-yellow-400 text-xs">Corrected</Badge>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs bg-gray-800 text-white border-gray-600">
+                              <p className="font-semibold">Reason for Correction:</p>
+                              <p>{agent.correctionReason}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
+                    {/* Progress bar */}
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          'h-full rounded-full bg-gradient-to-r transition-all duration-700 ease-out',
+                          index === 0 ? 'from-yellow-400 to-orange-400' : 'from-blue-500 to-emerald-400'
+                        )}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    {/* Stats */}
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-white/50">
+                      <span>Vol: <span className="text-white/80 font-semibold">{fmtCurrency(agent.closedVolume)}</span></span>
+                      {agent.listings > 0 && <span>Listings: <span className="text-white/80 font-semibold">{agent.listings}</span></span>}
+                      {agent.pending > 0 && <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>}
+                    </div>
+                  </div>
+
+                  {/* GCI + Closed */}
+                  <div className="flex-shrink-0 text-right">
+                    <div className="text-xl sm:text-2xl font-black text-emerald-400 tabular-nums">{fmtCurrency(agent.totalGCI)}</div>
+                    <div className="text-xs text-white/50 mt-0.5">GCI</div>
+                    <div className="text-sm font-bold text-white mt-1">{agent.closed} <span className="text-white/50 font-normal">closed</span></div>
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -359,12 +376,10 @@ export default function LeaderboardPage() {
 
 function TotalCard({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
   return (
-    <Card className="bg-gray-800/40 border-gray-700">
-      <CardContent className="p-3 sm:p-4 text-center">
-        <Icon className="h-5 w-5 mx-auto mb-1 text-gray-400" />
-        <div className="text-lg sm:text-xl font-bold">{value}</div>
-        <div className="text-xs text-gray-400">{label}</div>
-      </CardContent>
-    </Card>
+    <div className="bg-white/5 border border-white/10 rounded-xl p-3 sm:p-4 text-center backdrop-blur-sm hover:bg-white/10 transition-colors">
+      <Icon className="h-5 w-5 mx-auto mb-1 text-blue-400" />
+      <div className="text-lg sm:text-xl font-black text-white">{value}</div>
+      <div className="text-xs text-white/50">{label}</div>
+    </div>
   );
 }

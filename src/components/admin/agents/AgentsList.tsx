@@ -334,80 +334,105 @@ export default function AgentsList() {
       )}
 
       {isLoading ? (
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
-          <p className="text-sm text-gray-600">Loading agent profiles...</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="rounded-xl border bg-white shadow-sm overflow-hidden animate-pulse">
+              <div className="h-16 bg-gradient-to-r from-gray-200 to-gray-300" />
+              <div className="p-4 space-y-2">
+                <div className="h-4 bg-gray-200 rounded w-3/4" />
+                <div className="h-3 bg-gray-100 rounded w-1/2" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : errorMessage ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-6 shadow-sm">
           <p className="text-sm text-red-700">{errorMessage}</p>
         </div>
+      ) : agents.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-gray-200 p-12 text-center">
+          <div className="text-4xl mb-3">👤</div>
+          <p className="font-semibold text-gray-700">No agents yet</p>
+          <p className="text-sm text-gray-500 mt-1">Add your first agent profile to get started.</p>
+          <Link href="/dashboard/admin/agents/new" className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            Add Agent
+          </Link>
+        </div>
       ) : (
-        <section className="overflow-hidden rounded-lg border bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Office</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Agent Type</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Team</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Anniversary</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agents.length === 0 ? (
-                  <tr className="border-t">
-                    <td className="px-4 py-6 text-gray-600" colSpan={7}>
-                      No agent profiles found yet.
-                    </td>
-                  </tr>
-                ) : (
-                  agents.map((agent) => (
-                    <tr key={agent.agentId} className="border-t">
-                      <td className="px-4 py-3">{agent.displayName || agent.agentId}</td>
-                      <td className="px-4 py-3">{agent.office || '—'}</td>
-                      <td className="px-4 py-3 capitalize">
-                        {(agent.status || '—').replace('_', ' ')}
-                      </td>
-                      <td className="px-4 py-3">
-                        {formatAgentType(agent.agentType, agent.teamRole)}
-                      </td>
-                      <td className="px-4 py-3">{agent.primaryTeamId || '—'}</td>
-                      <td className="px-4 py-3">
-                        {formatAnniversary(agent.anniversaryMonth, agent.anniversaryDay)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Link
-                            href={`/dashboard?viewAs=${agent.agentId}&viewAsName=${encodeURIComponent(agent.displayName)}`}
-                            className="font-medium text-green-600 hover:underline"
-                          >
-                            Dashboard
-                          </Link>
-                          <Link
-                            href={`/dashboard/admin/agents/${agent.agentId}`}
-                            className="font-medium text-blue-600 hover:underline"
-                          >
-                            Edit
-                          </Link>
-                          <button
-                            onClick={() => handleDeleteAgent(agent.agentId, agent.displayName)}
-                            disabled={deletingAgent === agent.agentId}
-                            className="font-medium text-red-500 hover:text-red-700 hover:underline disabled:opacity-50 text-sm"
-                          >
-                            {deletingAgent === agent.agentId ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {agents.map((agent) => {
+            const initials = (agent.displayName || 'A')
+              .split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+            const gradients = [
+              'from-blue-500 to-indigo-600',
+              'from-emerald-500 to-teal-600',
+              'from-violet-500 to-purple-600',
+              'from-amber-500 to-orange-600',
+              'from-rose-500 to-pink-600',
+              'from-cyan-500 to-blue-600',
+            ];
+            const gradientIndex = (agent.displayName || '').charCodeAt(0) % gradients.length;
+            const gradient = gradients[gradientIndex];
+            const isActive = agent.status === 'active';
+            return (
+              <div key={agent.agentId} className="rounded-xl border bg-white shadow-sm overflow-hidden hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col">
+                {/* Gradient header */}
+                <div className={`bg-gradient-to-r ${gradient} h-16 flex items-end px-4 pb-2`}>
+                  <div className="flex items-center gap-2">
+                    <div className="h-10 w-10 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                      {initials}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-white text-sm truncate leading-tight">{agent.displayName || agent.agentId}</p>
+                      <p className="text-white/70 text-[11px] truncate">{agent.office || 'No office'}</p>
+                    </div>
+                  </div>
+                </div>
+                {/* Card body */}
+                <div className="p-3 flex-1 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {isActive ? '● Active' : '○ Inactive'}
+                    </span>
+                    <span className="text-[11px] text-gray-500">{formatAgentType(agent.agentType, agent.teamRole)}</span>
+                  </div>
+                  {agent.primaryTeamId && (
+                    <p className="text-[11px] text-gray-500 truncate">Team: {agent.primaryTeamId}</p>
+                  )}
+                  <p className="text-[11px] text-gray-400">
+                    Anniversary: {formatAnniversary(agent.anniversaryMonth, agent.anniversaryDay)}
+                  </p>
+                </div>
+                {/* Actions */}
+                <div className="border-t px-3 py-2 flex items-center gap-2 bg-gray-50/50">
+                  <Link
+                    href={`/dashboard?viewAs=${agent.agentId}&viewAsName=${encodeURIComponent(agent.displayName)}`}
+                    className="flex-1 text-center text-[11px] font-medium text-green-600 hover:text-green-700 hover:underline"
+                  >
+                    Dashboard
+                  </Link>
+                  <span className="text-gray-200">|</span>
+                  <Link
+                    href={`/dashboard/admin/agents/${agent.agentId}`}
+                    className="flex-1 text-center text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                  >
+                    Edit
+                  </Link>
+                  <span className="text-gray-200">|</span>
+                  <button
+                    onClick={() => handleDeleteAgent(agent.agentId, agent.displayName)}
+                    disabled={deletingAgent === agent.agentId}
+                    className="flex-1 text-center text-[11px] font-medium text-red-500 hover:text-red-700 hover:underline disabled:opacity-50"
+                  >
+                    {deletingAgent === agent.agentId ? '...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

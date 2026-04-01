@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useUser } from '@/firebase';
+import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist';
 import type { AgentDashboardData, BusinessPlan, YtdValueMetrics, Transaction, Opportunity } from '@/lib/types';
 import type { MonthlyData, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -761,6 +762,12 @@ function AgentDashboardPage() {
       />
       {/* ═══ QUICK ACTION BAR (Improvement #8) ══════════════════════════ */}
       <QuickActionBar />
+
+      {/* ═══ ONBOARDING CHECKLIST (Round 3 #6) ═══════════════════════════ */}
+      <OnboardingChecklist
+        hasTransactions={closedCount + pendingCount > 0}
+        hasGoal={!!dashboard?.annualIncomeGoal}
+      />
 
       {/* ════════════════════════════════════════════════════════════════════
           1. MY PERFORMANCE — metrics at the very top
