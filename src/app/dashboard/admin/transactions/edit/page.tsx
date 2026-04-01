@@ -69,12 +69,15 @@ type AgentCommissionData = {
 };
 
 function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | null {
+  if (!tiers || tiers.length === 0) return null;
   for (const tier of tiers) {
     const from = tier.fromCompanyDollar;
     const to = tier.toCompanyDollar;
     if (gci >= from && (to === null || gci < to)) return tier;
   }
-  return null;
+  // No exact match — agent has exceeded all defined band ceilings.
+  // Return the last tier (highest band) as the safe fallback.
+  return tiers[tiers.length - 1];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

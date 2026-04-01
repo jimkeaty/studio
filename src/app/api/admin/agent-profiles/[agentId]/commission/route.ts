@@ -176,6 +176,28 @@ export async function GET(
       tiersSource = 'team_template';
     }
 
+    // ── 4. Absolute last-resort fallback — should never be reached ────────────
+    // getTeamDefaultTiers always returns STANDARD_TIERS for unknown groups,
+    // so this guard is purely defensive against future code changes.
+    if (tiers.length === 0) {
+      console.warn(
+        `[commission API] All tier sources exhausted for agent ${agentId}; ` +
+        `falling back to STANDARD_TIERS. commissionMode=${commissionMode}, teamGroup=${teamGroup}`
+      );
+      const fallbackTiers = getTeamDefaultTiers('independent');
+      tiers = fallbackTiers.map((t) => ({
+        tierName: t.tierName,
+        fromCompanyDollar: t.fromCompanyDollar,
+        toCompanyDollar: t.toCompanyDollar,
+        agentSplitPercent: t.agentSplitPercent,
+        companySplitPercent: t.companySplitPercent,
+        transactionFee: null,
+        capAmount: null,
+        notes: t.notes || '',
+      }));
+      tiersSource = 'standard_fallback';
+    }
+
     // ── Default transaction fee ───────────────────────────────────────────────
     const defaultTransactionFee =
       data.defaultTransactionFee != null
