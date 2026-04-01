@@ -48,7 +48,7 @@
     "firebase-admin": "^13.6.1",
     "genkit": "^1.20.0",
     "lucide-react": "^0.475.0",
-    "next": "latest",
+    "next": "^15.0.8",
     "patch-package": "^8.0.0",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.3",
