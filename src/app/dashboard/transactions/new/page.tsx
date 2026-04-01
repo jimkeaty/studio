@@ -38,6 +38,7 @@ const INSPECTION_TYPE_OPTIONS = [
   'Sewer Scope Inspection',
   'HVAC Inspection',
   'Generator Inspection',
+  'Foundation Inspection',
   'Pool',
   'Survey',
 ];
