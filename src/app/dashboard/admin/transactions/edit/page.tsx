@@ -164,6 +164,7 @@ const schema = z.object({
   buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerClosingCostAgentCommission: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerClosingCostTxFee: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostHomeWarranty: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerClosingCostOther: z.coerce.number().min(0).optional().or(z.literal('')),
   warrantyAtClosing: z.enum(['yes', 'no']).optional(),
   warrantyPaidBy: z.string().optional(),
@@ -514,6 +515,7 @@ export default function EditTransactionPage() {
           buyerClosingCostTotal: n(tx.buyerClosingCostTotal),
           buyerClosingCostAgentCommission: n(tx.buyerClosingCostAgentCommission),
           buyerClosingCostTxFee: n(tx.buyerClosingCostTxFee),
+          buyerClosingCostHomeWarranty: n(tx.buyerClosingCostHomeWarranty),
           buyerClosingCostOther: n(tx.buyerClosingCostOther),
           warrantyAtClosing: (tx.warrantyAtClosing as any) || undefined,
           warrantyPaidBy: tx.warrantyPaidBy || '',
@@ -1192,6 +1194,12 @@ export default function EditTransactionPage() {
               <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Transaction Fee ($)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostHomeWarranty" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Home Warranty ($)</FormLabel>
                   <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
                 </FormItem>
               )} />

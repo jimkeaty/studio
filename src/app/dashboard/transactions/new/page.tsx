@@ -262,6 +262,7 @@ const schema = z.object({
   buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerClosingCostAgentCommission: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerClosingCostTxFee: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostHomeWarranty: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerClosingCostOther: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // Additional info
@@ -1379,9 +1380,9 @@ export default function AddTransactionPage() {
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 5 — COMMISSION & FEES
           ═══════════════════════════════════════════════════════════════════ */}
-          <Section title="Commission & Fees">
+          <Section title="Buyer Closing Cost Paid by Seller">
             {/* Buyer closing cost paid by seller */}
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buyer Closing Cost Paid by Seller</p>
+            {/* Buyer closing cost breakdown header */}
             <div className="max-w-xs">
               <FormField control={form.control} name="buyerClosingCostTotal" render={({ field }) => (
                 <FormItem>
@@ -1412,6 +1413,14 @@ export default function AddTransactionPage() {
               <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Transaction Fee ($)</FormLabel>
+                  <FormControl>
+                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                  </FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostHomeWarranty" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Home Warranty ($)</FormLabel>
                   <FormControl>
                     <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
                   </FormControl>
@@ -1493,28 +1502,11 @@ export default function AddTransactionPage() {
               </div>
             </div>
 
-            {/* Agent view: Gross Commission % + Agent Net $ (read-only) */}
+            {/* Agent view: Agent Net $ only (read-only) — GCI, Broker %, Broker GCI, Agent % are hidden from agents */}
             {!isAdmin && (
               <>
                 <Separator />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-lg">
-                  <FormField control={form.control} name="commissionPercent" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Gross Commission %</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="3"
-                          readOnly
-                          className="bg-background cursor-default"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>% of Commission Base Price</FormDescription>
-                    </FormItem>
-                  )} />
+                <div className="max-w-xs">
                   <FormField control={form.control} name="agentDollar" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Agent Net $</FormLabel>

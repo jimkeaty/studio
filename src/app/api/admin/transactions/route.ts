@@ -91,7 +91,7 @@ const UPDATABLE_FIELDS = new Set([
   // Commission paid by seller
   'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
   // Buyer closing cost
-  'buyerClosingCostTotal', 'buyerClosingCostAgentCommission', 'buyerClosingCostTxFee', 'buyerClosingCostOther',
+  'buyerClosingCostTotal', 'buyerClosingCostAgentCommission', 'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther',
   // Additional info
   'warrantyAtClosing', 'warrantyPaidBy',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',

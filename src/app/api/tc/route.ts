@@ -143,6 +143,31 @@ export async function POST(req: NextRequest) {
 
       notes: toStr(body.notes),
 
+      // Buyer closing cost paid by seller
+      buyerClosingCostTotal: toNum(body.buyerClosingCostTotal),
+      buyerClosingCostAgentCommission: toNum(body.buyerClosingCostAgentCommission),
+      buyerClosingCostTxFee: toNum(body.buyerClosingCostTxFee),
+      buyerClosingCostHomeWarranty: toNum(body.buyerClosingCostHomeWarranty),
+      buyerClosingCostOther: toNum(body.buyerClosingCostOther),
+
+      // Seller-paying commission
+      sellerPayingListingAgent: toNum(body.sellerPayingListingAgent),
+      sellerPayingListingAgentUnknown: !!body.sellerPayingListingAgentUnknown,
+      sellerPayingBuyerAgent: toNum(body.sellerPayingBuyerAgent),
+
+      // Additional info
+      warrantyAtClosing: toStr(body.warrantyAtClosing),
+      warrantyPaidBy: toStr(body.warrantyPaidBy),
+      txComplianceFee: toStr(body.txComplianceFee),
+      txComplianceFeeAmount: toNum(body.txComplianceFeeAmount),
+      txComplianceFeePaidBy: toStr(body.txComplianceFeePaidBy),
+      shortageInCommission: toStr(body.shortageInCommission),
+      shortageAmount: toNum(body.shortageAmount),
+      buyerBringToClosing: toNum(body.buyerBringToClosing),
+      additionalComments: toStr(body.additionalComments),
+      depositHolder: toStr(body.depositHolder),
+      depositHolderOther: toStr(body.depositHolderOther),
+
       // Co-agent fields — stored for TC review; commission calculated on approval
       hasCoAgent: !!body.hasCoAgent,
       ...(body.hasCoAgent ? {
