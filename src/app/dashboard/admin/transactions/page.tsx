@@ -624,7 +624,10 @@ export default function AdminTransactionLedgerPage() {
                       <span className="flex items-center">Status<SortIcon col="status" /></span>
                     </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('address')}>
-                      <span className="flex items-center">Address / Agent<SortIcon col="address" /></span>
+                      <span className="flex items-center">Address<SortIcon col="address" /></span>
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('agent')}>
+                      <span className="flex items-center">Agent<SortIcon col="agent" /></span>
                     </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('closingType')}>
                       <span className="flex items-center">Side<SortIcon col="closingType" /></span>
@@ -676,11 +679,10 @@ export default function AdminTransactionLedgerPage() {
                             {sc.label}
                           </span>
                         </TableCell>
-                        {/* Stacked address + agent */}
                         <TableCell className="max-w-[220px]">
                           <div className="font-medium truncate text-sm">{t.address || '—'}</div>
-                          <div className="text-xs text-muted-foreground truncate mt-0.5">{t.agentDisplayName ?? '—'}</div>
                         </TableCell>
+                        <TableCell className="whitespace-nowrap">{t.agentDisplayName ?? '—'}</TableCell>
                         <TableCell>
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border bg-muted/50 whitespace-nowrap">
                             {closingTypeLabel[(t as any).closingType] ?? (t as any).closingType ?? '—'}
