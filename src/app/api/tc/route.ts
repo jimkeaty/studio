@@ -1,6 +1,7 @@
 // POST /api/tc — any authenticated agent submits a new TC intake
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -67,6 +68,9 @@ export async function POST(req: NextRequest) {
     const agentId = toStr(body.agentId) || uid;
     const agentDisplayName = toStr(body.agentDisplayName) || toStr(decoded.name) || email;
 
+    // Determine if the submitter is an admin (used to gate commission split fields)
+    const isAdmin = await isAdminLike(uid);
+
     const now = new Date();
 
     const intake: Record<string, any> = {
@@ -90,10 +94,16 @@ export async function POST(req: NextRequest) {
       gci: toNum(body.gci),
       transactionFee: toNum(body.transactionFee),
       earnestMoney: toNum(body.earnestMoney),
-      brokerPct: toNum(body.brokerPct),
-      brokerGci: toNum(body.brokerGci),
-      agentPct: toNum(body.agentPct),
-      agentDollar: toNum(body.agentDollar),
+      // Commission split fields — only admins may set these; agents' submitted values are ignored
+      // and recalculated from the agent's saved profile during TC approval.
+      ...(isAdmin
+        ? {
+            brokerPct: toNum(body.brokerPct),
+            brokerGci: toNum(body.brokerGci),
+            agentPct: toNum(body.agentPct),
+            agentDollar: toNum(body.agentDollar),
+          }
+        : {}),
 
       // Dates
       listingDate: toStr(body.listingDate),
@@ -103,6 +113,10 @@ export async function POST(req: NextRequest) {
       surveyDeadline: toStr(body.surveyDeadline),
       projectedCloseDate: toStr(body.projectedCloseDate),
       closedDate: toStr(body.closedDate),
+      loanApplicationDeadline: toStr(body.loanApplicationDeadline),
+      appraisalDeadline: toStr(body.appraisalDeadline),
+      titleDeadline: toStr(body.titleDeadline),
+      finalLoanCommitmentDeadline: toStr(body.finalLoanCommitmentDeadline),
 
       // Client contact
       clientEmail: toStr(body.clientEmail),
