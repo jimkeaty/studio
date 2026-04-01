@@ -162,8 +162,8 @@ export function SidebarNav() {
       : branding?.logoUrl;
 
   return (
-    <Sidebar className="border-r">
-      <SidebarHeader className="border-b">
+    <Sidebar className="border-r bg-slate-900 dark:bg-slate-950 text-slate-100">
+      <SidebarHeader className="border-b border-slate-700/60">
         <div className="flex h-16 items-center gap-3 px-4">
           {activeLogo ? (
             <img
@@ -175,11 +175,11 @@ export function SidebarNav() {
             <Building className="h-8 w-8 text-primary" />
           )}
           <div className="flex flex-col">
-            <span className="text-lg font-semibold tracking-tight leading-tight">
+            <span className="text-lg font-semibold tracking-tight leading-tight text-white">
               {companyName}
             </span>
             {tagline && (
-              <span className="text-xs text-muted-foreground leading-tight">
+              <span className="text-xs text-slate-400 leading-tight">
                 {tagline}
               </span>
             )}
@@ -208,7 +208,7 @@ export function SidebarNav() {
         {/* Community — visible to all users */}
         <SidebarSeparator className="my-2" />
         <SidebarMenu>
-          <p className="px-2 text-xs font-semibold text-muted-foreground/80">Community</p>
+          <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Community</p>
           {communityMenuItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <Link href={item.href}>
@@ -243,7 +243,7 @@ export function SidebarNav() {
             <SidebarSeparator className="my-2" />
 
             <SidebarMenu>
-              <p className="px-2 text-xs font-semibold text-muted-foreground/80">Admin</p>
+              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Admin</p>
               {adminMenuItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <Link href={item.href}>
@@ -267,14 +267,14 @@ export function SidebarNav() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-2">
-        <Card className="bg-accent/50 dark:bg-accent/20 border-0">
-          <CardTitle className="p-3 pb-0 text-base font-semibold">Need help?</CardTitle>
-          <CardDescription className="p-3 pt-0 text-sm">
+      <SidebarFooter className="p-2 border-t border-slate-700/60">
+        <Card className="bg-slate-800 border-slate-700">
+          <CardTitle className="p-3 pb-0 text-base font-semibold text-white">Need help?</CardTitle>
+          <CardDescription className="p-3 pt-0 text-sm text-slate-400">
             Contact support for assistance with your account.
           </CardDescription>
           <div className="p-3 pt-0">
-            <Button size="sm" className="w-full">Contact Support</Button>
+            <Button size="sm" className="w-full bg-slate-700 hover:bg-slate-600 text-white border-slate-600">Contact Support</Button>
           </div>
         </Card>
       </SidebarFooter>
