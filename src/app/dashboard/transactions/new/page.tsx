@@ -493,6 +493,12 @@ export default function AddTransactionPage() {
     }
   }, [watchedGCI, agentCommission]);
 
+  // Sync additionalComments → notes (hidden field) for backward compatibility
+  const watchedAdditionalComments = form.watch('additionalComments');
+  useEffect(() => {
+    form.setValue('notes', watchedAdditionalComments || '');
+  }, [watchedAdditionalComments]);
+
   // Helper: toggle inspection type checkbox
   const toggleInspectionType = (type: string) => {
     const current = form.getValues('inspectionTypes') || [];

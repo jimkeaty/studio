@@ -930,7 +930,46 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
           <MetricTileWithDelta title="Avg Net per Deal" value={fmtCurrencyCompact(avgNetPerDeal)} previous={prevAvgNetPerDeal} icon={DollarSign} />
         </div>
 
-        {/* ── Grade Cards ─────────────────────────────────────────────────────── */}
+        {/* ── Pace Card ─────────────────────────────────────────────────────────────────────────────────── */}
+        {isCurrentYearPerf && projFull != null && yearlyIncomeGoal != null && yearlyIncomeGoal > 0 && (() => {
+          const paceRatio = projFull / yearlyIncomeGoal;
+          const isAhead = paceRatio >= 1;
+          const isCritical = paceRatio < 0.7;
+          const isWarning = !isAhead && paceRatio >= 0.7;
+          const paceColor = isAhead ? 'text-emerald-600 dark:text-emerald-400' : isCritical ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400';
+          const paceBg = isAhead ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800' : isCritical ? 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800' : 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800';
+          const paceLabel = isAhead ? 'On Track' : isCritical ? 'Critical — Needs Attention' : 'Behind Pace';
+          const paceArrow = isAhead ? '↑' : '↓';
+          const gapDollar = Math.abs(projFull - yearlyIncomeGoal);
+          return (
+            <div className={`mt-4 rounded-lg border p-4 ${paceBg}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full-Year Pace ({projLabel})</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className={`text-2xl font-black ${paceColor}`}>{fmtCurrencyCompact(projFull, true)}</span>
+                    <span className="text-sm text-muted-foreground">projected vs {fmtCurrencyCompact(yearlyIncomeGoal, true)} goal</span>
+                  </div>
+                  <p className={`text-sm font-semibold ${paceColor}`}>
+                    {paceArrow} {paceLabel} &mdash; {isAhead ? '+' : '-'}{fmtCurrencyCompact(gapDollar, true)} {isAhead ? 'above' : 'below'} goal
+                  </p>
+                </div>
+                <div className={`flex items-center justify-center w-14 h-14 rounded-full border-2 shrink-0 ${paceBg} ${paceColor}`}>
+                  <span className="text-2xl font-black">{Math.round(paceRatio * 100)}%</span>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="mt-3 relative h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${isAhead ? 'bg-emerald-500' : isCritical ? 'bg-red-500' : 'bg-amber-500'}`}
+                  style={{ width: `${Math.min(100, Math.round(paceRatio * 100))}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Grade Cards ─────────────────────────────────────────────────────────────────── */}
         {(gradeVsGoal || gradeVsVolume || gradeVsSales || projFull) && (
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
             {gradeVsGoal != null && (() => { const g = letterGrade(gradeVsGoal); return (
