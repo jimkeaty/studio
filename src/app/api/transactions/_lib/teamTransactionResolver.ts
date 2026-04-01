@@ -191,9 +191,53 @@ export async function resolveTransactionCalculation(
   const team = await getTeam(profile.primaryTeamId);
   const teamPlan = await getTeamPlan(team.teamPlanId);
 
+  const isLeaderless = (team.structureType || 'with_leader') === 'no_leader';
+  const isFixedModel = (teamPlan.commissionModelType || 'tiered') === 'fixed';
+
+  // ─── Fixed Commission Model path ────────────────────────────────────────────
+  // Flat split on every transaction — no tier lookup, no leader bands.
+  if (isFixedModel) {
+    const fixedSplit = teamPlan.fixedSplit;
+    if (!fixedSplit) {
+      throw new Error(`Team plan ${teamPlan.teamPlanId} is set to fixed model but has no fixedSplit defined`);
+    }
+    const agentSplitPercent = Number(fixedSplit.agentPercent || 0);
+    const companySplitPercent = Number(fixedSplit.companyPercent || 0);
+    const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
+    const companyRetained = asMoney(commission * (companySplitPercent / 100));
+    return {
+      calculationModel: 'individual',
+      agentType: profile.agentType,
+      splitSnapshot: {
+        primaryTeamId: team.teamId,
+        teamPlanId: teamPlan.teamPlanId,
+        memberPlanId: null,
+        grossCommission: commission,
+        agentSplitPercent,
+        companySplitPercent,
+        agentNetCommission,
+        leaderStructurePercent: null,
+        leaderStructureGross: null,
+        memberPercentOfLeaderSide: null,
+        memberPaid: null,
+        leaderRetainedAfterMember: null,
+        companyRetained,
+      },
+      creditSnapshot: {
+        leaderboardAgentId: profile.agentId,
+        leaderboardAgentDisplayName: input.agentDisplayName,
+        progressionMemberAgentId: profile.agentId,
+        progressionLeaderAgentId: null,
+        progressionTeamId: team.teamId,
+        progressionCompanyDollarCredit: commission,
+      },
+    };
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // ─── Leaderless team path (CGL, SGL, Referral Group, etc.) ───────────────────
   // Commission splits are agent vs. company only — no leader band lookup needed.
-  if ((team.structureType || 'with_leader') === 'no_leader') {
+  if (isLeaderless) {
     // Use the agent's own tiers (stored on the profile) for the split
     const tier = getActiveIndividualTier(profile.tiers || [], commission);
     if (!tier) {

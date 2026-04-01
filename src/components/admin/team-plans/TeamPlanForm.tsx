@@ -21,6 +21,11 @@ export type TeamPlanFormValues = {
   teamId: string;
   planName: string;
   status: 'active' | 'inactive';
+  /** 'tiered' = progressive bands; 'fixed' = flat split on every transaction */
+  commissionModelType: 'tiered' | 'fixed';
+  /** Only used when commissionModelType === 'fixed' */
+  fixedAgentPercent: number | string;
+  fixedCompanyPercent: number | string;
   thresholdMetric: 'companyDollar';
   thresholdMarkers: number[];
   structureModel: 'leaderFirst';
@@ -43,6 +48,9 @@ const DEFAULT_VALUES: TeamPlanFormValues = {
   teamId: '',
   planName: '',
   status: 'active',
+  commissionModelType: 'tiered',
+  fixedAgentPercent: 70,
+  fixedCompanyPercent: 30,
   thresholdMetric: 'companyDollar',
   thresholdMarkers: [0, 45000, 90000, 180000, 240000],
   structureModel: 'leaderFirst',
@@ -221,6 +229,14 @@ export default function TeamPlanForm({
         teamId: values.teamId.trim(),
         planName: values.planName.trim(),
         status: values.status,
+        commissionModelType: values.commissionModelType,
+        fixedSplit:
+          values.commissionModelType === 'fixed'
+            ? {
+                agentPercent: Number(values.fixedAgentPercent || 0),
+                companyPercent: Number(values.fixedCompanyPercent || 0),
+              }
+            : null,
         thresholdMetric: values.thresholdMetric,
         thresholdMarkers,
         structureModel: values.structureModel,
@@ -316,6 +332,77 @@ export default function TeamPlanForm({
               <option value="inactive">Inactive</option>
             </select>
           </label>
+
+          <div className="space-y-2 md:col-span-2">
+            <span className="block text-sm font-medium text-gray-700">Commission Model Type</span>
+            <div className="flex gap-6">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="commissionModelType"
+                  value="tiered"
+                  checked={values.commissionModelType === 'tiered'}
+                  onChange={() => updateField('commissionModelType', 'tiered')}
+                  className="h-4 w-4 text-blue-600"
+                />
+                <span className="text-sm">
+                  <strong>Tiered Commission</strong>
+                  <span className="ml-1 text-gray-500">(progressive bands based on cumulative GCI)</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="commissionModelType"
+                  value="fixed"
+                  checked={values.commissionModelType === 'fixed'}
+                  onChange={() => updateField('commissionModelType', 'fixed')}
+                  className="h-4 w-4 text-blue-600"
+                />
+                <span className="text-sm">
+                  <strong>Fixed Commission</strong>
+                  <span className="ml-1 text-gray-500">(flat split on every transaction, no tier progression)</span>
+                </span>
+              </label>
+            </div>
+            {values.commissionModelType === 'fixed' && (
+              <div className="mt-3 grid gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-gray-700">Agent % <span className="text-red-500">*</span></span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={values.fixedAgentPercent}
+                    onChange={(e) =>
+                      updateField('fixedAgentPercent', e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    placeholder="e.g. 70"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-gray-700">Company % <span className="text-red-500">*</span></span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={values.fixedCompanyPercent}
+                    onChange={(e) =>
+                      updateField('fixedCompanyPercent', e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    placeholder="e.g. 30"
+                  />
+                </label>
+                <p className="text-xs text-amber-700 md:col-span-2">
+                  Fixed split is applied to every transaction. Tier bands below are ignored when this model is active.
+                </p>
+              </div>
+            )}
+          </div>
 
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Threshold Markers</span>

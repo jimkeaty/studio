@@ -13,6 +13,20 @@ export type TeamStructureModel = 'leaderFirst';
  */
 export type TeamStructureType = 'with_leader' | 'no_leader';
 
+/**
+ * How commission is calculated for agents on this team plan.
+ *
+ * - `tiered`  — progressive tier bands based on cumulative company dollar (default)
+ * - `fixed`   — flat percentage split applied to every transaction, no tier progression
+ */
+export type CommissionModelType = 'tiered' | 'fixed';
+
+/** Fixed/flat split percentages used when commissionModelType === 'fixed' */
+export type TeamFixedSplit = {
+  agentPercent: number;
+  companyPercent: number;
+};
+
 export type TeamMembershipRole = 'leader' | 'member';
 
 export type TeamThresholdBand = {
@@ -89,6 +103,10 @@ export type TeamPlan = {
   teamId: string;
   planName: string;
   status: TeamStatus;
+  /** Defaults to 'tiered' for backward compatibility */
+  commissionModelType: CommissionModelType;
+  /** Only used when commissionModelType === 'fixed' */
+  fixedSplit: TeamFixedSplit | null;
   thresholdMetric: ThresholdMetric;
   thresholdMarkers: number[];
   structureModel: TeamStructureModel;
@@ -105,6 +123,10 @@ export type TeamPlanInput = {
   teamId: string;
   planName: string;
   status?: TeamStatus;
+  /** Defaults to 'tiered' when omitted */
+  commissionModelType?: CommissionModelType;
+  /** Required when commissionModelType === 'fixed' */
+  fixedSplit?: TeamFixedSplit | null;
   thresholdMetric?: ThresholdMetric;
   thresholdMarkers: number[];
   structureModel?: TeamStructureModel;

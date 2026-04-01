@@ -73,10 +73,17 @@ export default function TeamPlanEditor({
 
         if (isMounted) setIsLeaderless(parentTeamIsLeaderless);
 
+        const commissionModelType: 'tiered' | 'fixed' =
+          teamPlan.commissionModelType === 'fixed' ? 'fixed' : 'tiered';
+        const fixedSplit = teamPlan.fixedSplit || null;
+
         setInitialValues({
           teamId: teamPlan.teamId || '',
           planName: teamPlan.planName || '',
           status: teamPlan.status || 'active',
+          commissionModelType,
+          fixedAgentPercent: fixedSplit?.agentPercent ?? 70,
+          fixedCompanyPercent: fixedSplit?.companyPercent ?? 30,
           thresholdMetric: teamPlan.thresholdMetric || 'companyDollar',
           thresholdMarkers: Array.isArray(teamPlan.thresholdMarkers)
             ? teamPlan.thresholdMarkers

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import type {
+  CommissionModelType,
   MemberPlanBand,
+  TeamFixedSplit,
   TeamPlan,
   TeamPlanInput,
   TeamThresholdBand,
@@ -139,6 +141,26 @@ function normalizeInput(body: TeamPlanInput) {
     throw new Error('Invalid team plan status');
   }
 
+  // Commission Model Type
+  const commissionModelType: CommissionModelType =
+    body.commissionModelType === 'fixed' ? 'fixed' : 'tiered';
+
+  let fixedSplit: TeamFixedSplit | null = null;
+  if (commissionModelType === 'fixed') {
+    const agentPercent = Number(body.fixedSplit?.agentPercent ?? 0);
+    const companyPercent = Number(body.fixedSplit?.companyPercent ?? 0);
+    if (!Number.isFinite(agentPercent) || agentPercent < 0 || agentPercent > 100) {
+      throw new Error('Fixed split agent percent must be between 0 and 100');
+    }
+    if (!Number.isFinite(companyPercent) || companyPercent < 0 || companyPercent > 100) {
+      throw new Error('Fixed split company percent must be between 0 and 100');
+    }
+    if (agentPercent + companyPercent !== 100) {
+      throw new Error('Fixed split agent and company percents must total 100');
+    }
+    fixedSplit = { agentPercent, companyPercent };
+  }
+
   const thresholdMetric = body.thresholdMetric || 'companyDollar';
   if (thresholdMetric !== 'companyDollar') {
     throw new Error('Invalid threshold metric');
@@ -149,12 +171,12 @@ function normalizeInput(body: TeamPlanInput) {
     throw new Error('Invalid structure model');
   }
 
-  if (!Array.isArray(body.leaderStructureBands) || body.leaderStructureBands.length === 0) {
-    throw new Error('Leader structure bands are required');
+  // Bands are still required (used as fallback even for fixed plans; may be empty arrays for fixed)
+  if (!Array.isArray(body.leaderStructureBands)) {
+    throw new Error('Leader structure bands must be an array');
   }
-
-  if (!Array.isArray(body.memberDefaultBands) || body.memberDefaultBands.length === 0) {
-    throw new Error('Member default bands are required');
+  if (!Array.isArray(body.memberDefaultBands)) {
+    throw new Error('Member default bands must be an array');
   }
 
   const tierCreditRules = body.tierCreditRules || {
@@ -175,6 +197,8 @@ function normalizeInput(body: TeamPlanInput) {
     teamId: body.teamId.trim(),
     planName: body.planName.trim(),
     status,
+    commissionModelType,
+    fixedSplit,
     thresholdMetric,
     thresholdMarkers: normalizeThresholdMarkers(body.thresholdMarkers),
     structureModel,
@@ -259,6 +283,8 @@ export async function POST(req: NextRequest) {
       teamId: normalized.teamId,
       planName: normalized.planName,
       status: normalized.status,
+      commissionModelType: normalized.commissionModelType,
+      fixedSplit: normalized.fixedSplit,
       thresholdMetric: normalized.thresholdMetric,
       thresholdMarkers: normalized.thresholdMarkers,
       structureModel: normalized.structureModel,
