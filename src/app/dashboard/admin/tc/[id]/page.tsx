@@ -44,10 +44,12 @@ type ChecklistItem = {
   completedAt: string | null;
 };
 
+// TC coordinators now come from staffUsers (role tc or tc_admin)
 type TcProfile = {
   id: string;
   displayName: string;
   email: string;
+  role?: string;
   status: 'active' | 'inactive';
 };
 
@@ -294,10 +296,15 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
       if (!user) return;
       try {
         const token = await user.getIdToken();
-        const res = await fetch('/api/admin/tc-profiles', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
         if (data.ok) {
-          setTcProfiles(data.profiles?.filter((p: TcProfile) => p.status === 'active') || []);
+          // Only show active TC and TC Admin staff in the assignment dropdown
+          setTcProfiles(
+            (data.users as TcProfile[]).filter(
+              (u) => (u.role === 'tc' || u.role === 'tc_admin') && u.status === 'active'
+            )
+          );
         }
       } catch {
         // Profiles may not exist yet

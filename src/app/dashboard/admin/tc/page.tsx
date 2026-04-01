@@ -13,18 +13,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
-} from '@/components/ui/dialog';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, Eye, RefreshCw, ClipboardList,
-  Plus, Pencil, Trash2, UserCheck, Users, ListChecks,
+  Plus, Trash2, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -48,18 +42,13 @@ type Intake = {
   assignedTcProfileId?: string | null;
 };
 
-type TcProfile = {
+// Staff user shape (TC coordinators come from staffUsers collection)
+type StaffUser = {
   id: string;
   displayName: string;
   email: string;
-  phone: string | null;
-  role: 'tc' | 'tc_admin';
+  role: 'tc' | 'tc_admin' | 'office_admin';
   status: 'active' | 'inactive';
-  notifyOnNewIntake: boolean;
-  notifyOnStatusChange: boolean;
-  assignedIntakeIds: string[];
-  createdAt: string;
-  updatedAt: string;
 };
 
 const formatCurrency = (n?: number | null) =>
@@ -97,6 +86,7 @@ const CLOSING_TYPE_LABEL: Record<string, string> = {
   buyer: 'Buyer',
   listing: 'Listing',
   referral: 'Referral',
+  dual: 'Dual Agent',
 };
 
 const DEAL_TYPE_LABEL: Record<string, string> = {
@@ -137,21 +127,8 @@ export default function TcQueuePage() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // ── TC Profiles state ───────────────────────────────────────────────────────
-  const [profiles, setProfiles] = useState<TcProfile[]>([]);
-  const [profilesLoading, setProfilesLoading] = useState(false);
-  const [profilesError, setProfilesError] = useState<string | null>(null);
-  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
-  const [editingProfile, setEditingProfile] = useState<TcProfile | null>(null);
-  const [profileForm, setProfileForm] = useState({
-    displayName: '',
-    email: '',
-    phone: '',
-    role: 'tc' as 'tc' | 'tc_admin',
-    notifyOnNewIntake: true,
-    notifyOnStatusChange: true,
-  });
-  const [profileSaving, setProfileSaving] = useState(false);
+  // ── Staff TC users state (replaces legacy tcProfiles) ──────────────────────
+  const [tcStaff, setTcStaff] = useState<StaffUser[]>([]);
 
   // ── Workflow Templates state ────────────────────────────────────────────────
   const [checklistTemplate, setChecklistTemplate] = useState<string[]>(DEFAULT_CHECKLIST);
@@ -184,30 +161,30 @@ export default function TcQueuePage() {
     }
   }, [user, statusFilter, getToken]);
 
-  // ── Load TC profiles ────────────────────────────────────────────────────────
-  const loadProfiles = useCallback(async () => {
+  // ── Load TC staff from staffUsers (role tc or tc_admin, status active) ──────
+  const loadTcStaff = useCallback(async () => {
     if (!user) return;
-    setProfilesLoading(true);
-    setProfilesError(null);
     try {
       const token = await getToken();
-      const res = await fetch('/api/admin/tc-profiles', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load profiles');
-      setProfiles(data.profiles ?? []);
-    } catch (err: any) {
-      setProfilesError(err.message);
-    } finally {
-      setProfilesLoading(false);
+      if (data.ok) {
+        const tc = (data.users as StaffUser[]).filter(
+          (u) => (u.role === 'tc' || u.role === 'tc_admin') && u.status === 'active'
+        );
+        setTcStaff(tc);
+      }
+    } catch {
+      // Non-critical — assignment dropdown will just be empty
     }
   }, [user, getToken]);
 
   useEffect(() => {
     if (!userLoading && user) {
       loadIntakes();
-      loadProfiles();
+      loadTcStaff();
     }
-  }, [user, userLoading, statusFilter, loadIntakes, loadProfiles]);
+  }, [user, userLoading, statusFilter, loadIntakes, loadTcStaff]);
 
   // ── Assign TC to intake ─────────────────────────────────────────────────────
   const assignTcToIntake = async (intakeId: string, profileId: string | null) => {
@@ -224,110 +201,6 @@ export default function TcQueuePage() {
     } catch (err: any) {
       console.error('Failed to assign TC:', err);
     }
-  };
-
-  // ── Save TC profile (create or update) ──────────────────────────────────────
-  const saveProfile = async () => {
-    setProfileSaving(true);
-    try {
-      const token = await getToken();
-      if (editingProfile) {
-        // Update
-        const res = await fetch(`/api/admin/tc-profiles/${editingProfile.id}`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(profileForm),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to update');
-        setProfiles((prev) =>
-          prev.map((p) => (p.id === editingProfile.id ? { ...p, ...data.profile } : p))
-        );
-      } else {
-        // Create
-        const res = await fetch('/api/admin/tc-profiles', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(profileForm),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to create');
-        setProfiles((prev) => [data.profile, ...prev]);
-      }
-      setProfileDialogOpen(false);
-      resetProfileForm();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setProfileSaving(false);
-    }
-  };
-
-  // ── Delete TC profile ───────────────────────────────────────────────────────
-  const deleteProfile = async (profileId: string) => {
-    if (!confirm('Are you sure you want to remove this TC profile?')) return;
-    try {
-      const token = await getToken();
-      const res = await fetch(`/api/admin/tc-profiles/${profileId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete');
-      setProfiles((prev) => prev.filter((p) => p.id !== profileId));
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
-
-  // ── Toggle profile status ───────────────────────────────────────────────────
-  const toggleProfileStatus = async (profile: TcProfile) => {
-    const newStatus = profile.status === 'active' ? 'inactive' : 'active';
-    try {
-      const token = await getToken();
-      const res = await fetch(`/api/admin/tc-profiles/${profile.id}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to update');
-      setProfiles((prev) =>
-        prev.map((p) => (p.id === profile.id ? { ...p, status: newStatus } : p))
-      );
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
-
-  const resetProfileForm = () => {
-    setEditingProfile(null);
-    setProfileForm({
-      displayName: '',
-      email: '',
-      phone: '',
-      role: 'tc',
-      notifyOnNewIntake: true,
-      notifyOnStatusChange: true,
-    });
-  };
-
-  const openEditProfile = (profile: TcProfile) => {
-    setEditingProfile(profile);
-    setProfileForm({
-      displayName: profile.displayName,
-      email: profile.email,
-      phone: profile.phone || '',
-      role: profile.role,
-      notifyOnNewIntake: profile.notifyOnNewIntake,
-      notifyOnStatusChange: profile.notifyOnStatusChange,
-    });
-    setProfileDialogOpen(true);
-  };
-
-  const openNewProfile = () => {
-    resetProfileForm();
-    setProfileDialogOpen(true);
   };
 
   // ── Checklist template helpers ──────────────────────────────────────────────
@@ -376,15 +249,13 @@ export default function TcQueuePage() {
   }, {} as Record<string, number>);
   const allCount = intakes.length;
 
-  const activeProfiles = profiles.filter((p) => p.status === 'active');
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">TC Management</h1>
-          <p className="text-muted-foreground">Manage TC intake queue, coordinator profiles, and workflow templates.</p>
+          <p className="text-muted-foreground">Manage TC intake queue and workflow templates. Add or edit TC coordinators in <Link href="/dashboard/admin/staff-users" className="underline text-primary">Staff Users</Link>.</p>
         </div>
       </div>
 
@@ -393,9 +264,6 @@ export default function TcQueuePage() {
         <TabsList>
           <TabsTrigger value="queue" className="gap-2">
             <ClipboardList className="h-4 w-4" /> TC Queue
-          </TabsTrigger>
-          <TabsTrigger value="profiles" className="gap-2">
-            <Users className="h-4 w-4" /> TC Profiles
           </TabsTrigger>
           <TabsTrigger value="templates" className="gap-2">
             <ListChecks className="h-4 w-4" /> Workflow Templates
@@ -497,7 +365,7 @@ export default function TcQueuePage() {
                     <TableBody>
                       {intakes.map((intake) => {
                         const cfg = STATUS_CONFIG[intake.status] ?? STATUS_CONFIG.submitted;
-                        const assignedProfile = profiles.find((p) => p.id === intake.assignedTcProfileId);
+                        const assignedStaff = tcStaff.find((s) => s.id === intake.assignedTcProfileId);
                         return (
                           <TableRow key={intake.id}>
                             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
@@ -541,14 +409,14 @@ export default function TcQueuePage() {
                               >
                                 <SelectTrigger className="w-[150px] h-8 text-xs">
                                   <SelectValue>
-                                    {assignedProfile ? assignedProfile.displayName : 'Unassigned'}
+                                    {assignedStaff ? assignedStaff.displayName : 'Unassigned'}
                                   </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                                  {activeProfiles.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                      {p.displayName}
+                                  {tcStaff.map((s) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      {s.displayName}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -565,218 +433,6 @@ export default function TcQueuePage() {
                           </TableRow>
                         );
                       })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* TC PROFILES TAB                                                    */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <TabsContent value="profiles" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Transaction Coordinators</h2>
-              <p className="text-sm text-muted-foreground">Manage TC team members and their notification preferences.</p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={loadProfiles} disabled={profilesLoading}>
-                <RefreshCw className={cn('mr-2 h-4 w-4', profilesLoading && 'animate-spin')} /> Refresh
-              </Button>
-              <Dialog open={profileDialogOpen} onOpenChange={(open) => {
-                setProfileDialogOpen(open);
-                if (!open) resetProfileForm();
-              }}>
-                <DialogTrigger asChild>
-                  <Button size="sm" onClick={openNewProfile}>
-                    <Plus className="mr-2 h-4 w-4" /> Add TC
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{editingProfile ? 'Edit TC Profile' : 'Add TC Profile'}</DialogTitle>
-                    <DialogDescription>
-                      {editingProfile ? 'Update the transaction coordinator profile.' : 'Add a new transaction coordinator to the team.'}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="tc-name">Display Name</Label>
-                      <Input
-                        id="tc-name"
-                        placeholder="Jane Smith"
-                        value={profileForm.displayName}
-                        onChange={(e) => setProfileForm((f) => ({ ...f, displayName: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="tc-email">Email</Label>
-                      <Input
-                        id="tc-email"
-                        type="email"
-                        placeholder="jane@example.com"
-                        value={profileForm.email}
-                        onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="tc-phone">Phone (optional)</Label>
-                      <Input
-                        id="tc-phone"
-                        placeholder="(555) 123-4567"
-                        value={profileForm.phone}
-                        onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="tc-role">Role</Label>
-                      <Select
-                        value={profileForm.role}
-                        onValueChange={(val) => setProfileForm((f) => ({ ...f, role: val as 'tc' | 'tc_admin' }))}
-                      >
-                        <SelectTrigger id="tc-role">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="tc">TC</SelectItem>
-                          <SelectItem value="tc_admin">TC Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="tc-notify-new">Notify on new intake</Label>
-                      <Switch
-                        id="tc-notify-new"
-                        checked={profileForm.notifyOnNewIntake}
-                        onCheckedChange={(checked) =>
-                          setProfileForm((f) => ({ ...f, notifyOnNewIntake: checked }))
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="tc-notify-status">Notify on status change</Label>
-                      <Switch
-                        id="tc-notify-status"
-                        checked={profileForm.notifyOnStatusChange}
-                        onCheckedChange={(checked) =>
-                          setProfileForm((f) => ({ ...f, notifyOnStatusChange: checked }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setProfileDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={saveProfile} disabled={profileSaving || !profileForm.displayName || !profileForm.email}>
-                      {profileSaving ? 'Saving...' : editingProfile ? 'Update' : 'Create'}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </div>
-
-          {profilesError && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{profilesError}</AlertDescription>
-            </Alert>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>TC Profiles</CardTitle>
-              <CardDescription>{profiles.length} coordinator{profiles.length !== 1 ? 's' : ''}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {profilesLoading ? (
-                <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-              ) : profiles.length === 0 ? (
-                <div className="text-center py-16 space-y-3">
-                  <Users className="h-10 w-10 text-muted-foreground mx-auto" />
-                  <p className="text-muted-foreground">No TC profiles yet. Add your first transaction coordinator.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Phone</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Notifications</TableHead>
-                        <TableHead>Assigned</TableHead>
-                        <TableHead className="text-center">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {profiles.map((profile) => (
-                        <TableRow key={profile.id}>
-                          <TableCell className="font-medium">{profile.displayName}</TableCell>
-                          <TableCell className="text-sm">{profile.email}</TableCell>
-                          <TableCell className="text-sm">{profile.phone || '—'}</TableCell>
-                          <TableCell>
-                            <Badge variant={profile.role === 'tc_admin' ? 'default' : 'outline'}>
-                              {profile.role === 'tc_admin' ? 'TC Admin' : 'TC'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              className={cn(
-                                'cursor-pointer',
-                                profile.status === 'active'
-                                  ? 'bg-green-600/80 text-white hover:bg-green-700'
-                                  : 'bg-gray-400/80 text-white hover:bg-gray-500'
-                              )}
-                              onClick={() => toggleProfileStatus(profile)}
-                            >
-                              {profile.status === 'active' ? 'Active' : 'Inactive'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1 text-xs">
-                              {profile.notifyOnNewIntake && (
-                                <span className="text-green-600">New intake</span>
-                              )}
-                              {profile.notifyOnStatusChange && (
-                                <span className="text-blue-600">Status change</span>
-                              )}
-                              {!profile.notifyOnNewIntake && !profile.notifyOnStatusChange && (
-                                <span className="text-muted-foreground">None</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-center">
-                            {profile.assignedIntakeIds?.length || 0}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => openEditProfile(profile)}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600 hover:text-red-700"
-                                onClick={() => deleteProfile(profile.id)}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
                     </TableBody>
                   </Table>
                 </div>

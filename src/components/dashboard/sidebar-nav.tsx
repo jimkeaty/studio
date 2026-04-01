@@ -36,7 +36,6 @@ import {
   GitBranchPlus,
   Receipt,
   Upload,
-  UserCog,
   UsersRound,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
@@ -74,7 +73,6 @@ const adminMenuItems = [
   { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
   { href: '/dashboard/admin/recruiting', label: 'Recruiting & Dev', icon: UserPlus },
   { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
-  { href: '/dashboard/admin/tc-profiles', label: 'TC Profiles', icon: UserCog },
   { href: '/dashboard/admin/agents', label: 'Agents', icon: Users },
   { href: '/dashboard/admin/agents/new', label: 'New Agent', icon: UserPlus },
   { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
