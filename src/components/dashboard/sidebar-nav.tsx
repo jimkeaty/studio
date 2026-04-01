@@ -41,6 +41,51 @@ import {
 import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 
+// ─── Mobile Bottom Tab Bar ────────────────────────────────────────────────────
+const mobileTabItems = [
+  { href: '/dashboard',                   label: 'Home',        icon: LayoutGrid },
+  { href: '/dashboard/tracker',           label: 'Tracker',     icon: ClipboardPen },
+  { href: '/dashboard/transactions/new',  label: 'Add Deal',    icon: Plus },
+  { href: '/dashboard/plan',              label: 'Plan',        icon: Target },
+  { href: '/dashboard/admin/competitions',label: 'Compete',     icon: Trophy },
+];
+
+export function MobileBottomTabBar() {
+  const pathname = usePathname();
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-40 flex sm:hidden border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-[0_-2px_16px_rgba(0,0,0,0.08)]">
+      {mobileTabItems.map((item) => {
+        const isActive = item.href === '/dashboard'
+          ? pathname === item.href
+          : pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const isAddDeal = item.href === '/dashboard/transactions/new';
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={[
+              'flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
+              isAddDeal
+                ? 'relative -mt-3'
+                : '',
+              isActive && !isAddDeal ? 'text-primary' : !isAddDeal ? 'text-muted-foreground hover:text-foreground' : '',
+            ].join(' ')}
+          >
+            {isAddDeal ? (
+              <span className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg -mt-1">
+                <item.icon className="h-5 w-5" />
+              </span>
+            ) : (
+              <item.icon className={`h-5 w-5 ${isActive ? 'text-primary' : ''}`} />
+            )}
+            <span className={isAddDeal ? 'text-primary font-semibold mt-0.5' : ''}>{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 type BrandingData = {
   companyName: string;
   tagline: string | null;

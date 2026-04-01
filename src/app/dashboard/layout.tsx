@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Header } from '@/components/dashboard/header';
-import { SidebarNav } from '@/components/dashboard/sidebar-nav';
+import { SidebarNav, MobileBottomTabBar } from '@/components/dashboard/sidebar-nav';
 import { ImpersonationProvider, useImpersonation } from '@/contexts/ImpersonationContext';
 import { useUser } from '@/firebase';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
@@ -42,11 +42,13 @@ function DashboardShell({ children }: { children: ReactNode }) {
         <div className="flex flex-1 flex-col">
           <Header />
           <ImpersonationBanner />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-20 sm:pb-6 lg:pb-8">
             {children}
           </main>
         </div>
       </div>
+      {/* Mobile bottom tab bar — only visible on small screens */}
+      <MobileBottomTabBar />
     </SidebarProvider>
   );
 }
