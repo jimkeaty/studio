@@ -1333,35 +1333,166 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
 
 function gradeColorScheme(g: string) {
   switch (g) {
-    case 'A': return { bg: 'bg-gradient-to-br from-green-500/15 to-emerald-500/10', border: 'border-green-500/40', badge: 'bg-green-500 text-white', text: 'text-green-700 dark:text-green-400' };
-    case 'B': return { bg: 'bg-gradient-to-br from-blue-500/15 to-sky-500/10', border: 'border-blue-500/40', badge: 'bg-blue-500 text-white', text: 'text-blue-700 dark:text-blue-400' };
-    case 'C': return { bg: 'bg-gradient-to-br from-yellow-500/15 to-amber-500/10', border: 'border-yellow-500/40', badge: 'bg-yellow-500 text-white', text: 'text-yellow-700 dark:text-yellow-400' };
-    case 'D': return { bg: 'bg-gradient-to-br from-orange-500/15 to-orange-400/10', border: 'border-orange-500/40', badge: 'bg-orange-500 text-white', text: 'text-orange-700 dark:text-orange-400' };
-    default: return { bg: 'bg-gradient-to-br from-red-500/15 to-rose-500/10', border: 'border-red-500/40', badge: 'bg-red-500 text-white', text: 'text-red-700 dark:text-red-400' };
+    case 'A': return {
+      bg: 'bg-gradient-to-br from-green-500/15 to-emerald-500/10',
+      border: 'border-green-500/40',
+      badge: 'bg-green-500 text-white',
+      text: 'text-green-700 dark:text-green-400',
+      // New: left-border accent, grade badge colors, progress bar, pace arrow
+      accentBorder: 'border-l-4 border-l-emerald-500',
+      gradeBadgeBg: 'bg-emerald-50 dark:bg-emerald-900/30',
+      gradeBadgeText: 'text-emerald-700 dark:text-emerald-300',
+      gradeBadgeBorder: 'border-emerald-300 dark:border-emerald-700',
+      progressBar: 'bg-emerald-500',
+      paceArrow: '↑',
+      paceText: 'text-emerald-600 dark:text-emerald-400',
+      statusLabel: 'On Track',
+      statusBg: 'bg-emerald-50 dark:bg-emerald-900/30',
+      statusText: 'text-emerald-700 dark:text-emerald-300',
+      statusBorder: 'border-emerald-200 dark:border-emerald-700',
+    };
+    case 'B': return {
+      bg: 'bg-gradient-to-br from-blue-500/15 to-sky-500/10',
+      border: 'border-blue-500/40',
+      badge: 'bg-blue-500 text-white',
+      text: 'text-blue-700 dark:text-blue-400',
+      accentBorder: 'border-l-4 border-l-blue-500',
+      gradeBadgeBg: 'bg-blue-50 dark:bg-blue-900/30',
+      gradeBadgeText: 'text-blue-700 dark:text-blue-300',
+      gradeBadgeBorder: 'border-blue-300 dark:border-blue-700',
+      progressBar: 'bg-blue-500',
+      paceArrow: '↑',
+      paceText: 'text-blue-600 dark:text-blue-400',
+      statusLabel: 'Slightly Ahead',
+      statusBg: 'bg-blue-50 dark:bg-blue-900/30',
+      statusText: 'text-blue-700 dark:text-blue-300',
+      statusBorder: 'border-blue-200 dark:border-blue-700',
+    };
+    case 'C': return {
+      bg: 'bg-gradient-to-br from-yellow-500/15 to-amber-500/10',
+      border: 'border-yellow-500/40',
+      badge: 'bg-yellow-500 text-white',
+      text: 'text-yellow-700 dark:text-yellow-400',
+      accentBorder: 'border-l-4 border-l-yellow-500',
+      gradeBadgeBg: 'bg-yellow-50 dark:bg-yellow-900/30',
+      gradeBadgeText: 'text-yellow-700 dark:text-yellow-300',
+      gradeBadgeBorder: 'border-yellow-300 dark:border-yellow-700',
+      progressBar: 'bg-yellow-500',
+      paceArrow: '↓',
+      paceText: 'text-yellow-600 dark:text-yellow-400',
+      statusLabel: 'Behind Pace',
+      statusBg: 'bg-yellow-50 dark:bg-yellow-900/30',
+      statusText: 'text-yellow-700 dark:text-yellow-300',
+      statusBorder: 'border-yellow-200 dark:border-yellow-700',
+    };
+    case 'D': return {
+      bg: 'bg-gradient-to-br from-orange-500/15 to-orange-400/10',
+      border: 'border-orange-500/40',
+      badge: 'bg-orange-500 text-white',
+      text: 'text-orange-700 dark:text-orange-400',
+      accentBorder: 'border-l-4 border-l-orange-500',
+      gradeBadgeBg: 'bg-orange-50 dark:bg-orange-900/30',
+      gradeBadgeText: 'text-orange-700 dark:text-orange-300',
+      gradeBadgeBorder: 'border-orange-300 dark:border-orange-700',
+      progressBar: 'bg-orange-500',
+      paceArrow: '↓',
+      paceText: 'text-orange-600 dark:text-orange-400',
+      statusLabel: 'Falling Behind',
+      statusBg: 'bg-orange-50 dark:bg-orange-900/30',
+      statusText: 'text-orange-700 dark:text-orange-300',
+      statusBorder: 'border-orange-200 dark:border-orange-700',
+    };
+    default: return {
+      bg: 'bg-gradient-to-br from-red-500/15 to-rose-500/10',
+      border: 'border-red-500/40',
+      badge: 'bg-red-500 text-white',
+      text: 'text-red-700 dark:text-red-400',
+      accentBorder: 'border-l-4 border-l-red-500',
+      gradeBadgeBg: 'bg-red-50 dark:bg-red-900/30',
+      gradeBadgeText: 'text-red-700 dark:text-red-300',
+      gradeBadgeBorder: 'border-red-300 dark:border-red-700',
+      progressBar: 'bg-red-500',
+      paceArrow: '↓',
+      paceText: 'text-red-600 dark:text-red-400',
+      statusLabel: 'Critical',
+      statusBg: 'bg-red-50 dark:bg-red-900/30',
+      statusText: 'text-red-700 dark:text-red-300',
+      statusBorder: 'border-red-200 dark:border-red-700',
+    };
   }
 }
 
-function HeroCard({ title, grade, primary, secondary, performancePct, icon: Icon, isGracePeriod }: {
+function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel, icon: Icon, isGracePeriod }: {
   title: string; grade: string; primary: string; secondary: string;
-  performancePct?: number; icon: React.ElementType; isGracePeriod?: boolean;
+  performancePct?: number; goalLabel?: string; icon: React.ElementType; isGracePeriod?: boolean;
 }) {
   const colors = gradeColorScheme(grade);
+  const clampedPct = Math.min(performancePct ?? 0, 100);
+  const isPaceAhead = secondary.includes('ahead');
+  const isPaceBehind = secondary.includes('behind');
+  const paceArrow = isPaceAhead ? '↑' : isPaceBehind ? '↓' : '';
+  const paceColorClass = isPaceAhead ? colors.paceText : isPaceBehind ? colors.paceText : 'text-muted-foreground';
+
   return (
-    <Card className={cn('relative overflow-hidden border-2 shadow-sm', colors.bg, colors.border)}>
-      <div className="absolute -right-4 -top-4 text-[120px] font-black leading-none opacity-[0.06] pointer-events-none select-none">{grade}</div>
-      <CardHeader className="flex flex-row items-center justify-between pb-1 relative z-10">
-        <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
-        <div className={cn('flex items-center justify-center h-8 w-8 rounded-lg', colors.badge)}><Icon className="h-4 w-4" /></div>
-      </CardHeader>
-      <CardContent className="relative z-10 space-y-2">
-        <div className="flex items-end gap-3">
-          <span className={cn('text-5xl font-black tracking-tighter leading-none', colors.text)}>{grade}</span>
-          <div className="flex flex-col pb-0.5">
-            <span className="text-xl font-bold leading-tight">{primary}</span>
-            {performancePct != null && <span className={cn('text-sm font-semibold', colors.text)}>{performancePct}% of goal</span>}
+    <Card className={cn(
+      'relative overflow-hidden shadow-sm',
+      colors.accentBorder,
+      'border border-border'
+    )}>
+      {/* Faint watermark grade letter */}
+      <div className="absolute -right-3 -top-3 text-[110px] font-black leading-none opacity-[0.05] pointer-events-none select-none">
+        {grade}
+      </div>
+
+      <CardHeader className="flex flex-row items-start justify-between pb-2 pt-4 px-5 relative z-10">
+        <div className="flex items-center gap-2">
+          <div className={cn('flex items-center justify-center h-8 w-8 rounded-lg shrink-0', colors.badge)}>
+            <Icon className="h-4 w-4" />
           </div>
+          <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground leading-tight">
+            {title}
+          </CardTitle>
         </div>
-        <p className="text-xs text-muted-foreground leading-snug">{secondary}</p>
+        {/* Grade badge — large, color-coded */}
+        <div className={cn(
+          'flex items-center justify-center h-14 w-14 rounded-xl text-3xl font-black border-2 shrink-0',
+          colors.gradeBadgeBg, colors.gradeBadgeText, colors.gradeBadgeBorder
+        )}>
+          {isGracePeriod ? 'A' : grade}
+        </div>
+      </CardHeader>
+
+      <CardContent className="relative z-10 space-y-3 px-5 pb-5">
+        {/* Primary value */}
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl font-black tracking-tight text-foreground leading-none">{primary}</span>
+          {performancePct != null && (
+            <span className={cn('text-sm font-bold', colors.text)}>{performancePct}%</span>
+          )}
+        </div>
+
+        {/* Progress bar with labeled endpoints */}
+        {performancePct != null && (
+          <div className="space-y-1">
+            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+              <div
+                className={cn('h-2.5 rounded-full transition-all duration-500', colors.progressBar)}
+                style={{ width: `${clampedPct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>0%</span>
+              {goalLabel && <span className="font-medium text-foreground/70">{goalLabel}</span>}
+              <span>100% goal</span>
+            </div>
+          </div>
+        )}
+
+        {/* Pace text — colored with directional arrow */}
+        <p className={cn('text-xs font-medium leading-snug', paceArrow ? paceColorClass : 'text-muted-foreground')}>
+          {paceArrow && <span className="mr-0.5">{paceArrow}</span>}{secondary}
+        </p>
+
         {isGracePeriod && (
           <Badge variant="outline" className="text-[10px] border-amber-400/60 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
             <Clock className="h-2.5 w-2.5 mr-1" /> 90-Day Grace Period
@@ -1442,21 +1573,123 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
       ? `${Math.abs(deltaPct)}% ahead of pace · ${goalStr} YTD goal`
       : `${Math.abs(deltaPct)}% behind pace · ${goalStr} YTD goal`;
 
+  // Determine overall status from the primary income grade
+  const overallGrade = ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade;
+  const overallColors = gradeColorScheme(overallGrade);
+  const annualIncomeGoal = rcYearlyIncomeGoal > 0 ? rcYearlyIncomeGoal : null;
+  const annualProgressPct = annualIncomeGoal ? Math.min(Math.round((netEarned / annualIncomeGoal) * 100), 100) : null;
+
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold">Report Card</h2>
+
+      {/* ── HERO BANNER ─────────────────────────────────────────────────── */}
+      <Card className="overflow-hidden shadow-sm">
+        {/* Top accent stripe — grade color */}
+        <div className={cn('h-1.5', overallColors.progressBar)} />
+        <CardContent className="pt-5 pb-5">
+          <div className="flex flex-col md:flex-row md:items-end gap-5 md:gap-8">
+            {/* Primary hero number */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Net Income YTD</p>
+                {/* Status pill */}
+                <span className={cn(
+                  'inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full border',
+                  overallColors.statusBg, overallColors.statusText, overallColors.statusBorder
+                )}>
+                  <span className={cn('w-1.5 h-1.5 rounded-full', overallColors.progressBar)} />
+                  {overallColors.statusLabel}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <span className="text-5xl md:text-6xl font-black tracking-tight leading-none text-foreground">
+                  {fmtCurrency(netEarned)}
+                </span>
+                <div className={cn(
+                  'flex items-center justify-center h-16 w-16 rounded-2xl text-4xl font-black border-2 shrink-0',
+                  overallColors.gradeBadgeBg, overallColors.gradeBadgeText, overallColors.gradeBadgeBorder
+                )}>
+                  {dashboard.isMetricsGracePeriod ? 'A' : overallGrade}
+                </div>
+              </div>
+              {ytdIncomeGoal > 0 && (
+                <p className={cn('text-sm font-semibold mt-2', overallColors.paceText)}>
+                  {overallColors.paceArrow} {Math.abs(incomeDeltaPct)}% {incomeDeltaPct >= 0 ? 'ahead' : 'behind'} of pace · {fmtCurrency(ytdIncomeGoal)} YTD goal
+                </p>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="hidden md:block w-px h-16 bg-border self-center" />
+
+            {/* Secondary stats */}
+            <div className="flex flex-wrap gap-6 md:gap-8">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Pipeline Total</p>
+                <p className="text-xl font-bold text-foreground">{fmtCurrency(ytdTotalPotential)}</p>
+                {netPending > 0 && <p className="text-xs text-amber-600 font-medium mt-0.5">+{fmtCurrency(netPending)} pending</p>}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Closed Deals</p>
+                <p className="text-xl font-bold text-foreground">{vm.closedDeals}</p>
+                {vm.pendingDeals > 0 && <p className="text-xs text-muted-foreground font-medium mt-0.5">{vm.pendingDeals} pending</p>}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Closed Volume</p>
+                <p className="text-xl font-bold text-foreground">{fmtCurrencyCompact(vm.closedVolume, true)}</p>
+                {vm.pendingVolume > 0 && <p className="text-xs text-muted-foreground font-medium mt-0.5">{fmtCurrencyCompact(vm.pendingVolume, true)} pending</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Annual progress bar */}
+          {annualProgressPct !== null && annualIncomeGoal !== null && (
+            <div className="mt-5 space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-medium">
+                <span className="text-muted-foreground">Progress to Annual Goal ({fmtCurrencyCompact(annualIncomeGoal, true)})</span>
+                <span className={cn('font-bold', overallColors.paceText)}>{annualProgressPct}% complete</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                <div
+                  className={cn('h-3 rounded-full transition-all duration-700', overallColors.progressBar)}
+                  style={{ width: `${annualProgressPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>$0</span>
+                <span>{fmtCurrencyCompact(annualIncomeGoal / 2, true)}</span>
+                <span>{fmtCurrencyCompact(annualIncomeGoal, true)} goal</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── REPORT CARD SECTION HEADER ──────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold">Report Card</h2>
+        <p className="text-xs text-muted-foreground">
+          {isCurrentYearRC ? `YTD vs. prorated goal · Jan–${new Date().toLocaleString('default', { month: 'short' })} ${perfYear}` : `Full Year ${perfYear}`}
+        </p>
+      </div>
 
       {/* Row 1: Income */}
       <div className="grid gap-4 md:grid-cols-2">
         <HeroCard
-          title="Net Income YTD" grade={ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade} primary={fmtCurrency(netEarned)}
+          title="Net Income YTD"
+          grade={ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade}
+          primary={fmtCurrency(netEarned)}
           performancePct={ytdIncomeGoal > 0 ? incomePct : undefined}
+          goalLabel={ytdIncomeGoal > 0 ? fmtCurrency(ytdIncomeGoal) : undefined}
           secondary={ytdIncomeGoal > 0 ? paceText(incomeDeltaPct, fmtCurrency(ytdIncomeGoal)) : 'No income goal set'}
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
         />
         <HeroCard
-          title="Pipeline Net Income" grade={ytdIncomeGoal > 0 ? letterGrade(pipelinePct).letter : dashboard.pipelineAdjustedIncome.grade} primary={fmtCurrency(ytdTotalPotential)}
+          title="Pipeline Net Income"
+          grade={ytdIncomeGoal > 0 ? letterGrade(pipelinePct).letter : dashboard.pipelineAdjustedIncome.grade}
+          primary={fmtCurrency(ytdTotalPotential)}
           performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
+          goalLabel={ytdIncomeGoal > 0 ? (() => { const g = vm?.projectedIncomeGoal ?? ytdIncomeGoal; return fmtCurrency(g); })() : undefined}
           secondary={ytdIncomeGoal > 0
             ? (() => {
                 const projGoal = vm?.projectedIncomeGoal ?? ytdIncomeGoal;
@@ -1471,16 +1704,22 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
       {/* Row 2: Deals & Volume */}
       <div className="grid gap-4 md:grid-cols-2">
           <HeroCard
-            title="Deals Closed" grade={vm.dealsGrade} primary={`${vm.closedDeals} closed`}
+            title="Deals Closed"
+            grade={vm.dealsGrade}
+            primary={`${vm.closedDeals} closed`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.dealsPerformance) : undefined}
+            goalLabel={vm.dealsGoal != null ? `${fmtNum(vm.dealsGoal)} deals goal` : undefined}
             secondary={vm.dealsGoal != null
               ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${fmtNum(vm.dealsGoal)} deals YTD goal · ${vm.pendingDeals} pending`
               : `${vm.pendingDeals} pending · No goal set`}
             icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
-            title="Pipeline Sales" grade={vm.projectedDealsGrade} primary={`${vm.closedDeals + vm.pendingDeals} total`}
+            title="Pipeline Sales"
+            grade={vm.projectedDealsGrade}
+            primary={`${vm.closedDeals + vm.pendingDeals} total`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.projectedDealsPerformance) : undefined}
+            goalLabel={vm.dealsGoal != null ? (() => { const g = vm.projectedDealsGoal ?? vm.dealsGoal; return `${fmtNum(g ?? 0)} projected`; })() : undefined}
             secondary={vm.dealsGoal != null
               ? (() => {
                   const projDGoal = vm.projectedDealsGoal ?? vm.dealsGoal;
@@ -1490,16 +1729,22 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
-            title="$ Volume Sold" grade={vm.volumeGrade} primary={fmtCurrency(vm.closedVolume)}
+            title="$ Volume Sold"
+            grade={vm.volumeGrade}
+            primary={fmtCurrency(vm.closedVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.volumePerformance) : undefined}
+            goalLabel={vm.volumeGoal != null ? fmtCurrencyCompact(vm.volumeGoal, true) : undefined}
             secondary={vm.volumeGoal != null
               ? (vm.volumePerformance >= 100 ? `${Math.round(vm.volumePerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.volumePerformance)}% behind pace`) + ` · ${fmtCurrency(vm.volumeGoal)} YTD goal`
               : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
             icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
           />
           <HeroCard
-            title="Pipeline $ Volume Sold" grade={vm.projectedVolumeGrade} primary={fmtCurrency(vm.totalVolume)}
+            title="Pipeline $ Volume Sold"
+            grade={vm.projectedVolumeGrade}
+            primary={fmtCurrency(vm.totalVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.projectedVolumePerformance) : undefined}
+            goalLabel={vm.volumeGoal != null ? (() => { const g = vm.projectedVolumeGoal ?? vm.volumeGoal; return fmtCurrencyCompact(g ?? 0, true); })() : undefined}
             secondary={vm.volumeGoal != null
               ? (() => {
                   const projVolGoal = vm.projectedVolumeGoal ?? vm.volumeGoal;
