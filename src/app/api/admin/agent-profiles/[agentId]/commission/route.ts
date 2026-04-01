@@ -149,6 +149,29 @@ export async function GET(
         ? Number(data.defaultTransactionFee)
         : getTeamDefaultTransactionFee(teamGroup);
 
+    // ── YTD tier progression companyDollar ───────────────────────────────────
+    // For team leaders, this includes team member production credits so the
+    // correct cumulative tier band is selected for the next transaction.
+    // For all other agents, this equals their personal YTD companyDollar.
+    let ytdTierProgressionCompanyDollar = 0;
+    try {
+      const currentYear = new Date().getFullYear();
+      const rollupSnap = await adminDb
+        .collection('agentYearRollups')
+        .doc(`${agentId}_${currentYear}`)
+        .get();
+      if (rollupSnap.exists) {
+        const r = rollupSnap.data() || {};
+        // Prefer tierProgressionCompanyDollar (includes team member credits for leaders)
+        // Fall back to companyDollar for agents whose rollup predates this field
+        ytdTierProgressionCompanyDollar = Number(
+          r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0
+        );
+      }
+    } catch {
+      // Non-fatal: form will fall back to per-transaction GCI for tier lookup
+    }
+
     return NextResponse.json({
       ok: true,
       agentId,
@@ -158,6 +181,7 @@ export async function GET(
       tiersSource,
       defaultTransactionFee,
       tiers,
+      ytdTierProgressionCompanyDollar,
     });
   } catch (err: any) {
     console.error('[API/agent-profiles/commission] Error:', err?.message || err);

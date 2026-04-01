@@ -8,6 +8,16 @@
  * dashboard widget and leaderboard that reads agentYearRollups.
  *
  * Called automatically after every POST / PATCH / DELETE on transactions.
+ *
+ * ── Team Leader Tier Progression ─────────────────────────────────────────────
+ * For team leaders, `tierProgressionCompanyDollar` accumulates:
+ *   1. The leader's own closed transactions (companyRetained from splitSnapshot)
+ *   2. All team member transactions where
+ *      creditSnapshot.progressionLeaderAgentId === agentId
+ *      (using creditSnapshot.progressionCompanyDollarCredit as the amount)
+ *
+ * `companyDollar` (used by leaderboard / personal dashboard) is PERSONAL ONLY
+ * and never includes team member production.
  */
 import 'server-only';
 import type { Firestore } from 'firebase-admin/firestore';
@@ -45,7 +55,7 @@ export async function rebuildAgentRollup(
 ): Promise<void> {
   if (!agentId || !year) return;
 
-  // ── 1. Fetch all transactions for this agent ──────────────────────────────
+  // ── 1. Fetch all transactions for this agent (personal production) ────────
   const snap = await db
     .collection('transactions')
     .where('agentId', '==', agentId)
@@ -61,10 +71,14 @@ export async function rebuildAgentRollup(
   let listingsCanceled = 0;
   let listingsExpired = 0;
 
-  let closedVolume = 0;       // sum of dealValue for closed
-  let totalGCI = 0;           // sum of commission (gross) for closed
-  let agentNetCommission = 0; // sum of splitSnapshot.agentNetCommission for closed
-  let companyDollar = 0;      // sum of splitSnapshot.companyRetained for closed
+  let closedVolume = 0;       // sum of dealValue for closed (personal)
+  let totalGCI = 0;           // sum of commission (gross) for closed (personal)
+  let agentNetCommission = 0; // sum of splitSnapshot.agentNetCommission for closed (personal)
+  let companyDollar = 0;      // sum of splitSnapshot.companyRetained for closed (personal)
+
+  // tierProgressionCompanyDollar starts from personal production;
+  // team member credits are added in step 2b below.
+  let tierProgressionCompanyDollar = 0;
 
   for (const doc of snap.docs) {
     const t = doc.data() as any;
@@ -90,7 +104,10 @@ export async function rebuildAgentRollup(
       closedVolume += num(t.dealValue);
       totalGCI += num(t.commission);
       agentNetCommission += num(t.splitSnapshot?.agentNetCommission ?? t.commission);
-      companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+      const personalCompanyDollar = num(t.splitSnapshot?.companyRetained ?? 0);
+      companyDollar += personalCompanyDollar;
+      // Personal production also counts toward own tier progression
+      tierProgressionCompanyDollar += personalCompanyDollar;
     }
 
     // Pending / under contract
@@ -108,6 +125,41 @@ export async function rebuildAgentRollup(
         listingsExpired += 1;
       }
     }
+  }
+
+  // ── 2b. Add team member production to tier progression (leader only) ──────
+  // Fetch all closed transactions where this agent is the progression leader.
+  // These are team member transactions that credit toward the leader's tier.
+  // They do NOT affect leaderboard stats (closed, volume, GCI) — only tier.
+  try {
+    const memberSnap = await db
+      .collection('transactions')
+      .where('creditSnapshot.progressionLeaderAgentId', '==', agentId)
+      .get();
+
+    for (const doc of memberSnap.docs) {
+      const t = doc.data() as any;
+
+      // Only count closed transactions for tier progression
+      const status = String(t.status || '').toLowerCase();
+      if (status !== 'closed') continue;
+
+      // Only count transactions in the target year
+      const txYear =
+        toYear(t.closedDate) ??
+        toYear(t.contractDate) ??
+        (num(t.year) || null);
+      if (txYear !== year) continue;
+
+      // Use progressionCompanyDollarCredit if available; fall back to commission
+      const credit = num(
+        t.creditSnapshot?.progressionCompanyDollarCredit ?? t.commission
+      );
+      tierProgressionCompanyDollar += credit;
+    }
+  } catch {
+    // Non-fatal: Firestore composite index may not exist yet.
+    // tierProgressionCompanyDollar will fall back to personal-only value.
   }
 
   const totalTransactions = closed + pending;
@@ -151,11 +203,15 @@ export async function rebuildAgentRollup(
       listings: totalListings,
       all: totalAll,
     },
-    // Financial aggregates
+    // Financial aggregates — PERSONAL production only (used by leaderboard / dashboard)
     closedVolume,
     totalGCI,
     agentNetCommission,
     companyDollar,
+    // Tier progression — personal + team member credits (used by commission tier lookup)
+    // For non-team-leader agents this equals companyDollar.
+    // For team leaders this includes team member production credits.
+    tierProgressionCompanyDollar,
     // Metadata
     rebuiltAt: new Date().toISOString(),
     rebuiltFromLedger: true,
@@ -172,6 +228,7 @@ export async function rebuildAgentRollup(
 /**
  * Rebuild rollups for ALL agents for a given year.
  * Reads all transactions for the year, groups by agentId, then rebuilds each.
+ * Also rebuilds rollups for any team leaders credited by member transactions.
  *
  * @param db   Firestore Admin instance
  * @param year Calendar year to rebuild
@@ -184,7 +241,10 @@ export async function rebuildAllRollupsForYear(
   // Fetch all transactions — we'll filter by year in memory
   const snap = await db.collection('transactions').get();
 
-  // Collect unique agentIds that have transactions in this year
+  // Collect unique agentIds that have transactions in this year.
+  // Also collect team leader agentIds from creditSnapshot so their
+  // tierProgressionCompanyDollar is rebuilt even if they have no personal
+  // transactions in the year.
   const agentIds = new Set<string>();
   for (const doc of snap.docs) {
     const t = doc.data() as any;
@@ -195,6 +255,10 @@ export async function rebuildAllRollupsForYear(
     if (txYear === year) {
       const aid = String(t.agentId || '').trim();
       if (aid) agentIds.add(aid);
+
+      // Also ensure the progression leader's rollup is rebuilt
+      const leaderId = String(t.creditSnapshot?.progressionLeaderAgentId || '').trim();
+      if (leaderId && leaderId !== aid) agentIds.add(leaderId);
     }
   }
 
