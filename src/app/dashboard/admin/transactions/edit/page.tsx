@@ -63,6 +63,9 @@ type AgentCommissionData = {
   tiersSource?: string;
   defaultTransactionFee: number | null;
   tiers: CommissionTier[];
+  /** YTD cumulative companyDollar for tier band lookup. For team leaders this
+   * includes team member production credits. 0 if rollup not yet available. */
+  ytdTierProgressionCompanyDollar?: number;
 };
 
 function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | null {
@@ -308,7 +311,11 @@ export default function EditTransactionPage() {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(watchedGCI) || 0;
     if (gci <= 0) { setActiveTier(null); return; }
-    const tier = findActiveTier(agentCommission.tiers, gci);
+    // Use cumulative YTD companyDollar for tier band lookup so team leaders
+    // progress through bands based on total team production, not per-transaction GCI.
+    const ytd1 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+    const tierLookupAmount1 = ytd1 > 0 ? ytd1 : gci;
+    const tier = findActiveTier(agentCommission.tiers, tierLookupAmount1);
     setActiveTier(tier);
     if (tier) {
       form.setValue('agentPct', tier.agentSplitPercent as any);
@@ -327,7 +334,9 @@ export default function EditTransactionPage() {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(form.getValues('gci')) || 0;
     if (gci <= 0) return;
-    const tier = findActiveTier(agentCommission.tiers, gci);
+    const ytd2 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+    const tierLookupAmount2 = ytd2 > 0 ? ytd2 : gci;
+    const tier = findActiveTier(agentCommission.tiers, tierLookupAmount2);
     setActiveTier(tier);
     if (tier) {
       form.setValue('agentPct', tier.agentSplitPercent as any);
@@ -1292,7 +1301,9 @@ export default function EditTransactionPage() {
                         commissionManualOverride.current = false;
                         const gci = Number(form.getValues('gci')) || 0;
                         if (gci > 0 && agentCommission) {
-                          const tier = findActiveTier(agentCommission.tiers, gci);
+                          const ytd3 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+                          const tierLookupAmount3 = ytd3 > 0 ? ytd3 : gci;
+                          const tier = findActiveTier(agentCommission.tiers, tierLookupAmount3);
                           setActiveTier(tier);
                           if (tier) {
                             form.setValue('agentPct', tier.agentSplitPercent as any);

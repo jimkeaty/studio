@@ -63,6 +63,9 @@ type AgentCommissionData = {
   tiersSource?: string;
   defaultTransactionFee: number | null;
   tiers: CommissionTier[];
+  /** YTD cumulative companyDollar for tier band lookup. For team leaders this
+   * includes team member production credits. 0 if rollup not yet available. */
+  ytdTierProgressionCompanyDollar?: number;
 };
 
 /** Find the matching tier for a given GCI amount */
@@ -409,7 +412,11 @@ export default function AddTransactionPage() {
       setActiveTier(null);
       return;
     }
-    const tier = findActiveTier(agentCommission.tiers, gci);
+    // Use cumulative YTD companyDollar for tier band lookup so team leaders
+    // progress through bands based on total team production, not per-transaction GCI.
+    const ytd = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+    const tierLookupAmount = ytd > 0 ? ytd : gci;
+    const tier = findActiveTier(agentCommission.tiers, tierLookupAmount);
     setActiveTier(tier);
     if (tier) {
       const agentPct = tier.agentSplitPercent;
