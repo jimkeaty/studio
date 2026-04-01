@@ -9,9 +9,22 @@
  *
  * Called automatically after every POST / PATCH / DELETE on transactions.
  *
+ * ── Anniversary Cycle vs Calendar Year ───────────────────────────────────────
+ * Two separate windows are maintained per rollup document:
+ *
+ * CALENDAR YEAR (used by leaderboard / personal dashboard stats):
+ *   closed, pending, closedVolume, totalGCI, agentNetCommission, companyDollar
+ *   → filtered by txYear === year (Jan 1 – Dec 31)
+ *
+ * ANNIVERSARY CYCLE (used by commission tier progression):
+ *   tierProgressionCompanyDollar, cycleStart, cycleEnd
+ *   → filtered by transaction date falling within the agent's anniversary cycle
+ *     that contains Jan 1 of the target year (i.e., the cycle "active" that year)
+ *   → For team leaders: also includes team member production credits
+ *
  * ── Team Leader Tier Progression ─────────────────────────────────────────────
  * For team leaders, `tierProgressionCompanyDollar` accumulates:
- *   1. The leader's own closed transactions (companyRetained from splitSnapshot)
+ *   1. The leader's own closed transactions within the anniversary cycle
  *   2. All team member transactions where
  *      creditSnapshot.progressionLeaderAgentId === agentId
  *      (using creditSnapshot.progressionCompanyDollarCredit as the amount)
@@ -21,6 +34,7 @@
  */
 import 'server-only';
 import type { Firestore } from 'firebase-admin/firestore';
+import { getAnniversaryCycle, isInCycle } from '@/lib/agents/anniversaryCycle';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,14 +43,25 @@ function num(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function toYear(value: any): number | null {
+function toDate(value: any): Date | null {
   if (!value) return null;
   let d: Date | null = null;
   if (typeof value?.toDate === 'function') d = value.toDate();
   else if (value instanceof Date) d = value;
   else if (typeof value === 'string' || typeof value === 'number') d = new Date(value);
   if (!d || isNaN(d.getTime())) return null;
-  return d.getFullYear();
+  return d;
+}
+
+function toYear(value: any): number | null {
+  const d = toDate(value);
+  return d ? d.getFullYear() : null;
+}
+
+function toUtcDate(value: any): Date | null {
+  const d = toDate(value);
+  if (!d) return null;
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 }
 
 // ── Main rebuild function ─────────────────────────────────────────────────────
@@ -55,74 +80,106 @@ export async function rebuildAgentRollup(
 ): Promise<void> {
   if (!agentId || !year) return;
 
+  // ── 0. Fetch agent profile for anniversary data and display fields ─────────
+  let displayName = agentId;
+  let avatarUrl: string | null = null;
+  let agentStatus: string = 'active';
+  let anniversaryMonth: number = 0;
+  let anniversaryDay: number = 0;
+
+  try {
+    const profileDoc = await db.collection('agentProfiles').doc(agentId).get();
+    if (profileDoc.exists) {
+      const p = profileDoc.data() as any;
+      displayName =
+        String(p.displayName || p.name || p.agentName || '').trim() || agentId;
+      avatarUrl = p.avatarUrl ? String(p.avatarUrl) : null;
+      agentStatus = String(p.status || 'active');
+      anniversaryMonth = num(p.anniversaryMonth);
+      anniversaryDay = num(p.anniversaryDay);
+    }
+  } catch {
+    // Non-fatal: proceed without profile data
+  }
+
+  // ── 0b. Compute the anniversary cycle that is "active" for this year ───────
+  // We use Jan 1 of the target year as the reference point to find which
+  // anniversary cycle was active at the start of that year.
+  const cycleRef = new Date(Date.UTC(year, 0, 1)); // Jan 1 of target year
+  const cycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, cycleRef);
+
   // ── 1. Fetch all transactions for this agent (personal production) ────────
   const snap = await db
     .collection('transactions')
     .where('agentId', '==', agentId)
     .get();
 
-  // ── 2. Filter to the target year and bucket by status ────────────────────
+  // ── 2. Process transactions ───────────────────────────────────────────────
   // NOTE: Dual Agent transactions count as 2 sides (1 buyer + 1 listing).
   // Volume and commission are NOT doubled — the dollar amounts are already
   // the full deal total. Only the side/unit count is doubled.
+
+  // Calendar-year stats (leaderboard / dashboard performance tracking)
   let closed = 0;
   let pending = 0;
   let listingsActive = 0;
   let listingsCanceled = 0;
   let listingsExpired = 0;
+  let closedVolume = 0;
+  let totalGCI = 0;
+  let agentNetCommission = 0;
+  let companyDollar = 0;
 
-  let closedVolume = 0;       // sum of dealValue for closed (personal)
-  let totalGCI = 0;           // sum of commission (gross) for closed (personal)
-  let agentNetCommission = 0; // sum of splitSnapshot.agentNetCommission for closed (personal)
-  let companyDollar = 0;      // sum of splitSnapshot.companyRetained for closed (personal)
-
-  // tierProgressionCompanyDollar starts from personal production;
-  // team member credits are added in step 2b below.
+  // Anniversary-cycle stats (tier progression)
   let tierProgressionCompanyDollar = 0;
 
   for (const doc of snap.docs) {
     const t = doc.data() as any;
 
-    // Determine the year this transaction belongs to
+    // ── Calendar year filter (for leaderboard / performance stats) ──────────
     const txYear =
       toYear(t.closedDate) ??
       toYear(t.contractDate) ??
       (num(t.year) || null);
 
-    if (txYear !== year) continue;
-
     const status = String(t.status || '').toLowerCase();
     const txType = String(t.transactionType || '').toLowerCase();
-
-    // Dual Agent counts as 2 sides (1 buyer + 1 listing)
     const isDual = String(t.closingType || '').toLowerCase() === 'dual';
     const sideCount = isDual ? 2 : 1;
 
-    // Closed transactions
+    if (txYear === year) {
+      // Closed transactions — calendar year
+      if (status === 'closed') {
+        closed += sideCount;
+        closedVolume += num(t.dealValue);
+        totalGCI += num(t.commission);
+        agentNetCommission += num(t.splitSnapshot?.agentNetCommission ?? t.commission);
+        companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+      }
+
+      // Pending / under contract — calendar year
+      if (status === 'pending' || status === 'under_contract') {
+        pending += sideCount;
+      }
+
+      // Listings (active, canceled, expired) — calendar year
+      if (txType === 'listing' || txType === 'residential_listing') {
+        if (status === 'active' || status === 'listing_active') {
+          listingsActive += 1;
+        } else if (status === 'canceled' || status === 'cancelled') {
+          listingsCanceled += 1;
+        } else if (status === 'expired') {
+          listingsExpired += 1;
+        }
+      }
+    }
+
+    // ── Anniversary cycle filter (for tier progression) ─────────────────────
     if (status === 'closed') {
-      closed += sideCount;
-      closedVolume += num(t.dealValue);
-      totalGCI += num(t.commission);
-      agentNetCommission += num(t.splitSnapshot?.agentNetCommission ?? t.commission);
-      const personalCompanyDollar = num(t.splitSnapshot?.companyRetained ?? 0);
-      companyDollar += personalCompanyDollar;
-      // Personal production also counts toward own tier progression
-      tierProgressionCompanyDollar += personalCompanyDollar;
-    }
-
-    // Pending / under contract
-    if (status === 'pending' || status === 'under_contract') {
-      pending += sideCount;
-    }
-
-    // Listings (active, canceled, expired)
-    if (txType === 'listing' || txType === 'residential_listing') {
-      if (status === 'active' || status === 'listing_active') {
-        listingsActive += 1;
-      } else if (status === 'canceled' || status === 'cancelled') {
-        listingsCanceled += 1;
-      } else if (status === 'expired') {
-        listingsExpired += 1;
+      const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
+      if (txDateUtc && isInCycle(txDateUtc, cycle)) {
+        const personalCompanyDollar = num(t.splitSnapshot?.companyRetained ?? 0);
+        tierProgressionCompanyDollar += personalCompanyDollar;
       }
     }
   }
@@ -144,12 +201,9 @@ export async function rebuildAgentRollup(
       const status = String(t.status || '').toLowerCase();
       if (status !== 'closed') continue;
 
-      // Only count transactions in the target year
-      const txYear =
-        toYear(t.closedDate) ??
-        toYear(t.contractDate) ??
-        (num(t.year) || null);
-      if (txYear !== year) continue;
+      // Only count transactions within the anniversary cycle
+      const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
+      if (!txDateUtc || !isInCycle(txDateUtc, cycle)) continue;
 
       // Use progressionCompanyDollarCredit if available; fall back to commission
       const credit = num(
@@ -166,31 +220,15 @@ export async function rebuildAgentRollup(
   const totalListings = listingsActive + listingsCanceled + listingsExpired;
   const totalAll = totalTransactions + totalListings;
 
-  // ── 3. Fetch agent profile for displayName / avatarUrl / status ─────────
-  let displayName = agentId;
-  let avatarUrl: string | null = null;
-  let agentStatus: string = 'active'; // default to active if no profile found
-
-  try {
-    const profileDoc = await db.collection('agentProfiles').doc(agentId).get();
-    if (profileDoc.exists) {
-      const p = profileDoc.data() as any;
-      displayName =
-        String(p.displayName || p.name || p.agentName || '').trim() || agentId;
-      avatarUrl = p.avatarUrl ? String(p.avatarUrl) : null;
-      agentStatus = String(p.status || 'active');
-    }
-  } catch {
-    // Non-fatal: proceed without profile data
-  }
-
-  // ── 4. Build the rollup document ─────────────────────────────────────────
+  // ── 3. Build the rollup document ─────────────────────────────────────────
   const rollupData: Record<string, any> = {
     agentId,
     year,
     displayName,
     agentStatus,
     ...(avatarUrl ? { avatarUrl } : {}),
+
+    // Calendar-year performance stats (leaderboard / dashboard)
     closed,
     pending,
     listings: {
@@ -203,21 +241,26 @@ export async function rebuildAgentRollup(
       listings: totalListings,
       all: totalAll,
     },
-    // Financial aggregates — PERSONAL production only (used by leaderboard / dashboard)
     closedVolume,
     totalGCI,
     agentNetCommission,
     companyDollar,
-    // Tier progression — personal + team member credits (used by commission tier lookup)
-    // For non-team-leader agents this equals companyDollar.
-    // For team leaders this includes team member production credits.
+
+    // Anniversary-cycle tier progression stats
+    // For non-team-leader agents: equals personal companyDollar within the cycle.
+    // For team leaders: includes team member production credits within the cycle.
     tierProgressionCompanyDollar,
+    // Store the cycle boundaries so the commission API and dashboard can display them
+    cycleStart: cycle.cycleStart.toISOString().slice(0, 10),
+    cycleEnd: cycle.cycleEnd.toISOString().slice(0, 10),
+    cycleYear: cycle.cycleYear,
+
     // Metadata
     rebuiltAt: new Date().toISOString(),
     rebuiltFromLedger: true,
   };
 
-  // ── 5. Upsert the rollup document ─────────────────────────────────────────
+  // ── 4. Upsert the rollup document ─────────────────────────────────────────
   // Document ID convention: "{agentId}_{year}"
   const docId = `${agentId}_${year}`;
   await db.collection('agentYearRollups').doc(docId).set(rollupData, { merge: true });
@@ -248,10 +291,13 @@ export async function rebuildAllRollupsForYear(
   const agentIds = new Set<string>();
   for (const doc of snap.docs) {
     const t = doc.data() as any;
-    const txYear =
-      toYear(t.closedDate) ??
-      toYear(t.contractDate) ??
-      (num(t.year) || null);
+    let txYear: number | null = null;
+    const cd = t.closedDate ? new Date(typeof t.closedDate?.toDate === 'function' ? t.closedDate.toDate() : t.closedDate) : null;
+    const ctd = t.contractDate ? new Date(typeof t.contractDate?.toDate === 'function' ? t.contractDate.toDate() : t.contractDate) : null;
+    if (cd && !isNaN(cd.getTime())) txYear = cd.getFullYear();
+    else if (ctd && !isNaN(ctd.getTime())) txYear = ctd.getFullYear();
+    else if (t.year && typeof t.year === 'number') txYear = t.year;
+
     if (txYear === year) {
       const aid = String(t.agentId || '').trim();
       if (aid) agentIds.add(aid);

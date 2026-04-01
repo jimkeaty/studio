@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { isAdminLike } from '@/lib/auth/staffAccess';
-
+import { getAnniversaryCycle, isInCycle, formatCycleLabel } from '@/lib/agents/anniversaryCycle';
 import type { AgentDashboardData, BusinessPlan } from "@/lib/types";
 
 function serializeFirestore(val: any): any {
@@ -314,26 +314,15 @@ export async function GET(req: NextRequest) {
       const net = getTransactionNet(t);
       const dealValue = asNumber(t.dealValue);
       const gci = asNumber(t.splitSnapshot?.grossCommission || t.commission);
-      // Tier progression tracks total gross commission (progressionCompanyDollarCredit = commission).
-      // Fall back to grossCommission if creditSnapshot not present.
-      const tierGCI = asNumber(
-        t.creditSnapshot?.progressionCompanyDollarCredit
-        || t.splitSnapshot?.grossCommission
-        || t.commission
-      );
-      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
+         // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = String((t as any).closingType || "").toLowerCase() === "dual";
       const sideCount = isDual ? 2 : 1;
-
       if (status === "closed") {
         const d = getTransactionDateForEarned(t);
         if (!d) continue;
-
         const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const monthIndex = dUtc.getUTCMonth();
-
         monthlyBuckets[monthIndex].closed += net;
-
         if (
           dUtc.getTime() >= effectiveStart.getTime() &&
           dUtc.getTime() <= asOf.getTime()
@@ -342,7 +331,7 @@ export async function GET(req: NextRequest) {
           closedUnits += sideCount;
           closedVolume += dealValue;
           totalGCI += gci;
-          grossGCIYTD += tierGCI;
+          // grossGCIYTD is accumulated below using anniversary cycle filter
         }
       } else if (status === "pending" || status === "under_contract") {
         const d = getTransactionDateForPending(t);
@@ -371,7 +360,11 @@ export async function GET(req: NextRequest) {
           netPending += net;
           pendingUnits += sideCount;
           pendingVolume += dealValue;
-          pendingGrossGCI += tierGCI;
+          pendingGrossGCI += asNumber(
+            t.creditSnapshot?.progressionCompanyDollarCredit
+            || t.splitSnapshot?.grossCommission
+            || t.commission
+          );
         }
       }
     }
@@ -749,30 +742,40 @@ export async function GET(req: NextRequest) {
         console.warn('[dashboard] Failed to load team plan tiers:', teamErr);
       }
     }
-    console.log(`[dashboard] tiers resolved: ${resolvedTiers.length}, planName: ${resolvedPlanName}, grossGCI: ${grossGCIYTD.toFixed(2)}, teamMemberCompMode: ${agentProfile?.teamMemberCompMode ?? 'n/a'}, overrideBands: ${Array.isArray(agentProfile?.teamMemberOverrideBands) ? agentProfile.teamMemberOverrideBands.length : 0}`);
-
-    // Start date + anniversary (tier reset) date — always compute regardless of tiers
+     // ── Anniversary cycle — compute GCI within the agent's commission cycle ────
     const agentStartDate = agentProfile?.startDate || null;
     const annivMonth = asNumber(agentProfile?.anniversaryMonth);
     const annivDay = asNumber(agentProfile?.anniversaryDay);
-    let anniversaryDate: string | null = null;
-    let daysUntilReset: number | null = null;
-
-    if (annivMonth >= 1 && annivMonth <= 12 && annivDay >= 1) {
-      let annivYear = yearNum;
-      const annivThisYear = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
-      if (annivThisYear.getTime() < todayUtc.getTime()) annivYear += 1;
-      const nextAnniv = new Date(Date.UTC(annivYear, annivMonth - 1, annivDay));
-      anniversaryDate = nextAnniv.toISOString().slice(0, 10);
-      daysUntilReset = Math.ceil((nextAnniv.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24));
+    // Current anniversary cycle (the one containing today)
+    const currentCycle = getAnniversaryCycle(annivMonth, annivDay, todayUtc);
+    // Accumulate grossGCIYTD within the anniversary cycle (not calendar year)
+    for (const t of txDocs) {
+      if (String(t.status || '').trim() !== 'closed') continue;
+      const d = getTransactionDateForEarned(t);
+      if (!d) continue;
+      const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      if (isInCycle(dUtc, currentCycle)) {
+        const tierGCI = asNumber(
+          t.creditSnapshot?.progressionCompanyDollarCredit
+          || t.splitSnapshot?.grossCommission
+          || t.commission
+        );
+        grossGCIYTD += tierGCI;
+      }
     }
-
+    // Next anniversary date and days until reset
+    const actualNextAnniv = new Date(currentCycle.cycleEnd.getTime() + 1); // day after cycleEnd
+    const anniversaryDate: string = actualNextAnniv.toISOString().slice(0, 10);
+    const daysUntilReset: number = Math.ceil(
+      (actualNextAnniv.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const cycleLabel = formatCycleLabel(currentCycle);
+    console.log(`[dashboard] tiers resolved: ${resolvedTiers.length}, planName: ${resolvedPlanName}, grossGCI (cycle): ${grossGCIYTD.toFixed(2)}, cycle: ${cycleLabel}, teamMemberCompMode: ${agentProfile?.teamMemberCompMode ?? 'n/a'}, overrideBands: ${Array.isArray(agentProfile?.teamMemberOverrideBands) ? agentProfile.teamMemberOverrideBands.length : 0}`);
     // Sort tiers and compute progress
     if (resolvedTiers.length > 0) {
       const sortedTiers = [...resolvedTiers].sort(
         (a, b) => a.fromCompanyDollar - b.fromCompanyDollar
       );
-
       const totalGCIForTier = grossGCIYTD;
 
       // Find current tier
@@ -811,10 +814,13 @@ export async function GET(req: NextRequest) {
         nextTierThreshold: nextTier ? nextTier.fromCompanyDollar : null,
         progressInCurrentTier,
         capReached,
-        effectiveStartDate: agentStartDate,
+        effectiveStartDate: currentCycle.cycleStart.toISOString().slice(0, 10),
         anniversaryDate,
         daysUntilReset,
         planName: resolvedPlanName,
+        cycleLabel,
+        cycleStart: currentCycle.cycleStart.toISOString().slice(0, 10),
+        cycleEnd: currentCycle.cycleEnd.toISOString().slice(0, 10),
       };
     } else {
       // No tiers resolved — still provide start date info + diagnostic data
@@ -828,10 +834,13 @@ export async function GET(req: NextRequest) {
         nextTierThreshold: null,
         progressInCurrentTier: 0,
         capReached: false,
-        effectiveStartDate: agentStartDate,
+        effectiveStartDate: currentCycle.cycleStart.toISOString().slice(0, 10),
         anniversaryDate,
         daysUntilReset,
         planName: null,
+        cycleLabel,
+        cycleStart: currentCycle.cycleStart.toISOString().slice(0, 10),
+        cycleEnd: currentCycle.cycleEnd.toISOString().slice(0, 10),
         // Diagnostic: why tiers weren't resolved
         _debug: {
           profileFound: !!agentProfile,

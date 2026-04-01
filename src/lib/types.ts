@@ -311,6 +311,9 @@ export interface AgentDashboardData {
     anniversaryDate: string | null;   // next anniversary (tier reset) date
     daysUntilReset: number | null;    // days until anniversary/tier reset
     planName?: string | null;         // human-readable name of the commission plan
+    cycleLabel?: string;               // e.g. "Jun 15, 2025 – Jun 14, 2026"
+    cycleStart?: string;               // YYYY-MM-DD start of current anniversary cycle
+    cycleEnd?: string;                 // YYYY-MM-DD end of current anniversary cycle
   };
 
   // Volume & deals grading

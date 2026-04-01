@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getTeamDefaultTiers, getTeamDefaultTransactionFee } from '@/lib/commissions/teamTemplates';
+import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -149,16 +150,29 @@ export async function GET(
         ? Number(data.defaultTransactionFee)
         : getTeamDefaultTransactionFee(teamGroup);
 
-    // ── YTD tier progression companyDollar ───────────────────────────────────
-    // For team leaders, this includes team member production credits so the
-    // correct cumulative tier band is selected for the next transaction.
-    // For all other agents, this equals their personal YTD companyDollar.
+    // ── YTD tier progression companyDollar (anniversary-cycle based) ─────────
+    // We look up the rollup document for the calendar year that contains the
+    // agent's CURRENT anniversary cycle. Because rebuildAgentRollup now stores
+    // tierProgressionCompanyDollar filtered to the anniversary cycle window,
+    // we need to find which calendar-year rollup covers today's cycle.
+    //
+    // Strategy: the rollup for year Y stores the cycle that started in year Y.
+    // Today's cycle starts in either this calendar year or last calendar year.
+    // We check both rollups and pick the one whose cycleStart/cycleEnd contains today.
     let ytdTierProgressionCompanyDollar = 0;
+    let cycleStart: string | null = null;
+    let cycleEnd: string | null = null;
     try {
-      const currentYear = new Date().getFullYear();
+      const today = new Date();
+      const anniversaryMonth = Number(data.anniversaryMonth ?? 0);
+      const anniversaryDay = Number(data.anniversaryDay ?? 0);
+      // Compute the current anniversary cycle
+      const currentCycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+      // The rollup document key is based on the calendar year of cycleStart
+      const rollupYear = currentCycle.cycleStart.getUTCFullYear();
       const rollupSnap = await adminDb
         .collection('agentYearRollups')
-        .doc(`${agentId}_${currentYear}`)
+        .doc(`${agentId}_${rollupYear}`)
         .get();
       if (rollupSnap.exists) {
         const r = rollupSnap.data() || {};
@@ -167,6 +181,12 @@ export async function GET(
         ytdTierProgressionCompanyDollar = Number(
           r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0
         );
+        cycleStart = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
+        cycleEnd = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
+      } else {
+        // Rollup not yet built — return cycle boundaries from utility
+        cycleStart = currentCycle.cycleStart.toISOString().slice(0, 10);
+        cycleEnd = currentCycle.cycleEnd.toISOString().slice(0, 10);
       }
     } catch {
       // Non-fatal: form will fall back to per-transaction GCI for tier lookup
@@ -182,6 +202,9 @@ export async function GET(
       defaultTransactionFee,
       tiers,
       ytdTierProgressionCompanyDollar,
+      // Anniversary cycle boundaries for display in progress bars / dashboard
+      cycleStart,
+      cycleEnd,
     });
   } catch (err: any) {
     console.error('[API/agent-profiles/commission] Error:', err?.message || err);
