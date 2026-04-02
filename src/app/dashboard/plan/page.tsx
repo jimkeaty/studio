@@ -31,9 +31,36 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  BookOpen,
+  ArrowDownToLine,
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+
+type HistoricalStats = {
+  year: number;
+  hasData: boolean;
+  closedUnits: number;
+  netEarned: number;
+  totalVolume: number;
+  avgNetCommission: number | null;
+  activityTotals: {
+    calls: number;
+    engagements: number;
+    appointmentsSet: number;
+    appointmentsHeld: number;
+    contractsWritten: number;
+    closings: number;
+  };
+  conversionRates: {
+    callToEngagement: number | null;
+    engagementToAppointmentSet: number | null;
+    appointmentSetToHeld: number | null;
+    appointmentHeldToContract: number | null;
+    contractToClosing: number | null;
+  };
+};
 
 const planFormSchema = z.object({
   annualIncomeGoal: z.coerce.number().min(0, "Goal must be positive."),
@@ -196,6 +223,8 @@ export default function BusinessPlanPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [calculatedPlan, setCalculatedPlan] = useState<BusinessPlan["calculatedTargets"] | null>(null);
   const [wizardStep, setWizardStep] = useState(1);
+  const [historicalStats, setHistoricalStats] = useState<HistoricalStats | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
@@ -241,6 +270,18 @@ export default function BusinessPlanPage() {
     setCalculatedPlan(newCalculatedTargets);
   }, [form]);
 
+  const useHistoricalNumbers = useCallback(() => {
+    if (!historicalStats) return;
+    const r = historicalStats.conversionRates;
+    if (historicalStats.avgNetCommission !== null) form.setValue('avgCommission', historicalStats.avgNetCommission);
+    if (r.callToEngagement !== null) form.setValue('conversions.callToEngagement', r.callToEngagement);
+    if (r.engagementToAppointmentSet !== null) form.setValue('conversions.engagementToAppointmentSet', r.engagementToAppointmentSet);
+    if (r.appointmentSetToHeld !== null) form.setValue('conversions.appointmentSetToHeld', r.appointmentSetToHeld);
+    if (r.appointmentHeldToContract !== null) form.setValue('conversions.appointmentHeldToContract', r.appointmentHeldToContract);
+    if (r.contractToClosing !== null) form.setValue('conversions.contractToClosing', r.contractToClosing);
+    setTimeout(handleCalculate, 0);
+  }, [historicalStats, form, handleCalculate]);
+
   useEffect(() => {
     if (userLoading || !year) return;
 
@@ -256,6 +297,17 @@ export default function BusinessPlanPage() {
 
         const token = await user.getIdToken();
         const json = await fetchPlan(year, token, isImpersonating ? effectiveUid : null);
+
+        // Load last year's historical stats for the reference box
+        const histYear = parseInt(year) - 1;
+        setHistLoading(true);
+        const histParams = new URLSearchParams({ year: String(histYear) });
+        if (isImpersonating && effectiveUid) histParams.set('viewAs', effectiveUid);
+        fetch(`/api/historical-stats?${histParams}`, { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.json())
+          .then((d: HistoricalStats) => { setHistoricalStats(d.hasData ? d : null); })
+          .catch(() => {})
+          .finally(() => setHistLoading(false));
 
         // If no plan exists, server returns ok:true with plan:{} — keep defaults
         if (json?.ok && json.plan && typeof json.plan === "object" && Object.keys(json.plan).length > 0) {
@@ -544,6 +596,84 @@ export default function BusinessPlanPage() {
         {wizardStep === 2 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 order-2 lg:order-1">
+
+        {/* ── LAST YEAR'S REFERENCE BOX ──────────────────────────────────── */}
+        {histLoading ? (
+          <Card className="mb-6 border-blue-200 bg-blue-50 dark:bg-blue-950/30">
+            <CardContent className="pt-6">
+              <Skeleton className="h-4 w-48 mb-2" />
+              <Skeleton className="h-4 w-64" />
+            </CardContent>
+          </Card>
+        ) : historicalStats ? (
+          <Card className="mb-6 border-blue-300 bg-blue-50 dark:bg-blue-950/30">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2 text-blue-800 dark:text-blue-300">
+                  <BookOpen className="h-5 w-5" />
+                  {historicalStats.year} Actual Performance Reference
+                </CardTitle>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-400 text-blue-700 hover:bg-blue-100 dark:text-blue-300"
+                  onClick={useHistoricalNumbers}
+                >
+                  <ArrowDownToLine className="h-4 w-4 mr-1" />
+                  Use These Numbers
+                </Button>
+              </div>
+              <CardDescription className="text-blue-700 dark:text-blue-400">
+                Your actual results from {historicalStats.year} — use these to set realistic assumptions, or adjust as needed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Avg Net Commission</p>
+                  <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
+                    {historicalStats.avgNetCommission !== null
+                      ? `$${historicalStats.avgNetCommission.toLocaleString()}`
+                      : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">per closing</p>
+                </div>
+                <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Total Net Earned</p>
+                  <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
+                    ${historicalStats.netEarned.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{historicalStats.closedUnits} closings</p>
+                </div>
+                <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Appts Held</p>
+                  <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
+                    {historicalStats.activityTotals.appointmentsHeld}
+                  </p>
+                  <p className="text-xs text-muted-foreground">for the year</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                {([
+                  { label: 'Call → Engagement', value: historicalStats.conversionRates.callToEngagement },
+                  { label: 'Engagement → Appt Set', value: historicalStats.conversionRates.engagementToAppointmentSet },
+                  { label: 'Appt Set → Held', value: historicalStats.conversionRates.appointmentSetToHeld },
+                  { label: 'Appt Held → Contract', value: historicalStats.conversionRates.appointmentHeldToContract },
+                  { label: 'Contract → Closing', value: historicalStats.conversionRates.contractToClosing },
+                ] as { label: string; value: number | null }[]).map(({ label, value }) => (
+                  <div key={label} className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                    <p className="text-lg font-bold text-blue-800 dark:text-blue-200">
+                      {value !== null ? `${value.toFixed(1)}%` : '—'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Advanced Assumptions</CardTitle>
