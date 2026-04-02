@@ -7,14 +7,21 @@
  * imported. Each row shows the import date/time, row count, and sample
  * client names. A "Delete Batch" button (with confirmation dialog) deletes
  * every appointment in that batch at once.
+ *
+ * Admin behaviour:
+ *   - If viewAs is set (impersonation mode), shows batches for that agent.
+ *   - If viewAs is NOT set and user is an admin, shows an agent selector
+ *     so the admin can view/delete batches for any agent.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Trash2, RefreshCw, PackageOpen, Calendar } from 'lucide-react';
+import { Loader2, Trash2, RefreshCw, PackageOpen, Calendar, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ImportBatch {
@@ -34,6 +41,11 @@ interface ImportBatch {
   importedAt: string; // ISO string
   count: number;
   sampleNames: string[];
+}
+
+interface AgentOption {
+  agentId: string;
+  agentName: string;
 }
 
 interface ManageImportBatchesProps {
@@ -61,18 +73,51 @@ function formatDateTime(iso: string): string {
 export function ManageImportBatches({ viewAs, onBatchDeleted }: ManageImportBatchesProps) {
   const { user } = useUser();
   const { toast } = useToast();
+  const { isAdmin } = useIsAdminLike();
 
   const [batches, setBatches] = useState<ImportBatch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Admin agent selector
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+
+  // Effective viewAs: prop (impersonation) takes priority, then admin selector
+  const effectiveViewAs = viewAs ?? (isAdmin ? selectedAgentId || null : null);
+  const selectedAgentName = agents.find(a => a.agentId === selectedAgentId)?.agentName ?? '';
+
+  // Fetch agent list for admin selector when not impersonating
+  useEffect(() => {
+    if (!isAdmin || viewAs || !user) return;
+    setAgentsLoading(true);
+    user.getIdToken().then(token =>
+      fetch('/api/admin/agents?source=profiles', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ).then(r => r.json()).then(data => {
+      if (data.agents) {
+        const sorted = [...data.agents].sort((a: AgentOption, b: AgentOption) =>
+          a.agentName.localeCompare(b.agentName)
+        );
+        setAgents(sorted);
+      }
+    }).catch(() => {}).finally(() => setAgentsLoading(false));
+  }, [isAdmin, viewAs, user]);
 
   const loadBatches = useCallback(async () => {
     if (!user) return;
+    // Don't load if admin hasn't selected an agent yet (and not impersonating)
+    if (isAdmin && !effectiveViewAs) {
+      setBatches([]);
+      return;
+    }
     setLoading(true);
     try {
       const token = await user.getIdToken();
       const params = new URLSearchParams();
-      if (viewAs) params.set('viewAs', viewAs);
+      if (effectiveViewAs) params.set('viewAs', effectiveViewAs);
       const res = await fetch(`/api/appointments/bulk-batches?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -84,7 +129,7 @@ export function ManageImportBatches({ viewAs, onBatchDeleted }: ManageImportBatc
     } finally {
       setLoading(false);
     }
-  }, [user, viewAs, toast]);
+  }, [user, effectiveViewAs, isAdmin, toast]);
 
   useEffect(() => { loadBatches(); }, [loadBatches]);
 
@@ -94,7 +139,7 @@ export function ManageImportBatches({ viewAs, onBatchDeleted }: ManageImportBatc
     try {
       const token = await user.getIdToken();
       const params = new URLSearchParams({ batchId: batch.importBatchId });
-      if (viewAs) params.set('viewAs', viewAs);
+      if (effectiveViewAs) params.set('viewAs', effectiveViewAs);
       const res = await fetch(`/api/appointments/bulk-batches?${params}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -127,17 +172,61 @@ export function ManageImportBatches({ viewAs, onBatchDeleted }: ManageImportBatc
               Each row below is one bulk import. Delete an entire batch to remove all appointments from that upload.
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={loadBatches} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={loadBatches} disabled={loading || (isAdmin && !effectiveViewAs)}>
             <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             Refresh
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+
+        {/* ── ADMIN AGENT SELECTOR ────────────────────────────────────────────────── */}
+        {isAdmin && !viewAs && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Admin View — Select Agent to Manage
+              </p>
+            </div>
+            {agentsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading agents...
+              </div>
+            ) : (
+              <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+                <SelectTrigger className="bg-white dark:bg-gray-900">
+                  <SelectValue placeholder="Select an agent to view their import batches..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map(a => (
+                    <SelectItem key={a.agentId} value={a.agentId}>
+                      {a.agentName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {selectedAgentName && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Showing import batches for <strong>{selectedAgentName}</strong>
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── BATCH LIST ──────────────────────────────────────────────────────────── */}
         {loading ? (
           <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
             <span>Loading import history...</span>
+          </div>
+        ) : isAdmin && !effectiveViewAs ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+            <User className="h-10 w-10 opacity-40" />
+            <p className="font-medium">Select an agent above</p>
+            <p className="text-sm">Choose an agent to view and manage their appointment import batches.</p>
           </div>
         ) : batches.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">

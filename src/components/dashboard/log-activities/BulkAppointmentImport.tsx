@@ -9,18 +9,26 @@
  * Template columns:
  *   Row ID | Appointment Type | Client Name | Date Set | Appointment Date |
  *   Appointment Time | Status | Client Timing | Price Range | Notes | Year
+ *
+ * Admin behaviour:
+ *   - If viewAs is already set (impersonation mode), uploads for that agent.
+ *   - If viewAs is NOT set and user is an admin, shows an agent selector
+ *     so the admin can explicitly choose which agent to upload for.
+ *   - Prevents uploading to the admin's own account by accident.
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, CheckCircle2, AlertTriangle, X, Download, Loader2, Calendar } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Upload, FileText, CheckCircle2, AlertTriangle, X, Download, Loader2, Calendar, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Template-matched ParsedRow ──────────────────────────────────────────────
@@ -71,7 +79,6 @@ function parseCSV(text: string): Record<string, string>[] {
   if (lines.length < 2) return [];
   const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
   return lines.slice(1).map(line => {
-    // Simple CSV parse — handles quoted fields
     const values: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -147,6 +154,11 @@ function typeColor(s: string): string {
   return 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300';
 }
 
+interface AgentOption {
+  agentId: string;
+  agentName: string;
+}
+
 interface BulkAppointmentImportProps {
   onImportComplete?: (count: number) => void;
   viewAs?: string;
@@ -155,6 +167,7 @@ interface BulkAppointmentImportProps {
 export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointmentImportProps) {
   const { user } = useUser();
   const { toast } = useToast();
+  const { isAdmin } = useIsAdminLike();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<'idle' | 'preview' | 'importing' | 'done'>('idle');
@@ -162,6 +175,38 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [importResult, setImportResult] = useState<{ created: number; errors: { row: number; error: string }[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Admin agent selector — only used when admin is NOT already impersonating
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+
+  // The effective viewAs to use for the upload:
+  // 1. If viewAs prop is set (impersonation mode), use that
+  // 2. If admin selected an agent from the dropdown, use that
+  // 3. Otherwise null (will upload to own account — blocked for admins)
+  const effectiveViewAs = viewAs ?? (isAdmin ? selectedAgentId || null : null);
+  const selectedAgentName = agents.find(a => a.agentId === selectedAgentId)?.agentName ?? '';
+
+  // Fetch agent list for admin selector when not impersonating
+  useEffect(() => {
+    if (!isAdmin || viewAs || !user) return;
+    setAgentsLoading(true);
+    user.getIdToken().then(token =>
+      fetch('/api/admin/agents?source=profiles', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ).then(r => r.json()).then(data => {
+      if (data.agents) {
+        const sorted = [...data.agents].sort((a: AgentOption, b: AgentOption) =>
+          a.agentName.localeCompare(b.agentName)
+        );
+        setAgents(sorted);
+      }
+    }).catch(() => {
+      // silently ignore — admin can still impersonate to upload
+    }).finally(() => setAgentsLoading(false));
+  }, [isAdmin, viewAs, user]);
 
   const processCSV = (text: string) => {
     const rawRows = parseCSV(text);
@@ -197,6 +242,11 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
 
   const handleImport = async () => {
     if (!user) return;
+    // Block admin from uploading without selecting an agent
+    if (isAdmin && !effectiveViewAs) {
+      toast({ variant: 'destructive', title: 'Select an Agent', description: 'Please select which agent to upload appointments for.' });
+      return;
+    }
     const validRows = parsedRows.filter(r => r.valid);
     if (validRows.length === 0) {
       toast({ variant: 'destructive', title: 'No Valid Rows', description: 'Fix errors before importing.' });
@@ -208,7 +258,7 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
       const token = await user.getIdToken();
       const payload = {
         appointments: validRows.map(r => r.raw),
-        ...(viewAs ? { viewAs } : {}),
+        ...(effectiveViewAs ? { viewAs: effectiveViewAs } : {}),
       };
       const res = await fetch('/api/appointments/bulk', {
         method: 'POST',
@@ -238,6 +288,13 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
   const validCount = parsedRows.filter(r => r.valid).length;
   const errorCount = parsedRows.filter(r => !r.valid).length;
 
+  // Determine the display name for the target agent
+  const targetAgentLabel = viewAs
+    ? `Impersonating agent (${viewAs.slice(0, 8)}...)`
+    : selectedAgentName
+    ? selectedAgentName
+    : null;
+
   return (
     <Card>
       <CardHeader>
@@ -260,6 +317,59 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+
+        {/* ── ADMIN AGENT SELECTOR ────────────────────────────────────────────────── */}
+        {isAdmin && !viewAs && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Admin Upload — Select Target Agent
+              </p>
+            </div>
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              You are uploading as an admin. Select which agent these appointments belong to.
+              If you skip this step, the upload will be blocked to prevent accidental uploads to the admin account.
+            </p>
+            {agentsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading agents...
+              </div>
+            ) : (
+              <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+                <SelectTrigger className="bg-white dark:bg-gray-900">
+                  <SelectValue placeholder="Select an agent..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map(a => (
+                    <SelectItem key={a.agentId} value={a.agentId}>
+                      {a.agentName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {selectedAgentName && (
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                  Uploading for: <strong>{selectedAgentName}</strong>
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── IMPERSONATION BANNER ────────────────────────────────────────────────── */}
+        {viewAs && (
+          <div className="rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-700 p-3 flex items-center gap-2">
+            <User className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              Uploading appointments for the currently impersonated agent.
+            </p>
+          </div>
+        )}
 
         {/* ── STEP: IDLE ─────────────────────────────────────────────────────────────── */}
         {step === 'idle' && (
@@ -336,11 +446,27 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
                 <Badge variant="default" className="bg-green-600">{validCount} valid</Badge>
                 {errorCount > 0 && <Badge variant="destructive">{errorCount} with errors</Badge>}
                 <span className="text-sm text-muted-foreground">{parsedRows.length} total rows</span>
+                {targetAgentLabel && (
+                  <Badge variant="outline" className="border-blue-400 text-blue-700 dark:text-blue-300">
+                    <User className="h-3 w-3 mr-1" />
+                    {targetAgentLabel}
+                  </Badge>
+                )}
               </div>
               <Button variant="ghost" size="sm" onClick={handleReset}>
                 <X className="h-4 w-4 mr-1" />Start Over
               </Button>
             </div>
+
+            {isAdmin && !effectiveViewAs && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>No Agent Selected</AlertTitle>
+                <AlertDescription>
+                  Go back and select an agent before importing. Uploading without selecting an agent is blocked to prevent data from being stored under the admin account.
+                </AlertDescription>
+              </Alert>
+            )}
 
             {errorCount > 0 && (
               <Alert variant="destructive">
@@ -406,9 +532,14 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={handleImport} disabled={validCount === 0} className="flex-1">
+              <Button
+                onClick={handleImport}
+                disabled={validCount === 0 || (isAdmin && !effectiveViewAs)}
+                className="flex-1"
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Import {validCount} Appointment{validCount !== 1 ? 's' : ''}
+                {targetAgentLabel ? ` for ${targetAgentLabel}` : ''}
               </Button>
               <Button variant="outline" onClick={handleReset}>Cancel</Button>
             </div>
@@ -431,7 +562,8 @@ export function BulkAppointmentImport({ onImportComplete, viewAs }: BulkAppointm
               <CheckCircle2 className="h-4 w-4 text-green-600" />
               <AlertTitle className="text-green-700 dark:text-green-400">Import Complete</AlertTitle>
               <AlertDescription className="text-green-700 dark:text-green-400">
-                <strong>{importResult.created}</strong> appointment{importResult.created !== 1 ? 's' : ''} imported successfully.
+                <strong>{importResult.created}</strong> appointment{importResult.created !== 1 ? 's' : ''} imported successfully
+                {targetAgentLabel ? ` for ${targetAgentLabel}` : ''}.
                 {importResult.errors.length > 0 && ` ${importResult.errors.length} row(s) had errors and were skipped.`}
               </AlertDescription>
             </Alert>
