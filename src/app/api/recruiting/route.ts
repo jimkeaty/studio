@@ -95,12 +95,49 @@ export async function GET(req: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
 
-    // ── 1. Find Tier 1 recruits (agents where referringAgentId = uid) ─────────
-    const tier1Snap = await adminDb.collection('agentProfiles')
-      .where('referringAgentId', '==', uid)
-      .get();
+    // ── 0. Resolve all possible IDs for this referrer ──────────────────────────
+    // referringAgentId may be stored as Firebase UID, agent slug, or profile docId.
+    // Build a complete set of all possible values so we don't miss any recruits.
+    const referrerIdSet = new Set<string>([uid]);
+    try {
+      // Strategy 1: uid IS the Firebase UID (profile doc ID)
+      const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+      if (profileByIdSnap.exists) {
+        const d = profileByIdSnap.data();
+        if (d?.agentId) referrerIdSet.add(String(d.agentId));        // slug
+        if (d?.firebaseUid) referrerIdSet.add(String(d.firebaseUid)); // explicit UID field
+      } else {
+        // Strategy 2: uid is a slug — find the profile doc
+        const profileBySlugSnap = await adminDb.collection('agentProfiles')
+          .where('agentId', '==', uid).limit(1).get();
+        if (!profileBySlugSnap.empty) {
+          referrerIdSet.add(profileBySlugSnap.docs[0].id); // doc ID (Firebase UID)
+          const d = profileBySlugSnap.docs[0].data();
+          if (d?.agentId) referrerIdSet.add(String(d.agentId));
+          if (d?.firebaseUid) referrerIdSet.add(String(d.firebaseUid));
+        }
+      }
+    } catch {
+      // Non-fatal — fall back to uid only
+    }
+    const referrerIds = Array.from(referrerIdSet);
 
-    const tier1Profiles = tier1Snap.docs.map(d => d.data());
+    // ── 1. Find Tier 1 recruits (agents where referringAgentId = any referrer ID) ─
+    // Query for each possible referrer ID and merge results to avoid missing recruits
+    // stored under a different ID format (slug vs Firebase UID).
+    const tier1SnapBatches = await Promise.all(
+      referrerIds.map(rid =>
+        adminDb.collection('agentProfiles').where('referringAgentId', '==', rid).get().catch(() => null)
+      )
+    );
+    const tier1DocMap = new Map<string, FirebaseFirestore.DocumentData>();
+    for (const snap of tier1SnapBatches) {
+      if (!snap) continue;
+      for (const doc of snap.docs) {
+        if (!tier1DocMap.has(doc.id)) tier1DocMap.set(doc.id, doc.data());
+      }
+    }
+    const tier1Profiles = Array.from(tier1DocMap.values());
     const tier1Ids = tier1Profiles.map(p => p.agentId as string).filter(Boolean);
 
     // ── 2. Find Tier 2 recruits (agents referred by Tier 1 agents) ─────────────
