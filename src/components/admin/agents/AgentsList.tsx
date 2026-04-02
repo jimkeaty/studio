@@ -58,6 +58,7 @@ export default function AgentsList() {
   const [merging, setMerging] = useState<string | null>(null);
   const [mergeResults, setMergeResults] = useState<string[]>([]);
   const [deletingAgent, setDeletingAgent] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   async function getToken() {
     const auth = getFirebaseAuth();
@@ -213,6 +214,19 @@ export default function AgentsList() {
     }
   }
 
+  const filteredAgents = searchQuery.trim() === ''
+    ? agents
+    : agents.filter((agent) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          (agent.displayName || '').toLowerCase().includes(q) ||
+          (agent.office || '').toLowerCase().includes(q) ||
+          (agent.primaryTeamId || '').toLowerCase().includes(q) ||
+          (agent.agentType || '').toLowerCase().includes(q) ||
+          (agent.teamRole || '').toLowerCase().includes(q)
+        );
+      });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -238,6 +252,33 @@ export default function AgentsList() {
             New Agent
           </Link>
         </div>
+      </div>
+
+      {/* ── Search Bar ──────────────────────────────────────────────────── */}
+      <div className="relative">
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+          <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search agents by name, office, or team…"
+          className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-10 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* ── Duplicate Detection Results ──────────────────────────────────── */}
@@ -358,9 +399,28 @@ export default function AgentsList() {
             Add Agent
           </Link>
         </div>
+      ) : filteredAgents.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-gray-200 p-10 text-center">
+          <div className="text-3xl mb-2">🔍</div>
+          <p className="font-semibold text-gray-700">No agents match &ldquo;{searchQuery}&rdquo;</p>
+          <p className="text-sm text-gray-500 mt-1">Try a different name, office, or team.</p>
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="mt-3 text-sm text-blue-600 hover:underline"
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
+        <>
+          {searchQuery && (
+            <p className="text-sm text-gray-500">
+              Showing {filteredAgents.length} of {agents.length} agent{agents.length !== 1 ? 's' : ''}
+            </p>
+          )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {agents.map((agent) => {
+          {filteredAgents.map((agent) => {
             const initials = (agent.displayName || 'A')
               .split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
             const gradients = [
@@ -433,6 +493,7 @@ export default function AgentsList() {
             );
           })}
         </div>
+        </>
       )}
     </div>
   );
