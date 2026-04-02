@@ -607,115 +607,7 @@ export default function BusinessPlanPage() {
           )}
         </div>
 
-        {/* ── SECTION 1: YOUR GOAL ──────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle>Your Goal</CardTitle>
-                <CardDescription>Set your annual income goal and plan dates.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="annualIncomeGoal"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Annual Net Income Goal</FormLabel>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="100000"
-                            className="pl-10"
-                            {...field}
-                            onChange={(e) => { field.onChange(e); handleCalculate(); }}
-                          />
-                        </FormControl>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="planStartDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Plan Start Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} value={field.value ?? ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="resetStartDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reset Start Date (Optional)</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} value={field.value ?? ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Use Plan Start Date for a new agent or the beginning of this year's plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Live Preview side panel */}
-          <div>
-            <Card className="sticky top-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-primary" /> Live Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                {calculatedPlan && calculatedPlan.closings.yearly > 0 ? (
-                  <>
-                    <div className="rounded-lg bg-primary/10 p-3 text-center mb-3">
-                      <p className="text-xs text-muted-foreground">Monthly Target</p>
-                      <p className="text-2xl font-black text-primary">{fmtCurrency(calculatedPlan.monthlyNetIncome)}</p>
-                    </div>
-                    <div className="space-y-2">
-                      {[
-                        { label: 'Closings / yr', value: calculatedPlan.closings.yearly },
-                        { label: 'Closings / mo', value: calculatedPlan.closings.monthly },
-                        { label: 'Daily Calls', value: calculatedPlan.calls.daily },
-                        { label: 'Daily Engagements', value: calculatedPlan.engagements.daily },
-                        { label: 'Appts Set / wk', value: calculatedPlan.appointmentsSet.weekly },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="flex justify-between items-center">
-                          <span className="text-muted-foreground">{label}</span>
-                          <span className="font-bold text-primary">{value === 0 ? '—' : value.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground pt-2">Updates live as you type.</p>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground text-xs">Type your annual income goal to see a live preview.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* ── SECTION 2: ASSUMPTIONS ────────────────────────────────────── */}
-        <div className="space-y-6">
-
-        {/* ── LAST YEAR'S REFERENCE BOX ──────────────────────────────────── */}
+        {/* ── SECTION 1: PRIOR YEAR ACTUALS REFERENCE ─────────────────── */}
         {histLoading ? (
           <Card className="mb-6 border-blue-200 bg-blue-50 dark:bg-blue-950/30">
             <CardContent className="pt-6">
@@ -834,6 +726,194 @@ export default function BusinessPlanPage() {
           </Card>
         ) : null}
 
+        {/* ── SECTION 2: GROWTH TARGET ────────────────────────────────── */}
+        {historicalStats?.hasData && (
+          <Card className="border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                <TrendingUp className="h-5 w-5" /> Growth Target
+              </CardTitle>
+              <CardDescription>
+                Based on your {historicalStats.year} results — select a growth target to auto-populate your goals below.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Prior year quick-reference row */}
+              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-white/60 dark:bg-black/20 border border-emerald-100 dark:border-emerald-900">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">{historicalStats.year} Net Income</p>
+                  <p className="text-base font-bold">${historicalStats.netEarned.toLocaleString()}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">{historicalStats.year} Volume</p>
+                  <p className="text-base font-bold">${(historicalStats.totalVolume / 1_000_000).toFixed(2)}M</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">{historicalStats.year} Closings</p>
+                  <p className="text-base font-bold">{historicalStats.closedUnits} deals</p>
+                </div>
+              </div>
+              {/* Growth % selector */}
+              <div>
+                <p className="text-sm font-medium mb-2 text-emerald-800 dark:text-emerald-300">Select growth over {historicalStats.year}:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[5, 10, 15, 20, 30].map(pct => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => {
+                        setGrowthTarget(pct);
+                        setCustomGrowthPct('');
+                        const multiplier = 1 + pct / 100;
+                        const newIncome = Math.round(historicalStats.netEarned * multiplier);
+                        const newVolume = Math.round(historicalStats.totalVolume * multiplier);
+                        const newSales = Math.round(historicalStats.closedUnits * multiplier);
+                        form.setValue('annualIncomeGoal', newIncome);
+                        handleCalculate();
+                        setYearlyIncome(String(newIncome));
+                        setYearlyVolume(String(newVolume));
+                        setYearlySales(String(newSales));
+                      }}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${
+                        growthTarget === pct
+                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
+                          : 'bg-white dark:bg-black/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                      }`}
+                    >
+                      +{pct}%
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setGrowthTarget('other')}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${
+                      growthTarget === 'other'
+                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
+                        : 'bg-white dark:bg-black/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                    }`}
+                  >
+                    Other
+                  </button>
+                </div>
+                {growthTarget === 'other' && (
+                  <div className="flex items-center gap-3 mt-3">
+                    <div className="flex items-center gap-2">
+                      <Input type="number" placeholder="e.g. 25" value={customGrowthPct} onChange={e => setCustomGrowthPct(e.target.value)} className="w-28" />
+                      <span className="text-sm font-medium">%</span>
+                    </div>
+                    <Button type="button" size="sm" variant="outline" className="border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => {
+                        const pct = parseFloat(customGrowthPct);
+                        if (isNaN(pct) || pct <= 0) return;
+                        const multiplier = 1 + pct / 100;
+                        const newIncome = Math.round(historicalStats.netEarned * multiplier);
+                        const newVolume = Math.round(historicalStats.totalVolume * multiplier);
+                        const newSales = Math.round(historicalStats.closedUnits * multiplier);
+                        form.setValue('annualIncomeGoal', newIncome);
+                        handleCalculate();
+                        setYearlyIncome(String(newIncome));
+                        setYearlyVolume(String(newVolume));
+                        setYearlySales(String(newSales));
+                      }}
+                    >Apply</Button>
+                  </div>
+                )}
+              </div>
+              {growthTarget !== null && (
+                <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-emerald-100/60 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                  {(() => {
+                    const pct = growthTarget === 'other' ? parseFloat(customGrowthPct) || 0 : growthTarget;
+                    const multiplier = 1 + pct / 100;
+                    return (
+                      <>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">Target Net Income</p>
+                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">${Math.round(historicalStats.netEarned * multiplier).toLocaleString()}</p>
+                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">Target Volume</p>
+                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">${(historicalStats.totalVolume * multiplier / 1_000_000).toFixed(2)}M</p>
+                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">Target Closings</p>
+                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">{Math.round(historicalStats.closedUnits * multiplier)} deals</p>
+                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── SECTION 3: YOUR GOAL ──────────────────────────────────────── */}
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle>Your Goal</CardTitle>
+            <CardDescription>Set your annual income goal and plan dates.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <FormField
+              control={form.control}
+              name="annualIncomeGoal"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Annual Net Income Goal</FormLabel>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="100000"
+                        className="pl-10"
+                        {...field}
+                        onChange={(e) => { field.onChange(e); handleCalculate(); }}
+                      />
+                    </FormControl>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="planStartDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Plan Start Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="resetStartDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Reset Start Date (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Use Plan Start Date for a new agent or the beginning of this year’s plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* ── SECTION 4: ADVANCED ASSUMPTIONS ─────────────────────────── */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>Advanced Assumptions</CardTitle>
@@ -1054,163 +1134,8 @@ export default function BusinessPlanPage() {
             </div>
           </CardContent>
         </Card>
-        </div>
 
-        {/* ── GROWTH TARGET BOX ───────────────────────────────────────── */}
-        {historicalStats?.hasData && (
-          <Card className="border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
-                <TrendingUp className="h-5 w-5" /> Growth Target
-              </CardTitle>
-              <CardDescription>
-                Based on your {historicalStats.year} results — select a growth target to auto-populate your goals.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Prior year reference row */}
-              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-white/60 dark:bg-black/20 border border-emerald-100 dark:border-emerald-900">
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">{historicalStats.year} Net Income</p>
-                  <p className="text-base font-bold">${historicalStats.netEarned.toLocaleString()}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">{historicalStats.year} Volume</p>
-                  <p className="text-base font-bold">${(historicalStats.totalVolume / 1_000_000).toFixed(2)}M</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">{historicalStats.year} Closings</p>
-                  <p className="text-base font-bold">{historicalStats.closedUnits} deals</p>
-                </div>
-              </div>
-
-              {/* Growth % selector buttons */}
-              <div>
-                <p className="text-sm font-medium mb-2 text-emerald-800 dark:text-emerald-300">Select growth over {historicalStats.year}:</p>
-                <div className="flex flex-wrap gap-2">
-                  {[5, 10, 15, 20, 30].map(pct => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => {
-                        setGrowthTarget(pct);
-                        setCustomGrowthPct('');
-                        const multiplier = 1 + pct / 100;
-                        const newIncome = Math.round(historicalStats.netEarned * multiplier);
-                        const newVolume = Math.round(historicalStats.totalVolume * multiplier);
-                        const newSales = Math.round(historicalStats.closedUnits * multiplier);
-                        form.setValue('annualIncomeGoal', newIncome);
-                        handleCalculate();
-                        setYearlyIncome(String(newIncome));
-                        setYearlyVolume(String(newVolume));
-                        setYearlySales(String(newSales));
-                      }}
-                      className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${
-                        growthTarget === pct
-                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
-                          : 'bg-white dark:bg-black/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
-                      }`}
-                    >
-                      +{pct}%
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => { setGrowthTarget('other'); }}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${
-                      growthTarget === 'other'
-                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
-                        : 'bg-white dark:bg-black/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
-                    }`}
-                  >
-                    Other
-                  </button>
-                </div>
-
-                {/* Custom % input for 'Other' */}
-                {growthTarget === 'other' && (
-                  <div className="flex items-center gap-3 mt-3">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        placeholder="e.g. 25"
-                        value={customGrowthPct}
-                        onChange={e => setCustomGrowthPct(e.target.value)}
-                        className="w-28"
-                      />
-                      <span className="text-sm font-medium">%</span>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-emerald-400 text-emerald-700 hover:bg-emerald-50"
-                      onClick={() => {
-                        const pct = parseFloat(customGrowthPct);
-                        if (isNaN(pct) || pct <= 0) return;
-                        const multiplier = 1 + pct / 100;
-                        const newIncome = Math.round(historicalStats.netEarned * multiplier);
-                        const newVolume = Math.round(historicalStats.totalVolume * multiplier);
-                        const newSales = Math.round(historicalStats.closedUnits * multiplier);
-                        form.setValue('annualIncomeGoal', newIncome);
-                        handleCalculate();
-                        setYearlyIncome(String(newIncome));
-                        setYearlyVolume(String(newVolume));
-                        setYearlySales(String(newSales));
-                      }}
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Projected results preview */}
-              {growthTarget !== null && (
-                <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-emerald-100/60 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                  {(() => {
-                    const pct = growthTarget === 'other' ? parseFloat(customGrowthPct) || 0 : growthTarget;
-                    const multiplier = 1 + pct / 100;
-                    return (
-                      <>
-                        <div className="text-center">
-                          <p className="text-xs text-muted-foreground">Target Net Income</p>
-                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">
-                            ${Math.round(historicalStats.netEarned * multiplier).toLocaleString()}
-                          </p>
-                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-muted-foreground">Target Volume</p>
-                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">
-                            ${(historicalStats.totalVolume * multiplier / 1_000_000).toFixed(2)}M
-                          </p>
-                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-muted-foreground">Target Closings</p>
-                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">
-                            {Math.round(historicalStats.closedUnits * multiplier)} deals
-                          </p>
-                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── Save button ─────────────────────────────────────────────────── */}
-        <div className="flex justify-end pt-2">
-          <Button type="submit" disabled={isSaving}>
-            {isSaving ? 'Saving...' : <><CheckCircle className="mr-2 h-4 w-4" /> Save Plan</>}
-          </Button>
-        </div>
-
-        {/* ── SECTION 3: YOUR DAILY TARGETS ───────────────────────────────── */}
+        {/* ── SECTION 5: YOUR DAILY TARGETS ───────────────────────────────── */}
         {calculatedPlan && calculatedPlan.closings.yearly > 0 && (
           <div className="space-y-6 animate-in fade-in-50">
             <Card>
@@ -1467,6 +1392,13 @@ export default function BusinessPlanPage() {
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* ── SECTION 7: SAVE PLAN ─────────────────────────────────────── */}
+        <div className="flex justify-end pt-2 pb-8">
+          <Button type="submit" size="lg" disabled={isSaving}>
+            {isSaving ? 'Saving...' : <><CheckCircle className="mr-2 h-4 w-4" /> Save Plan</>}
+          </Button>
+        </div>
 
       </form>
     </Form>
