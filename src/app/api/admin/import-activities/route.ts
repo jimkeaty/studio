@@ -291,9 +291,37 @@ export async function POST(req: NextRequest) {
           createdAt: now,
         };
 
+        // ── Write to activityTracking (detailed history) ─────────────────────
         const ref = adminDb.collection('activityTracking').doc();
         batch.set(ref, record);
         imported.push(ref.id);
+        batchCount++;
+
+        // ── Also write aggregated data to daily_activity ───────────────────────
+        // The KPI tracker, dashboard, and appointment pipeline all read from
+        // daily_activity (doc ID: {agentId}_{date}). Without this write, imported
+        // activities are invisible to those views.
+        const dailyDocId = `${agent.agentId}_${activityDate}`;
+        const dailyRef = adminDb.collection('daily_activity').doc(dailyDocId);
+        const dailyData = {
+          agentId: agent.agentId,
+          date: activityDate,
+          callsCount: toNum(row.calls),
+          engagementsCount: toNum(row.spokeTo),
+          appointmentsSetCount: toNum(row.listingApptsSet) + toNum(row.buyerApptsSet),
+          appointmentsHeldCount: toNum(row.listingApptsHeld) + toNum(row.buyerApptsHeld),
+          contractsWrittenCount: toNum(row.listingContractsSigned) + toNum(row.buyerContractsSigned),
+          notes: toOptStr(row.notes) ?? '',
+          startTime: '',
+          endTime: '',
+          updatedAt: now,
+          updatedByUid: decoded.uid,
+          source: 'bulk_import',
+          importBatchId: batchId,
+        };
+        // Use merge:true so manual edits on the same date are not overwritten;
+        // only update if the imported value is higher (handled by merge strategy).
+        batch.set(dailyRef, dailyData, { merge: true });
         batchCount++;
 
         if (batchCount >= BATCH_LIMIT) await flushBatch();
