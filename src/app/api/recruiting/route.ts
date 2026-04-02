@@ -231,7 +231,7 @@ export async function GET(req: NextRequest) {
       { tier1Count: 0, tier2Count: 0, qualifiedCount: 0, totalRecruits: 0 }
     );
 
-    return NextResponse.json({ ok: true, uid, summary, downline });
+    return NextResponse.json({ ok: true, uid, summary, downline, _debug: { referrerIds, tier1Count: tier1Profiles.length, tier2Count: tier2Profiles.length } });
   } catch (e: any) {
     console.error("[api/recruiting] error:", e?.message || e);
     return NextResponse.json({ ok: false, error: "Failed to load recruiting data" }, { status: 500 });
