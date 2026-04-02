@@ -28,8 +28,6 @@ import {
   Award,
   CalendarCheck,
   Sailboat,
-  ChevronLeft,
-  ChevronRight,
   Zap,
   BookOpen,
   ArrowDownToLine,
@@ -222,7 +220,6 @@ export default function BusinessPlanPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [calculatedPlan, setCalculatedPlan] = useState<BusinessPlan["calculatedTargets"] | null>(null);
-  const [wizardStep, setWizardStep] = useState(1);
   const [historicalStats, setHistoricalStats] = useState<HistoricalStats | null>(null);
   const [histLoading, setHistLoading] = useState(false);
 
@@ -426,15 +423,10 @@ export default function BusinessPlanPage() {
 
   const fmtCurrency = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
 
-  const wizardSteps = [
-    { id: 1, title: 'Your Goal', description: 'Set your income target' },
-    { id: 2, title: 'Assumptions', description: 'Tune conversion rates' },
-    { id: 3, title: 'Daily Targets', description: 'Your action plan' },
-  ];
-
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Business Plan Engine</h1>
@@ -445,111 +437,73 @@ export default function BusinessPlanPage() {
           )}
         </div>
 
-        {/* Wizard Progress Bar */}
-        <div className="flex items-center gap-0">
-          {wizardSteps.map((step, idx) => (
-            <div key={step.id} className="flex items-center flex-1">
-              <button
-                type="button"
-                onClick={() => setWizardStep(step.id)}
-                className="flex flex-col items-center gap-1 group"
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                  wizardStep === step.id
-                    ? 'bg-primary text-primary-foreground shadow-md scale-110'
-                    : wizardStep > step.id
-                    ? 'bg-green-500 text-white'
-                    : 'bg-muted text-muted-foreground'
-                }`}>
-                  {wizardStep > step.id ? '✓' : step.id}
-                </div>
-                <span className={`text-xs font-medium hidden sm:block ${
-                  wizardStep === step.id ? 'text-primary' : 'text-muted-foreground'
-                }`}>{step.title}</span>
-              </button>
-              {idx < wizardSteps.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-2 transition-all ${
-                  wizardStep > step.id ? 'bg-green-500' : 'bg-muted'
-                }`} />
-              )}
-            </div>
-          ))}
-        </div>
-
+        {/* ── SECTION 1: YOUR GOAL ──────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main form area */}
-          <div className="lg:col-span-2 order-2 lg:order-1">
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>{wizardStep === 1 ? 'Your Goal' : wizardStep === 2 ? 'Advanced Assumptions' : 'Your Daily Targets'}</CardTitle>
-            <CardDescription>{wizardStep === 1 ? 'Set your annual income goal and plan dates.' : wizardStep === 2 ? 'Fine-tune conversion rates and working schedule.' : 'Based on your goal and assumptions, here is what you need to do every day.'}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <FormField
-              control={form.control}
-              name="annualIncomeGoal"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Annual Net Income Goal</FormLabel>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <FormControl>
-                      <Input
-                        type="number"
-                        placeholder="100000"
-                        className="pl-10"
-                        {...field}
-                        onChange={(e) => {
-                          field.onChange(e);
-                          handleCalculate();
-                        }}
-                      />
-                    </FormControl>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="planStartDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plan Start Date</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} value={field.value ?? ""} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="resetStartDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Reset Start Date (Optional)</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} value={field.value ?? ""} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <p className="text-sm text-muted-foreground">
-              Use Plan Start Date for a new agent or the beginning of this year's plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year.
-            </p>
-          </CardContent>
-        </Card>
+          <div className="lg:col-span-2">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle>Your Goal</CardTitle>
+                <CardDescription>Set your annual income goal and plan dates.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="annualIncomeGoal"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Annual Net Income Goal</FormLabel>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="100000"
+                            className="pl-10"
+                            {...field}
+                            onChange={(e) => { field.onChange(e); handleCalculate(); }}
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="planStartDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Plan Start Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="resetStartDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reset Start Date (Optional)</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Use Plan Start Date for a new agent or the beginning of this year's plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year.
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Step 1 Live Preview Side Panel */}
-          {wizardStep === 1 && (
+          {/* Live Preview side panel */}
           <div>
             <Card className="sticky top-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
               <CardHeader className="pb-3">
@@ -562,15 +516,15 @@ export default function BusinessPlanPage() {
                   <>
                     <div className="rounded-lg bg-primary/10 p-3 text-center mb-3">
                       <p className="text-xs text-muted-foreground">Monthly Target</p>
-                      <p className="text-2xl font-black text-primary">
-                        {fmtCurrency(calculatedPlan.monthlyNetIncome)}
-                      </p>
+                      <p className="text-2xl font-black text-primary">{fmtCurrency(calculatedPlan.monthlyNetIncome)}</p>
                     </div>
                     <div className="space-y-2">
                       {[
                         { label: 'Closings / yr', value: calculatedPlan.closings.yearly },
                         { label: 'Closings / mo', value: calculatedPlan.closings.monthly },
                         { label: 'Daily Calls', value: calculatedPlan.calls.daily },
+                        { label: 'Daily Engagements', value: calculatedPlan.engagements.daily },
+                        { label: 'Appts Set / wk', value: calculatedPlan.appointmentsSet.weekly },
                       ].map(({ label, value }) => (
                         <div key={label} className="flex justify-between items-center">
                           <span className="text-muted-foreground">{label}</span>
@@ -578,24 +532,18 @@ export default function BusinessPlanPage() {
                         </div>
                       ))}
                     </div>
-                    <p className="text-xs text-muted-foreground pt-2">Updates live as you type your goal.</p>
+                    <p className="text-xs text-muted-foreground pt-2">Updates live as you type.</p>
                   </>
                 ) : (
-                  <p className="text-muted-foreground text-xs">Type your annual income goal to see a live preview of your required closings and daily calls.</p>
+                  <p className="text-muted-foreground text-xs">Type your annual income goal to see a live preview.</p>
                 )}
               </CardContent>
             </Card>
           </div>
-          )}
         </div>
 
-        {/* STEP 1 END — hidden when not on step 1 */}
-        {wizardStep !== 1 && <div className="hidden" />}
-
-        {/* ── STEP 2: ASSUMPTIONS ───────────────────────────────────────── */}
-        {wizardStep === 2 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 order-2 lg:order-1">
+        {/* ── SECTION 2: ASSUMPTIONS ────────────────────────────────────── */}
+        <div className="space-y-6">
 
         {/* ── LAST YEAR'S REFERENCE BOX ──────────────────────────────────── */}
         {histLoading ? (
@@ -894,70 +842,17 @@ export default function BusinessPlanPage() {
             </div>
           </CardContent>
         </Card>
-          </div>
-
-          {/* Step 2 Live Preview Side Panel */}
-          <div>
-            <Card className="sticky top-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-primary" /> Live Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                {calculatedPlan && calculatedPlan.closings.yearly > 0 ? (
-                  <>
-                    <div className="space-y-2">
-                      {[
-                        { label: 'Daily Calls', value: calculatedPlan.calls.daily },
-                        { label: 'Daily Engagements', value: calculatedPlan.engagements.daily },
-                        { label: 'Appts Set / wk', value: calculatedPlan.appointmentsSet.weekly },
-                        { label: 'Closings / yr', value: calculatedPlan.closings.yearly },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="flex justify-between items-center">
-                          <span className="text-muted-foreground">{label}</span>
-                          <span className="font-bold text-primary">{value === 0 ? '—' : value.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground pt-2">Updates live as you change rates above.</p>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground text-xs">Enter your goal on Step 1 to see live targets.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
-        )}
 
-        {/* Wizard navigation footer */}
-        <div className="flex items-center justify-between pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setWizardStep(s => Math.max(1, s - 1))}
-            disabled={wizardStep === 1}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" /> Back
+        {/* ── Save button ─────────────────────────────────────────────────── */}
+        <div className="flex justify-end pt-2">
+          <Button type="submit" disabled={isSaving}>
+            {isSaving ? 'Saving...' : <><CheckCircle className="mr-2 h-4 w-4" /> Save Plan</>}
           </Button>
-          <div className="flex gap-2">
-            {wizardStep < 3 ? (
-              <Button
-                type="button"
-                onClick={() => { handleCalculate(); setWizardStep(s => Math.min(3, s + 1)); }}
-              >
-                Next <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            ) : (
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? 'Saving...' : <><CheckCircle className="mr-2 h-4 w-4" /> Save Plan</>}
-              </Button>
-            )}
-          </div>
         </div>
 
-        {wizardStep === 3 && calculatedPlan && calculatedPlan.closings.yearly > 0 && (
+        {/* ── SECTION 3: YOUR DAILY TARGETS ───────────────────────────────── */}
+        {calculatedPlan && calculatedPlan.closings.yearly > 0 && (
           <div className="space-y-6 animate-in fade-in-50">
             <Card>
               <CardHeader>
