@@ -128,6 +128,11 @@ export default function AdminTransactionLedgerPage() {
   // Agent list for transfer dropdown
   const [allAgents, setAllAgents] = useState<{ id: string; displayName: string }[]>([]);
 
+  // Selection & bulk delete
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   /* ─── Data loading ─────────────────────────────────────────────────── */
 
   const loadTransactions = useCallback(async () => {
@@ -272,8 +277,44 @@ export default function AdminTransactionLedgerPage() {
     }
   };
 
-  /* ─── Transfer handler ─────────────────────────────────────────────── */
+  /* ─── Bulk selection & delete ────────────────────────────────────── */
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(t => t.id)));
+    }
+  };
+  const handleBulkDelete = async () => {
+    if (!user || selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/transactions/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Bulk delete failed');
+      setTransactions(prev => prev.filter(t => !selectedIds.has(t.id)));
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+    } catch (err: any) {
+      setPageError(err.message);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
+  /* ─── Transfer handler ─────────────────────────────────────────────── */
   const openTransfer = (tx: Transaction) => {
     setTransferTx(tx);
     setTransferAgentId('');
@@ -550,6 +591,22 @@ export default function AdminTransactionLedgerPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* ── Bulk-select toolbar — appears when any rows are selected ── */}
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2">
+              <span className="text-sm font-medium text-destructive">
+                {selectedIds.size} transaction{selectedIds.size !== 1 ? 's' : ''} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())}>
+                  <X className="h-3 w-3 mr-1" /> Clear
+                </Button>
+                <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="h-3 w-3 mr-1" /> Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
           {loadingTx ? (
             <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : filtered.length === 0 ? (
@@ -621,6 +678,16 @@ export default function AdminTransactionLedgerPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px] px-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 cursor-pointer"
+                        checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                        ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length; }}
+                        onChange={toggleSelectAll}
+                        title="Select all visible"
+                      />
+                    </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap w-[100px]" onClick={() => toggleSort('status')}>
                       <span className="flex items-center">Status<SortIcon col="status" /></span>
                     </TableHead>
@@ -669,9 +736,17 @@ export default function AdminTransactionLedgerPage() {
                     return (
                       <TableRow
                         key={t.id}
-                        className="cursor-pointer hover:bg-muted/40 transition-colors group"
+                        className={cn('cursor-pointer hover:bg-muted/40 transition-colors group', selectedIds.has(t.id) && 'bg-destructive/5')}
                         onClick={() => openEdit(t)}
                       >
+                        <TableCell className="w-[40px] px-2" onClick={e => { e.stopPropagation(); toggleSelect(t.id); }}>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300 cursor-pointer"
+                            checked={selectedIds.has(t.id)}
+                            onChange={() => toggleSelect(t.id)}
+                          />
+                        </TableCell>
                         <TableCell className="w-[100px]">
                           <span className={cn(
                             'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap',
@@ -807,6 +882,32 @@ export default function AdminTransactionLedgerPage() {
             <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               <Trash2 className="mr-2 h-4 w-4" /> {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── BULK DELETE DIALOG ── */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4 text-destructive" /> Delete {selectedIds.size} Transaction{selectedIds.size !== 1 ? 's' : ''}
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete {selectedIds.size} selected transaction{selectedIds.size !== 1 ? 's' : ''}. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-muted-foreground">
+              Agent rollups will be rebuilt automatically after deletion.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {bulkDeleting ? 'Deleting…' : `Delete ${selectedIds.size} Transaction${selectedIds.size !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>
