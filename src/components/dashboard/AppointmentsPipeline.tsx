@@ -438,8 +438,12 @@ export function AppointmentsPipeline({ agentId, viewAs, initialYear }: Props) {
 
   // Exclude trash from pipeline totals
   const activeForTotals = appointments.filter(a => a.pipelineStatus !== 'trash');
-  const totalVolume = activeForTotals.reduce((s, a) => s + midpoint(a.priceRangeLow, a.priceRangeHigh), 0);
   const totalEstNet = activeForTotals.reduce((s, a) => s + (a.estimatedCommission ?? 0), 0);
+
+  // Active-only pipeline volume: sum the midpoint of each active appointment's price range
+  const activeAppts = appointments.filter(a => a.pipelineStatus === 'active');
+  const activeWithPrice = activeAppts.filter(a => (a.priceRangeLow ?? 0) > 0 || (a.priceRangeHigh ?? 0) > 0);
+  const activePipelineVolume = activeWithPrice.reduce((s, a) => s + midpoint(a.priceRangeLow, a.priceRangeHigh), 0);
 
   // Status counts (excluding trash)
   const counts = STATUS_ORDER.reduce((acc, s) => {
@@ -463,7 +467,7 @@ export function AppointmentsPipeline({ agentId, viewAs, initialYear }: Props) {
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <div>
             <h2 className="text-base font-bold tracking-tight">Appointments Pipeline</h2>
-            <p className="text-xs text-blue-300 mt-0.5">All appointments for {year} — excluding trashed</p>
+            <p className="text-xs text-blue-300 mt-0.5">All appointments for {year} · Volume = avg of active price ranges</p>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -489,8 +493,13 @@ export function AppointmentsPipeline({ agentId, viewAs, initialYear }: Props) {
             <p className="text-[11px] text-blue-300 mt-0.5">Total Appointments</p>
           </div>
           <div className="rounded-xl bg-white/10 border border-white/10 p-3 text-center">
-            <p className="text-2xl font-black">{fmt$(totalVolume) === '—' ? '—' : fmt$(totalVolume)}</p>
-            <p className="text-[11px] text-blue-300 mt-0.5">Total Volume</p>
+            <p className="text-2xl font-black text-emerald-300">
+              {activePipelineVolume > 0 ? fmt$(activePipelineVolume) : '—'}
+            </p>
+            <p className="text-[11px] text-blue-300 mt-0.5">Active Pipeline Volume</p>
+            {activeWithPrice.length > 0 && (
+              <p className="text-[10px] text-white/40 mt-0.5">{activeWithPrice.length} appt avg</p>
+            )}
           </div>
           <div className="rounded-xl bg-white/10 border border-white/10 p-3 text-center">
             <p className="text-2xl font-black text-green-300">{totalEstNet > 0 ? fmtFull$(totalEstNet) : '—'}</p>
