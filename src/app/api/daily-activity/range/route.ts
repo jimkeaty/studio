@@ -35,6 +35,36 @@ async function requireUser(req: NextRequest): Promise<{ uid: string }> {
   }
 }
 
+/**
+ * Resolve all possible agentId values for a given uid.
+ * Handles bulk imports stored under a slug vs Firebase UID.
+ */
+async function resolveAgentIds(uid: string): Promise<string[]> {
+  const ids = new Set<string>([uid]);
+  try {
+    const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+    if (profileByIdSnap.exists) {
+      const d = profileByIdSnap.data();
+      if (d?.agentId) ids.add(String(d.agentId));
+      if (d?.firebaseUid) ids.add(String(d.firebaseUid));
+    } else {
+      const profileBySlugSnap = await adminDb
+        .collection('agentProfiles')
+        .where('agentId', '==', uid)
+        .limit(1)
+        .get();
+      if (!profileBySlugSnap.empty) {
+        ids.add(profileBySlugSnap.docs[0].id);
+        const d = profileBySlugSnap.docs[0].data();
+        if (d?.firebaseUid) ids.add(String(d.firebaseUid));
+      }
+    }
+  } catch {
+    // Non-fatal — fall back to single uid
+  }
+  return Array.from(ids);
+}
+
 // --- Route Handler ---
 export async function GET(req: NextRequest) {
   try {
@@ -49,19 +79,48 @@ export async function GET(req: NextRequest) {
       return jsonError(400, 'Missing required query params: start, end');
     }
 
-    const q = adminDb
-      .collection('daily_activity')
-      .where('agentId', '==', uid)
-      .where('date', '>=', start)
-      .where('date', '<=', end);
+    // Resolve all possible agentId values to handle bulk imports stored under slugs
+    const agentIdList = await resolveAgentIds(uid);
 
-    const snap = await q.get();
+    // Query daily_activity for ALL resolved agentId values and merge by date
+    const allSnaps = await Promise.all(
+      agentIdList.map(agentIdVal =>
+        adminDb
+          .collection('daily_activity')
+          .where('agentId', '==', agentIdVal)
+          .where('date', '>=', start)
+          .where('date', '<=', end)
+          .get()
+          .catch(e => {
+            console.warn('[daily-activity/range] query failed for agentId=' + agentIdVal, e);
+            return null;
+          })
+      )
+    );
 
-    const activitiesByDate: Record<string, DailyActivity> = {};
-    snap.forEach((doc) => {
-      const data = doc.data() as DailyActivity & { date: string };
-      activitiesByDate[data.date] = { id: doc.id, ...data } as DailyActivity & { id: string; date: string };
-    });
+    // Merge results — take the higher value for each numeric field per date
+    const activitiesByDate: Record<string, DailyActivity & { id: string; date: string }> = {};
+    for (const snap of allSnaps) {
+      if (!snap) continue;
+      snap.forEach((doc) => {
+        const data = doc.data() as DailyActivity & { date: string };
+        const date = data.date;
+        if (!date) return;
+        if (!activitiesByDate[date]) {
+          activitiesByDate[date] = { id: doc.id, ...data };
+        } else {
+          const existing = activitiesByDate[date];
+          activitiesByDate[date] = {
+            ...existing,
+            callsCount: Math.max(Number(existing.callsCount ?? 0), Number(data.callsCount ?? 0)),
+            engagementsCount: Math.max(Number(existing.engagementsCount ?? 0), Number(data.engagementsCount ?? 0)),
+            appointmentsSetCount: Math.max(Number(existing.appointmentsSetCount ?? 0), Number(data.appointmentsSetCount ?? 0)),
+            appointmentsHeldCount: Math.max(Number(existing.appointmentsHeldCount ?? 0), Number(data.appointmentsHeldCount ?? 0)),
+            contractsWrittenCount: Math.max(Number(existing.contractsWrittenCount ?? 0), Number(data.contractsWrittenCount ?? 0)),
+          };
+        }
+      });
+    }
 
     return NextResponse.json({ ok: true, activities: activitiesByDate });
   } catch (err: any) {
