@@ -450,6 +450,25 @@ export default function BulkImportPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Load import batches for the batch-picker in the Danger Zone ────────
+  // MUST be defined before any early returns (Rules of Hooks)
+  const loadBatches = useCallback(async () => {
+    if (!user) return;
+    setBatchesLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/import-batches', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) setImportBatches(data.batches ?? []);
+    } catch { /* non-fatal */ } finally {
+      setBatchesLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => { if (showDeletePanel) loadBatches(); }, [showDeletePanel, loadBatches]);
+
   // ── Auth guards ──────────────────────────────────────────────────────────
    if (userLoading || adminLoading) {
     return (
@@ -475,24 +494,6 @@ export default function BulkImportPage() {
       </Alert>
     );
   }
-
-  // ── Load import batches for the batch-picker in the Danger Zone ────────
-  const loadBatches = useCallback(async () => {
-    if (!user) return;
-    setBatchesLoading(true);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch('/api/admin/import-batches', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) setImportBatches(data.batches ?? []);
-    } catch { /* non-fatal */ } finally {
-      setBatchesLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => { if (showDeletePanel) loadBatches(); }, [showDeletePanel, loadBatches]);
 
   // ── Parse XLSX to same format as CSV ──────────────────────────────────
   function parseXLSX(data: ArrayBuffer): { headers: string[]; rows: ParsedRow[] } {
