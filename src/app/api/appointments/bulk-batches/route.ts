@@ -36,12 +36,12 @@ export async function GET(req: NextRequest) {
       uid = viewAs;
     }
 
-    // Query all bulk-imported appointments for this agent
+    // Query all appointments for this agent and filter bulk_import in memory.
+    // This avoids a composite index on (agentId, source, importedAt) which
+    // Firestore requires but may not yet be built.
     const snap = await adminDb
       .collection('appointments')
       .where('agentId', '==', uid)
-      .where('source', '==', 'bulk_import')
-      .orderBy('importedAt', 'desc')
       .get();
 
     // Group by importBatchId
@@ -54,6 +54,8 @@ export async function GET(req: NextRequest) {
 
     for (const doc of snap.docs) {
       const d = doc.data();
+      // Only include bulk-imported appointments
+      if (d.source !== 'bulk_import') continue;
       const batchId: string = d.importBatchId ?? 'unknown';
       const importedAt: string = d.importedAt ?? '';
       const name: string = d.contactName ?? '';
