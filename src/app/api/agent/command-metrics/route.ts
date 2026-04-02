@@ -90,7 +90,9 @@ export async function GET(req: NextRequest) {
     const viewAs = searchParams.get('viewAs');
     const callerIsAdmin = await isAdminLike(decoded.uid);
     const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
-    const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()), 10);
+    const yearParam = searchParams.get('year') || String(new Date().getFullYear());
+    const isAllYears = yearParam === '0' || yearParam === 'all';
+    const year = isAllYears ? new Date().getFullYear() : parseInt(yearParam, 10);
     const view = searchParams.get('view') || 'personal'; // 'personal' | 'team'
     const compareYearParam = searchParams.get('compareYear');
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
@@ -195,7 +197,10 @@ export async function GET(req: NextRequest) {
     };
 
     const prevYear = year - 1;
-    const transactions = allAgentTx.filter(t => getTxYear(t) === year);
+    // In all-years mode, include ALL closed transactions; for single year, filter normally
+    const transactions = isAllYears
+      ? allAgentTx.filter(t => t.status === 'closed' || t.status === 'pending' || t.status === 'under_contract')
+      : allAgentTx.filter(t => getTxYear(t) === year);
     const prevTransactions = allAgentTx.filter(t => getTxYear(t) === prevYear);
     const compareTransactions = compareYear
       ? allAgentTx.filter(t => getTxYear(t) === compareYear)
@@ -291,15 +296,17 @@ export async function GET(req: NextRequest) {
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
-        if (!closedDate || closedDate.getFullYear() !== year) continue;
-        const mi = closedDate.getMonth();
-
-        months[mi].totalGCI += gci;
-        months[mi].grossMargin += companyRetained;
-        months[mi].transactionFees += txFee;
-        months[mi].closedVolume += dealValue;
-        months[mi].closedCount += sideCount;
-        monthlyNetIncome[mi] += agentNet;
+        if (!isAllYears && (!closedDate || closedDate.getFullYear() !== year)) continue;
+        if (isAllYears && !closedDate) continue;
+        const mi = closedDate!.getMonth();
+        if (!isAllYears) {
+          months[mi].totalGCI += gci;
+          months[mi].grossMargin += companyRetained;
+          months[mi].transactionFees += txFee;
+          months[mi].closedVolume += dealValue;
+          months[mi].closedCount += sideCount;
+          monthlyNetIncome[mi] += agentNet;
+        }
 
         totals.totalGCI += gci;
         totals.grossMargin += companyRetained;
@@ -353,6 +360,13 @@ export async function GET(req: NextRequest) {
     }
     totals.grossMarginPct = totals.totalGCI > 0
       ? Math.round((totals.grossMargin / totals.totalGCI) * 10000) / 100 : 0;
+
+    // Avg commission % = total GCI / total closed volume
+    const avgCommissionPct = totals.closedVolume > 0
+      ? Math.round((totals.totalGCI / totals.closedVolume) * 10000) / 100 : 0;
+    // Avg net commission % = agent net / total closed volume
+    const avgNetCommissionPct = totals.closedVolume > 0
+      ? Math.round((totals.netIncome / totals.closedVolume) * 10000) / 100 : 0;
 
     // ── All-time side + source breakdown (all closed transactions, all years) ──
     const allTimeSideBreakdown: { closed: Record<string, SideBucket> } = { closed: {} };
@@ -522,6 +536,15 @@ export async function GET(req: NextRequest) {
       prevYearStats: isAdminCaller ? prevYearStats : stripCommissionFromPrevYearStats(prevYearStats),
       availableYears,
       comparisonData: isAdminCaller ? comparisonData : stripCommissionFromComparisonData(comparisonData),
+      // Aggregated stats (available to all callers)
+      aggregateStats: {
+        isAllYears,
+        avgCommissionPct: isAdminCaller ? avgCommissionPct : null, // GCI% — admin only
+        avgNetCommissionPct,  // Agent net % of volume — safe for agents
+        totalClosedVolume: totals.closedVolume,
+        totalClosedCount: totals.closedCount,
+        totalNetIncome: totals.netIncome,
+      },
       // Agent-specific data
       agentView: {
         view,

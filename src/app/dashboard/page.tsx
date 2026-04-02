@@ -134,6 +134,7 @@ type AgentMetricsResponse = {
   availableYears?: number[];
   comparisonData?: { year: number; months: { closedVolume: number; closedCount: number; netIncome: number; grossMargin?: number; totalGCI?: number }[] } | null;
   agentView: { view: string; viewLabel: string; isTeamLeader: boolean; availableTeams: { teamId: string; teamName: string }[]; monthlyNetIncome: number[]; monthlyPendingNetIncome: number[]; netIncome: number; pendingNetIncome: number; goalSegment: string; };
+  aggregateStats?: { isAllYears: boolean; avgCommissionPct: number | null; avgNetCommissionPct: number; totalClosedVolume: number; totalClosedCount: number; totalNetIncome: number; };
 };
 
 // ── Compare Selector ────────────────────────────────────────────────────────
@@ -880,12 +881,15 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
   if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Performance data unavailable</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
   if (!perfData?.overview) return null;
 
-  const { overview, agentView, prevYearStats } = perfData;
+  const { overview, agentView, prevYearStats, aggregateStats } = perfData;
   const { totals } = overview;
   const { isTeamLeader, availableTeams } = agentView;
+  const isAllYears = aggregateStats?.isAllYears ?? false;
 
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
   const avgNetPerDeal = totals.closedCount > 0 ? totals.netIncome / totals.closedCount : 0;
+  const avgCommissionPct = aggregateStats?.avgCommissionPct ?? null;
+  const avgNetCommissionPct = aggregateStats?.avgNetCommissionPct ?? 0;
 
   // YTD-prorated goal logic (apples-to-apples: compare YTD actuals to YTD goal)
   const todayPerf = new Date();
@@ -943,9 +947,10 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
               </Tabs>
             )}
             <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-              <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {[...Array(5)].map((_, i) => { const y = new Date().getFullYear() - i; return <SelectItem key={y} value={String(y)}>{y}</SelectItem>; })}
+                <SelectItem value="0">All Years</SelectItem>
+                {[...Array(10)].map((_, i) => { const y = new Date().getFullYear() - i; return <SelectItem key={y} value={String(y)}>{y}</SelectItem>; })}
               </SelectContent>
             </Select>
           </div>
@@ -953,11 +958,18 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricTile title="Net Income (Closed)" value={fmtCurrencyCompact(totals.netIncome)} subtitle={`${fmtNumNull(totals.closedCount)} closings · ${ytdIncomeGoal ? `${gradeVsGoal}% of YTD goal` : 'No goal set'}`} icon={DollarSign} highlight />
-          <MetricTile title="Pending Income" value={fmtCurrencyCompact(totals.pendingNetIncome)} subtitle={`${fmtNumNull(totals.pendingCount)} pending deals`} icon={Clock} />
-          <MetricTile title="Closed Volume" value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={`Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
-          <MetricTile title="Avg Sale Price" value={fmtCurrencyCompact(avgSalePrice)} subtitle={prevYearStats ? `vs ${fmtCurrencyCompact(prevYearStats.avgSalePrice)} prev year` : '—'} icon={DollarSign} />
+          <MetricTile title={isAllYears ? 'Total Net Income' : 'Net Income (Closed)'} value={fmtCurrencyCompact(totals.netIncome)} subtitle={isAllYears ? `${fmtNumNull(totals.closedCount)} total closings` : `${fmtNumNull(totals.closedCount)} closings · ${ytdIncomeGoal ? `${gradeVsGoal}% of YTD goal` : 'No goal set'}`} icon={DollarSign} highlight />
+          <MetricTile title={isAllYears ? 'Total Closed Volume' : 'Closed Volume'} value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={isAllYears ? `${fmtNumNull(totals.closedCount)} total sides` : `Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
+          <MetricTile title={isAllYears ? 'Total Sales (Sides)' : 'Total Sales'} value={fmtNumNull(totals.closedCount) ?? '0'} subtitle={isAllYears ? `All-time closed sides` : `${fmtNumNull(totals.pendingCount)} pending`} icon={BarChart3} />
+          <MetricTile title="Avg Commission %" value={avgCommissionPct != null ? `${avgCommissionPct.toFixed(2)}%` : `${avgNetCommissionPct.toFixed(2)}%`} subtitle={avgCommissionPct != null ? 'GCI ÷ Volume' : 'Net ÷ Volume'} icon={Percent} />
         </div>
+        {!isAllYears && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+          <MetricTile title="Pending Income" value={fmtCurrencyCompact(totals.pendingNetIncome)} subtitle={`${fmtNumNull(totals.pendingCount)} pending deals`} icon={Clock} />
+          <MetricTile title="Avg Sale Price" value={fmtCurrencyCompact(avgSalePrice)} subtitle={prevYearStats ? `vs ${fmtCurrencyCompact(prevYearStats.avgSalePrice)} prev year` : '—'} icon={DollarSign} />
+          <MetricTile title="Avg Net per Deal" value={fmtCurrencyCompact(avgNetPerDeal)} subtitle="Closed transactions" icon={DollarSign} />
+        </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
           <MetricTileWithDelta title="$ per Engagement" value={fmtCurrencyCompact(perEngagement)} previous={prevPerEngagement} icon={MessageSquare} />
           <MetricTileWithDelta title="$ per Appointment" value={fmtCurrencyCompact(perAppointment)} previous={prevPerAppointment} icon={CalendarCheck2} />
