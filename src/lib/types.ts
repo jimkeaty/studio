@@ -444,13 +444,25 @@ export interface DailyActivity {
 
 export interface AppointmentLog {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD — the date the appointment is scheduled/held
   time?: string; // "HH:mm" optional
   contactName: string;
   notes?: string;
-  category: 'buyer' | 'seller';
+  // Client type: buyer | seller | both
+  category: 'buyer' | 'seller' | 'both';
   status?: 'scheduled' | 'held' | 'canceled' | 'no_show';
-  scheduledAt?: string;
+  scheduledAt?: string; // ISO — appointment date/time
+  heldAt?: string;      // ISO — when actually held
+  // Date appointment was set (logged)
+  dateSet?: string;     // YYYY-MM-DD
+  timeSet?: string;     // "HH:mm"
+  // Sale price range
+  priceRangeLow?: number;
+  priceRangeHigh?: number;
+  // Timing bucket: how soon the client expects to transact
+  timing?: '0_60' | '60_120' | '120_plus' | 'other';
+  // Source flag for bulk imports
+  source?: 'manual' | 'bulk_import';
   createdAt?: string;
   updatedAt?: string;
 }

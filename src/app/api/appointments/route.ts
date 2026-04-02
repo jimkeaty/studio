@@ -156,6 +156,13 @@ export async function POST(req: NextRequest) {
       priceRangeLow: body.priceRangeLow ? Number(body.priceRangeLow) : null,
       priceRangeHigh: body.priceRangeHigh ? Number(body.priceRangeHigh) : null,
       estimatedCommission: body.estimatedCommission ? Number(body.estimatedCommission) : null,
+      // Timing bucket: how soon the client expects to transact
+      timing: body.timing ?? null,
+      // Date appointment was set (logged)
+      dateSet: body.dateSet ?? null,
+      timeSet: body.timeSet ?? null,
+      // Source flag
+      source: body.source ?? 'manual',
       // Notes
       notes: body.notes ?? null,
       scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,

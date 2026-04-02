@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertTriangle, CheckCircle2, ClipboardList, Plus, Save, Trash2, Loader2, ChevronLeft, ChevronRight, Phone, Users, Calendar, FileText, Flame } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardList, Plus, Save, Trash2, Loader2, ChevronLeft, ChevronRight, Phone, Users, Calendar, FileText, Flame, Upload } from 'lucide-react';
+import { BulkAppointmentImport } from '@/components/dashboard/log-activities/BulkAppointmentImport';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -110,6 +111,15 @@ export default function DailyTrackerPage() {
   const [rangeLoading, setRangeLoading] = useState(true);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [apptLoading, setApptLoading] = useState(true);
+
+  // Map of date string -> appointment count for calendar dots
+  const apptCountMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const a of appointments) {
+      if (a.date) m[a.date] = (m[a.date] ?? 0) + 1;
+    }
+    return m;
+  }, [appointments]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showApptModal, setShowApptModal] = useState(false);
@@ -432,10 +442,11 @@ export default function DailyTrackerPage() {
       </Dialog>
 
       <Tabs defaultValue="calendar">
-        <TabsList className="grid grid-cols-3 w-full md:w-[520px]">
+        <TabsList className="grid grid-cols-4 w-full md:w-[680px]">
           <TabsTrigger value="calendar"><CalendarLeft className="h-4 w-4 mr-2" />Calendar</TabsTrigger>
           <TabsTrigger value="today"><ClipboardList className="h-4 w-4 mr-2" />Daily Entry</TabsTrigger>
           <TabsTrigger value="appts"><CheckCircle2 className="h-4 w-4 mr-2" />Appointments</TabsTrigger>
+          <TabsTrigger value="bulk"><Upload className="h-4 w-4 mr-2" />Bulk Import</TabsTrigger>
         </TabsList>
 
         {/* ── CALENDAR HEAT-MAP TAB ─────────────────────────────────────────── */}
@@ -476,6 +487,7 @@ export default function DailyTrackerPage() {
                         const isSelected = dateStr === selectedDate;
                         const isToday = dateStr === today;
                         const dayNum = parseInt(dateStr.split('-')[2], 10);
+                        const apptCount = apptCountMap[dateStr] ?? 0;
                         return (
                           <button
                             key={dateStr}
@@ -493,13 +505,20 @@ export default function DailyTrackerPage() {
                             {a?.contractsWrittenCount ? (
                               <span className="absolute top-0.5 right-0.5 text-[8px]">🏠</span>
                             ) : null}
+                            {apptCount > 0 && (
+                              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
+                                {Array.from({ length: Math.min(apptCount, 3) }).map((_, di) => (
+                                  <span key={di} className="w-1 h-1 rounded-full bg-primary/70 inline-block" />
+                                ))}
+                              </span>
+                            )}
                           </button>
                         );
                       })}
                     </div>
                   )}
                   {/* Legend */}
-                  <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground flex-wrap">
                     <span>Activity:</span>
                     <span className="px-2 py-0.5 rounded bg-muted/40">0</span>
                     <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700">1–3</span>
@@ -507,6 +526,7 @@ export default function DailyTrackerPage() {
                     <span className="px-2 py-0.5 rounded bg-emerald-200 dark:bg-emerald-900/60 text-emerald-800">9–15</span>
                     <span className="px-2 py-0.5 rounded bg-emerald-400 dark:bg-emerald-700 text-white">16+</span>
                     <span className="ml-2">🏠 = Contract</span>
+                    <span className="ml-2 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-primary/70 inline-block" /> = Appointment</span>
                   </div>
                 </CardContent>
               </Card>
@@ -702,6 +722,14 @@ export default function DailyTrackerPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── BULK IMPORT TAB ───────────────────────────────────────────────── */}
+        <TabsContent value="bulk" className="space-y-4">
+          <BulkAppointmentImport
+            onImportComplete={() => { loadAppts(); }}
+            viewAs={isImpersonating && effectiveUid ? effectiveUid : undefined}
+          />
         </TabsContent>
       </Tabs>
     </div>
