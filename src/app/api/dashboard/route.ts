@@ -411,6 +411,43 @@ export async function GET(req: NextRequest) {
       contractsWrittenActual += asNumber(a.contractsWrittenCount);
     }
 
+    // ── Overlay appointment counts from the appointments pipeline ──────────
+    // Pipeline appointments (bulk-uploaded or manually added) live in the
+    // appointments collection, not in daily_activity. Count them here and
+    // use the higher of the two sources so manual edits are preserved.
+    try {
+      const apptPipelineSnaps = await Promise.all(
+        activityIdList.map((agentIdVal: string) =>
+          adminDb
+            .collection('appointments')
+            .where('agentId', '==', agentIdVal)
+            .where('date', '>=', toYmd(effectiveStart))
+            .where('date', '<=', toYmd(asOf))
+            .get()
+            .catch(() => null)
+        )
+      );
+      const seenApptIds = new Set<string>();
+      let pipelineSetTotal = 0;
+      let pipelineHeldTotal = 0;
+      for (const snap of apptPipelineSnaps) {
+        if (!snap) continue;
+        for (const doc of snap.docs) {
+          if (seenApptIds.has(doc.id)) continue;
+          seenApptIds.add(doc.id);
+          const d = doc.data();
+          if (d.pipelineStatus === 'trash') continue;
+          pipelineSetTotal++;
+          if (d.pipelineStatus === 'held') pipelineHeldTotal++;
+        }
+      }
+      // Use the higher of daily_activity vs pipeline
+      appointmentsSetActual = Math.max(appointmentsSetActual, pipelineSetTotal);
+      appointmentsHeldActual = Math.max(appointmentsHeldActual, pipelineHeldTotal);
+    } catch {
+      // Non-fatal — fall back to daily_activity totals only
+    }
+
     const ytdTotalPotential = Number((netEarned + netPending).toFixed(2));
     const incomePerformance = performance(netEarned, expectedYTDIncomeGoal);
     const pipelinePerformance = performance(ytdTotalPotential, expectedYTDIncomeGoal);
