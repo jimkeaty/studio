@@ -58,7 +58,8 @@ function isDateEditable(dateStr: string, role: string): boolean {
 
 /**
  * GET /api/appointments?date=YYYY-MM-DD
- * GET /api/appointments?year=YYYY&month=MM
+ * GET /api/appointments?year=YYYY&month=MM          (monthly log view)
+ * GET /api/appointments?year=YYYY                   (full-year pipeline view)
  */
 export async function GET(req: NextRequest) {
   try {
@@ -75,37 +76,31 @@ export async function GET(req: NextRequest) {
     if (date) {
       q = q.where('date', '==', date);
     } else if (year && month) {
+      // Monthly log view (existing behaviour)
       const startDate = format(startOfMonth(new Date(parseInt(year), parseInt(month) - 1)), 'yyyy-MM-dd');
       const endDate = format(endOfMonth(new Date(parseInt(year), parseInt(month) - 1)), 'yyyy-MM-dd');
       q = q.where('date', '>=', startDate).where('date', '<=', endDate);
+    } else if (year) {
+      // Full-year pipeline view — all appointments for the calendar year
+      q = q.where('date', '>=', `${year}-01-01`).where('date', '<=', `${year}-12-31`);
     } else {
-      return jsonError(400, 'Missing query params: must provide either `date` or `year` and `month`');
+      return jsonError(400, 'Missing query params: must provide either `date`, `year`, or `year` and `month`');
     }
 
-    // This was removed because a range filter on `date` and an orderBy on `createdAt` requires a composite index.
-    // We will sort in memory instead to avoid the 500 error.
-    // q = q.orderBy('createdAt', 'desc');
-    
     const snap = await q.get();
 
     const appointments = snap.docs.map(doc => {
         const serialized = serializeFirestore(doc.data());
-        // Ensure createdAt has a fallback for sorting
         if (!serialized.createdAt) serialized.createdAt = new Date(0).toISOString();
         return { id: doc.id, ...serialized };
     });
 
-    // Sort in memory to avoid needing composite indexes in Firestore.
-    // Primary sort: by date, descending (most recent first).
-    // Secondary sort: by creation time, descending.
+    // Sort in memory: by date ascending (upcoming first), then by creation time
     appointments.sort((a, b) => {
-        const dateCompare = b.date.localeCompare(a.date);
-        if (dateCompare !== 0) {
-            return dateCompare;
-        }
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
-
 
     return NextResponse.json({ ok: true, appointments });
   } catch (err: any) {
@@ -133,8 +128,8 @@ export async function POST(req: NextRequest) {
     const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
     const effectiveRole = await isAdminLike(callerUid) ? 'admin' : role;
 
-    if (!body.date || !body.contactName || !body.category || !body.status) {
-      return jsonError(400, 'Missing required fields');
+    if (!body.date || !body.contactName || !body.category) {
+      return jsonError(400, 'Missing required fields: date, contactName, category');
     }
 
     if (!isDateEditable(body.date, effectiveRole)) {
@@ -146,12 +141,22 @@ export async function POST(req: NextRequest) {
       createdByUid: callerUid,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+      // Core fields
       date: body.date,
       contactName: body.contactName,
-      category: body.category,
-      status: body.status,
+      category: body.category,                          // buyer | seller | commercial
+      status: body.status ?? 'set',                     // legacy log status: set | held
+      // Pipeline status (new)
+      pipelineStatus: body.pipelineStatus ?? 'active',  // active | set | held | ghost | on_hold | trash
+      // Contact info
       contactPhone: body.contactPhone ?? null,
       contactEmail: body.contactEmail ?? null,
+      // Property / deal info
+      listingAddress: body.listingAddress ?? null,
+      priceRangeLow: body.priceRangeLow ? Number(body.priceRangeLow) : null,
+      priceRangeHigh: body.priceRangeHigh ? Number(body.priceRangeHigh) : null,
+      estimatedCommission: body.estimatedCommission ? Number(body.estimatedCommission) : null,
+      // Notes
       notes: body.notes ?? null,
       scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
       heldAt: body.heldAt ? new Date(body.heldAt) : null,

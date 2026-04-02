@@ -32,6 +32,7 @@ import {
   TrendingDown, Award, Star,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
+import { AppointmentsPipeline } from '@/components/dashboard/AppointmentsPipeline';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -848,11 +849,11 @@ function AgentDashboardPage() {
             />
           )}
 
-          {/* ═══ PIPELINE KANBAN BOARD (Improvement #3) ═══════════════ */}
-          <PipelineKanban
-            opportunities={opportunities}
-            transactions={transactions}
-            year={year}
+          {/* ═══ APPOINTMENTS PIPELINE ═══════════════════════════════ */}
+          <AppointmentsPipeline
+            agentId={user?.uid ?? ''}
+            viewAs={viewAs ?? undefined}
+            initialYear={year}
           />
 
           {/* ════════════════════════════════════════════════════════════════
