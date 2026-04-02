@@ -237,14 +237,47 @@ export async function resolveTransactionCalculation(
 
   // ─── Leaderless team path (CGL, SGL, Referral Group, etc.) ───────────────────
   // Commission splits are agent vs. company only — no leader band lookup needed.
+  // Resolution order:
+  //   1. Agent's custom teamMemberOverrideBands (memberPercent = agent's % of full GCI)
+  //   2. Team plan's memberDefaultBands (fallback to team default)
+  //   3. Agent's individual tiers (legacy fallback for backward compatibility)
   if (isLeaderless) {
-    // Use the agent's own tiers (stored on the profile) for the split
-    const tier = getActiveIndividualTier(profile.tiers || [], commission);
-    if (!tier) {
-      throw new Error(`No active tier found for leaderless team member ${profile.agentId}`);
+    let agentSplitPercent: number;
+    let companySplitPercent: number;
+
+    // Priority 1: custom override bands on the agent profile
+    if (
+      profile.teamMemberCompMode === 'custom' &&
+      Array.isArray(profile.teamMemberOverrideBands) &&
+      profile.teamMemberOverrideBands.length > 0
+    ) {
+      const memberBand = getActiveMemberBand(profile.teamMemberOverrideBands as MemberPlanBand[], commission);
+      if (!memberBand) {
+        throw new Error(`No active custom member tier found for leaderless team member ${profile.agentId}`);
+      }
+      agentSplitPercent = Number(memberBand.memberPercent || 0);
+      companySplitPercent = Math.max(0, 100 - agentSplitPercent);
+    } else if (
+      // Priority 2: team plan's memberDefaultBands
+      Array.isArray(teamPlan.memberDefaultBands) &&
+      teamPlan.memberDefaultBands.length > 0
+    ) {
+      const memberBand = getActiveMemberBand(teamPlan.memberDefaultBands, commission);
+      if (!memberBand) {
+        throw new Error(`No active member default band found for leaderless team ${team.teamId}`);
+      }
+      agentSplitPercent = Number(memberBand.memberPercent || 0);
+      companySplitPercent = Math.max(0, 100 - agentSplitPercent);
+    } else {
+      // Priority 3: legacy fallback — individual tiers on the agent profile
+      const tier = getActiveIndividualTier(profile.tiers || [], commission);
+      if (!tier) {
+        throw new Error(`No active tier found for leaderless team member ${profile.agentId}`);
+      }
+      agentSplitPercent = Number(tier.agentSplitPercent || 0);
+      companySplitPercent = Number(tier.companySplitPercent || 0);
     }
-    const agentSplitPercent = Number(tier.agentSplitPercent || 0);
-    const companySplitPercent = Number(tier.companySplitPercent || 0);
+
     const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
     const companyRetained = asMoney(commission * (companySplitPercent / 100));
     return {

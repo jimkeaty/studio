@@ -1741,6 +1741,51 @@ export default function AgentProfileForm({
                 </tbody>
               </table>
             </div>
+            {/* Commission flow example — shows how a sample GCI flows through leader → member → company */}
+            {(() => {
+              const sampleGci = 10000;
+              const firstLeaderBand = resolvedLeaderBands[0];
+              const firstMemberBand = values.teamMemberOverrideBands?.[0];
+              if (!firstLeaderBand || !firstMemberBand) return null;
+              const leaderPct = firstLeaderBand.leaderPercent / 100;
+              const companyFromLeaderPct = firstLeaderBand.companyPercent / 100;
+              const memberPct = firstMemberBand.memberPercent / 100;
+              const leaderPool = sampleGci * leaderPct;
+              const companyFromLeader = sampleGci * companyFromLeaderPct;
+              const memberPayout = leaderPool * memberPct;
+              const leaderKeeps = leaderPool - memberPayout;
+              return (
+                <div className="mt-4 rounded-md border border-purple-200 bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold text-purple-800">Example: ${sampleGci.toLocaleString()} GCI (Tier 1 rates)</p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded bg-purple-100 px-2 py-1 font-medium text-purple-800">
+                      GCI ${sampleGci.toLocaleString()}
+                    </span>
+                    <span className="text-gray-400">→</span>
+                    <span className="rounded bg-amber-100 px-2 py-1 font-medium text-amber-800">
+                      Leader pool {firstLeaderBand.leaderPercent}% = ${leaderPool.toLocaleString()}
+                    </span>
+                    <span className="text-gray-400">+</span>
+                    <span className="rounded bg-gray-100 px-2 py-1 font-medium text-gray-700">
+                      Company {firstLeaderBand.companyPercent}% = ${companyFromLeader.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded bg-amber-100 px-2 py-1 font-medium text-amber-800">
+                      Leader pool ${leaderPool.toLocaleString()}
+                    </span>
+                    <span className="text-gray-400">→</span>
+                    <span className="rounded bg-green-100 px-2 py-1 font-medium text-green-800">
+                      You (member) {firstMemberBand.memberPercent}% = ${memberPayout.toLocaleString()}
+                    </span>
+                    <span className="text-gray-400">+</span>
+                    <span className="rounded bg-blue-100 px-2 py-1 font-medium text-blue-800">
+                      Leader keeps {(100 - firstMemberBand.memberPercent)}% = ${leaderKeeps.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 

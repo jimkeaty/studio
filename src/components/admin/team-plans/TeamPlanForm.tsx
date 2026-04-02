@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getFirebaseAuth } from '@/lib/firebase';
 
@@ -34,6 +34,12 @@ export type TeamPlanFormValues = {
   notes: string;
   /** Inherited from the parent team — controls whether Leader Structure Bands are shown */
   teamStructureType?: 'with_leader' | 'no_leader';
+};
+
+type TeamOption = {
+  teamId: string;
+  teamName: string;
+  structureType: 'with_leader' | 'no_leader';
 };
 
 type TeamPlanFormProps = {
@@ -103,6 +109,7 @@ export default function TeamPlanForm({
   isLeaderless = false,
 }: TeamPlanFormProps) {
   const router = useRouter();
+  const isEditMode = Boolean(teamPlanId);
 
   const [values, setValues] = useState<TeamPlanFormValues>({
     ...DEFAULT_VALUES,
@@ -125,10 +132,62 @@ export default function TeamPlanForm({
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Team dropdown state (only used in create mode)
+  const [teamOptions, setTeamOptions] = useState<TeamOption[]>([]);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  // In edit mode, isLeaderless comes from the parent; in create mode, derive from selected team
+  const [selectedTeamStructure, setSelectedTeamStructure] = useState<'with_leader' | 'no_leader' | null>(null);
+
+  // Effective leaderless flag: edit mode uses prop, create mode uses selected team
+  const effectiveIsLeaderless = isEditMode ? isLeaderless : selectedTeamStructure === 'no_leader';
+
   const thresholdMarkersText = useMemo(
     () => values.thresholdMarkers.join(', '),
     [values.thresholdMarkers]
   );
+
+  // Load team options for the dropdown (create mode only)
+  useEffect(() => {
+    if (isEditMode) return;
+    let isMounted = true;
+    const auth = getFirebaseAuth();
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (!user || !isMounted) return;
+      try {
+        setIsLoadingTeams(true);
+        const token = await user.getIdToken();
+        const res = await fetch('/api/admin/teams', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data?.ok && Array.isArray(data.teams)) {
+          if (isMounted) {
+            setTeamOptions(
+              data.teams.map((t: any) => ({
+                teamId: t.teamId,
+                teamName: t.teamName,
+                structureType: t.structureType || 'with_leader',
+              }))
+            );
+          }
+        }
+      } catch {
+        // non-fatal
+      } finally {
+        if (isMounted) setIsLoadingTeams(false);
+      }
+    });
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [isEditMode]);
+
+  function handleTeamSelect(teamId: string) {
+    updateField('teamId', teamId);
+    const found = teamOptions.find((t) => t.teamId === teamId);
+    setSelectedTeamStructure(found?.structureType ?? null);
+  }
 
   function updateField<K extends keyof TeamPlanFormValues>(
     field: K,
@@ -209,22 +268,17 @@ export default function TeamPlanForm({
     setIsSaving(true);
     setErrorMessage('');
     setSuccessMessage('');
-
     try {
       const auth = getFirebaseAuth();
       const currentUser = auth.currentUser;
-
       if (!currentUser) {
         throw new Error('You must be signed in to update this team plan.');
       }
-
       const token = await currentUser.getIdToken();
-
       const thresholdMarkers = thresholdMarkersText
         .split(',')
         .map((value) => Number(value.trim()))
         .filter((value) => Number.isFinite(value));
-
       const payload = {
         teamId: values.teamId.trim(),
         planName: values.planName.trim(),
@@ -260,18 +314,17 @@ export default function TeamPlanForm({
         notes: values.notes.trim() || null,
       };
 
-      const isEditMode = Boolean(teamPlanId);
-
       const response = await fetch(
         isEditMode ? `/api/admin/team-plans/${teamPlanId}` : '/api/admin/team-plans',
         {
           method: isEditMode ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const result = await response.json();
 
@@ -303,14 +356,44 @@ export default function TeamPlanForm({
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Team Plan Details</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-gray-700">Team ID</span>
-            <input
-              value={values.teamId}
-              onChange={(e) => updateField('teamId', e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            />
-          </label>
+
+          {/* Team selector — dropdown in create mode, read-only text in edit mode */}
+          <div className="space-y-1">
+            <span className="block text-sm font-medium text-gray-700">Team</span>
+            {isEditMode ? (
+              <input
+                value={values.teamId}
+                readOnly
+                className="w-full rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-500"
+              />
+            ) : (
+              <>
+                <select
+                  value={values.teamId}
+                  onChange={(e) => handleTeamSelect(e.target.value)}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  disabled={isLoadingTeams}
+                >
+                  <option value="">
+                    {isLoadingTeams ? 'Loading teams…' : 'Select a team'}
+                  </option>
+                  {teamOptions.map((t) => (
+                    <option key={t.teamId} value={t.teamId}>
+                      {t.teamName}
+                      {t.structureType === 'no_leader' ? ' (No Leader)' : ' (Has Leader)'}
+                    </option>
+                  ))}
+                </select>
+                {selectedTeamStructure && (
+                  <p className={`mt-1 text-xs font-medium ${selectedTeamStructure === 'no_leader' ? 'text-gray-600' : 'text-purple-700'}`}>
+                    {selectedTeamStructure === 'no_leader'
+                      ? 'This team has no leader — Leader Structure Bands are hidden.'
+                      : 'This team has a leader — Leader Structure Bands are required.'}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
 
           <label className="space-y-1">
             <span className="text-sm font-medium text-gray-700">Plan Name</span>
@@ -433,102 +516,103 @@ export default function TeamPlanForm({
         </div>
       </section>
 
-      {!isLeaderless && (
-      <section className="rounded-lg border bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Leader Structure Bands</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Defines the leader/company split before any member payout is applied.
-            </p>
+      {/* Leader Structure Bands — hidden for leaderless teams */}
+      {!effectiveIsLeaderless && (
+        <section className="rounded-lg border bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Leader Structure Bands</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Defines the leader/company split before any member payout is applied.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={addLeaderBand}
+              className="rounded-md border px-3 py-2 text-sm font-medium"
+            >
+              Add Leader Band
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={addLeaderBand}
-            className="rounded-md border px-3 py-2 text-sm font-medium"
-          >
-            Add Leader Band
-          </button>
-        </div>
+          <div className="mt-4 space-y-4">
+            {values.leaderStructureBands.map((band, index) => (
+              <div key={index} className="grid gap-3 rounded-lg border p-4 md:grid-cols-5">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-gray-600">From</span>
+                  <input
+                    type="number"
+                    value={band.fromCompanyDollar}
+                    onChange={(e) =>
+                      updateLeaderBand(index, 'fromCompanyDollar', Number(e.target.value || 0))
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </label>
 
-        <div className="mt-4 space-y-4">
-          {values.leaderStructureBands.map((band, index) => (
-            <div key={index} className="grid gap-3 rounded-lg border p-4 md:grid-cols-5">
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-gray-600">From</span>
-                <input
-                  type="number"
-                  value={band.fromCompanyDollar}
-                  onChange={(e) =>
-                    updateLeaderBand(index, 'fromCompanyDollar', Number(e.target.value || 0))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-gray-600">To</span>
+                  <input
+                    type="number"
+                    value={band.toCompanyDollar ?? ''}
+                    onChange={(e) =>
+                      updateLeaderBand(
+                        index,
+                        'toCompanyDollar',
+                        e.target.value === '' ? null : Number(e.target.value)
+                      )
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </label>
 
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-gray-600">To</span>
-                <input
-                  type="number"
-                  value={band.toCompanyDollar ?? ''}
-                  onChange={(e) =>
-                    updateLeaderBand(
-                      index,
-                      'toCompanyDollar',
-                      e.target.value === '' ? null : Number(e.target.value)
-                    )
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-gray-600">Leader %</span>
+                  <input
+                    type="number"
+                    value={band.leaderPercent}
+                    onChange={(e) =>
+                      updateLeaderBand(index, 'leaderPercent', Number(e.target.value || 0))
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </label>
 
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-gray-600">Leader %</span>
-                <input
-                  type="number"
-                  value={band.leaderPercent}
-                  onChange={(e) =>
-                    updateLeaderBand(index, 'leaderPercent', Number(e.target.value || 0))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-gray-600">Company %</span>
+                  <input
+                    type="number"
+                    value={band.companyPercent}
+                    onChange={(e) =>
+                      updateLeaderBand(index, 'companyPercent', Number(e.target.value || 0))
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </label>
 
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-gray-600">Company %</span>
-                <input
-                  type="number"
-                  value={band.companyPercent}
-                  onChange={(e) =>
-                    updateLeaderBand(index, 'companyPercent', Number(e.target.value || 0))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </label>
-
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={() => removeLeaderBand(index)}
-                  className="w-full rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700"
-                  disabled={values.leaderStructureBands.length === 1}
-                >
-                  Remove
-                </button>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => removeLeaderBand(index)}
+                    className="w-full rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700"
+                    disabled={values.leaderStructureBands.length === 1}
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">{isLeaderless ? 'Agent Payout Bands' : 'Member Default Bands'}</h2>
+            <h2 className="text-lg font-semibold">{effectiveIsLeaderless ? 'Agent Payout Bands' : 'Member Default Bands'}</h2>
             <p className="mt-1 text-sm text-gray-600">
-              {isLeaderless
+              {effectiveIsLeaderless
                 ? 'Defines the agent vs. company split for this leaderless team.'
                 : 'Defines the default member payout from the leader side when no member-specific plan is assigned.'}
             </p>
