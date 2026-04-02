@@ -71,29 +71,67 @@ export async function GET(req: NextRequest) {
     const viewAs = searchParams.get('viewAs');
     const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
 
-    let q: Query = adminDb.collection('appointments').where('agentId', '==', uid);
+    // Resolve all possible agentId values (Firebase UID, slug, profile docId)
+    // so bulk-imported appointments stored under any ID are always found
+    const agentIdSet = new Set([uid]);
+    try {
+      const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+      if (profileByIdSnap.exists) {
+        const d = profileByIdSnap.data();
+        if (d?.agentId) agentIdSet.add(String(d.agentId));
+      } else {
+        const profileBySlugSnap = await adminDb.collection('agentProfiles')
+          .where('agentId', '==', uid).limit(1).get();
+        if (!profileBySlugSnap.empty) {
+          agentIdSet.add(profileBySlugSnap.docs[0].id);
+        }
+      }
+    } catch { /* ignore profile lookup errors */ }
+    const agentIdList = Array.from(agentIdSet);
+
+    // Build date filter strings
+    let startDate: string | null = null;
+    let endDate: string | null = null;
+    let singleDate: string | null = null;
 
     if (date) {
-      q = q.where('date', '==', date);
+      singleDate = date;
     } else if (year && month) {
-      // Monthly log view (existing behaviour)
-      const startDate = format(startOfMonth(new Date(parseInt(year), parseInt(month) - 1)), 'yyyy-MM-dd');
-      const endDate = format(endOfMonth(new Date(parseInt(year), parseInt(month) - 1)), 'yyyy-MM-dd');
-      q = q.where('date', '>=', startDate).where('date', '<=', endDate);
+      startDate = format(startOfMonth(new Date(parseInt(year), parseInt(month) - 1)), 'yyyy-MM-dd');
+      endDate = format(endOfMonth(new Date(parseInt(year), parseInt(month) - 1)), 'yyyy-MM-dd');
     } else if (year) {
-      // Full-year pipeline view — all appointments for the calendar year
-      q = q.where('date', '>=', `${year}-01-01`).where('date', '<=', `${year}-12-31`);
+      startDate = `${year}-01-01`;
+      endDate = `${year}-12-31`;
     } else {
       return jsonError(400, 'Missing query params: must provide either `date`, `year`, or `year` and `month`');
     }
 
-    const snap = await q.get();
+    // Query appointments for all resolved agentId values and merge by doc ID
+    const apptDocMap = new Map<string, any>();
+    await Promise.all(
+      agentIdList.map(async (agentIdVal) => {
+        try {
+          let q: Query = adminDb.collection('appointments').where('agentId', '==', agentIdVal);
+          if (singleDate) {
+            q = q.where('date', '==', singleDate);
+          } else if (startDate && endDate) {
+            q = q.where('date', '>=', startDate).where('date', '<=', endDate);
+          }
+          const snap = await q.get();
+          for (const doc of snap.docs) {
+            if (!apptDocMap.has(doc.id)) {
+              const serialized = serializeFirestore(doc.data());
+              if (!serialized.createdAt) serialized.createdAt = new Date(0).toISOString();
+              apptDocMap.set(doc.id, { id: doc.id, ...serialized });
+            }
+          }
+        } catch (e) {
+          console.warn('[API/appointments] query failed for agentId=' + agentIdVal, e);
+        }
+      })
+    );
 
-    const appointments = snap.docs.map(doc => {
-        const serialized = serializeFirestore(doc.data());
-        if (!serialized.createdAt) serialized.createdAt = new Date(0).toISOString();
-        return { id: doc.id, ...serialized };
-    });
+    const appointments = Array.from(apptDocMap.values());
 
     // Sort in memory: by date ascending (upcoming first), then by creation time
     appointments.sort((a, b) => {

@@ -262,19 +262,46 @@ export async function GET(req: NextRequest) {
     if (_ap?.agentId && _ap.agentId !== uid) txQueryIds.add(String(_ap.agentId));
     const txQueryIdList = Array.from(txQueryIds);
 
+    // Build the full set of agentId values to query for daily_activity
+    // (same multi-ID strategy used for transactions — covers Firebase UID, slug, and profile docId)
+    const activityQueryIds = new Set([uid]);
+    if (agentFirebaseUid && agentFirebaseUid !== uid) activityQueryIds.add(agentFirebaseUid);
+    if (agentProfileDocId && agentProfileDocId !== uid) activityQueryIds.add(agentProfileDocId);
+    if (_ap?.agentId && _ap.agentId !== uid) activityQueryIds.add(String(_ap.agentId));
+    const activityIdList = Array.from(activityQueryIds);
+
     const txDocMap = new Map();
-    const [activitySnap, goalsSnap] = await Promise.all([
-      adminDb
-        .collection("daily_activity")
-        .where("agentId", "==", uid)
-        .where("date", ">=", toYmd(effectiveStart))
-        .where("date", "<=", toYmd(asOf))
-        .get(),
+    const activityDocMap = new Map<string, any>();
+
+    const [activitySnapsArray, goalsSnap] = await Promise.all([
+      // Query daily_activity for ALL resolved agentId values and merge by doc ID
+      Promise.all(
+        activityIdList.map(agentIdVal =>
+          adminDb
+            .collection("daily_activity")
+            .where("agentId", "==", agentIdVal)
+            .where("date", ">=", toYmd(effectiveStart))
+            .where("date", "<=", toYmd(asOf))
+            .get()
+            .catch(e => { console.warn('[dashboard] daily_activity query failed for '+agentIdVal, e); return null; })
+        )
+      ),
       adminDb.collection("brokerCommandGoals")
         .where("year", "==", yearNum)
         .where("segment", "==", goalSegment)
         .get(),
     ]);
+
+    // Merge all daily_activity results — deduplicate by doc ID
+    for (const snap of activitySnapsArray) {
+      if (!snap) continue;
+      for (const doc of snap.docs) {
+        if (!activityDocMap.has(doc.id)) activityDocMap.set(doc.id, doc.data() || {});
+      }
+    }
+    // Wrap in a compatible object for the existing activitySnap.docs usage below
+    const activitySnap = { docs: Array.from(activityDocMap.entries()).map(([id, data]) => ({ id, data: () => data })) };
+
     await Promise.all(
       txQueryIdList.map(async (agentIdVal) => {
         try {
