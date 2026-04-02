@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertTriangle, CheckCircle2, ClipboardList, Plus, Save, Trash2, Loader2, ChevronLeft, ChevronRight, Phone, Users, Calendar, FileText, Flame, Upload } from 'lucide-react';
 import { BulkAppointmentImport } from '@/components/dashboard/log-activities/BulkAppointmentImport';
 import { BulkTrackerImport } from '@/components/dashboard/log-activities/BulkTrackerImport';
+import { ManageImportBatches } from '@/components/dashboard/log-activities/ManageImportBatches';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -738,6 +739,11 @@ export default function DailyTrackerPage() {
           {/* Appointment records — populates appointment dots on calendar */}
           <BulkAppointmentImport
             onImportComplete={() => { loadAppts(); }}
+            viewAs={isImpersonating && effectiveUid ? effectiveUid : undefined}
+          />
+          {/* Manage / delete past import batches by date */}
+          <ManageImportBatches
+            onBatchDeleted={() => { loadAppts(); }}
             viewAs={isImpersonating && effectiveUid ? effectiveUid : undefined}
           />
         </TabsContent>

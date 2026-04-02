@@ -204,6 +204,10 @@ export async function POST(req: NextRequest) {
     if (rows.length === 0) return jsonError(400, 'No appointments provided');
     if (rows.length > MAX_BATCH) return jsonError(400, `Maximum ${MAX_BATCH} appointments per bulk import`);
 
+    // Unique batch ID — groups all rows from this import so they can be deleted together
+    const importBatchId = `${uid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const importedAt = new Date().toISOString();
+
     const errors: { row: number; error: string }[] = [];
     const validDocs: Record<string, unknown>[] = [];
 
@@ -285,6 +289,8 @@ export async function POST(req: NextRequest) {
           listingAddress: toStr(row.listingAddress ?? row.address) ?? null,
           sourceRowId: sourceRowId ?? null,
           source: 'bulk_import',
+          importBatchId,
+          importedAt,
         });
       } catch (err: any) {
         errors.push({ row: rowNum, error: err.message || 'Parse error' });
@@ -309,7 +315,7 @@ export async function POST(req: NextRequest) {
       created += chunk.length;
     }
 
-    return NextResponse.json({ ok: true, created, errors });
+    return NextResponse.json({ ok: true, created, errors, importBatchId, importedAt });
   } catch (err: any) {
     console.error('[API/appointments/bulk] POST failed:', err);
     return jsonError(err.status ?? 500, err.message ?? 'Bulk import failed');
