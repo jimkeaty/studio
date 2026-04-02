@@ -247,6 +247,8 @@ export default function BusinessPlanPage() {
   const [goalSegment, setGoalSegment] = useState('');
   const [isSavingGoals, setIsSavingGoals] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(true);
+  const [growthTarget, setGrowthTarget] = useState<number | 'other' | null>(null);
+  const [customGrowthPct, setCustomGrowthPct] = useState('');
   const [yearlyVolume, setYearlyVolume] = useState('');
   const [yearlySales, setYearlySales] = useState('');
   const [yearlyIncome, setYearlyIncome] = useState('');
@@ -1053,6 +1055,153 @@ export default function BusinessPlanPage() {
           </CardContent>
         </Card>
         </div>
+
+        {/* ── GROWTH TARGET BOX ───────────────────────────────────────── */}
+        {historicalStats?.hasData && (
+          <Card className="border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                <TrendingUp className="h-5 w-5" /> Growth Target
+              </CardTitle>
+              <CardDescription>
+                Based on your {historicalStats.year} results — select a growth target to auto-populate your goals.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Prior year reference row */}
+              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-white/60 dark:bg-black/20 border border-emerald-100 dark:border-emerald-900">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">{historicalStats.year} Net Income</p>
+                  <p className="text-base font-bold">${historicalStats.netEarned.toLocaleString()}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">{historicalStats.year} Volume</p>
+                  <p className="text-base font-bold">${(historicalStats.totalVolume / 1_000_000).toFixed(2)}M</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">{historicalStats.year} Closings</p>
+                  <p className="text-base font-bold">{historicalStats.closedUnits} deals</p>
+                </div>
+              </div>
+
+              {/* Growth % selector buttons */}
+              <div>
+                <p className="text-sm font-medium mb-2 text-emerald-800 dark:text-emerald-300">Select growth over {historicalStats.year}:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[5, 10, 15, 20, 30].map(pct => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => {
+                        setGrowthTarget(pct);
+                        setCustomGrowthPct('');
+                        const multiplier = 1 + pct / 100;
+                        const newIncome = Math.round(historicalStats.netEarned * multiplier);
+                        const newVolume = Math.round(historicalStats.totalVolume * multiplier);
+                        const newSales = Math.round(historicalStats.closedUnits * multiplier);
+                        form.setValue('annualIncomeGoal', newIncome);
+                        handleCalculate();
+                        setYearlyIncome(String(newIncome));
+                        setYearlyVolume(String(newVolume));
+                        setYearlySales(String(newSales));
+                      }}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${
+                        growthTarget === pct
+                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
+                          : 'bg-white dark:bg-black/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                      }`}
+                    >
+                      +{pct}%
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { setGrowthTarget('other'); }}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${
+                      growthTarget === 'other'
+                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
+                        : 'bg-white dark:bg-black/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                    }`}
+                  >
+                    Other
+                  </button>
+                </div>
+
+                {/* Custom % input for 'Other' */}
+                {growthTarget === 'other' && (
+                  <div className="flex items-center gap-3 mt-3">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="e.g. 25"
+                        value={customGrowthPct}
+                        onChange={e => setCustomGrowthPct(e.target.value)}
+                        className="w-28"
+                      />
+                      <span className="text-sm font-medium">%</span>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => {
+                        const pct = parseFloat(customGrowthPct);
+                        if (isNaN(pct) || pct <= 0) return;
+                        const multiplier = 1 + pct / 100;
+                        const newIncome = Math.round(historicalStats.netEarned * multiplier);
+                        const newVolume = Math.round(historicalStats.totalVolume * multiplier);
+                        const newSales = Math.round(historicalStats.closedUnits * multiplier);
+                        form.setValue('annualIncomeGoal', newIncome);
+                        handleCalculate();
+                        setYearlyIncome(String(newIncome));
+                        setYearlyVolume(String(newVolume));
+                        setYearlySales(String(newSales));
+                      }}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Projected results preview */}
+              {growthTarget !== null && (
+                <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-emerald-100/60 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                  {(() => {
+                    const pct = growthTarget === 'other' ? parseFloat(customGrowthPct) || 0 : growthTarget;
+                    const multiplier = 1 + pct / 100;
+                    return (
+                      <>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">Target Net Income</p>
+                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">
+                            ${Math.round(historicalStats.netEarned * multiplier).toLocaleString()}
+                          </p>
+                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">Target Volume</p>
+                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">
+                            ${(historicalStats.totalVolume * multiplier / 1_000_000).toFixed(2)}M
+                          </p>
+                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">Target Closings</p>
+                          <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">
+                            {Math.round(historicalStats.closedUnits * multiplier)} deals
+                          </p>
+                          <p className="text-xs text-emerald-600">+{pct}% over {historicalStats.year}</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Save button ─────────────────────────────────────────────────── */}
         <div className="flex justify-end pt-2">
