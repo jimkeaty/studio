@@ -67,14 +67,20 @@ export async function GET(req: NextRequest) {
     const asOf = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
     // ── 1. Load Business Plan ────────────────────────────────────────────────
-    const planSnap = await adminDb
-      .collection('businessPlans')
-      .where('userId', '==', uid)
-      .where('year', '==', year)
-      .limit(1)
-      .get();
+    // The Business Plan page saves to: dashboards/{year}/agent/{uid}/plans/plan
+    // (via /api/plan POST — this is the canonical path, NOT 'businessPlans' collection)
+    const planRef = adminDb
+      .collection('dashboards')
+      .doc(String(year))
+      .collection('agent')
+      .doc(uid)
+      .collection('plans')
+      .doc('plan');
+    const planDoc = await planRef.get();
+    const plan = planDoc.exists ? (planDoc.data() ?? null) : null;
 
-    const plan = planSnap.empty ? null : planSnap.docs[0].data();
+    // Synthetic hasPlan flag used in the response
+    const hasPlan = planDoc.exists;
 
     // Plan assumptions
     const annualIncomeGoal = n(plan?.annualIncomeGoal, 100000);
@@ -123,11 +129,14 @@ export async function GET(req: NextRequest) {
     const remainingWeeks = asOf >= yearEnd ? 0 : countWorkWeeks(asOf, yearEnd);
     const totalWeeks = elapsedWeeks + remainingWeeks;
     const yearPct = totalWeeks > 0 ? elapsedWeeks / workingWeeksInYear : 0;
-
-    // ── 3. Load YTD Daily Logs ───────────────────────────────────────────────
+    // ── 3. Load YTD Daily Activity ──────────────────────────────────────────────
+    // daily_activity docs are keyed as "{uid}_{YYYY-MM-DD}" — no userId field to query by.
+    // We query all docs whose ID starts with the agent's uid prefix.
+    // For the year range we use a Firestore range query on the doc ID.
     const logsSnap = await adminDb
-      .collection('dailyLogs')
-      .where('userId', '==', uid)
+      .collection('daily_activity')
+      .where('__name__', '>=', `${uid}_${year}-01-01`)
+      .where('__name__', '<=', `${uid}_${year}-12-31`)
       .get();
 
     let callsActual = 0;
@@ -138,9 +147,6 @@ export async function GET(req: NextRequest) {
 
     for (const doc of logsSnap.docs) {
       const d = doc.data();
-      const logDate = d.date ? new Date(d.date) : null;
-      if (!logDate) continue;
-      if (logDate.getUTCFullYear() !== year) continue;
       callsActual += n(d.callsCount);
       engagementsActual += n(d.engagementsCount);
       appointmentsSetActual += n(d.appointmentsSetCount);
@@ -269,7 +275,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       year,
-      hasPlan: !planSnap.empty,
+      hasPlan,
       annualIncomeGoal,
       avgNetCommission: actualAvgNetPerClosing,
       workingWeeksInYear,
