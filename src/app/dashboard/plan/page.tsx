@@ -297,6 +297,23 @@ export default function BusinessPlanPage() {
     setCalculatedPlan(newCalculatedTargets);
   }, [form]);
 
+  // ── Sync volume & sales from calculatedPlan ─────────────────────────────
+  useEffect(() => {
+    if (!calculatedPlan) return;
+    const closings = calculatedPlan.closings.yearly || 0;
+    const income = form.getValues('annualIncomeGoal') || 0;
+    const asp = historicalStats?.avgSalePrice ?? 0;
+    // Volume = closings × avg sale price (fall back to income / avgCommPct if no price data)
+    const vol = asp > 0
+      ? Math.round(closings * asp)
+      : avgCommPct > 0
+        ? Math.round(income / (avgCommPct / 100))
+        : 0;
+    setYearlyIncome(String(income));
+    if (vol > 0) setYearlyVolume(String(vol));
+    if (closings > 0) setYearlySales(String(closings));
+  }, [calculatedPlan]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Monthly Goals helpers ────────────────────────────────────────────────
   const fmtCurrencyCompact = (v: number) => {
     if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
@@ -1236,45 +1253,31 @@ export default function BusinessPlanPage() {
             </CardHeader>
             <CollapsibleContent>
               <CardContent className="space-y-6">
-                {/* Yearly totals row */}
+                {/* Yearly totals row — read-only, populated from business plan above */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-lg bg-muted/40 border">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Annual Net Income Goal</Label>
-                    <div className="relative mt-1">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="number"
-                        className="pl-9"
-                        placeholder={String(form.getValues('annualIncomeGoal') || '')}
-                        value={yearlyIncome}
-                        onChange={e => handleGoalIncomeChange(e.target.value)}
-                      />
-                    </div>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Annual Net Income Goal</p>
+                    <p className="text-xl font-bold text-primary">
+                      {yearlyIncome ? `$${Number(yearlyIncome).toLocaleString()}` : <span className="text-muted-foreground text-sm">Set above ↑</span>}
+                    </p>
                     {historicalStats?.avgNetPct && <p className="text-xs text-muted-foreground mt-1">Prior yr net %: {historicalStats.avgNetPct.toFixed(1)}%</p>}
                   </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Annual Volume Goal</Label>
-                    <div className="relative mt-1">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="number"
-                        className="pl-9"
-                        placeholder="0"
-                        value={yearlyVolume}
-                        onChange={e => handleVolumeChange(e.target.value)}
-                      />
-                    </div>
-                    {historicalStats?.avgSalePrice && <p className="text-xs text-muted-foreground mt-1">Prior yr avg sale: ${historicalStats.avgSalePrice.toLocaleString()}</p>}
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Annual Volume Goal</p>
+                    <p className="text-xl font-bold text-primary">
+                      {yearlyVolume && Number(yearlyVolume) > 0
+                        ? `$${(Number(yearlyVolume) / 1_000_000).toFixed(2)}M`
+                        : <span className="text-muted-foreground text-sm">Calculated from plan</span>}
+                    </p>
+                    {historicalStats?.avgSalePrice && <p className="text-xs text-muted-foreground mt-1">Based on avg sale: ${historicalStats.avgSalePrice.toLocaleString()}</p>}
                   </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Annual Sales Goal (units)</Label>
-                    <Input
-                      type="number"
-                      className="mt-1"
-                      placeholder="0"
-                      value={yearlySales}
-                      onChange={e => handleSalesChange(e.target.value)}
-                    />
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Annual Sales Goal (units)</p>
+                    <p className="text-xl font-bold text-primary">
+                      {yearlySales && Number(yearlySales) > 0
+                        ? `${Number(yearlySales)} closings`
+                        : <span className="text-muted-foreground text-sm">Calculated from plan</span>}
+                    </p>
                     {historicalStats && <p className="text-xs text-muted-foreground mt-1">Prior yr closings: {historicalStats.closedUnits}</p>}
                   </div>
                 </div>
