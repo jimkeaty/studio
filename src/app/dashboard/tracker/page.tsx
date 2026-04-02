@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertTriangle, CheckCircle2, ClipboardList, Plus, Save, Trash2, Loader2, ChevronLeft, ChevronRight, Phone, Users, Calendar, FileText, Flame, Upload } from 'lucide-react';
 import { BulkAppointmentImport } from '@/components/dashboard/log-activities/BulkAppointmentImport';
+import { BulkTrackerImport } from '@/components/dashboard/log-activities/BulkTrackerImport';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -725,7 +726,16 @@ export default function DailyTrackerPage() {
         </TabsContent>
 
         {/* ── BULK IMPORT TAB ───────────────────────────────────────────────── */}
-        <TabsContent value="bulk" className="space-y-4">
+        <TabsContent value="bulk" className="space-y-6">
+          {/* Tracking sheet data — populates calendar + KPI dashboard */}
+          <BulkTrackerImport
+            onImportComplete={(count) => {
+              // Refresh the calendar range data so dots + heat-map update immediately
+              setMonthYear(m => ({ ...m }));
+            }}
+            viewAs={isImpersonating && effectiveUid ? effectiveUid : undefined}
+          />
+          {/* Appointment records — populates appointment dots on calendar */}
           <BulkAppointmentImport
             onImportComplete={() => { loadAppts(); }}
             viewAs={isImpersonating && effectiveUid ? effectiveUid : undefined}
