@@ -1,3 +1,19 @@
+/**
+ * GET /api/projections?year=2026&viewAs=<uid>
+ *
+ * Projection engine — appointment-held-driven, net income based.
+ *
+ * MATH MODEL:
+ * 1. Load plan targets (already calculated and stored by the Business Plan page)
+ * 2. Load YTD actuals from daily logs + closed transactions
+ * 3. Compute elapsed/remaining work weeks
+ * 4. ON-TRACK numbers = plan_target × (elapsed_weeks / total_work_weeks)
+ * 5. FULL-YEAR PROJECTION = YTD actual + (remaining weeks × actual weekly pace)
+ *    — driven by appointments held per week as the primary KPI
+ * 6. CATCH-UP TARGETS = (what's still needed) ÷ (weeks remaining)
+ *    — always recalibrated, never the original weekly goal
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
@@ -10,24 +26,19 @@ function extractBearer(req: NextRequest) {
   return h.slice('Bearer '.length).trim();
 }
 
-function asNumber(v: unknown, fallback = 0): number {
-  const n = Number(v);
-  return isFinite(n) ? n : fallback;
+function n(v: unknown, fallback = 0): number {
+  const x = Number(v);
+  return isFinite(x) ? x : fallback;
 }
 
-function countWeekdays(start: Date, end: Date): number {
-  let count = 0;
-  const cur = new Date(start);
-  while (cur <= end) {
-    const day = cur.getUTCDay();
-    if (day !== 0 && day !== 6) count++;
-    cur.setUTCDate(cur.getUTCDate() + 1);
-  }
-  return count;
+function safeDiv(num: number, den: number, fallback = 0): number {
+  return den > 0 ? num / den : fallback;
 }
 
-function safeDivide(num: number, den: number): number | null {
-  return den > 0 ? num / den : null;
+function countWorkWeeks(start: Date, end: Date): number {
+  if (end <= start) return 0;
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  return (end.getTime() - start.getTime()) / msPerWeek;
 }
 
 // ── GET /api/projections ─────────────────────────────────────────────────────
@@ -44,7 +55,6 @@ export async function GET(req: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     let uid = decoded.uid;
 
-    // Admin impersonation
     if (viewAs) {
       const callerIsAdmin = await isAdminLike(decoded.uid);
       if (!callerIsAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -53,9 +63,8 @@ export async function GET(req: NextRequest) {
 
     const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
     const now = new Date();
+    // Use start-of-today as "as of" date
     const asOf = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const yearStart = new Date(Date.UTC(year, 0, 1));
-    const yearEnd = new Date(Date.UTC(year, 11, 31));
 
     // ── 1. Load Business Plan ────────────────────────────────────────────────
     const planSnap = await adminDb
@@ -67,37 +76,55 @@ export async function GET(req: NextRequest) {
 
     const plan = planSnap.empty ? null : planSnap.docs[0].data();
 
-    const annualIncomeGoal = asNumber(plan?.annualIncomeGoal, 100000);
-    const workingDaysPerMonth = asNumber(plan?.assumptions?.workingDaysPerMonth, 21);
-    const weeksOff = asNumber(plan?.assumptions?.weeksOff, 2);
-    const totalWorkdaysInYear = Math.max(1, workingDaysPerMonth * 12 - weeksOff * 5);
-    const avgCommission = asNumber(plan?.assumptions?.avgCommission, 5000);
+    // Plan assumptions
+    const annualIncomeGoal = n(plan?.annualIncomeGoal, 100000);
+    const avgNetCommission = n(plan?.assumptions?.avgCommission, 5000);
+    const workingDaysPerMonth = n(plan?.assumptions?.workingDaysPerMonth, 21);
+    const weeksOff = n(plan?.assumptions?.weeksOff, 2);
+    const workingWeeksInYear = Math.max(1, 52 - weeksOff);
+    const workingDaysInYear = Math.max(1, workingDaysPerMonth * 12 - weeksOff * 5);
 
-    // Plan conversion rates (fallback to typical industry rates)
-    const planConv = plan?.assumptions?.conversionRates ?? {};
-    const planCallToEngagement = asNumber(planConv.callToEngagement, 0.1);
-    const planEngToApptSet = asNumber(planConv.engagementToAppointmentSet, 0.1);
-    const planApptSetToHeld = asNumber(planConv.appointmentSetToHeld, 0.9);
-    const planApptHeldToContract = asNumber(planConv.appointmentHeldToContract, 0.2);
-    const planContractToClosing = asNumber(planConv.contractToClosing, 0.8);
+    // Plan conversion rates
+    const cr = plan?.assumptions?.conversionRates ?? {};
+    const planCallToEng = n(cr.callToEngagement, 0.1);
+    const planEngToApptSet = n(cr.engagementToAppointmentSet, 0.1);
+    const planApptSetToHeld = n(cr.appointmentSetToHeld, 0.9);
+    const planApptHeldToContract = n(cr.appointmentHeldToContract, 0.2);
+    const planContractToClose = n(cr.contractToClosing, 0.8);
 
-    // Plan annual targets
+    // Plan annual targets (pre-calculated by Business Plan page, stored in Firestore)
+    const pt = plan?.calculatedTargets ?? {};
     const planTargets = {
-      calls: asNumber(plan?.calculatedTargets?.calls?.yearly),
-      engagements: asNumber(plan?.calculatedTargets?.engagements?.yearly),
-      appointmentsSet: asNumber(plan?.calculatedTargets?.appointmentsSet?.yearly),
-      appointmentsHeld: asNumber(plan?.calculatedTargets?.appointmentsHeld?.yearly),
-      contractsWritten: asNumber(plan?.calculatedTargets?.contractsWritten?.yearly),
-      closings: asNumber(plan?.calculatedTargets?.closings?.yearly),
+      closings: n(pt.closings?.yearly),
+      contractsWritten: n(pt.contractsWritten?.yearly),
+      appointmentsHeld: n(pt.appointmentsHeld?.yearly),
+      appointmentsSet: n(pt.appointmentsSet?.yearly),
+      engagements: n(pt.engagements?.yearly),
+      calls: n(pt.calls?.yearly),
+      // Weekly plan targets
+      closingsPerWeek: n(pt.closings?.weekly),
+      contractsPerWeek: n(pt.contractsWritten?.weekly),
+      apptsHeldPerWeek: n(pt.appointmentsHeld?.weekly),
+      apptsSetPerWeek: n(pt.appointmentsSet?.weekly),
+      engagementsPerWeek: n(pt.engagements?.weekly),
+      callsPerWeek: n(pt.calls?.weekly),
     };
 
-    // Effective start date
+    // Effective plan start date
     const rawStart = plan?.resetStartDate ?? plan?.planStartDate ?? `${year}-01-01`;
     const [sy, sm, sd] = rawStart.split('-').map(Number);
     const planStart = new Date(Date.UTC(sy, sm - 1, sd));
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const yearEnd = new Date(Date.UTC(year, 11, 31));
     const effectiveStart = planStart < yearStart ? yearStart : planStart;
 
-    // ── 2. Load YTD Daily Logs ───────────────────────────────────────────────
+    // ── 2. Time calculations ─────────────────────────────────────────────────
+    const elapsedWeeks = asOf <= effectiveStart ? 0 : countWorkWeeks(effectiveStart, asOf);
+    const remainingWeeks = asOf >= yearEnd ? 0 : countWorkWeeks(asOf, yearEnd);
+    const totalWeeks = elapsedWeeks + remainingWeeks;
+    const yearPct = totalWeeks > 0 ? elapsedWeeks / workingWeeksInYear : 0;
+
+    // ── 3. Load YTD Daily Logs ───────────────────────────────────────────────
     const logsSnap = await adminDb
       .collection('dailyLogs')
       .where('userId', '==', uid)
@@ -113,16 +140,15 @@ export async function GET(req: NextRequest) {
       const d = doc.data();
       const logDate = d.date ? new Date(d.date) : null;
       if (!logDate) continue;
-      const logYear = logDate.getUTCFullYear();
-      if (logYear !== year) continue;
-      callsActual += asNumber(d.callsCount);
-      engagementsActual += asNumber(d.engagementsCount);
-      appointmentsSetActual += asNumber(d.appointmentsSetCount);
-      appointmentsHeldActual += asNumber(d.appointmentsHeldCount);
-      contractsWrittenActual += asNumber(d.contractsWrittenCount);
+      if (logDate.getUTCFullYear() !== year) continue;
+      callsActual += n(d.callsCount);
+      engagementsActual += n(d.engagementsCount);
+      appointmentsSetActual += n(d.appointmentsSetCount);
+      appointmentsHeldActual += n(d.appointmentsHeldCount);
+      contractsWrittenActual += n(d.contractsWrittenCount);
     }
 
-    // ── 3. Load YTD Transactions ─────────────────────────────────────────────
+    // ── 4. Load YTD Transactions (agent net income only) ─────────────────────
     const txSnap = await adminDb
       .collection('transactions')
       .where('agentId', '==', uid)
@@ -136,87 +162,123 @@ export async function GET(req: NextRequest) {
 
     for (const doc of txSnap.docs) {
       const tx = doc.data();
-      const status = tx.status ?? '';
-      const net = asNumber(tx.splitSnapshot?.agentNetCommission ?? tx.commission);
+      const status = (tx.status ?? '').toLowerCase();
+      // Agent net = splitSnapshot.agentNetCommission (never GCI)
+      const agentNet = n(tx.splitSnapshot?.agentNetCommission ?? tx.splitSnapshot?.agentDollar ?? tx.commission);
       if (['closed', 'sold'].includes(status)) {
-        netEarned += net;
+        netEarned += agentNet;
         closedUnits += 1;
       } else if (['pending', 'under_contract', 'active'].includes(status)) {
-        pendingNetIncome += net;
+        pendingNetIncome += agentNet;
         pendingUnits += 1;
       }
     }
 
-    // ── 4. Time calculations ─────────────────────────────────────────────────
-    const elapsedWorkdays = asOf < effectiveStart ? 0 : countWeekdays(effectiveStart, asOf);
-    const remainingWorkdays = asOf > yearEnd ? 0 : countWeekdays(asOf, yearEnd);
-    const weeksRemaining = remainingWorkdays / 5;
-    const monthsRemaining = Math.max(0, 12 - (asOf.getUTCMonth() + 1));
+    // Actual avg net per closing (use plan avgCommission if no closings yet)
+    const actualAvgNetPerClosing = closedUnits > 0 ? netEarned / closedUnits : avgNetCommission;
 
-    // ── 5. Actual conversion rates (YTD) ─────────────────────────────────────
-    const actualCallToEngagement = safeDivide(engagementsActual, callsActual);
-    const actualEngToApptSet = safeDivide(appointmentsSetActual, engagementsActual);
-    const actualApptSetToHeld = safeDivide(appointmentsHeldActual, appointmentsSetActual);
-    const actualApptHeldToContract = safeDivide(contractsWrittenActual, appointmentsHeldActual);
-    const actualContractToClosing = safeDivide(closedUnits, contractsWrittenActual);
-
-    // Use actual conversion rates if available, fall back to plan rates
-    const useCallToEng = actualCallToEngagement ?? planCallToEngagement;
-    const useEngToAppt = actualEngToApptSet ?? planEngToApptSet;
-    const useApptToHeld = actualApptSetToHeld ?? planApptSetToHeld;
-    const useHeldToContract = actualApptHeldToContract ?? planApptHeldToContract;
-    const useContractToClose = actualContractToClosing ?? planContractToClosing;
-
-    // ── 6. Full-year projection using ACTUAL pace ─────────────────────────────
-    // Project calls for the full year based on YTD daily rate
-    const dailyCallRate = elapsedWorkdays > 0 ? callsActual / elapsedWorkdays : 0;
-    const projectedFullYearCalls = dailyCallRate * totalWorkdaysInYear;
-
-    // Chain through actual conversion rates
-    const projectedFullYearEngagements = projectedFullYearCalls * useCallToEng;
-    const projectedFullYearApptsSet = projectedFullYearEngagements * useEngToAppt;
-    const projectedFullYearApptsHeld = projectedFullYearApptsSet * useApptToHeld;
-    const projectedFullYearContracts = projectedFullYearApptsHeld * useHeldToContract;
-    const projectedFullYearClosings = projectedFullYearContracts * useContractToClose;
-
-    // Avg net per closing: use actual if we have closings, otherwise use plan avgCommission
-    const avgNetPerClosing = closedUnits > 0 ? netEarned / closedUnits : avgCommission;
-
-    // Full-year projected income = YTD actual + projected remaining closings × avg net
-    const remainingProjectedClosings = Math.max(projectedFullYearClosings - closedUnits, 0);
-    const projectedFullYearIncome = netEarned + (remainingProjectedClosings * avgNetPerClosing);
-
-    // ── 7. Catch-up calculator ────────────────────────────────────────────────
-    const incomeLeftToGo = Math.max(annualIncomeGoal - netEarned, 0);
-    const closingsNeededForGoal = avgNetPerClosing > 0 ? Math.ceil(incomeLeftToGo / avgNetPerClosing) : 0;
-
-    const contractsNeeded = useContractToClose > 0 ? Math.ceil(closingsNeededForGoal / useContractToClose) : 0;
-    const apptsHeldNeeded = useHeldToContract > 0 ? Math.ceil(contractsNeeded / useHeldToContract) : 0;
-    const apptsSetNeeded = useApptToHeld > 0 ? Math.ceil(apptsHeldNeeded / useApptToHeld) : 0;
-    const engagementsNeeded = useEngToAppt > 0 ? Math.ceil(apptsSetNeeded / useEngToAppt) : 0;
-    const callsNeeded = useCallToEng > 0 ? Math.ceil(engagementsNeeded / useCallToEng) : 0;
-
-    const makeRate = (total: number, done: number) => {
-      const remaining = Math.max(total - done, 0);
-      return {
-        remaining,
-        perDay: remainingWorkdays > 0 ? remaining / remainingWorkdays : 0,
-        perWeek: weeksRemaining > 0 ? remaining / weeksRemaining : 0,
-        perMonth: monthsRemaining > 0 ? remaining / monthsRemaining : 0,
-      };
+    // ── 5. On-track numbers (where agent SHOULD be today) ────────────────────
+    const onTrack = {
+      closings: planTargets.closings * yearPct,
+      contractsWritten: planTargets.contractsWritten * yearPct,
+      appointmentsHeld: planTargets.appointmentsHeld * yearPct,
+      appointmentsSet: planTargets.appointmentsSet * yearPct,
+      engagements: planTargets.engagements * yearPct,
+      calls: planTargets.calls * yearPct,
+      netEarned: annualIncomeGoal * yearPct,
     };
+
+    // ── 6. Actual YTD conversion rates ───────────────────────────────────────
+    const actualApptHeldToClose = closedUnits > 0 && appointmentsHeldActual > 0
+      ? closedUnits / appointmentsHeldActual
+      : null;
+    const actualContractToClose = closedUnits > 0 && contractsWrittenActual > 0
+      ? closedUnits / contractsWrittenActual
+      : null;
+    const actualApptSetToHeld = appointmentsHeldActual > 0 && appointmentsSetActual > 0
+      ? appointmentsHeldActual / appointmentsSetActual
+      : null;
+    const actualEngToApptSet = appointmentsSetActual > 0 && engagementsActual > 0
+      ? appointmentsSetActual / engagementsActual
+      : null;
+    const actualCallToEng = engagementsActual > 0 && callsActual > 0
+      ? engagementsActual / callsActual
+      : null;
+
+    // Use actual if available, fall back to plan
+    const useApptHeldToClose = actualApptHeldToClose ?? (planApptHeldToContract * planContractToClose);
+    const useContractToClose = actualContractToClose ?? planContractToClose;
+    const useApptSetToHeld = actualApptSetToHeld ?? planApptSetToHeld;
+    const useEngToApptSet = actualEngToApptSet ?? planEngToApptSet;
+    const useCallToEng = actualCallToEng ?? planCallToEng;
+
+    // ── 7. Full-year projection at CURRENT PACE ───────────────────────────────
+    // Primary driver: appointments held per week (actual pace)
+    const actualApptsHeldPerWeek = elapsedWeeks > 0 ? appointmentsHeldActual / elapsedWeeks : 0;
+    const projectedFullYearApptsHeld = actualApptsHeldPerWeek * workingWeeksInYear;
+    const projectedFullYearClosings = projectedFullYearApptsHeld * useApptHeldToClose;
+    const remainingProjectedClosings = Math.max(projectedFullYearClosings - closedUnits, 0);
+    const projectedFullYearIncome = netEarned + (remainingProjectedClosings * actualAvgNetPerClosing);
+
+    // Chain back up through the funnel for full projection
+    const projectedFullYearContracts = safeDiv(projectedFullYearClosings, useContractToClose);
+    const projectedFullYearApptsSet = safeDiv(projectedFullYearApptsHeld, useApptSetToHeld);
+    const projectedFullYearEngagements = safeDiv(projectedFullYearApptsSet, useEngToApptSet);
+    const projectedFullYearCalls = safeDiv(projectedFullYearEngagements, useCallToEng);
+
+    // ── 8. Pace status ───────────────────────────────────────────────────────
+    // Based on appointments held vs on-track
+    const paceRatio = onTrack.appointmentsHeld > 0
+      ? appointmentsHeldActual / onTrack.appointmentsHeld
+      : 1;
+    const paceStatus: 'on_track' | 'slightly_behind' | 'behind' =
+      paceRatio >= 1.0 ? 'on_track' :
+      paceRatio >= 0.85 ? 'slightly_behind' : 'behind';
+
+    // ── 9. CATCH-UP CALCULATOR (recalibrated weekly targets) ─────────────────
+    // "What do I need to do each week FROM NOW to still hit my goal?"
+    // This is always: (total needed - already done) / weeks remaining
+    // NOT the original weekly goal — it increases when you fall behind
+
+    const closingsStillNeeded = Math.max(planTargets.closings - closedUnits, 0);
+    const contractsStillNeeded = Math.max(planTargets.contractsWritten - contractsWrittenActual, 0);
+    const apptsHeldStillNeeded = Math.max(planTargets.appointmentsHeld - appointmentsHeldActual, 0);
+    const apptsSetStillNeeded = Math.max(planTargets.appointmentsSet - appointmentsSetActual, 0);
+    const engagementsStillNeeded = Math.max(planTargets.engagements - engagementsActual, 0);
+    const callsStillNeeded = Math.max(planTargets.calls - callsActual, 0);
+
+    const catchUpPerWeek = {
+      closings: safeDiv(closingsStillNeeded, remainingWeeks),
+      contractsWritten: safeDiv(contractsStillNeeded, remainingWeeks),
+      appointmentsHeld: safeDiv(apptsHeldStillNeeded, remainingWeeks),
+      appointmentsSet: safeDiv(apptsSetStillNeeded, remainingWeeks),
+      engagements: safeDiv(engagementsStillNeeded, remainingWeeks),
+      calls: safeDiv(callsStillNeeded, remainingWeeks),
+    };
+
+    const catchUpPerDay = {
+      closings: safeDiv(closingsStillNeeded, remainingWeeks * 5),
+      contractsWritten: safeDiv(contractsStillNeeded, remainingWeeks * 5),
+      appointmentsHeld: safeDiv(apptsHeldStillNeeded, remainingWeeks * 5),
+      appointmentsSet: safeDiv(apptsSetStillNeeded, remainingWeeks * 5),
+      engagements: safeDiv(engagementsStillNeeded, remainingWeeks * 5),
+      calls: safeDiv(callsStillNeeded, remainingWeeks * 5),
+    };
+
+    const incomeStillNeeded = Math.max(annualIncomeGoal - netEarned, 0);
 
     return NextResponse.json({
       year,
-      annualIncomeGoal,
-      avgNetPerClosing,
-      totalWorkdaysInYear,
-      elapsedWorkdays,
-      remainingWorkdays,
-      weeksRemaining,
-      monthsRemaining,
-      yearPct: totalWorkdaysInYear > 0 ? elapsedWorkdays / totalWorkdaysInYear : 0,
       hasPlan: !planSnap.empty,
+      annualIncomeGoal,
+      avgNetCommission: actualAvgNetPerClosing,
+      workingWeeksInYear,
+      workingDaysInYear,
+      elapsedWeeks,
+      remainingWeeks,
+      yearPct,
+
+      planTargets,
 
       ytdActuals: {
         calls: callsActual,
@@ -228,24 +290,20 @@ export async function GET(req: NextRequest) {
         pendingUnits,
         netEarned,
         pendingNetIncome,
+        apptsHeldPerWeek: actualApptsHeldPerWeek,
       },
 
-      planTargets,
+      onTrack,
+
+      paceStatus,
+      paceRatio,
 
       actualConversions: {
-        callToEngagement: actualCallToEngagement,
-        engagementToAppointmentSet: actualEngToApptSet,
-        appointmentSetToHeld: actualApptSetToHeld,
-        appointmentHeldToContract: actualApptHeldToContract,
-        contractToClosing: actualContractToClosing,
-      },
-
-      planConversions: {
-        callToEngagement: planCallToEngagement,
-        engagementToAppointmentSet: planEngToApptSet,
-        appointmentSetToHeld: planApptSetToHeld,
-        appointmentHeldToContract: planApptHeldToContract,
-        contractToClosing: planContractToClosing,
+        apptHeldToClosing: actualApptHeldToClose,
+        contractToClosing: actualContractToClose,
+        apptSetToHeld: actualApptSetToHeld,
+        engagementToApptSet: actualEngToApptSet,
+        callToEngagement: actualCallToEng,
       },
 
       projection: {
@@ -259,15 +317,15 @@ export async function GET(req: NextRequest) {
       },
 
       catchUp: {
-        incomeLeftToGo,
-        closingsNeeded: Math.max(closingsNeededForGoal - closedUnits, 0),
-        metrics: {
-          closings: makeRate(closingsNeededForGoal, closedUnits),
-          contractsWritten: makeRate(contractsNeeded, contractsWrittenActual),
-          appointmentsHeld: makeRate(apptsHeldNeeded, appointmentsHeldActual),
-          appointmentsSet: makeRate(apptsSetNeeded, appointmentsSetActual),
-          engagements: makeRate(engagementsNeeded, engagementsActual),
-          calls: makeRate(callsNeeded, callsActual),
+        incomeStillNeeded,
+        closingsStillNeeded,
+        perWeek: catchUpPerWeek,
+        perDay: catchUpPerDay,
+        // Deficit: how many behind on each metric vs on-track
+        deficit: {
+          appointmentsHeld: Math.max(onTrack.appointmentsHeld - appointmentsHeldActual, 0),
+          closings: Math.max(onTrack.closings - closedUnits, 0),
+          netEarned: Math.max(onTrack.netEarned - netEarned, 0),
         },
       },
     });
