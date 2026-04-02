@@ -32,9 +32,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { scope, year, month, deleteAutoCreatedAgents } = body;
+    const { scope, year, month, deleteAutoCreatedAgents, batchId } = body;
 
-    // scope: 'all' | 'imported' | 'year' | 'source_and_year'
+    // scope: 'all' | 'imported' | 'year' | 'source_and_year' | 'batch_id'
     if (!scope) {
       return NextResponse.json({ error: 'Missing scope parameter' }, { status: 400 });
     }
@@ -42,7 +42,11 @@ export async function POST(req: NextRequest) {
     let query: FirebaseFirestore.Query = adminDb.collection('transactions');
     let monthFilter: number | null = month ? Number(month) : null;
 
-    if (scope === 'imported') {
+    if (scope === 'batch_id' && batchId) {
+      // Delete only the transactions from a specific import batch
+      query = query.where('importBatchId', '==', batchId);
+      monthFilter = null; // batch_id is already precise — ignore month filter
+    } else if (scope === 'imported') {
       query = query.where('source', '==', 'import');
     } else if (scope === 'year' && year) {
       query = query.where('year', '==', Number(year));
@@ -51,7 +55,7 @@ export async function POST(req: NextRequest) {
     } else if (scope === 'all') {
       // No filters — delete everything
     } else {
-      return NextResponse.json({ error: 'Invalid scope or missing year' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid scope or missing year/batchId' }, { status: 400 });
     }
 
     const snap = await query.get();

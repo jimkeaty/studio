@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/firebase';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
@@ -443,6 +443,10 @@ export default function BulkImportPage() {
   const [showDeletePanel, setShowDeletePanel] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteAutoCreatedAgents, setDeleteAutoCreatedAgents] = useState(true);
+  // Import batch picker state
+  const [importBatches, setImportBatches] = useState<{importBatchId:string;importedAt:string;count:number;years:number[];sampleAgents:string[];sampleAddresses:string[]}[]>([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -471,6 +475,24 @@ export default function BulkImportPage() {
       </Alert>
     );
   }
+
+  // ── Load import batches for the batch-picker in the Danger Zone ────────
+  const loadBatches = useCallback(async () => {
+    if (!user) return;
+    setBatchesLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/import-batches', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) setImportBatches(data.batches ?? []);
+    } catch { /* non-fatal */ } finally {
+      setBatchesLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => { if (showDeletePanel) loadBatches(); }, [showDeletePanel, loadBatches]);
 
   // ── Parse XLSX to same format as CSV ──────────────────────────────────
   function parseXLSX(data: ArrayBuffer): { headers: string[]; rows: ParsedRow[] } {
@@ -692,6 +714,12 @@ export default function BulkImportPage() {
 
   // ── Bulk delete transactions ────────────────────────────────────────────
   const deleteScopeLabel = (() => {
+    if (deleteScope === 'batch_id') {
+      const batch = importBatches.find(b => b.importBatchId === selectedBatchId);
+      if (!batch) return 'Selected import batch';
+      const dt = batch.importedAt ? new Date(batch.importedAt).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true }) : '';
+      return `Import batch from ${dt} (${batch.count} transactions)`;
+    }
     if (deleteScope === 'imported') return 'All imported transactions' + (deleteMonth ? ` for month ${deleteMonth}` : '');
     if (deleteScope === 'year') return `All transactions for ${deleteYear}` + (deleteMonth ? ` month ${deleteMonth}` : '');
     if (deleteScope === 'source_and_year') return `Imported transactions for ${deleteYear}` + (deleteMonth ? ` month ${deleteMonth}` : '');
@@ -707,10 +735,12 @@ export default function BulkImportPage() {
     try {
       const token = await user.getIdToken();
       const payload: Record<string, any> = { scope: deleteScope, deleteAutoCreatedAgents };
-      if (deleteScope === 'year' || deleteScope === 'source_and_year') {
+      if (deleteScope === 'batch_id') {
+        payload.batchId = selectedBatchId;
+      } else if (deleteScope === 'year' || deleteScope === 'source_and_year') {
         payload.year = Number(deleteYear);
       }
-      if (deleteMonth) {
+      if (deleteScope !== 'batch_id' && deleteMonth) {
         payload.month = Number(deleteMonth);
       }
       const res = await fetch('/api/admin/bulk-delete', {
@@ -1085,6 +1115,7 @@ export default function BulkImportPage() {
                   value={deleteScope}
                   onChange={(e) => setDeleteScope(e.target.value)}
                 >
+                  <option value="batch_id">Delete a specific import batch (by date)</option>
                   <option value="imported">All imported transactions (bulk imports only)</option>
                   <option value="source_and_year">Imported transactions for a specific year</option>
                   <option value="year">All transactions for a specific year</option>
@@ -1092,6 +1123,59 @@ export default function BulkImportPage() {
                 </select>
               </div>
 
+              {/* Batch picker — shown when scope is batch_id */}
+              {deleteScope === 'batch_id' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium">Select Import Batch</label>
+                    <button type="button" onClick={loadBatches} className="text-xs text-blue-600 hover:underline">
+                      {batchesLoading ? 'Loading…' : 'Refresh'}
+                    </button>
+                  </div>
+                  {batchesLoading ? (
+                    <div className="text-sm text-muted-foreground py-2">Loading import batches…</div>
+                  ) : importBatches.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-2 border rounded-md px-3">
+                      No import batches found. Batches are tracked for imports done after this update.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto border rounded-md p-2">
+                      {importBatches.map((batch) => {
+                        const dt = batch.importedAt
+                          ? new Date(batch.importedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                          : 'Unknown date';
+                        const isSelected = selectedBatchId === batch.importBatchId;
+                        return (
+                          <div
+                            key={batch.importBatchId}
+                            onClick={() => setSelectedBatchId(batch.importBatchId)}
+                            className={`cursor-pointer rounded-md border p-3 text-sm transition-colors ${
+                              isSelected ? 'border-red-400 bg-red-50' : 'border-border hover:bg-muted/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{dt}</span>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                                {batch.count} transaction{batch.count !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            {batch.years.length > 0 && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Year{batch.years.length > 1 ? 's' : ''}: {batch.years.join(', ')}
+                              </div>
+                            )}
+                            {batch.sampleAgents.length > 0 && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                Agents: {batch.sampleAgents.join(', ')}{batch.count > batch.sampleAgents.length ? ' …' : ''}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Year picker — shown when scope needs a year */}
               {(deleteScope === 'year' || deleteScope === 'source_and_year') && (
                 <div>

@@ -235,6 +235,8 @@ export async function POST(req: NextRequest) {
     for (const [k, v] of teamNameToId) { if (!v) teamNameToId.delete(k); }
 
     const now = new Date();
+    // Unique batch ID — stamps every transaction in this upload so they can be deleted as a group
+    const importBatchId = `import_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
     const imported: string[] = [];
     const failed: { row: number; error: string; data: any }[] = [];
     const autoCreatedAgents: { name: string; agentId: string }[] = [];
@@ -514,6 +516,7 @@ export async function POST(req: NextRequest) {
           year,
           source: 'import',
           importedAt: now,
+          importBatchId,
           createdAt: now,
           updatedAt: now,
         };
@@ -540,6 +543,7 @@ export async function POST(req: NextRequest) {
       failed: failed.length,
       errors: failed,
       ids: imported,
+      importBatchId,
       autoCreatedAgents: autoCreatedAgents.length > 0 ? autoCreatedAgents : undefined,
       fuzzyMatchedAgents: fuzzyMatchedAgents.length > 0 ? fuzzyMatchedAgents : undefined,
     });
