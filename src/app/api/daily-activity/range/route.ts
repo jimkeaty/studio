@@ -122,6 +122,78 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ── Overlay appointment counts from the appointments collection ──────────
+    // Pipeline appointments (bulk-uploaded or manually added) are stored in the
+    // appointments collection, not in daily_activity. We query them here and
+    // overlay the counts so the KPI tracker reflects the real pipeline data.
+    try {
+      const apptSnaps = await Promise.all(
+        agentIdList.map(agentIdVal =>
+          adminDb
+            .collection('appointments')
+            .where('agentId', '==', agentIdVal)
+            .where('date', '>=', start)
+            .where('date', '<=', end)
+            .get()
+            .catch(() => null)
+        )
+      );
+
+      // Count set and held appointments per date
+      const apptSetByDate: Record<string, number> = {};
+      const apptHeldByDate: Record<string, number> = {};
+      const seenApptIds = new Set<string>();
+
+      for (const snap of apptSnaps) {
+        if (!snap) continue;
+        for (const doc of snap.docs) {
+          if (seenApptIds.has(doc.id)) continue;
+          seenApptIds.add(doc.id);
+          const d = doc.data();
+          const apptDate = d.date as string;
+          if (!apptDate) continue;
+          if (d.pipelineStatus === 'trash') continue; // ignore trashed
+          apptSetByDate[apptDate] = (apptSetByDate[apptDate] ?? 0) + 1;
+          if (d.pipelineStatus === 'held') {
+            apptHeldByDate[apptDate] = (apptHeldByDate[apptDate] ?? 0) + 1;
+          }
+        }
+      }
+
+      // Merge into activitiesByDate — use the higher of the two sources
+      const allDates = new Set([
+        ...Object.keys(activitiesByDate),
+        ...Object.keys(apptSetByDate),
+      ]);
+      for (const apptDate of allDates) {
+        const pipelineSet = apptSetByDate[apptDate] ?? 0;
+        const pipelineHeld = apptHeldByDate[apptDate] ?? 0;
+        if (activitiesByDate[apptDate]) {
+          activitiesByDate[apptDate].appointmentsSetCount = Math.max(
+            Number(activitiesByDate[apptDate].appointmentsSetCount ?? 0),
+            pipelineSet
+          );
+          activitiesByDate[apptDate].appointmentsHeldCount = Math.max(
+            Number(activitiesByDate[apptDate].appointmentsHeldCount ?? 0),
+            pipelineHeld
+          );
+        } else if (pipelineSet > 0) {
+          // Date exists in appointments but not in daily_activity — create a synthetic entry
+          activitiesByDate[apptDate] = {
+            id: `appt_${apptDate}`,
+            date: apptDate,
+            callsCount: 0,
+            engagementsCount: 0,
+            appointmentsSetCount: pipelineSet,
+            appointmentsHeldCount: pipelineHeld,
+            contractsWrittenCount: 0,
+          } as any;
+        }
+      }
+    } catch {
+      // Non-fatal — fall back to daily_activity values only
+    }
+
     return NextResponse.json({ ok: true, activities: activitiesByDate });
   } catch (err: any) {
     return jsonError(

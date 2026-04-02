@@ -104,6 +104,51 @@ export async function GET(req: Request) {
     dailyActivity.appointmentsHeldCount = toNumberOrZero(dailyActivity.appointmentsHeldCount);
     dailyActivity.contractsWrittenCount = toNumberOrZero(dailyActivity.contractsWrittenCount);
 
+    // ── Overlay appointment counts from the appointments collection ──────────
+    // This ensures pipeline appointments (bulk-uploaded or manually added) are
+    // reflected in the KPI tracker numbers for the matching date.
+    try {
+      // Resolve all possible agentId values (UID, slug, profile docId)
+      const agentIdSet = new Set<string>([uid]);
+      const profileSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+      if (profileSnap.exists) {
+        const d = profileSnap.data();
+        if (d?.agentId) agentIdSet.add(String(d.agentId));
+      } else {
+        const bySlug = await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get();
+        if (!bySlug.empty) agentIdSet.add(bySlug.docs[0].id);
+      }
+      const agentIdList = Array.from(agentIdSet);
+
+      // Query appointments for this date across all resolved agentIds
+      const apptSnaps = await Promise.all(
+        agentIdList.map(aid =>
+          adminDb.collection('appointments').where('agentId', '==', aid).where('date', '==', date).get().catch(() => null)
+        )
+      );
+
+      let apptSetFromPipeline = 0;
+      let apptHeldFromPipeline = 0;
+      const seenIds = new Set<string>();
+      for (const snap of apptSnaps) {
+        if (!snap) continue;
+        for (const doc of snap.docs) {
+          if (seenIds.has(doc.id)) continue;
+          seenIds.add(doc.id);
+          const d = doc.data();
+          if (d.pipelineStatus === 'trash') continue; // ignore trashed
+          apptSetFromPipeline++;
+          if (d.pipelineStatus === 'held') apptHeldFromPipeline++;
+        }
+      }
+
+      // Use the higher of the two sources so manual edits aren't overwritten
+      dailyActivity.appointmentsSetCount = Math.max(dailyActivity.appointmentsSetCount, apptSetFromPipeline);
+      dailyActivity.appointmentsHeldCount = Math.max(dailyActivity.appointmentsHeldCount, apptHeldFromPipeline);
+    } catch {
+      // Non-fatal — fall back to daily_activity values only
+    }
+
     return NextResponse.json({ ok: true, dailyActivity });
   } catch (err: any) {
     const status = err?.status ?? 500;
