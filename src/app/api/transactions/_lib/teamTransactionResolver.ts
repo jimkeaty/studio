@@ -189,17 +189,29 @@ export async function resolveTransactionCalculation(
   }
 
   const team = await getTeam(profile.primaryTeamId);
-  const teamPlan = await getTeamPlan(team.teamPlanId);
-
   const isLeaderless = (team.structureType || 'with_leader') === 'no_leader';
-  const isFixedModel = (teamPlan.commissionModelType || 'tiered') === 'fixed';
+
+  // Fetch team plan lazily — leaderless teams may not have a plan configured.
+  // For leaderless teams, missing plan is non-fatal; we fall back to agent tiers.
+  let teamPlan: TeamPlan | null = null;
+  if (team.teamPlanId) {
+    const planSnap = await adminDb.collection('teamPlans').doc(team.teamPlanId).get();
+    if (planSnap.exists) {
+      teamPlan = planSnap.data() as TeamPlan;
+    }
+  }
+  if (!teamPlan && !isLeaderless) {
+    throw new Error(`Team plan not found for ${team.teamPlanId} (team: ${team.teamId})`);
+  }
+
+  const isFixedModel = teamPlan ? (teamPlan.commissionModelType || 'tiered') === 'fixed' : false;
 
   // ─── Fixed Commission Model path ────────────────────────────────────────────
   // Flat split on every transaction — no tier lookup, no leader bands.
   if (isFixedModel) {
-    const fixedSplit = teamPlan.fixedSplit;
+    const fixedSplit = teamPlan!.fixedSplit;
     if (!fixedSplit) {
-      throw new Error(`Team plan ${teamPlan.teamPlanId} is set to fixed model but has no fixedSplit defined`);
+      throw new Error(`Team plan ${teamPlan!.teamPlanId} is set to fixed model but has no fixedSplit defined`);
     }
     const agentSplitPercent = Number(fixedSplit.agentPercent || 0);
     const companySplitPercent = Number(fixedSplit.companyPercent || 0);
@@ -210,7 +222,7 @@ export async function resolveTransactionCalculation(
       agentType: profile.agentType,
       splitSnapshot: {
         primaryTeamId: team.teamId,
-        teamPlanId: teamPlan.teamPlanId,
+        teamPlanId: teamPlan?.teamPlanId ?? null,
         memberPlanId: null,
         grossCommission: commission,
         agentSplitPercent,
@@ -233,8 +245,7 @@ export async function resolveTransactionCalculation(
       },
     };
   }
-  // ─────────────────────────────────────────────────────────────────────────────
-
+  // ───────────────────────────────────────────────────────────────────────────────
   // ─── Leaderless team path (CGL, SGL, Referral Group, etc.) ───────────────────
   // Commission splits are agent vs. company only — no leader band lookup needed.
   // Resolution order:
@@ -259,6 +270,7 @@ export async function resolveTransactionCalculation(
       companySplitPercent = Math.max(0, 100 - agentSplitPercent);
     } else if (
       // Priority 2: team plan's memberDefaultBands
+      teamPlan &&
       Array.isArray(teamPlan.memberDefaultBands) &&
       teamPlan.memberDefaultBands.length > 0
     ) {
@@ -285,7 +297,7 @@ export async function resolveTransactionCalculation(
       agentType: profile.agentType,
       splitSnapshot: {
         primaryTeamId: team.teamId,
-        teamPlanId: teamPlan.teamPlanId,
+        teamPlanId: teamPlan!.teamPlanId,
         memberPlanId: null,
         grossCommission: commission,
         agentSplitPercent,
@@ -308,9 +320,9 @@ export async function resolveTransactionCalculation(
       },
     };
   }
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────────
 
-  const leaderBand = getActiveLeaderBand(teamPlan.leaderStructureBands || [], commission);
+  const leaderBand = getActiveLeaderBand(teamPlan!.leaderStructureBands || [], commission);
 
   if (!leaderBand) {
     throw new Error(`No active leader structure band found for ${team.teamId}`);
@@ -329,7 +341,7 @@ export async function resolveTransactionCalculation(
       agentType: profile.agentType,
       splitSnapshot: {
         primaryTeamId: team.teamId,
-        teamPlanId: teamPlan.teamPlanId,
+        teamPlanId: teamPlan!.teamPlanId,
         memberPlanId: profile.defaultPlanId || null,
         grossCommission: commission,
         agentSplitPercent: null,
@@ -383,10 +395,10 @@ export async function resolveTransactionCalculation(
       throw new Error(`No active member payout band found for ${memberPlan.memberPlanId}`);
     }
   } else {
-    memberBand = getActiveMemberBand(teamPlan.memberDefaultBands || [], commission);
+    memberBand = getActiveMemberBand(teamPlan!.memberDefaultBands || [], commission);
 
     if (!memberBand) {
-      throw new Error(`No active member default band found for ${teamPlan.teamPlanId}`);
+      throw new Error(`No active member default band found for ${teamPlan!.teamPlanId}`);
     }
 
     resolvedMemberPlanId = null;
@@ -401,7 +413,7 @@ export async function resolveTransactionCalculation(
     agentType: profile.agentType,
     splitSnapshot: {
       primaryTeamId: team.teamId,
-      teamPlanId: teamPlan.teamPlanId,
+      teamPlanId: teamPlan!.teamPlanId,
       memberPlanId: resolvedMemberPlanId,
       grossCommission: commission,
       agentSplitPercent: null,
