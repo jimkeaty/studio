@@ -107,7 +107,7 @@ const schema = z.object({
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   agentDollar: z.coerce.number().min(0).optional().or(z.literal('')),
   listingDate: z.string().optional().or(z.literal('')),
-  contractDate: z.string().min(1, 'Under contract date is required'),
+  contractDate: z.string().optional().or(z.literal('')),
   optionExpiration: z.string().optional().or(z.literal('')),
   inspectionDeadline: z.string().optional().or(z.literal('')),
   surveyDeadline: z.string().optional().or(z.literal('')),
