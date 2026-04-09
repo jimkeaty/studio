@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, AlertTriangle, ExternalLink,
   ClipboardList, UserCheck, Clock, Activity, Archive, Trash2, DollarSign,
-  Phone, Mail, Building2, User, Users,
+  Phone, Mail, Building2, User, Users, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -818,6 +818,55 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             {intake.approvedTransactionId && <span className="block font-mono text-xs mt-1">TX: {intake.approvedTransactionId}</span>}
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* ── Queue Management — always visible for admins when intake is read-only ── */}
+      {isReadOnly && (
+        <Card className="border-dashed">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Queue Management</CardTitle>
+            <CardDescription>Admin actions to manage this intake regardless of its current status.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={acting}
+                onClick={async () => {
+                  try {
+                    setActing(true);
+                    await callAction('in_review');
+                    toast({ title: 'Intake Re-opened', description: 'Status set back to In Review. You can now edit and re-approve.' });
+                    setIntake((prev: any) => ({ ...prev, status: 'in_review' }));
+                  } catch (err: any) {
+                    toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                  } finally {
+                    setActing(false);
+                  }
+                }}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" /> Re-open
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)} disabled={acting}>
+                <Archive className="mr-2 h-4 w-4" /> Archive
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-red-600 border-red-300 hover:bg-red-50"
+                onClick={() => setRemoveOpen(true)}
+                disabled={acting}
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Remove from Queue
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              <strong>Re-open</strong> moves this back to &quot;In Review&quot; so it can be edited and re-approved.
+              <strong> Remove</strong> permanently deletes it from the queue.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Workflow Checklist */}
