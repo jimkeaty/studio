@@ -94,6 +94,7 @@ async function getTeam(teamId: string): Promise<Team> {
   return snap.data() as Team;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function getTeamPlan(teamPlanId: string): Promise<TeamPlan> {
   const snap = await adminDb.collection('teamPlans').doc(teamPlanId).get();
   if (!snap.exists) {
@@ -135,6 +136,7 @@ export async function resolveTransactionCalculation(
   const commission = asMoney(input.commission);
   const profile = await getAgentProfile(input.agentId);
 
+  // ─── Independent agent path ──────────────────────────────────────────────────
   if (profile.agentType === 'independent') {
     const tier = getActiveIndividualTier(profile.tiers || [], commission);
     if (!tier) {
@@ -143,7 +145,6 @@ export async function resolveTransactionCalculation(
 
     const agentSplitPercent = Number(tier.agentSplitPercent || 0);
     const companySplitPercent = Number(tier.companySplitPercent || 0);
-
     const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
     const companyRetained = asMoney(commission * (companySplitPercent / 100));
 
@@ -192,7 +193,8 @@ export async function resolveTransactionCalculation(
   const isLeaderless = (team.structureType || 'with_leader') === 'no_leader';
 
   // Fetch team plan lazily — leaderless teams may not have a plan configured.
-  // For leaderless teams, missing plan is non-fatal; we fall back to agent tiers.
+  // For leaderless teams, a missing plan is non-fatal; we fall back to agent tiers.
+  // For teams with a leader, a missing plan is a fatal error.
   let teamPlan: TeamPlan | null = null;
   if (team.teamPlanId) {
     const planSnap = await adminDb.collection('teamPlans').doc(team.teamPlanId).get();
@@ -204,19 +206,24 @@ export async function resolveTransactionCalculation(
     throw new Error(`Team plan not found for ${team.teamPlanId} (team: ${team.teamId})`);
   }
 
-  const isFixedModel = teamPlan ? (teamPlan.commissionModelType || 'tiered') === 'fixed' : false;
+  const isFixedModel = teamPlan
+    ? (teamPlan.commissionModelType || 'tiered') === 'fixed'
+    : false;
 
-  // ─── Fixed Commission Model path ────────────────────────────────────────────
+  // ─── Fixed Commission Model path ─────────────────────────────────────────────
   // Flat split on every transaction — no tier lookup, no leader bands.
   if (isFixedModel) {
     const fixedSplit = teamPlan!.fixedSplit;
     if (!fixedSplit) {
-      throw new Error(`Team plan ${teamPlan!.teamPlanId} is set to fixed model but has no fixedSplit defined`);
+      throw new Error(
+        `Team plan ${teamPlan!.teamPlanId} is set to fixed model but has no fixedSplit defined`
+      );
     }
     const agentSplitPercent = Number(fixedSplit.agentPercent || 0);
     const companySplitPercent = Number(fixedSplit.companyPercent || 0);
     const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
     const companyRetained = asMoney(commission * (companySplitPercent / 100));
+
     return {
       calculationModel: 'individual',
       agentType: profile.agentType,
@@ -245,7 +252,7 @@ export async function resolveTransactionCalculation(
       },
     };
   }
-  // ───────────────────────────────────────────────────────────────────────────────
+
   // ─── Leaderless team path (CGL, SGL, Referral Group, etc.) ───────────────────
   // Commission splits are agent vs. company only — no leader band lookup needed.
   // Resolution order:
@@ -262,9 +269,14 @@ export async function resolveTransactionCalculation(
       Array.isArray(profile.teamMemberOverrideBands) &&
       profile.teamMemberOverrideBands.length > 0
     ) {
-      const memberBand = getActiveMemberBand(profile.teamMemberOverrideBands as MemberPlanBand[], commission);
+      const memberBand = getActiveMemberBand(
+        profile.teamMemberOverrideBands as MemberPlanBand[],
+        commission
+      );
       if (!memberBand) {
-        throw new Error(`No active custom member tier found for leaderless team member ${profile.agentId}`);
+        throw new Error(
+          `No active custom member tier found for leaderless team member ${profile.agentId}`
+        );
       }
       agentSplitPercent = Number(memberBand.memberPercent || 0);
       companySplitPercent = Math.max(0, 100 - agentSplitPercent);
@@ -276,7 +288,9 @@ export async function resolveTransactionCalculation(
     ) {
       const memberBand = getActiveMemberBand(teamPlan.memberDefaultBands, commission);
       if (!memberBand) {
-        throw new Error(`No active member default band found for leaderless team ${team.teamId}`);
+        throw new Error(
+          `No active member default band found for leaderless team ${team.teamId}`
+        );
       }
       agentSplitPercent = Number(memberBand.memberPercent || 0);
       companySplitPercent = Math.max(0, 100 - agentSplitPercent);
@@ -284,7 +298,9 @@ export async function resolveTransactionCalculation(
       // Priority 3: legacy fallback — individual tiers on the agent profile
       const tier = getActiveIndividualTier(profile.tiers || [], commission);
       if (!tier) {
-        throw new Error(`No active tier found for leaderless team member ${profile.agentId}`);
+        throw new Error(
+          `No active tier found for leaderless team member ${profile.agentId}`
+        );
       }
       agentSplitPercent = Number(tier.agentSplitPercent || 0);
       companySplitPercent = Number(tier.companySplitPercent || 0);
@@ -292,12 +308,13 @@ export async function resolveTransactionCalculation(
 
     const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
     const companyRetained = asMoney(commission * (companySplitPercent / 100));
+
     return {
       calculationModel: 'individual',
       agentType: profile.agentType,
       splitSnapshot: {
         primaryTeamId: team.teamId,
-        teamPlanId: teamPlan!.teamPlanId,
+        teamPlanId: teamPlan?.teamPlanId ?? null,
         memberPlanId: null,
         grossCommission: commission,
         agentSplitPercent,
@@ -316,12 +333,13 @@ export async function resolveTransactionCalculation(
         progressionMemberAgentId: profile.agentId,
         progressionLeaderAgentId: null,
         progressionTeamId: team.teamId,
-        progressionCompanyDollarCredit: commission,
+        progressionCompanyDollarCredit: companyRetained,
       },
     };
   }
-  // ───────────────────────────────────────────────────────────────────────────────
 
+  // ─── Team with leader path ────────────────────────────────────────────────────
+  // teamPlan is guaranteed non-null here (checked above for !isLeaderless).
   const leaderBand = getActiveLeaderBand(teamPlan!.leaderStructureBands || [], commission);
 
   if (!leaderBand) {
