@@ -171,6 +171,9 @@ function normalizeInput(body: TeamPlanInput) {
     throw new Error('Invalid structure model');
   }
 
+  const structureType: import('@/lib/teams/types').TeamStructureType =
+    body.structureType === 'no_leader' ? 'no_leader' : 'with_leader';
+
   // Bands are still required (used as fallback even for fixed plans; may be empty arrays for fixed)
   if (!Array.isArray(body.leaderStructureBands)) {
     throw new Error('Leader structure bands must be an array');
@@ -197,6 +200,7 @@ function normalizeInput(body: TeamPlanInput) {
     teamId: body.teamId.trim(),
     planName: body.planName.trim(),
     status,
+    structureType,
     commissionModelType,
     fixedSplit,
     thresholdMetric,
@@ -283,6 +287,7 @@ export async function POST(req: NextRequest) {
       teamId: normalized.teamId,
       planName: normalized.planName,
       status: normalized.status,
+      structureType: normalized.structureType,
       commissionModelType: normalized.commissionModelType,
       fixedSplit: normalized.fixedSplit,
       thresholdMetric: normalized.thresholdMetric,

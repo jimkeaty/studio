@@ -190,7 +190,6 @@ export async function resolveTransactionCalculation(
   }
 
   const team = await getTeam(profile.primaryTeamId);
-  const isLeaderless = (team.structureType || 'with_leader') === 'no_leader';
 
   // Fetch team plan lazily — leaderless teams may not have a plan configured.
   // For leaderless teams, a missing plan is non-fatal; we fall back to agent tiers.
@@ -202,6 +201,13 @@ export async function resolveTransactionCalculation(
       teamPlan = planSnap.data() as TeamPlan;
     }
   }
+
+  // Check structureType on team plan first (explicit override set in team plan editor),
+  // then fall back to the team document for backward compatibility.
+  const isLeaderless =
+    teamPlan?.structureType === 'no_leader' ||
+    (team.structureType || 'with_leader') === 'no_leader';
+
   if (!teamPlan && !isLeaderless) {
     throw new Error(`Team plan not found for ${team.teamPlanId} (team: ${team.teamId})`);
   }

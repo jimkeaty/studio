@@ -16,7 +16,6 @@ export default function TeamPlanEditor({
 }: TeamPlanEditorProps) {
   const [initialValues, setInitialValues] =
     useState<Partial<TeamPlanFormValues> | null>(null);
-  const [isLeaderless, setIsLeaderless] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -55,23 +54,26 @@ export default function TeamPlanEditor({
 
         const teamPlan = result.teamPlan || {};
 
-        // Fetch the parent team to determine structureType
-        let parentTeamIsLeaderless = false;
-        if (teamPlan.teamId) {
+        // structureType is now stored on the team plan document itself.
+        // Fall back to fetching from the parent team for backward compatibility
+        // with older plans that don't have structureType set.
+        let resolvedStructureType: 'with_leader' | 'no_leader' =
+          teamPlan.structureType === 'no_leader' ? 'no_leader' : 'with_leader';
+
+        if (!teamPlan.structureType && teamPlan.teamId) {
+          // Legacy plan — derive from parent team
           try {
             const teamRes = await fetch(`/api/admin/teams/${teamPlan.teamId}`, {
               headers: { Authorization: `Bearer ${token}` },
             });
             const teamData = await teamRes.json();
             if (teamData?.ok && teamData?.team?.structureType === 'no_leader') {
-              parentTeamIsLeaderless = true;
+              resolvedStructureType = 'no_leader';
             }
           } catch {
-            // non-fatal — fall back to showing leader bands
+            // non-fatal — fall back to with_leader
           }
         }
-
-        if (isMounted) setIsLeaderless(parentTeamIsLeaderless);
 
         const commissionModelType: 'tiered' | 'fixed' =
           teamPlan.commissionModelType === 'fixed' ? 'fixed' : 'tiered';
@@ -81,6 +83,7 @@ export default function TeamPlanEditor({
           teamId: teamPlan.teamId || '',
           planName: teamPlan.planName || '',
           status: teamPlan.status || 'active',
+          structureType: resolvedStructureType,
           commissionModelType,
           fixedAgentPercent: fixedSplit?.agentPercent ?? 70,
           fixedCompanyPercent: fixedSplit?.companyPercent ?? 30,
@@ -134,7 +137,6 @@ export default function TeamPlanEditor({
       teamPlanId={teamPlanId}
       initialValues={initialValues || {}}
       submitLabel="Update Team Plan"
-      isLeaderless={isLeaderless}
     />
   );
 }

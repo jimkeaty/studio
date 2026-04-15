@@ -21,6 +21,8 @@ export type TeamPlanFormValues = {
   teamId: string;
   planName: string;
   status: 'active' | 'inactive';
+  /** Whether this team has a leader. Controls visibility of Leader Structure Bands. */
+  structureType: 'with_leader' | 'no_leader';
   /** 'tiered' = progressive bands; 'fixed' = flat split on every transaction */
   commissionModelType: 'tiered' | 'fixed';
   /** Only used when commissionModelType === 'fixed' */
@@ -32,8 +34,6 @@ export type TeamPlanFormValues = {
   leaderStructureBands: TeamThresholdBandFormValue[];
   memberDefaultBands: MemberDefaultBandFormValue[];
   notes: string;
-  /** Inherited from the parent team — controls whether Leader Structure Bands are shown */
-  teamStructureType?: 'with_leader' | 'no_leader';
 };
 
 type TeamOption = {
@@ -46,14 +46,13 @@ type TeamPlanFormProps = {
   teamPlanId?: string;
   initialValues?: Partial<TeamPlanFormValues>;
   submitLabel?: string;
-  /** When true, hides the Leader Structure Bands section */
-  isLeaderless?: boolean;
 };
 
 const DEFAULT_VALUES: TeamPlanFormValues = {
   teamId: '',
   planName: '',
   status: 'active',
+  structureType: 'with_leader',
   commissionModelType: 'tiered',
   fixedAgentPercent: 70,
   fixedCompanyPercent: 30,
@@ -106,7 +105,6 @@ export default function TeamPlanForm({
   teamPlanId,
   initialValues,
   submitLabel = teamPlanId ? 'Update Team Plan' : 'Create Team Plan',
-  isLeaderless = false,
 }: TeamPlanFormProps) {
   const router = useRouter();
   const isEditMode = Boolean(teamPlanId);
@@ -135,11 +133,9 @@ export default function TeamPlanForm({
   // Team dropdown state (only used in create mode)
   const [teamOptions, setTeamOptions] = useState<TeamOption[]>([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
-  // In edit mode, isLeaderless comes from the parent; in create mode, derive from selected team
-  const [selectedTeamStructure, setSelectedTeamStructure] = useState<'with_leader' | 'no_leader' | null>(null);
 
-  // Effective leaderless flag: edit mode uses prop, create mode uses selected team
-  const effectiveIsLeaderless = isEditMode ? isLeaderless : selectedTeamStructure === 'no_leader';
+  // Derived: is this a leaderless team plan?
+  const isLeaderless = values.structureType === 'no_leader';
 
   const thresholdMarkersText = useMemo(
     () => values.thresholdMarkers.join(', '),
@@ -183,10 +179,13 @@ export default function TeamPlanForm({
     };
   }, [isEditMode]);
 
+  // When a team is selected in create mode, auto-set structureType from the team's structureType
   function handleTeamSelect(teamId: string) {
     updateField('teamId', teamId);
     const found = teamOptions.find((t) => t.teamId === teamId);
-    setSelectedTeamStructure(found?.structureType ?? null);
+    if (found) {
+      updateField('structureType', found.structureType);
+    }
   }
 
   function updateField<K extends keyof TeamPlanFormValues>(
@@ -283,6 +282,7 @@ export default function TeamPlanForm({
         teamId: values.teamId.trim(),
         planName: values.planName.trim(),
         status: values.status,
+        structureType: values.structureType,
         commissionModelType: values.commissionModelType,
         fixedSplit:
           values.commissionModelType === 'fixed'
@@ -384,13 +384,6 @@ export default function TeamPlanForm({
                     </option>
                   ))}
                 </select>
-                {selectedTeamStructure && (
-                  <p className={`mt-1 text-xs font-medium ${selectedTeamStructure === 'no_leader' ? 'text-gray-600' : 'text-purple-700'}`}>
-                    {selectedTeamStructure === 'no_leader'
-                      ? 'This team has no leader — Leader Structure Bands are hidden.'
-                      : 'This team has a leader — Leader Structure Bands are required.'}
-                  </p>
-                )}
               </>
             )}
           </div>
@@ -415,6 +408,49 @@ export default function TeamPlanForm({
               <option value="inactive">Inactive</option>
             </select>
           </label>
+
+          {/* Team Leader Toggle — always visible, editable in both create and edit mode */}
+          <div className="space-y-2 md:col-span-2">
+            <span className="block text-sm font-medium text-gray-700">Team Structure</span>
+            <p className="text-xs text-gray-500">
+              Select whether this team has a designated team leader. Teams without a leader (CGL, SGL, New CGL, Referral Group, Independent) do not use Leader Structure Bands.
+            </p>
+            <div className="flex gap-6">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="structureType"
+                  value="with_leader"
+                  checked={values.structureType === 'with_leader'}
+                  onChange={() => updateField('structureType', 'with_leader')}
+                  className="h-4 w-4 text-blue-600"
+                />
+                <span className="text-sm">
+                  <strong>Has Team Leader</strong>
+                  <span className="ml-1 text-gray-500">(leader receives a split before member payout)</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="structureType"
+                  value="no_leader"
+                  checked={values.structureType === 'no_leader'}
+                  onChange={() => updateField('structureType', 'no_leader')}
+                  className="h-4 w-4 text-blue-600"
+                />
+                <span className="text-sm">
+                  <strong>No Team Leader</strong>
+                  <span className="ml-1 text-gray-500">(agent vs. company split only — CGL, SGL, Referral Group, Independent)</span>
+                </span>
+              </label>
+            </div>
+            {isLeaderless && (
+              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Leader Structure Bands are hidden for leaderless teams. Only Agent Payout Bands below apply.
+              </div>
+            )}
+          </div>
 
           <div className="space-y-2 md:col-span-2">
             <span className="block text-sm font-medium text-gray-700">Commission Model Type</span>
@@ -517,7 +553,7 @@ export default function TeamPlanForm({
       </section>
 
       {/* Leader Structure Bands — hidden for leaderless teams */}
-      {!effectiveIsLeaderless && (
+      {!isLeaderless && (
         <section className="rounded-lg border bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -610,9 +646,9 @@ export default function TeamPlanForm({
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">{effectiveIsLeaderless ? 'Agent Payout Bands' : 'Member Default Bands'}</h2>
+            <h2 className="text-lg font-semibold">{isLeaderless ? 'Agent Payout Bands' : 'Member Default Bands'}</h2>
             <p className="mt-1 text-sm text-gray-600">
-              {effectiveIsLeaderless
+              {isLeaderless
                 ? 'Defines the agent vs. company split for this leaderless team.'
                 : 'Defines the default member payout from the leader side when no member-specific plan is assigned.'}
             </p>
@@ -623,7 +659,7 @@ export default function TeamPlanForm({
             onClick={addMemberBand}
             className="rounded-md border px-3 py-2 text-sm font-medium"
           >
-            Add Member Band
+            Add {isLeaderless ? 'Payout' : 'Member'} Band
           </button>
         </div>
 
@@ -659,7 +695,7 @@ export default function TeamPlanForm({
               </label>
 
               <label className="space-y-1">
-                <span className="text-xs font-medium text-gray-600">Member %</span>
+                <span className="text-xs font-medium text-gray-600">{isLeaderless ? 'Agent %' : 'Member %'}</span>
                 <input
                   type="number"
                   value={band.memberPercent}

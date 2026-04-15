@@ -37,6 +37,7 @@ export const charlesDitchTeamPlan: TeamPlan = {
   teamId: CHARLES_DITCH_TEAM_ID,
   planName: 'Charles Ditch Team Plan V1',
   status: 'active',
+  structureType: 'with_leader',
   commissionModelType: 'tiered',
   fixedSplit: null,
   thresholdMetric: 'companyDollar',

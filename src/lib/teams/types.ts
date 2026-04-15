@@ -103,6 +103,9 @@ export type TeamPlan = {
   teamId: string;
   planName: string;
   status: TeamStatus;
+  /** Whether this plan belongs to a team with or without a leader.
+   *  Defaults to 'with_leader' for backward compatibility. */
+  structureType: TeamStructureType;
   /** Defaults to 'tiered' for backward compatibility */
   commissionModelType: CommissionModelType;
   /** Only used when commissionModelType === 'fixed' */
@@ -123,6 +126,8 @@ export type TeamPlanInput = {
   teamId: string;
   planName: string;
   status?: TeamStatus;
+  /** Whether this plan belongs to a team with or without a leader. Defaults to 'with_leader'. */
+  structureType?: TeamStructureType;
   /** Defaults to 'tiered' when omitted */
   commissionModelType?: CommissionModelType;
   /** Required when commissionModelType === 'fixed' */
