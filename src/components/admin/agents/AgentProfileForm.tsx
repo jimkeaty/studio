@@ -270,9 +270,10 @@ async function fetchTeamOptions(token: string) {
   ]);
 
   return {
-    teams: Array.isArray(teamsJson?.teams)
-      ? teamsJson.teams.filter((team: TeamOption) => team.status !== 'inactive')
-      : [],
+    // Return ALL teams (including inactive) so the dropdown always shows the agent's
+    // currently assigned team even if it was later marked inactive.
+    // The UI can visually flag inactive teams.
+    teams: Array.isArray(teamsJson?.teams) ? teamsJson.teams : [],
     teamPlans: Array.isArray(teamPlansJson?.teamPlans)
       ? teamPlansJson.teamPlans.filter((plan: TeamPlanOption) => plan.status !== 'inactive')
       : [],
@@ -397,7 +398,13 @@ export default function AgentProfileForm({
   }, [values.startDate]);
 
   const availableTeams = useMemo(() => {
-    return [...teams].sort((a, b) => a.teamName.localeCompare(b.teamName));
+    // Sort: active teams first, then inactive; alphabetical within each group
+    return [...teams].sort((a, b) => {
+      const aInactive = a.status === 'inactive' ? 1 : 0;
+      const bInactive = b.status === 'inactive' ? 1 : 0;
+      if (aInactive !== bInactive) return aInactive - bInactive;
+      return a.teamName.localeCompare(b.teamName);
+    });
   }, [teams]);
 
   const selectedTeam = useMemo(() => {
@@ -1402,7 +1409,7 @@ export default function AgentProfileForm({
                   </option>
                   {availableTeams.map((team) => (
                     <option key={team.teamId} value={team.teamId}>
-                      {team.teamName}
+                      {team.teamName}{team.status === 'inactive' ? ' (Inactive)' : ''}
                     </option>
                   ))}
                 </select>
@@ -1590,19 +1597,34 @@ export default function AgentProfileForm({
                   </>
                 ) : (
                   <div className="rounded-md border border-gray-200 bg-white p-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className="text-sm font-semibold">Member Commission Tiers</h4>
-                      <div className="flex items-center gap-3">
-                        {resolvedMemberDefaults.length > 0 && (
+                    {/* ── Team Default Plan Banner ─────────────────────────────── */}
+                    {resolvedMemberDefaults.length > 0 && (
+                      <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold text-blue-900">
+                              Team Default Plan: {selectedTeamPlan?.planName || 'Team Plan'}
+                            </p>
+                            <p className="mt-0.5 text-xs text-blue-700">
+                              {resolvedMemberDefaults.length} tier{resolvedMemberDefaults.length !== 1 ? 's' : ''} available.
+                              Load them below to use as a starting point, or keep the current custom tiers.
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {resolvedMemberDefaults.map((t, i) => (
+                                <span key={i} className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800">
+                                  {t.tierName}: {t.memberPercent}%
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                           <button
                             type="button"
-                            className="text-xs text-blue-600 underline hover:text-blue-800"
+                            className="flex-shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                             onClick={() => {
                               setValues((prev) => ({
                                 ...prev,
                                 teamMemberCompMode: 'custom' as TeamMemberCompMode,
                                 teamMemberOverrideBands: resolvedMemberDefaults.map((t, i) => ({
-                                  id: `reset-${i}`,
                                   tierName: t.tierName,
                                   fromCompanyDollar: t.fromCompanyDollar,
                                   toCompanyDollar: t.toCompanyDollar,
@@ -1612,9 +1634,15 @@ export default function AgentProfileForm({
                               }));
                             }}
                           >
-                            Reset to team default
+                            Load Team Default
                           </button>
-                        )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-sm font-semibold">Member Commission Tiers</h4>
+                      <div className="flex items-center gap-3">
                         <button
                           type="button"
                           className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
@@ -1625,7 +1653,7 @@ export default function AgentProfileForm({
                       </div>
                     </div>
                     <p className="mb-4 text-xs text-gray-500">
-                      Tiers loaded from the team plan — edit as needed for this agent. Changes are saved to this agent&apos;s profile only.
+                      Edit tiers for this agent. Use &quot;Load Team Default&quot; above to start from the team plan, or manually enter custom tiers. Changes apply to this agent only.
                     </p>
 
                     {values.teamMemberOverrideBands.map((tier, index) => (

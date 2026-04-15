@@ -171,6 +171,7 @@ const CHARLES_DITCH_TIERS: CommissionTierTemplate[] = [
 const TEAM_TEMPLATES: Record<string, CommissionTierTemplate[]> = {
   referral_group: REFERRAL_GROUP_TIERS,
   cgl: CGL_TIERS,
+  new_cgl: CGL_TIERS,
   sgl: SGL_TIERS,
   charles_ditch_team: CHARLES_DITCH_TIERS,
   independent: STANDARD_TIERS,
@@ -207,6 +208,7 @@ export function getTeamDefaultTransactionFee(
 export const TEAM_GROUP_OPTIONS = [
   { value: 'referral_group', label: 'Referral Group', leaderless: true },
   { value: 'cgl', label: 'CGL', leaderless: true },
+  { value: 'new_cgl', label: 'New CGL', leaderless: true },
   { value: 'sgl', label: 'SGL', leaderless: true },
   { value: 'charles_ditch_team', label: 'Charles Ditch Team', leaderless: false },
   { value: 'independent', label: 'Independent', leaderless: false },
@@ -221,6 +223,7 @@ export const TEAM_GROUP_OPTIONS = [
  */
 export const LEADERLESS_TEAM_GROUPS = new Set<string>([
   'cgl',
+  'new_cgl',
   'sgl',
   'referral_group',
 ]);
@@ -231,7 +234,7 @@ export const LEADERLESS_TEAM_GROUPS = new Set<string>([
  */
 export const TEAM_NAME_TO_GROUP: Record<string, string> = {
   'cgl-team': 'cgl',
-  'new-cgl': 'cgl',
+  'new-cgl': 'new_cgl',
   'sgl-team': 'sgl',
   'charles-ditch-team': 'charles_ditch_team',
   'cd-team': 'charles_ditch_team',
