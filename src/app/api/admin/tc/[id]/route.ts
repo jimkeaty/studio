@@ -210,7 +210,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'surveyDeadline', 'projectedCloseDate', 'closedDate',
         'loanApplicationDeadline', 'appraisalDeadline', 'titleDeadline', 'finalLoanCommitmentDeadline',
         // Client contact
-        'clientEmail', 'clientPhone', 'clientNewAddress',
+        'clientType', 'clientEmail', 'clientPhone', 'clientNewAddress',
         'client2Name', 'client2Email', 'client2Phone',
         // Buyer contact
         'buyerName', 'buyerEmail', 'buyerPhone',
@@ -462,6 +462,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         finalLoanCommitmentDeadline: toOptStr(intake.finalLoanCommitmentDeadline),
 
         // Client contact
+        clientType: toOptStr(intake.clientType),
         clientEmail: toOptStr(intake.clientEmail),
         clientPhone: toOptStr(intake.clientPhone),
         clientNewAddress: toOptStr(intake.clientNewAddress),

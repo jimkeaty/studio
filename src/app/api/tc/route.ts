@@ -119,12 +119,29 @@ export async function POST(req: NextRequest) {
       finalLoanCommitmentDeadline: toStr(body.finalLoanCommitmentDeadline),
 
       // Client contact
+      clientType: toStr(body.clientType),
       clientEmail: toStr(body.clientEmail),
       clientPhone: toStr(body.clientPhone),
       clientNewAddress: toStr(body.clientNewAddress),
       client2Name: toStr(body.client2Name),
       client2Email: toStr(body.client2Email),
       client2Phone: toStr(body.client2Phone),
+
+      // Buyer contact
+      buyerName: toStr(body.buyerName),
+      buyerEmail: toStr(body.buyerEmail),
+      buyerPhone: toStr(body.buyerPhone),
+      buyer2Name: toStr(body.buyer2Name),
+      buyer2Email: toStr(body.buyer2Email),
+      buyer2Phone: toStr(body.buyer2Phone),
+
+      // Seller contact
+      sellerName: toStr(body.sellerName),
+      sellerEmail: toStr(body.sellerEmail),
+      sellerPhone: toStr(body.sellerPhone),
+      seller2Name: toStr(body.seller2Name),
+      seller2Email: toStr(body.seller2Email),
+      seller2Phone: toStr(body.seller2Phone),
 
       // Parties
       dealSource: VALID_SOURCES.has(toStr(body.dealSource) || '') ? toStr(body.dealSource) : toStr(body.dealSource),
