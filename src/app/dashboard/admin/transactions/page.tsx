@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import {
   Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2,
   Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft, Download, Tags,
@@ -790,13 +791,65 @@ export default function AdminTransactionLedgerPage() {
                             onChange={() => toggleSelect(t.id)}
                           />
                         </TableCell>
-                        <TableCell className="w-[100px]">
-                          <span className={cn(
-                            'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap',
-                            sc.color
-                          )}>
-                            {sc.label}
-                          </span>
+                        <TableCell className="w-[130px]">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                              <button className={cn(
+                                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap cursor-pointer hover:opacity-80 transition-opacity',
+                                sc.color
+                              )}>
+                                {sc.label}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 opacity-70" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-44">
+                              <DropdownMenuLabel className="text-xs text-muted-foreground">Change Status</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              {ALL_STATUSES
+                                .filter(s => {
+                                  if (s === t.status) return false; // hide current
+                                  if ((s as string) === 'temp_off_market' &&
+                                    (t.status === 'closed' || t.status === 'sold')) return false;
+                                  return true;
+                                })
+                                .map(s => (
+                                  <DropdownMenuItem
+                                    key={s}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (!user) return;
+                                      try {
+                                        const token = await user.getIdToken();
+                                        const res = await fetch('/api/admin/transactions', {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                          body: JSON.stringify({ id: t.id, status: s }),
+                                        });
+                                        const data = await res.json();
+                                        if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+                                        setTransactions(prev =>
+                                          prev.map(tx => tx.id === t.id ? { ...tx, status: s as Transaction['status'] } : tx)
+                                        );
+                                      } catch (err: any) {
+                                        setPageError(err.message);
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 text-xs cursor-pointer"
+                                  >
+                                    <span className={cn(
+                                      'inline-block w-2 h-2 rounded-full flex-shrink-0',
+                                      (s as string) === 'active' ? 'bg-blue-500' :
+                                      (s as string) === 'temp_off_market' ? 'bg-orange-500' :
+                                      (s as string) === 'pending' || (s as string) === 'under_contract' ? 'bg-yellow-500' :
+                                      (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
+                                      (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
+                                      'bg-gray-500'
+                                    )} />
+                                    {statusConfig[s]?.label ?? s}
+                                  </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                         <TableCell className="min-w-[160px] max-w-[220px]">
                           <div className="font-medium truncate text-sm">{t.address || '—'}</div>
