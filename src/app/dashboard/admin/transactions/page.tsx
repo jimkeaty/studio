@@ -895,6 +895,11 @@ export default function AdminTransactionLedgerPage() {
                   </span>
                 </div>
               </div>
+              {(quickStatusTx?.status === 'closed' || quickStatusTx?.status === 'sold') && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-300">
+                  <strong>Note:</strong> Closed listings cannot be moved to Temp Off Market. Only status corrections (e.g. Cancelled) are available.
+                </div>
+              )}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">New Status</Label>
                 <Select value={quickStatusValue} onValueChange={setQuickStatusValue}>
@@ -902,22 +907,31 @@ export default function AdminTransactionLedgerPage() {
                     <SelectValue placeholder="Select status..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {ALL_STATUSES.map(s => (
-                      <SelectItem key={s} value={s}>
-                        <span className="flex items-center gap-2">
-                          <span className={cn(
-                            'inline-block w-2 h-2 rounded-full',
-                            (s as string) === 'active' ? 'bg-blue-500' :
-                            (s as string) === 'temp_off_market' ? 'bg-orange-500' :
-                            (s as string) === 'pending' || (s as string) === 'under_contract' ? 'bg-yellow-500' :
-                            (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
-                            (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
-                            'bg-gray-500'
-                          )} />
-                          {statusConfig[s]?.label ?? s}
-                        </span>
-                      </SelectItem>
-                    ))}
+                    {ALL_STATUSES
+                      .filter(s => {
+                        // Temp Off Market is not available for closed/sold listings
+                        if ((s as string) === 'temp_off_market' &&
+                          (quickStatusTx?.status === 'closed' || quickStatusTx?.status === 'sold')) {
+                          return false;
+                        }
+                        return true;
+                      })
+                      .map(s => (
+                        <SelectItem key={s} value={s}>
+                          <span className="flex items-center gap-2">
+                            <span className={cn(
+                              'inline-block w-2 h-2 rounded-full',
+                              (s as string) === 'active' ? 'bg-blue-500' :
+                              (s as string) === 'temp_off_market' ? 'bg-orange-500' :
+                              (s as string) === 'pending' || (s as string) === 'under_contract' ? 'bg-yellow-500' :
+                              (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
+                              (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
+                              'bg-gray-500'
+                            )} />
+                            {statusConfig[s]?.label ?? s}
+                          </span>
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

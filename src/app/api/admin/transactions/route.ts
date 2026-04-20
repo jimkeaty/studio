@@ -134,6 +134,17 @@ export async function PATCH(req: NextRequest) {
       return jsonError(400, 'No valid fields to update');
     }
 
+    // Guard: temp_off_market cannot be set on closed or sold listings
+    if (updates.status === 'temp_off_market') {
+      const existingDoc = await adminDb.collection('transactions').doc(id).get();
+      if (existingDoc.exists) {
+        const existing = existingDoc.data();
+        if (existing?.status === 'closed' || existing?.status === 'sold') {
+          return jsonError(400, 'Cannot set Temp Off Market on a closed or sold listing');
+        }
+      }
+    }
+
     // If status changed to closed and closedDate not provided, set it
     if (updates.status === 'closed' && !updates.closedDate) {
       const existingDoc = await adminDb.collection('transactions').doc(id).get();
