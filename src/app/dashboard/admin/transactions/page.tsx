@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2,
-  Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft, Download,
+  Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft, Download, Tags,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -50,6 +50,7 @@ const closingTypeLabel: Record<string, string> = {
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   active: { label: 'Active', color: 'bg-blue-500/80 text-white' },
+  temp_off_market: { label: 'Temp Off Market', color: 'bg-orange-500/80 text-white' },
   pending: { label: 'Pending', color: 'bg-yellow-500/80 text-white' },
   under_contract: { label: 'Under Contract', color: 'bg-yellow-500/80 text-white' },
   sold: { label: 'Sold', color: 'bg-green-600/80 text-white' },
@@ -61,7 +62,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 const YEARS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-const ALL_STATUSES = ['active', 'pending', 'under_contract', 'sold', 'closed', 'canceled', 'expired'] as const;
+const ALL_STATUSES = ['active', 'temp_off_market', 'pending', 'under_contract', 'sold', 'closed', 'canceled', 'expired'] as const;
 
 /* ─── Sorting ────────────────────────────────────────────────────────── */
 
@@ -132,6 +133,12 @@ export default function AdminTransactionLedgerPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  // Quick status change (Temp Off Market toggle)
+  const [quickStatusTx, setQuickStatusTx] = useState<Transaction | null>(null);
+  const [quickStatusOpen, setQuickStatusOpen] = useState(false);
+  const [quickStatusValue, setQuickStatusValue] = useState<string>('');
+  const [quickStatusSaving, setQuickStatusSaving] = useState(false);
 
   /* ─── Data loading ─────────────────────────────────────────────────── */
 
@@ -370,7 +377,43 @@ export default function AdminTransactionLedgerPage() {
     }
   };
 
-  /* ─── Sort toggle ──────────────────────────────────────────────────── */
+    /* ─── Quick status change handler ───────────────────────────── */
+
+  const openQuickStatus = (tx: Transaction) => {
+    setQuickStatusTx(tx);
+    setQuickStatusValue(tx.status);
+    setQuickStatusOpen(true);
+  };
+
+  const handleQuickStatus = async () => {
+    if (!quickStatusTx || !quickStatusValue || !user) return;
+    if (quickStatusValue === quickStatusTx.status) {
+      setQuickStatusOpen(false);
+      return;
+    }
+    setQuickStatusSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/transactions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: quickStatusTx.id, status: quickStatusValue }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to update status');
+      setTransactions(prev =>
+        prev.map(t => t.id === quickStatusTx.id ? { ...t, status: quickStatusValue as Transaction['status'] } : t)
+      );
+      setQuickStatusOpen(false);
+      setQuickStatusTx(null);
+    } catch (err: any) {
+      setPageError(err.message);
+    } finally {
+      setQuickStatusSaving(false);
+    }
+  };
+
+  /* ─── Sort toggle ────────────────────────────────────────────────── */
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -791,6 +834,18 @@ export default function AdminTransactionLedgerPage() {
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(t); }} title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={cn(
+                                'h-7 w-7',
+                                t.status === 'temp_off_market' && 'text-orange-600 hover:text-orange-700'
+                              )}
+                              onClick={(e) => { e.stopPropagation(); openQuickStatus(t); }}
+                              title="Change listing status"
+                            >
+                              <Tags className="h-3.5 w-3.5" />
+                            </Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openTransfer(t); }} title="Transfer to another agent">
                               <ArrowRightLeft className="h-3.5 w-3.5" />
                             </Button>
@@ -811,6 +866,74 @@ export default function AdminTransactionLedgerPage() {
       </Card>
 
       {/* ── EDIT SHEET ── */}
+
+      {/* ── QUICK STATUS CHANGE DIALOG ── */}
+      <Dialog open={quickStatusOpen} onOpenChange={setQuickStatusOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tags className="h-4 w-4" /> Change Listing Status
+            </DialogTitle>
+            <DialogDescription>
+              Update the status for this listing. Use &quot;Temp Off Market&quot; to temporarily remove it from active listings, then set back to &quot;Active&quot; when ready.
+            </DialogDescription>
+          </DialogHeader>
+          {quickStatusTx && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-md border p-3 bg-muted/50">
+                <p className="font-medium text-sm">{quickStatusTx.address}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Agent: <strong>{quickStatusTx.agentDisplayName ?? '—'}</strong>
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Current:</span>
+                  <span className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold',
+                    statusConfig[quickStatusTx.status]?.color || 'bg-gray-500/80 text-white'
+                  )}>
+                    {statusConfig[quickStatusTx.status]?.label ?? quickStatusTx.status}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">New Status</Label>
+                <Select value={quickStatusValue} onValueChange={setQuickStatusValue}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALL_STATUSES.map(s => (
+                      <SelectItem key={s} value={s}>
+                        <span className="flex items-center gap-2">
+                          <span className={cn(
+                            'inline-block w-2 h-2 rounded-full',
+                            (s as string) === 'active' ? 'bg-blue-500' :
+                            (s as string) === 'temp_off_market' ? 'bg-orange-500' :
+                            (s as string) === 'pending' || (s as string) === 'under_contract' ? 'bg-yellow-500' :
+                            (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
+                            (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
+                            'bg-gray-500'
+                          )} />
+                          {statusConfig[s]?.label ?? s}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuickStatusOpen(false)} disabled={quickStatusSaving}>Cancel</Button>
+            <Button
+              onClick={handleQuickStatus}
+              disabled={quickStatusSaving || !quickStatusValue || quickStatusValue === quickStatusTx?.status}
+            >
+              {quickStatusSaving ? 'Saving...' : 'Update Status'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── TRANSFER DIALOG ── */}
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
