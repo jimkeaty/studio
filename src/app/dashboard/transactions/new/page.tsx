@@ -155,7 +155,7 @@ const schema = z.object({
   agentDisplayName: z.string().min(1),
 
   // Status
-  status: z.enum(['active', 'pending', 'under_contract', 'closed', 'cancelled', 'temp_off_market']).optional(),
+  status: z.enum(['active', 'pending', 'under_contract', 'closed', 'cancelled', 'temp_off_market'], { required_error: 'Please select a status to continue' }),
 
   // Basics
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
@@ -356,7 +356,6 @@ export default function AddTransactionPage() {
     defaultValues: {
       agentId: '',
       agentDisplayName: '',
-      status: 'active',
       closingType: 'buyer',
       dealType: 'residential_sale',
       address: '',
@@ -781,11 +780,11 @@ export default function AddTransactionPage() {
 
             <FormField control={form.control} name="status" render={({ field }) => (
               <FormItem>
-                <FormLabel>Listing / Transaction Status</FormLabel>
-                <Select value={field.value || 'active'} onValueChange={field.onChange}>
+                <FormLabel>Listing / Transaction Status <span className="text-destructive">*</span></FormLabel>
+                <Select value={field.value || ''} onValueChange={field.onChange}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
+                      <SelectValue placeholder="Select a status (required)" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -797,7 +796,7 @@ export default function AddTransactionPage() {
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
-                <FormDescription>Set to Active for new listings. Change to Pending once under contract.</FormDescription>
+                <FormDescription>Select the current status of this listing or transaction.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
