@@ -122,16 +122,32 @@ export async function GET(req: NextRequest) {
       return bTime - aTime;
     });
 
+    const activeTransactions = allTx.filter((t: any) =>
+      t.status === 'active' || t.status === 'temp_off_market'
+    );
+
     const pendingTransactions = allTx.filter((t: any) =>
       t.status === 'pending' || t.status === 'under_contract'
     );
 
-    const closedTransactions = allTx.filter((t: any) => {
-      if (t.status !== 'closed') return false;
+    // All closed transactions (all years) — client filters by year
+    const allClosedTransactions = allTx.filter((t: any) => t.status === 'closed');
+
+    const closedTransactions = allClosedTransactions.filter((t: any) => {
       if (t.year) return t.year === year;
       const dateStr: string = t.closedDate ?? t.closingDate ?? '';
       return dateStr.startsWith(String(year));
     });
+
+    // Derive available closed years for the year selector
+    const closedYears = Array.from(new Set(
+      allClosedTransactions.map((t: any) => {
+        if (t.year) return Number(t.year);
+        const dateStr: string = t.closedDate ?? t.closingDate ?? '';
+        const m = dateStr.match(/^(\d{4})/);
+        return m ? Number(m[1]) : null;
+      }).filter((y): y is number => y !== null)
+    )).sort((a, b) => b - a);
 
     // Fetch active opportunities (single-field query + client filter to avoid composite index)
     let opportunities: any[] = [];
@@ -157,9 +173,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       year,
-      transactions: [...pendingTransactions, ...closedTransactions],
+      transactions: [...activeTransactions, ...pendingTransactions, ...closedTransactions],
+      activeTransactions,
       pendingTransactions,
       closedTransactions,
+      allClosedTransactions,
+      closedYears,
       opportunities,
     });
   } catch (err: any) {

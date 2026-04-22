@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { AppointmentsPipeline } from '@/components/dashboard/AppointmentsPipeline';
+import { AgentTransactionsSection } from '@/components/dashboard/AgentTransactionsSection';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -856,7 +857,11 @@ function AgentDashboardPage() {
             viewAs={viewAs ?? undefined}
             initialYear={year}
           />
-
+          {/* ═══ MY TRANSACTIONS ════════════════════════════════════════ */}
+          <AgentTransactionsSection
+            agentId={user?.uid ?? ''}
+            viewAs={viewAs ?? undefined}
+          />
           {/* ════════════════════════════════════════════════════════════════
               9. RECRUITING INCENTIVE TRACKER
              ════════════════════════════════════════════════════════════════ */}
