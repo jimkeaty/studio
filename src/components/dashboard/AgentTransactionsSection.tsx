@@ -490,8 +490,10 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
     setError(null);
     try {
       const token = await user.getIdToken();
-      const effectiveId = viewAs || agentId;
-      const res = await fetch(`/api/agent/pipeline?agentId=${effectiveId}`, {
+      const url = viewAs
+        ? `/api/agent/pipeline?viewAs=${viewAs}`
+        : `/api/agent/pipeline`;
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
