@@ -2982,9 +2982,9 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
 }
 
 function PendingTable({ transactions }: { transactions: Transaction[] }) {
-  const pending = transactions.filter(t => t.status === 'pending' || t.status === 'under_contract');
+  const pending = transactions.filter(t => t.status === 'pending');
   return (
-    <Card><CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Pending / Under Contract</CardTitle><CardDescription>Deals in progress — not yet closed.</CardDescription></CardHeader>
+    <Card><CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Pending</CardTitle><CardDescription>Deals in progress — not yet closed.</CardDescription></CardHeader>
       <CardContent>{pending.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">No pending transactions.</p>) : (
         <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Client</TableHead><TableHead>Contract Date</TableHead><TableHead>Est. Close</TableHead><TableHead className="text-right">Sale Price</TableHead><TableHead className="text-right">Projected Net Income</TableHead></TableRow></TableHeader>
           <TableBody>{pending.map(t => { const projNet = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{t.clientName ?? '—'}</TableCell><TableCell>{formatDate(t.contractDate)}</TableCell><TableCell><span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>{(t.closedDate || t.closingDate) && <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
@@ -3175,7 +3175,7 @@ function PipelineKanban({
 }: {
   opportunities: Opportunity[]; transactions: Transaction[]; year: number;
 }) {
-  const pending = transactions.filter(t => t.status === 'pending' || t.status === 'under_contract');
+  const pending = transactions.filter(t => t.status === 'pending');
   const closed = transactions.filter(t =>
     t.status === 'closed' &&
     (t.year === year || (t.closedDate ?? t.closingDate ?? '').startsWith(String(year)))
@@ -3187,7 +3187,7 @@ function PipelineKanban({
 
   const colConfig = [
     { key: 'leads', title: 'Active Leads', color: 'border-t-blue-500', headerBg: 'bg-blue-50', count: opportunities.length, vol: totalLeadsVol },
-    { key: 'contract', title: 'Under Contract', color: 'border-t-amber-500', headerBg: 'bg-amber-50', count: pending.length, vol: totalPendingVol },
+    { key: 'contract', title: 'Pending', color: 'border-t-amber-500', headerBg: 'bg-amber-50', count: pending.length, vol: totalPendingVol },
     { key: 'closed', title: `Closed (${year})`, color: 'border-t-green-500', headerBg: 'bg-green-50', count: closed.length, vol: totalClosedVol },
   ];
 

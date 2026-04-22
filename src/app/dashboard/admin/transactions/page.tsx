@@ -53,7 +53,6 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   active: { label: 'Active', color: 'bg-blue-500/80 text-white' },
   temp_off_market: { label: 'Temp Off Market', color: 'bg-orange-500/80 text-white' },
   pending: { label: 'Pending', color: 'bg-yellow-500/80 text-white' },
-  under_contract: { label: 'Under Contract', color: 'bg-yellow-500/80 text-white' },
   sold: { label: 'Sold', color: 'bg-green-600/80 text-white' },
   closed: { label: 'Closed', color: 'bg-green-600/80 text-white' },
   canceled: { label: 'Canceled', color: 'bg-red-500/80 text-white' },
@@ -63,7 +62,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 const YEARS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-const ALL_STATUSES = ['active', 'temp_off_market', 'pending', 'under_contract', 'sold', 'closed', 'canceled', 'expired'] as const;
+const ALL_STATUSES = ['active', 'temp_off_market', 'pending', 'sold', 'closed', 'canceled', 'expired'] as const;
 
 /* ─── Sorting ────────────────────────────────────────────────────────── */
 
@@ -840,7 +839,7 @@ export default function AdminTransactionLedgerPage() {
                                       'inline-block w-2 h-2 rounded-full flex-shrink-0',
                                       (s as string) === 'active' ? 'bg-blue-500' :
                                       (s as string) === 'temp_off_market' ? 'bg-orange-500' :
-                                      (s as string) === 'pending' || (s as string) === 'under_contract' ? 'bg-yellow-500' :
+                                      (s as string) === 'pending' ? 'bg-yellow-500' :
                                       (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
                                       (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
                                       'bg-gray-500'
@@ -976,8 +975,8 @@ export default function AdminTransactionLedgerPage() {
                               'inline-block w-2 h-2 rounded-full',
                               (s as string) === 'active' ? 'bg-blue-500' :
                               (s as string) === 'temp_off_market' ? 'bg-orange-500' :
-                              (s as string) === 'pending' || (s as string) === 'under_contract' ? 'bg-yellow-500' :
-                              (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
+              (s as string) === 'pending' ? 'bg-yellow-500' :
+              (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
                               (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
                               'bg-gray-500'
                             )} />

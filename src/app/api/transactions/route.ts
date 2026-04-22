@@ -33,7 +33,7 @@ function toYearFromDates(closedDate: string | null, contractDate: string | null)
   return d.getFullYear()
 }
 
-const ALLOWED_STATUS = new Set(['closed', 'pending', 'under_contract', 'cancelled'])
+const ALLOWED_STATUS = new Set(['active', 'closed', 'pending', 'cancelled', 'temp_off_market'])
 const ALLOWED_TYPES = new Set(['residential_sale', 'rental', 'commercial_lease', 'commercial_sale'])
 const ALLOWED_SOURCES = new Set(['manual', 'ghl', 'import'])
 
