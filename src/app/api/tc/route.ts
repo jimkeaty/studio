@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
       submittedByEmail: email,
 
       status: 'submitted',
+      listingStatus: toStr(body.status) || 'active',
 
       closingType,
       dealType,

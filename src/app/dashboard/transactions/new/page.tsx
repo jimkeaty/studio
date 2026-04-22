@@ -155,7 +155,7 @@ const schema = z.object({
   agentDisplayName: z.string().min(1),
 
   // Status
-  status: z.enum(['pending', 'under_contract', 'closed', 'cancelled']).optional(),
+  status: z.enum(['active', 'pending', 'under_contract', 'closed', 'cancelled', 'temp_off_market']).optional(),
 
   // Basics
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
@@ -356,6 +356,7 @@ export default function AddTransactionPage() {
     defaultValues: {
       agentId: '',
       agentDisplayName: '',
+      status: 'active',
       closingType: 'buyer',
       dealType: 'residential_sale',
       address: '',
@@ -778,6 +779,29 @@ export default function AddTransactionPage() {
               )} />
             </Grid2>
 
+            <FormField control={form.control} name="status" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Listing / Transaction Status</FormLabel>
+                <Select value={field.value || 'active'} onValueChange={field.onChange}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="under_contract">Under Contract</SelectItem>
+                    <SelectItem value="temp_off_market">Temp Off Market</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>Set to Active for new listings. Change to Pending once under contract.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )} />
+
             <FormField control={form.control} name="address" render={({ field }) => (
               <FormItem>
                 <FormLabel>Property Address <span className="text-destructive">*</span></FormLabel>
@@ -1042,27 +1066,7 @@ export default function AddTransactionPage() {
                   </FormDescription>
                 </FormItem>
               )} />
-              {isAdmin && (
-                <FormField control={form.control} name="status" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select value={field.value || ''} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Auto (based on close date)" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="under_contract">Under Contract</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Override status manually, or leave blank to auto-detect.</FormDescription>
-                  </FormItem>
-                )} />
-              )}
+
             </Grid3>
           </Section>
 

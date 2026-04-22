@@ -200,7 +200,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const updates: Record<string, any> = { updatedAt: now };
       const editableFields = [
         // Core
-        'closingType', 'dealType', 'address', 'clientName', 'dealSource',
+        'closingType', 'dealType', 'address', 'clientName', 'dealSource', 'listingStatus',
         // Financial
         'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'gci',
         'transactionFee', 'earnestMoney', 'depositHolderOther',
@@ -432,7 +432,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         agentType,
         calculationModel,
 
-        status: closedDate ? 'closed' : 'pending',
+        status: closedDate ? 'closed' : (intake.listingStatus || 'active'),
         transactionType,
         closingType: toOptStr(intake.closingType),
         dealType,
