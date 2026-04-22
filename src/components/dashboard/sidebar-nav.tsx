@@ -37,6 +37,7 @@ import {
   Receipt,
   Upload,
   UsersRound,
+  Wrench,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -154,6 +155,12 @@ const adminMenuGroups = [
     label: 'Settings',
     items: [
       { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { href: '/dashboard/admin/tools', label: 'Admin Tools', icon: Wrench },
     ],
   },
 ];
