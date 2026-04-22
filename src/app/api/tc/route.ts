@@ -238,6 +238,33 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit();
 
+    // ── Staff Queue: create a staff queue item for all new listings ──
+    // This notifies staff to list on MLS and take appropriate action.
+    // If working with TC, also goes to TC queue (already done above).
+    const workingWithTc = !!body.workingWithTc;
+    const staffQueueItem: Record<string, any> = {
+      transactionId: null, // Will be set when TC approves or immediately if not using TC
+      tcIntakeId: ref.id,
+      agentId,
+      agentName: agentDisplayName,
+      submittedBy: uid,
+      submittedByName: agentDisplayName,
+      actionType: 'new_listing',
+      previousStatus: null,
+      newStatus: toStr(body.status) || 'active',
+      notes: toStr(body.notes) || null,
+      tcWorking: workingWithTc,
+      status: 'pending_review',
+      reviewedBy: null,
+      reviewedByName: null,
+      reviewedAt: null,
+      staffNotes: null,
+      address: address,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+    await adminDb.collection('staffQueue').add(staffQueueItem);
+
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err: any) {
     console.error('[POST /api/tc]', err);

@@ -38,6 +38,7 @@ import {
   Upload,
   UsersRound,
   Wrench,
+  MapPin,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -138,6 +139,7 @@ const adminMenuGroups = [
     label: 'Transactions',
     items: [
       { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
+      { href: '/dashboard/admin/staff-queue', label: 'Staff Queue', icon: MapPin },
       { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
       { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
       { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },

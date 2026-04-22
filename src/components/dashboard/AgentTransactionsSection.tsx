@@ -65,6 +65,9 @@ type AgentTx = {
   notes?: string;
   year?: number;
   source?: string;
+  projectedCloseDate?: string | null;
+  inspectionDeadline?: string | null;
+  workingWithTc?: boolean;
 };
 
 /* ─── Constants ──────────────────────────────────────────────────────────── */
@@ -102,7 +105,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   expired:         { label: 'Expired',         color: 'bg-gray-500/80 text-white' },
 };
 
-const AGENT_STATUSES = ['active', 'temp_off_market', 'pending', 'closed', 'canceled'] as const;
+const AGENT_STATUSES = ['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired'] as const;
 const YEARS = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i));
 
 type SortKey = 'status' | 'address' | 'closingType' | 'dealType' | 'contractDate' | 'closedDate' | 'dealValue' | 'netToMe';
@@ -198,9 +201,16 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
   }, [tx.id]);
 
   const isMovingToPending = status === 'pending' && tx.status !== 'pending';
+  const isMovingToClosed = status === 'closed' && tx.status !== 'closed';
+  const isMlsStatusChange = isMovingToPending || isMovingToClosed || (status === 'temp_off_market' && tx.status !== 'temp_off_market') || (status === 'cancelled' && tx.status !== 'cancelled') || (status === 'expired' && tx.status !== 'expired');
 
   const handleSave = async () => {
     if (!user) return;
+    // Require closing date when setting to Closed
+    if (status === 'closed' && !closingDate) {
+      setSaveError('A closing date is required to mark this transaction as Closed.');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -223,6 +233,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
         buyerCommissionPct: buyerCommissionPct ? Number(buyerCommissionPct) : undefined,
         notes,
         resubmitToTc: isMovingToPending,
+        notifyStaffQueue: isMlsStatusChange,
       };
 
       const res = await fetch(`/api/agent/transactions/${tx.id}`, {
@@ -269,11 +280,24 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="temp_off_market">Temp Off Market</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
               {isMovingToPending && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mt-1">
-                  Changing to Pending will submit this transaction to the TC Queue for review and approval.
+                  Changing to Pending will notify the Staff Queue and (if working with TC) the TC Queue for review.
+                </p>
+              )}
+              {isMovingToClosed && (
+                <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 mt-1">
+                  Closing this transaction will notify the Staff Queue to update MLS. A closing date is required.
+                </p>
+              )}
+              {isMlsStatusChange && !isMovingToPending && !isMovingToClosed && (
+                <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 mt-1">
+                  This status change will notify the Staff Queue to update MLS accordingly.
                 </p>
               )}
             </div>
@@ -769,6 +793,12 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                       <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px]" onClick={() => toggleSort('closedDate')}>
                         <span className="flex items-center">Close Date<SortIcon col="closedDate" /></span>
                       </TableHead>
+                      <TableHead className="whitespace-nowrap min-w-[130px]">
+                        Proj. Close
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap min-w-[130px]">
+                        Inspection Deadline
+                      </TableHead>
                       <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('dealValue')}>
                         <span className="flex items-center justify-end">Sale Price<SortIcon col="dealValue" /></span>
                       </TableHead>
@@ -782,7 +812,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                       const net = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
                       const sc = statusConfig[t.status] || statusConfig.pending;
                       const addr = t.address || t.propertyAddress || '—';
-                      const canEdit = t.status === 'active' || t.status === 'temp_off_market' || t.status === 'pending';
+                      const canEdit = t.status !== 'sold'; // all statuses except sold are editable by agent
                       return (
                         <TableRow
                           key={t.id}
@@ -807,7 +837,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                                 <DropdownMenuContent align="start" className="w-48">
                                   <DropdownMenuLabel className="text-xs text-muted-foreground">Change Status</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
-                                  {(['active', 'temp_off_market', 'pending'] as const)
+                                  {(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'expired'] as string[])
                                     .filter(s => s !== t.status)
                                     .map(s => (
                                       <DropdownMenuItem
@@ -819,11 +849,14 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                                           'inline-block w-2 h-2 rounded-full flex-shrink-0',
                                           s === 'active' ? 'bg-blue-500' :
                                           s === 'temp_off_market' ? 'bg-orange-500' :
-                                          'bg-yellow-500'
+                                          s === 'pending' ? 'bg-yellow-500' :
+                                          s === 'closed' ? 'bg-green-600' :
+                                          s === 'cancelled' || s === 'canceled' ? 'bg-red-500' :
+                                          'bg-gray-500'
                                         )} />
                                         {statusConfig[s]?.label ?? s}
-                                        {s === 'pending' && t.status !== 'pending' && (
-                                          <span className="ml-auto text-[10px] text-amber-600 font-medium">→ TC Queue</span>
+                                        {(s === 'pending' || s === 'closed') && (
+                                          <span className="ml-auto text-[10px] text-amber-600 font-medium">→ Staff Queue</span>
                                         )}
                                       </DropdownMenuItem>
                                     ))}
@@ -853,6 +886,8 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                           </TableCell>
                           <TableCell className="min-w-[120px] whitespace-nowrap text-sm">{formatDate(t.contractDate)}</TableCell>
                           <TableCell className="min-w-[110px] whitespace-nowrap text-sm">{formatDate(t.closedDate ?? t.closingDate)}</TableCell>
+                          <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.projectedCloseDate) || '—'}</TableCell>
+                          <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.inspectionDeadline) || '—'}</TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap text-sm">
                             {(t.dealValue || t.salePrice) ? formatCurrency(t.dealValue || t.salePrice || 0) : '—'}
                           </TableCell>

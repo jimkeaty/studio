@@ -87,7 +87,7 @@ function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | 
 const schema = z.object({
   agentId: z.string().min(1, 'Agent is required'),
   agentDisplayName: z.string().min(1),
-  status: z.enum(['active', 'pending', 'closed', 'cancelled', 'temp_off_market'], { required_error: 'Please select a status to continue' }),
+  status: z.enum(['active', 'pending', 'closed', 'cancelled', 'canceled', 'sold', 'expired', 'temp_off_market'], { required_error: 'Please select a status to continue' }),
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5, 'Full property address is required'),
@@ -891,6 +891,9 @@ export default function EditTransactionPage() {
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
+                      <SelectItem value="canceled">Canceled</SelectItem>
+                      <SelectItem value="sold">Sold</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormDescription>Select the current status of this transaction.</FormDescription>

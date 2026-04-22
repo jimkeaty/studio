@@ -30,7 +30,10 @@ const AGENT_ALLOWED_FIELDS = new Set([
 ]);
 
 // Statuses an agent is allowed to set
-const AGENT_ALLOWED_STATUSES = new Set(['active', 'temp_off_market', 'pending']);
+const AGENT_ALLOWED_STATUSES = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'sold']);
+
+// MLS-relevant status changes that trigger a Staff Queue notification
+const MLS_STATUS_TRIGGERS = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired']);
 
 export async function PATCH(
   req: NextRequest,
@@ -94,6 +97,37 @@ export async function PATCH(
 
     // Save updates to the transaction document
     await txRef.update(updates);
+
+    // ── Staff Queue: notify staff of MLS-relevant status changes ──
+    const previousStatus = txData.status;
+    const newStatus = updates.status;
+    const isMlsStatusChange = newStatus && newStatus !== previousStatus && MLS_STATUS_TRIGGERS.has(newStatus);
+    if (isMlsStatusChange) {
+      const agentProfile = await adminDb.collection('agentProfiles').doc(txData.agentId || uid).get().catch(() => null);
+      const agentName = agentProfile?.data()?.displayName || txData.agentDisplayName || 'Unknown Agent';
+      const staffQueueItem: Record<string, any> = {
+        transactionId: txId,
+        tcIntakeId: null,
+        agentId: txData.agentId || uid,
+        agentName,
+        submittedBy: uid,
+        submittedByName: agentName,
+        actionType: 'status_change',
+        previousStatus,
+        newStatus,
+        notes: updates.notes || txData.notes || null,
+        tcWorking: !!txData.workingWithTc,
+        status: 'pending_review',
+        reviewedBy: null,
+        reviewedByName: null,
+        reviewedAt: null,
+        staffNotes: null,
+        address: txData.address || txData.propertyAddress || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await adminDb.collection('staffQueue').add(staffQueueItem);
+    }
 
     // If agent is moving from active → pending, re-submit to TC queue
     if (resubmitToTc) {
