@@ -39,6 +39,7 @@ import {
   UsersRound,
   Wrench,
   MapPin,
+  GraduationCap,
 } from 'lucide-react';
 import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -105,6 +106,7 @@ const agentMenuItems = [
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
+  { href: '/dashboard/training', label: 'Training & Help', icon: GraduationCap },
 ];
 
 // Shown to all users — community & entertainment
@@ -157,6 +159,12 @@ const adminMenuGroups = [
     label: 'Settings',
     items: [
       { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
+    ],
+  },
+  {
+    label: 'Training',
+    items: [
+      { href: '/dashboard/training', label: 'Training & Help Center', icon: GraduationCap },
     ],
   },
   {
