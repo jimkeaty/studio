@@ -1,7 +1,7 @@
 // src/app/api/admin/branding/upload/route.ts
 // POST /api/admin/branding/upload?type=logo|animated
 // Accepts multipart/form-data with a `logo` file field.
-// Uploads to Firebase Storage and returns the public URL.
+// Uploads to Firebase Storage and returns a long-lived signed URL.
 import { NextRequest, NextResponse } from 'next/server';
 import { admin, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
@@ -92,14 +92,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Make publicly accessible
-    await blob.makePublic();
-
-    const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${storagePath}`;
+    // ---------- Generate a long-lived signed URL (10 years) ----------
+    // We use a signed URL because the bucket has uniform bucket-level access
+    // enabled, which prevents makePublic() from working.
+    const [signedUrl] = await blob.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000, // 10 years
+    });
 
     return NextResponse.json({
       ok: true,
-      url: publicUrl,
+      url: signedUrl,
       type: uploadType,
       storagePath,
     });
