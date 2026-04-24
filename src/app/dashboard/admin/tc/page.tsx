@@ -132,6 +132,7 @@ export default function TcQueuePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [tcSearch, setTcSearch] = useState('');
 
   // ── Staff TC users state (replaces legacy tcProfiles) ──────────────────────
   const [tcStaff, setTcStaff] = useState<StaffUser[]>([]);
@@ -334,40 +335,64 @@ export default function TcQueuePage() {
             })}
           </div>
 
-          {/* Filter */}
+          {/* Filter + Search */}
           <Card>
-            <CardContent className="pt-4 flex items-center gap-4">
-              <span className="text-sm font-medium">Status:</span>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active Queue ({activeCount})</SelectItem>
-                  <SelectItem value="all">All ({allCount})</SelectItem>
-                  <SelectItem value="submitted">Submitted ({counts.submitted ?? 0})</SelectItem>
-                  <SelectItem value="in_review">In Review ({counts.in_review ?? 0})</SelectItem>
-                  <SelectItem value="approved">Approved ({counts.approved ?? 0})</SelectItem>
-                  <SelectItem value="rejected">Rejected ({counts.rejected ?? 0})</SelectItem>
-                  <SelectItem value="archived">Archived ({counts.archived ?? 0})</SelectItem>
-                </SelectContent>
-              </Select>
+            <CardContent className="pt-4 flex flex-wrap items-center gap-4">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Input
+                  placeholder="Search by address, agent, or client..."
+                  value={tcSearch}
+                  onChange={(e) => setTcSearch(e.target.value)}
+                  className="pl-9"
+                />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Status:</span>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active Queue ({activeCount})</SelectItem>
+                    <SelectItem value="all">All ({allCount})</SelectItem>
+                    <SelectItem value="submitted">Submitted ({counts.submitted ?? 0})</SelectItem>
+                    <SelectItem value="in_review">In Review ({counts.in_review ?? 0})</SelectItem>
+                    <SelectItem value="approved">Approved ({counts.approved ?? 0})</SelectItem>
+                    <SelectItem value="rejected">Rejected ({counts.rejected ?? 0})</SelectItem>
+                    <SelectItem value="archived">Archived ({counts.archived ?? 0})</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardContent>
           </Card>
 
           {/* Table */}
+          {(() => {
+            const q = tcSearch.toLowerCase();
+            const filteredIntakes = tcSearch
+              ? intakes.filter((i) =>
+                  (i.address || '').toLowerCase().includes(q) ||
+                  (i.agentDisplayName || '').toLowerCase().includes(q) ||
+                  (i.clientName || '').toLowerCase().includes(q)
+                )
+              : intakes;
+            return (
           <Card>
             <CardHeader>
               <CardTitle>Intakes</CardTitle>
-              <CardDescription>{intakes.length} record{intakes.length !== 1 ? 's' : ''}</CardDescription>
+              <CardDescription>
+                {filteredIntakes.length} record{filteredIntakes.length !== 1 ? 's' : ''}
+                {tcSearch && ` matching "${tcSearch}"`}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-              ) : intakes.length === 0 ? (
+              ) : filteredIntakes.length === 0 ? (
                 <div className="text-center py-16 space-y-3">
                   <ClipboardList className="h-10 w-10 text-muted-foreground mx-auto" />
-                  <p className="text-muted-foreground">No TC submissions found.</p>
+                  <p className="text-muted-foreground">{tcSearch ? `No results for "${tcSearch}"` : 'No TC submissions found.'}</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -388,7 +413,7 @@ export default function TcQueuePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {intakes.map((intake) => {
+                      {filteredIntakes.map((intake) => {
                         const cfg = STATUS_CONFIG[intake.status] ?? STATUS_CONFIG.submitted;
                         const assignedStaff = tcStaff.find((s) => s.id === intake.assignedTcProfileId);
                         return (
@@ -464,6 +489,8 @@ export default function TcQueuePage() {
               )}
             </CardContent>
           </Card>
+            );
+          })()}
         </TabsContent>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}

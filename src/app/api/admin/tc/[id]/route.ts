@@ -251,9 +251,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ ok: true, status: 'updated' });
     }
 
-    // ── APPROVE → create transaction ─────────────────────────────────────────
+    // ── APPROVE → create or update transaction ──────────────────────────────
     if (action === 'approve') {
-      if (intake.status === 'approved') {
+      // Guard: already approved AND still has a linked transaction — nothing to do
+      if (intake.status === 'approved' && intake.approvedTransactionId) {
         return jsonError(400, 'Intake is already approved');
       }
 
@@ -543,12 +544,33 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         txPayload.hasCoAgent = !!intake.hasCoAgent;
       }
 
-      const txRef = await adminDb.collection('transactions').add(txPayload);
+      // If this intake was previously approved and already has a linked transaction,
+      // UPDATE that transaction in place instead of creating a duplicate.
+      let transactionId: string;
+      const existingTxId = toOptStr(intake.approvedTransactionId);
+
+      if (existingTxId) {
+        // Re-approval after reopen: update the existing ledger transaction
+        const existingTxRef = adminDb.collection('transactions').doc(existingTxId);
+        const existingTxSnap = await existingTxRef.get();
+        if (existingTxSnap.exists) {
+          await existingTxRef.update({ ...txPayload, updatedAt: now });
+          transactionId = existingTxId;
+        } else {
+          // Linked transaction was deleted — create a fresh one
+          const txRef = await adminDb.collection('transactions').add(txPayload);
+          transactionId = txRef.id;
+        }
+      } else {
+        // First-time approval — create a new transaction
+        const txRef = await adminDb.collection('transactions').add(txPayload);
+        transactionId = txRef.id;
+      }
 
       // Mark intake approved
       await docRef.update({
         status: 'approved',
-        approvedTransactionId: txRef.id,
+        approvedTransactionId: transactionId,
         reviewedAt: now,
         reviewedBy: decoded.email,
         updatedAt: now,
@@ -569,7 +591,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({
         ok: true,
         status: 'approved',
-        transactionId: txRef.id,
+        transactionId,
       });
     }
 

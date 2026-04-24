@@ -254,9 +254,12 @@ const schema = z.object({
   inspectorName: z.string().optional(),
 
   // Commission paid by seller
-  sellerPayingListingAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  // When commissionMode is 'flat', sellerPayingListingAgent / sellerPayingBuyerAgent hold dollar amounts
+  sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
   sellerPayingListingAgentUnknown: z.boolean().optional(),
-  sellerPayingBuyerAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  sellerPayingBuyerAgent: z.coerce.number().min(0).optional().or(z.literal('')),
+  // 'percent' (default) or 'flat' — controls whether seller-paying fields are % or $
+  commissionMode: z.enum(['percent', 'flat']).optional(),
 
   // Buyer closing cost paid by seller
   buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -348,6 +351,18 @@ export default function AddTransactionPage() {
   const [activeTier, setActiveTier] = useState<CommissionTier | null>(null);
   const commissionManualOverride = useRef(false);
 
+  // Commission mode toggle: 'percent' = % of sale price, 'flat' = flat dollar amount
+  const [commissionMode, setCommissionMode] = useState<'percent' | 'flat'>('percent');
+  const toggleCommissionMode = () => {
+    const next = commissionMode === 'percent' ? 'flat' : 'percent';
+    setCommissionMode(next);
+    form.setValue('commissionMode', next);
+    // Clear seller-paying fields when switching modes to avoid misinterpretation
+    form.setValue('sellerPayingListingAgent', '' as any);
+    form.setValue('sellerPayingBuyerAgent', '' as any);
+    commPctManuallyEdited.current = false;
+  };
+
   const { isAdmin: isAdminUser } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
 
@@ -411,7 +426,8 @@ export default function AddTransactionPage() {
   }, [watchedSalePrice]);
 
   useEffect(() => {
-    if (commPctManuallyEdited.current) return;
+    // Only auto-fill commissionPercent when in percent mode
+    if (commPctManuallyEdited.current || commissionMode === 'flat') return;
     const listingPct = Number(watchedSellerPayingListing) || 0;
     const buyerPct = Number(watchedSellerPayingBuyer) || 0;
     let autoPct = 0;
@@ -419,7 +435,7 @@ export default function AddTransactionPage() {
     else if (watchedClosingType === 'buyer') autoPct = buyerPct;
     else if (watchedClosingType === 'dual') autoPct = listingPct + buyerPct;
     if (autoPct > 0) form.setValue('commissionPercent', autoPct as any);
-  }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer]);
+  }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer, commissionMode]);
 
   useEffect(() => {
     const cbp = Number(watchedCBP) || 0;
@@ -1461,20 +1477,59 @@ export default function AddTransactionPage() {
 
             {/* Commission paid by seller */}
             <Separator />
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Paid by Seller</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Paid by Seller</p>
+              {/* % / $ toggle */}
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${commissionMode === 'percent' ? 'text-primary' : 'text-muted-foreground'}`}>%</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={commissionMode === 'flat'}
+                  onClick={toggleCommissionMode}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    commissionMode === 'flat' ? 'bg-primary' : 'bg-input'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                      commissionMode === 'flat' ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+                <span className={`text-xs font-medium ${commissionMode === 'flat' ? 'text-primary' : 'text-muted-foreground'}`}>Flat $</span>
+              </div>
+            </div>
+            {commissionMode === 'flat' && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 rounded px-3 py-2">
+                <strong>Flat Rate Mode:</strong> Enter the exact dollar amount the seller is paying. GCI % will not be auto-filled — enter GCI manually below.
+              </p>
+            )}
             <div className="space-y-4">
               <div className="flex items-end gap-4">
                 <div className="flex-1 max-w-xs">
                   <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>% Seller Paying Listing Agent</FormLabel>
+                      <FormLabel>
+                        {commissionMode === 'flat' ? '$ Seller Paying Listing Agent' : '% Seller Paying Listing Agent'}
+                      </FormLabel>
                       <FormControl>
-                        <div className="relative">
-                          <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-                        </div>
+                        {commissionMode === 'flat' ? (
+                          <CurrencyInput
+                            value={field.value as any}
+                            onChange={(val) => field.onChange(val)}
+                            placeholder="0"
+                          />
+                        ) : (
+                          <div className="relative">
+                            <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                          </div>
+                        )}
                       </FormControl>
-                      <FormDescription>% of Commission Base Price</FormDescription>
+                      <FormDescription>
+                        {commissionMode === 'flat' ? 'Flat dollar amount paid to listing agent' : '% of Commission Base Price'}
+                      </FormDescription>
                     </FormItem>
                   )} />
                 </div>
@@ -1491,14 +1546,26 @@ export default function AddTransactionPage() {
               <div className="max-w-xs">
                 <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>% Seller Paying Buyer&apos;s Agent</FormLabel>
+                    <FormLabel>
+                      {commissionMode === 'flat' ? "$ Seller Paying Buyer's Agent" : "% Seller Paying Buyer's Agent"}
+                    </FormLabel>
                     <FormControl>
-                      <div className="relative">
-                        <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-                      </div>
+                      {commissionMode === 'flat' ? (
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => field.onChange(val)}
+                          placeholder="0"
+                        />
+                      ) : (
+                        <div className="relative">
+                          <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                        </div>
+                      )}
                     </FormControl>
-                    <FormDescription>% of Commission Base Price</FormDescription>
+                    <FormDescription>
+                      {commissionMode === 'flat' ? "Flat dollar amount paid to buyer's agent" : '% of Commission Base Price'}
+                    </FormDescription>
                   </FormItem>
                 )} />
               </div>
