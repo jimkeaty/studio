@@ -257,6 +257,8 @@ export async function GET(req: NextRequest) {
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = String((t as any).closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
+      // Pass-through transactions: count volume/count but exclude from GCI & commission % calculation
+      const isPassThrough = srcKey === 'pass_through';
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -268,17 +270,17 @@ export async function GET(req: NextRequest) {
 
         const md = months[txMonth]; // 0-based index
 
-        // Monthly
-        md.totalGCI += gci;
-        md.grossMargin += companyRetained;
+        // Monthly — always count volume; only count GCI for non-pass-through
+        if (!isPassThrough) md.totalGCI += gci;
+        if (!isPassThrough) md.grossMargin += companyRetained;
         md.transactionFees += txFee;
         md.closedVolume += dealValue;
         md.closedCount += sideCount;
 
-        // Yearly totals
-        totals.totalGCI += gci;
-        totals.grossMargin += companyRetained;
-        totals.agentNetCommission += Math.max(0, gci - companyRetained);
+        // Yearly totals — same rule
+        if (!isPassThrough) totals.totalGCI += gci;
+        if (!isPassThrough) totals.grossMargin += companyRetained;
+        if (!isPassThrough) totals.agentNetCommission += Math.max(0, gci - companyRetained);
         totals.transactionFees += txFee;
         totals.closedVolume += dealValue;
         totals.closedCount += sideCount;

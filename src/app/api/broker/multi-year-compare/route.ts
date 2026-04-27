@@ -95,10 +95,13 @@ export async function GET(req: NextRequest) {
       const isDual = String(d.closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
 
-      bucket.grossMargin += grossMargin;
+      // Pass-through: count volume/sales but exclude from GCI & grossMargin to keep commission % accurate
+      const isPassThrough = String(d.dealSource || '').toLowerCase() === 'pass_through';
+
+      if (!isPassThrough) bucket.grossMargin += grossMargin;
       bucket.volume += dealValue;
       bucket.sales += sideCount;
-      bucket.gci += gci;
+      if (!isPassThrough) bucket.gci += gci;
     }
 
     // Convert to sorted array
