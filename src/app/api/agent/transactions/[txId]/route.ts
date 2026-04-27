@@ -137,7 +137,7 @@ export async function PATCH(
         reviewedByName: null,
         reviewedAt: null,
         staffNotes: null,
-        address: txData.address || txData.propertyAddress || null,
+        address: txData.propertyAddress || txData.address || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

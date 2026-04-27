@@ -61,6 +61,19 @@ export async function GET(
       if (txDoc.exists) {
         transaction = serializeFirestore(txDoc.data());
         transaction.id = txDoc.id;
+
+        // Backfill address on the queue item if it was missing at creation time
+        if (!item.address && !item.transactionAddress) {
+          const resolvedAddress = transaction.propertyAddress || transaction.address || null;
+          if (resolvedAddress) {
+            await adminDb.collection('staffQueue').doc(params.itemId).update({
+              address: resolvedAddress,
+              transactionAddress: resolvedAddress,
+            });
+            item.address = resolvedAddress;
+            item.transactionAddress = resolvedAddress;
+          }
+        }
       }
     }
 
