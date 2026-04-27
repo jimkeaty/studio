@@ -20,6 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2,
   Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft, Download, Tags,
+  Copy, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -133,6 +134,27 @@ export default function AdminTransactionLedgerPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  // Duplicate finder
+  const [dupFinderOpen, setDupFinderOpen] = useState(true);
+  const [dupDismissed, setDupDismissed] = useState(false);
+
+  // Compute duplicate groups: same agent + normalized address, 2+ transactions
+  const duplicateGroups = useMemo(() => {
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+    const map = new Map<string, Transaction[]>();
+    for (const tx of transactions) {
+      const agent = (tx.agentDisplayName || tx.agentId || '').trim();
+      const addr = normalize(tx.address || '');
+      if (!agent || !addr) continue;
+      const key = `${agent}|||${addr}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(tx);
+    }
+    return Array.from(map.values())
+      .filter(group => group.length > 1)
+      .sort((a, b) => b.length - a.length);
+  }, [transactions]);
 
   // Quick status change (Temp Off Market toggle)
   const [quickStatusTx, setQuickStatusTx] = useState<Transaction | null>(null);
@@ -515,6 +537,96 @@ export default function AdminTransactionLedgerPage() {
           </Link>
         </div>
       </div>
+
+      {/* DUPLICATE FINDER BANNER */}
+      {duplicateGroups.length > 0 && !dupDismissed && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+            onClick={() => setDupFinderOpen(o => !o)}
+          >
+            <div className="flex items-center gap-2">
+              <Copy className="h-4 w-4 text-amber-600" />
+              <span className="font-semibold text-amber-800 dark:text-amber-300">
+                {duplicateGroups.length} Potential Duplicate Group{duplicateGroups.length !== 1 ? 's' : ''} Detected
+              </span>
+              <span className="text-xs text-amber-700 dark:text-amber-400">
+                — same agent &amp; address with multiple transactions
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="text-xs text-amber-700 underline hover:text-amber-900 mr-2"
+                onClick={e => { e.stopPropagation(); setDupDismissed(true); }}
+              >
+                Dismiss
+              </button>
+              {dupFinderOpen
+                ? <ChevronUp className="h-4 w-4 text-amber-600" />
+                : <ChevronDown className="h-4 w-4 text-amber-600" />}
+            </div>
+          </button>
+
+          {dupFinderOpen && (
+            <div className="px-4 pb-4 space-y-3">
+              {duplicateGroups.map((group, gi) => (
+                <div key={gi} className="rounded-md border border-amber-200 bg-white dark:bg-amber-950/20 overflow-hidden">
+                  <div className="px-3 py-2 bg-amber-100 dark:bg-amber-900/30 flex items-center justify-between">
+                    <div className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                      {group[0].address || '(no address)'}
+                      <span className="ml-2 text-xs font-normal text-amber-700">— {group[0].agentDisplayName}</span>
+                    </div>
+                    <span className="text-xs bg-amber-200 text-amber-800 rounded-full px-2 py-0.5 font-semibold">
+                      {group.length} duplicates
+                    </span>
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-amber-100 text-muted-foreground">
+                        <th className="text-left px-3 py-1.5 font-medium">Status</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Type</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Contract Date</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Close Date</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Sale Price</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Source</th>
+                        <th className="text-left px-3 py-1.5 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.map((tx, ti) => (
+                        <tr key={tx.id} className={ti % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-amber-50/50 dark:bg-amber-950/10'}>
+                          <td className="px-3 py-1.5">
+                            <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold', statusConfig[tx.status]?.color ?? 'bg-gray-200 text-gray-700')}>
+                              {statusConfig[tx.status]?.label ?? tx.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{closingTypeLabel[(tx as any).closingType] ?? (tx as any).closingType ?? '—'}</td>
+                          <td className="px-3 py-1.5">{formatDate(tx.contractDate)}</td>
+                          <td className="px-3 py-1.5">{formatDate(tx.closedDate ?? (tx as any).closingDate)}</td>
+                          <td className="px-3 py-1.5">{tx.salePrice ? formatCurrency(tx.salePrice as number) : (tx.dealValue ? formatCurrency(tx.dealValue) : '—')}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{tx.source ?? 'manual'}</td>
+                          <td className="px-3 py-1.5 flex items-center gap-1.5">
+                            <Link href={`/dashboard/admin/transactions/edit?id=${tx.id}`}>
+                              <button className="text-blue-600 hover:underline text-[11px]">Edit</button>
+                            </Link>
+                            <span className="text-muted-foreground">·</span>
+                            <button
+                              className="text-red-600 hover:underline text-[11px]"
+                              onClick={() => { setDeleteTx(tx); setDeleteOpen(true); }}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ALERTS */}
       {recalcResult && (
