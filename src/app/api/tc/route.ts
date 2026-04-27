@@ -238,32 +238,39 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit();
 
-    // ── Staff Queue: create a staff queue item for all new listings ──
-    // This notifies staff to list on MLS and take appropriate action.
-    // If working with TC, also goes to TC queue (already done above).
+    // ── Staff Queue: only create an item for listing/dual transactions ──
+    // Rules:
+    //   - Listings (closingType = 'listing' or 'dual'): always notify staff (new listing + every status change)
+    //   - Buyer/referral transactions: only notify staff when the deal is CLOSED
+    //   - New buyer/referral submissions go to the transaction ledger only, not the staff queue
     const workingWithTc = !!body.workingWithTc;
-    const staffQueueItem: Record<string, any> = {
-      transactionId: null, // Will be set when TC approves or immediately if not using TC
-      tcIntakeId: ref.id,
-      agentId,
-      agentName: agentDisplayName,
-      submittedBy: uid,
-      submittedByName: agentDisplayName,
-      actionType: 'new_listing',
-      previousStatus: null,
-      newStatus: toStr(body.status) || 'active',
-      notes: toStr(body.notes) || null,
-      tcWorking: workingWithTc,
-      status: 'pending_review',
-      reviewedBy: null,
-      reviewedByName: null,
-      reviewedAt: null,
-      staffNotes: null,
-      address: address,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-    await adminDb.collection('staffQueue').add(staffQueueItem);
+    const isListingType = closingType === 'listing' || closingType === 'dual';
+    if (isListingType) {
+      const staffQueueItem: Record<string, any> = {
+        transactionId: null, // Will be set when TC approves or immediately if not using TC
+        tcIntakeId: ref.id,
+        agentId,
+        agentName: agentDisplayName,
+        submittedBy: uid,
+        submittedByName: agentDisplayName,
+        actionType: 'new_listing',
+        closingType,
+        previousStatus: null,
+        newStatus: toStr(body.status) || 'active',
+        notes: toStr(body.notes) || null,
+        tcWorking: workingWithTc,
+        status: 'pending_review',
+        reviewedBy: null,
+        reviewedByName: null,
+        reviewedAt: null,
+        staffNotes: null,
+        address: address,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      await adminDb.collection('staffQueue').add(staffQueueItem);
+    }
+    // Buyer/referral transactions are saved to the transaction ledger only (no staff queue entry on new submission)
 
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err: any) {

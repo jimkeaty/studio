@@ -32,8 +32,14 @@ const AGENT_ALLOWED_FIELDS = new Set([
 // Statuses an agent is allowed to set
 const AGENT_ALLOWED_STATUSES = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'sold']);
 
-// MLS-relevant status changes that trigger a Staff Queue notification
-const MLS_STATUS_TRIGGERS = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired']);
+// Listing-specific status changes that always trigger a Staff Queue notification
+const LISTING_STATUS_TRIGGERS = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'coming_soon']);
+
+// For buyer/referral transactions, only 'closed' triggers a Staff Queue notification
+const BUYER_STATUS_TRIGGERS = new Set(['closed']);
+
+// Closing types that are considered "listing" transactions
+const LISTING_CLOSING_TYPES = new Set(['listing', 'dual']);
 
 export async function PATCH(
   req: NextRequest,
@@ -98,11 +104,19 @@ export async function PATCH(
     // Save updates to the transaction document
     await txRef.update(updates);
 
-    // ── Staff Queue: notify staff of MLS-relevant status changes ──
+    // ── Staff Queue: notify staff based on transaction type and status change ──
+    // Rules:
+    //   - Listing/dual transactions: notify on any MLS status change
+    //     (active, pending, coming_soon, temp_off_market, canceled, expired, closed)
+    //   - Buyer/referral transactions: notify ONLY when status changes to 'closed'
     const previousStatus = txData.status;
     const newStatus = updates.status;
-    const isMlsStatusChange = newStatus && newStatus !== previousStatus && MLS_STATUS_TRIGGERS.has(newStatus);
-    if (isMlsStatusChange) {
+    const txClosingType = String(txData.closingType || txData.transactionType || '');
+    const isListingTx = LISTING_CLOSING_TYPES.has(txClosingType);
+    const triggerSet = isListingTx ? LISTING_STATUS_TRIGGERS : BUYER_STATUS_TRIGGERS;
+    const shouldNotifyStaff = newStatus && newStatus !== previousStatus && triggerSet.has(newStatus);
+
+    if (shouldNotifyStaff) {
       const agentProfile = await adminDb.collection('agentProfiles').doc(txData.agentId || uid).get().catch(() => null);
       const agentName = agentProfile?.data()?.displayName || txData.agentDisplayName || 'Unknown Agent';
       const staffQueueItem: Record<string, any> = {
@@ -112,7 +126,8 @@ export async function PATCH(
         agentName,
         submittedBy: uid,
         submittedByName: agentName,
-        actionType: 'status_change',
+        actionType: newStatus === 'closed' && !isListingTx ? 'closed_buyer' : 'status_change',
+        closingType: txClosingType || null,
         previousStatus,
         newStatus,
         notes: updates.notes || txData.notes || null,

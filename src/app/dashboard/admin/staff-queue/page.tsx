@@ -21,7 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 
 type QueueStatus = 'pending_review' | 'in_progress' | 'completed' | 'dismissed';
-type ActionType = 'new_listing' | 'status_change' | 'update';
+type ActionType = 'new_listing' | 'status_change' | 'update' | 'closed_buyer';
 
 type StaffQueueItem = {
   id: string;
@@ -82,6 +82,7 @@ const ACTION_CONFIG: Record<ActionType, { label: string; color: string }> = {
   new_listing: { label: 'New Listing', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   status_change: { label: 'Status Change', color: 'bg-purple-100 text-purple-800 border-purple-200' },
   update: { label: 'Update', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  closed_buyer: { label: 'Closed Buyer', color: 'bg-amber-100 text-amber-800 border-amber-200' },
 };
 
 const TX_STATUS_LABELS: Record<string, string> = {
@@ -233,6 +234,7 @@ export default function StaffQueuePage() {
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="new_listing">New Listing</SelectItem>
                 <SelectItem value="status_change">Status Change</SelectItem>
+                <SelectItem value="closed_buyer">Closed Buyer</SelectItem>
                 <SelectItem value="update">Update</SelectItem>
               </SelectContent>
             </Select>
@@ -307,7 +309,7 @@ export default function StaffQueuePage() {
                         </TableCell>
                         <TableCell className="text-sm whitespace-nowrap">{item.agentName || item.submittedByName || '—'}</TableCell>
                         <TableCell>
-                          {item.actionType === 'status_change' && (item.previousStatus || item.newStatus) ? (
+                          {(item.actionType === 'status_change' || item.actionType === 'closed_buyer') && (item.previousStatus || item.newStatus) ? (
                             <div className="flex items-center gap-1.5 text-xs">
                               <span className="px-1.5 py-0.5 rounded bg-muted border text-muted-foreground">
                                 {TX_STATUS_LABELS[item.previousStatus || ''] || item.previousStatus || '?'}
