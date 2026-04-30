@@ -46,6 +46,13 @@ export default function AdminToolsPage() {
   const [yearFixRunning, setYearFixRunning] = useState(false);
   const [yearFixResult, setYearFixResult] = useState<MigrationResult | null>(null);
 
+  // Bulk Accept Duplicates
+  const [bulkAcceptRunning, setBulkAcceptRunning] = useState(false);
+  const [bulkAcceptResult, setBulkAcceptResult] = useState<{
+    ok: boolean; accepted?: number; notFound?: number;
+    notFoundList?: { address: string; agent: string }[]; error?: string;
+  } | null>(null);
+
   // Manual Agent Merge
   const [allAgents, setAllAgents] = useState<AgentRow[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -127,6 +134,26 @@ export default function AdminToolsPage() {
     }
   }
 
+  async function runBulkAcceptDuplicates() {
+    if (!user) return;
+    if (!confirm('This will permanently mark all 91 pre-verified duplicate groups as legitimate in Firestore. They will no longer appear in the duplicate finder. Continue?')) return;
+    setBulkAcceptRunning(true);
+    setBulkAcceptResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/migrations/bulk-accept-duplicates', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setBulkAcceptResult(data);
+    } catch (err: any) {
+      setBulkAcceptResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setBulkAcceptRunning(false);
+    }
+  }
+
   async function runYearFix() {
     if (!user) return;
     setYearFixRunning(true);
@@ -157,6 +184,61 @@ export default function AdminToolsPage() {
           One-time maintenance tasks and data migrations. Each tool is safe to run multiple times.
         </p>
       </div>
+
+      {/* Bulk Accept Duplicates */}
+      <Card className="border-green-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <div>
+                <CardTitle className="text-base">Bulk Accept 91 Pre-Verified Duplicate Groups</CardTitle>
+                <CardDescription className="mt-1">
+                  Permanently marks all 91 duplicate transaction groups from the spreadsheet as legitimate
+                  in Firestore. These groups will no longer appear in the duplicate finder on the Transaction
+                  Ledger — even after a page refresh. Categories: same agent listed &amp; sold, same address
+                  sold in different years, leases 6+ months apart.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-green-300 text-green-700">One-Time</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {bulkAcceptResult && (
+            <Alert variant={bulkAcceptResult.ok ? 'default' : 'destructive'} className={bulkAcceptResult.ok ? 'border-green-200 bg-green-50' : ''}>
+              {bulkAcceptResult.ok ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle className={bulkAcceptResult.ok ? 'text-green-800' : ''}>
+                {bulkAcceptResult.ok ? 'Bulk Accept Complete' : 'Bulk Accept Failed'}
+              </AlertTitle>
+              <AlertDescription className={bulkAcceptResult.ok ? 'text-green-700' : ''}>
+                {bulkAcceptResult.ok ? (
+                  <div className="space-y-1">
+                    <p>✓ {bulkAcceptResult.accepted} group(s) accepted and saved to Firestore.</p>
+                    {(bulkAcceptResult.notFound ?? 0) > 0 && (
+                      <div>
+                        <p className="text-amber-700">⚠ {bulkAcceptResult.notFound} entry/entries not found in transaction data:</p>
+                        <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                          {bulkAcceptResult.notFoundList?.map((nf, i) => (
+                            <li key={i}>{nf.address} — {nf.agent}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : bulkAcceptResult.error}
+              </AlertDescription>
+            </Alert>
+          )}
+          <Button
+            onClick={runBulkAcceptDuplicates}
+            disabled={bulkAcceptRunning}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            {bulkAcceptRunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running…</> : 'Accept All 91 Groups'}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Manual Agent Merge */}
       <Card className="border-blue-200">

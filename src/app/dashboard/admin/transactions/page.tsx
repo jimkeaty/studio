@@ -139,6 +139,7 @@ export default function AdminTransactionLedgerPage() {
   const [dupFinderOpen, setDupFinderOpen] = useState(true);
   const [dupDismissed, setDupDismissed] = useState(false);
   const [acceptedDupKeys, setAcceptedDupKeys] = useState<Set<string>>(new Set());
+  const [acceptedDupLoaded, setAcceptedDupLoaded] = useState(false);
 
   // Compute duplicate groups: same agent + normalized address, 2+ transactions
   const duplicateGroups = useMemo(() => {
@@ -162,8 +163,19 @@ export default function AdminTransactionLedgerPage() {
     [duplicateGroups, acceptedDupKeys]
   );
 
-  const acceptDupGroup = (key: string) =>
+  const acceptDupGroup = async (key: string) => {
     setAcceptedDupKeys(prev => new Set([...prev, key]));
+    // Persist to Firestore
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch('/api/admin/accepted-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ key }),
+      });
+    } catch { /* non-critical — UI already updated */ }
+  };
 
   // Quick status change (Temp Off Market toggle)
   const [quickStatusTx, setQuickStatusTx] = useState<Transaction | null>(null);
@@ -206,12 +218,30 @@ export default function AdminTransactionLedgerPage() {
     } catch { /* ignore */ }
   }, [user]);
 
+  // Load accepted duplicate keys from Firestore on mount
+  const loadAcceptedDups = useCallback(async () => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/accepted-duplicates', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.keys)) {
+        setAcceptedDupKeys(new Set(data.keys));
+      }
+    } catch { /* non-critical */ } finally {
+      setAcceptedDupLoaded(true);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!userLoading && user) {
       loadTransactions();
       loadAgents();
+      loadAcceptedDups();
     }
-  }, [user, userLoading, loadTransactions, loadAgents]);
+  }, [user, userLoading, loadTransactions, loadAgents, loadAcceptedDups]);
 
   /* ─── Recalculate rollups ──────────────────────────────────────────── */
 
