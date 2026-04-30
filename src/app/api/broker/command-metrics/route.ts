@@ -222,7 +222,8 @@ export async function GET(req: NextRequest) {
       grossMarginPct: 0,
       agentNetCommission: 0,
       transactionFees: 0,
-      closedVolume: 0,
+      closedVolume: 0,         // all closed volume (for display)
+      commissionVolume: 0,     // non-pass-through volume only (for commission % denominator)
       pendingVolume: 0,
       closedCount: 0,
       pendingCount: 0,
@@ -281,6 +282,7 @@ export async function GET(req: NextRequest) {
         if (!isPassThrough) totals.totalGCI += gci;
         if (!isPassThrough) totals.grossMargin += companyRetained;
         if (!isPassThrough) totals.agentNetCommission += Math.max(0, gci - companyRetained);
+        if (!isPassThrough) totals.commissionVolume += dealValue;
         totals.transactionFees += txFee;
         totals.closedVolume += dealValue;
         totals.closedCount += sideCount;
@@ -331,10 +333,11 @@ export async function GET(req: NextRequest) {
     const prevMonthly = Array.from({ length: 12 }, () => ({
       closedVolume: 0, closedCount: 0, totalGCI: 0, grossMargin: 0,
     }));
-    let prevTotalVolume = 0;
+    let prevTotalVolume = 0;       // all closed volume (for display)
+    let prevCommissionVolume = 0;  // non-pass-through volume only (for commission % denominator)
     let prevTotalCount = 0;
-    let prevTotalGCI = 0;
-    let prevTotalMargin = 0;
+    let prevTotalGCI = 0;          // non-pass-through GCI only
+    let prevTotalMargin = 0;       // non-pass-through margin only
 
     for (const t of prevTransactions) {
       if (t.status !== 'closed') continue;
@@ -345,16 +348,23 @@ export async function GET(req: NextRequest) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const vol = t.dealValue ?? 0;
+      const isPrevPassThrough = ((t.dealSource || '').toLowerCase()) === 'pass_through';
 
       prevMonthly[m].closedVolume += vol;
       prevMonthly[m].closedCount += 1;
-      prevMonthly[m].totalGCI += gci;
-      prevMonthly[m].grossMargin += margin;
+      // Only count GCI/margin for non-pass-through transactions
+      if (!isPrevPassThrough) {
+        prevMonthly[m].totalGCI += gci;
+        prevMonthly[m].grossMargin += margin;
+      }
 
       prevTotalVolume += vol;
       prevTotalCount += 1;
-      prevTotalGCI += gci;
-      prevTotalMargin += margin;
+      if (!isPrevPassThrough) {
+        prevTotalGCI += gci;
+        prevTotalMargin += margin;
+        prevCommissionVolume += vol;
+      }
     }
 
     // Seasonality: what % of the year each month represented
@@ -379,7 +389,7 @@ export async function GET(req: NextRequest) {
       avgGCI: prevTotalCount > 0 ? Math.round(prevTotalGCI / prevTotalCount) : 0,
       avgGrossMargin: prevTotalCount > 0 ? Math.round(prevTotalMargin / prevTotalCount) : 0,
       avgMarginPct: prevTotalGCI > 0 ? Math.round((prevTotalMargin / prevTotalGCI) * 10000) / 100 : 0,
-      avgCommissionPct: prevTotalVolume > 0 ? Math.round((prevTotalGCI / prevTotalVolume) * 100000) / 1000 : 0,
+      avgCommissionPct: prevCommissionVolume > 0 ? Math.round((prevTotalGCI / prevCommissionVolume) * 100000) / 1000 : 0,
       seasonality,
     };
 

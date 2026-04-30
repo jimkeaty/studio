@@ -1054,8 +1054,11 @@ export function BrokerDashboardInner() {
   // ── Computed averages ─────────────────────────────────────────────────
   const avgSalePrice = totals.closedCount > 0
     ? Math.round(totals.closedVolume / totals.closedCount) : 0;
-  const avgCommissionPct = totals.closedVolume > 0
-    ? Math.round((totals.totalGCI / totals.closedVolume) * 10000) / 100 : 0;
+  // Use commissionVolume (excludes pass-throughs) as the denominator so the
+  // percentage reflects true brokerage deals only, not low-commission pass-throughs.
+  const commissionVolumeDenom = (totals.commissionVolume ?? totals.closedVolume);
+  const avgCommissionPct = commissionVolumeDenom > 0
+    ? Math.round((totals.totalGCI / commissionVolumeDenom) * 10000) / 100 : 0;
   const avgMarginPerDeal = totals.closedCount > 0
     ? Math.round(totals.grossMargin / totals.closedCount) : 0;
 

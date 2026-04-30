@@ -245,7 +245,7 @@ export async function GET(req: NextRequest) {
 
     const totals = {
       totalGCI: 0, grossMargin: 0, grossMarginPct: 0, transactionFees: 0,
-      closedVolume: 0, pendingVolume: 0, closedCount: 0, pendingCount: 0,
+      closedVolume: 0, commissionVolume: 0, pendingVolume: 0, closedCount: 0, pendingCount: 0,
       // Agent-specific: net income (what agent takes home)
       agentNetCommission: 0, // alias for netIncome — satisfies BrokerCommandOverview type
       netIncome: 0, pendingNetIncome: 0,

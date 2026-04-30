@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2 } from 'lucide-react';
 
 interface MigrationResult {
   ok: boolean;
@@ -45,6 +45,29 @@ export default function AdminToolsPage() {
   // Year 20226 fix
   const [yearFixRunning, setYearFixRunning] = useState(false);
   const [yearFixResult, setYearFixResult] = useState<MigrationResult | null>(null);
+
+  // Commission % Diagnostics
+  const [diagYear, setDiagYear] = useState(String(new Date().getFullYear()));
+  const [diagRunning, setDiagRunning] = useState(false);
+  const [diagResult, setDiagResult] = useState<any | null>(null);
+
+  async function runCommissionDiagnostics() {
+    if (!user) return;
+    setDiagRunning(true);
+    setDiagResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin/diagnostics/commission-pct?year=${diagYear}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setDiagResult(data);
+    } catch (err: any) {
+      setDiagResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setDiagRunning(false);
+    }
+  }
 
   // Bulk Delete Duplicates
   const [bulkDeleteMode, setBulkDeleteMode] = useState<'idle' | 'dryrun' | 'execute'>('idle');
@@ -559,6 +582,130 @@ export default function AdminToolsPage() {
           <Button onClick={runYearFix} disabled={yearFixRunning} variant={yearFixResult?.ok && yearFixResult?.fixed === 0 ? 'outline' : 'default'}>
             {yearFixRunning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scanning…</> : yearFixResult?.ok ? <><CheckCircle2 className="mr-2 h-4 w-4" />Run Again</> : 'Fix Year 20226 Typo'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Commission % Diagnostics */}
+      <Card className="border-blue-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <BarChart2 className="h-5 w-5 text-blue-600" />
+              <div>
+                <CardTitle className="text-base">Commission % Diagnostics</CardTitle>
+                <CardDescription className="mt-1">
+                  Shows the raw numbers behind the Avg Commission % on the Broker Dashboard.
+                  Breaks down included vs. excluded (pass-through) transactions and shows what the
+                  old vs. new calculation produces.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-blue-300 text-blue-700">Diagnostic</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-end gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="diagYear">Year</Label>
+              <Input
+                id="diagYear"
+                value={diagYear}
+                onChange={e => setDiagYear(e.target.value)}
+                className="w-24"
+                placeholder="2026"
+              />
+            </div>
+            <Button onClick={runCommissionDiagnostics} disabled={diagRunning}>
+              {diagRunning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Running…</> : 'Run Diagnostics'}
+            </Button>
+          </div>
+
+          {diagResult && (
+            diagResult.ok ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-md border bg-muted/30 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Total Closed</div>
+                    <div className="font-semibold">{diagResult.totalClosed}</div>
+                  </div>
+                  <div className="rounded-md border bg-green-50 border-green-200 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Included in %</div>
+                    <div className="font-semibold text-green-700">{diagResult.includedCount}</div>
+                  </div>
+                  <div className="rounded-md border bg-amber-50 border-amber-200 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Pass-Throughs Excluded</div>
+                    <div className="font-semibold text-amber-700">{diagResult.passThroughCount}</div>
+                  </div>
+                  <div className="rounded-md border bg-muted/30 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Zero-GCI Deals</div>
+                    <div className="font-semibold">{diagResult.zeroGCICount}</div>
+                  </div>
+                  <div className="rounded-md border bg-muted/30 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Total GCI (excl. PT)</div>
+                    <div className="font-semibold">${diagResult.totalGCI?.toLocaleString()}</div>
+                  </div>
+                  <div className="rounded-md border bg-muted/30 px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Commission Volume (excl. PT)</div>
+                    <div className="font-semibold">${diagResult.commissionVolume?.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 space-y-1">
+                  <div className="text-sm font-semibold text-blue-900">Commission % Results</div>
+                  <div className="text-sm text-blue-800">
+                    <span className="line-through text-red-500 mr-2">Old (incl. pass-through volume): {diagResult.avgCommPctOld}%</span>
+                    <span className="font-bold text-green-700">New (excl. pass-through volume): {diagResult.avgCommPctNew}%</span>
+                  </div>
+                </div>
+
+                {diagResult.passThroughExamples?.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:underline">Sample pass-through transactions ({diagResult.passThroughCount} total)</summary>
+                    <table className="mt-2 w-full text-xs border rounded">
+                      <thead><tr className="bg-muted/50"><th className="px-2 py-1 text-left">Address</th><th className="px-2 py-1 text-left">Agent</th><th className="px-2 py-1 text-right">Volume</th><th className="px-2 py-1 text-right">GCI</th><th className="px-2 py-1 text-right">Comm%</th></tr></thead>
+                      <tbody>
+                        {diagResult.passThroughExamples.map((ex: any, i: number) => (
+                          <tr key={i} className="border-t">
+                            <td className="px-2 py-1">{ex.address}</td>
+                            <td className="px-2 py-1">{ex.agent}</td>
+                            <td className="px-2 py-1 text-right">${ex.dealValue?.toLocaleString()}</td>
+                            <td className="px-2 py-1 text-right">${ex.gci?.toLocaleString()}</td>
+                            <td className="px-2 py-1 text-right">{ex.commPct}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                )}
+
+                {diagResult.zeroGCIExamples?.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:underline">Zero-GCI transactions ({diagResult.zeroGCICount} total) — may need data cleanup</summary>
+                    <table className="mt-2 w-full text-xs border rounded">
+                      <thead><tr className="bg-muted/50"><th className="px-2 py-1 text-left">Address</th><th className="px-2 py-1 text-left">Agent</th><th className="px-2 py-1 text-right">Volume</th><th className="px-2 py-1 text-left">Source</th><th className="px-2 py-1 text-left">Closed</th></tr></thead>
+                      <tbody>
+                        {diagResult.zeroGCIExamples.map((ex: any, i: number) => (
+                          <tr key={i} className="border-t">
+                            <td className="px-2 py-1">{ex.address}</td>
+                            <td className="px-2 py-1">{ex.agent}</td>
+                            <td className="px-2 py-1 text-right">${ex.dealValue?.toLocaleString()}</td>
+                            <td className="px-2 py-1">{ex.dealSource}</td>
+                            <td className="px-2 py-1">{ex.closedDate}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                )}
+              </div>
+            ) : (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Diagnostics Failed</AlertTitle>
+                <AlertDescription>{diagResult.error}</AlertDescription>
+              </Alert>
+            )
+          )}
         </CardContent>
       </Card>
 
