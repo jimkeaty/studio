@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2 } from 'lucide-react';
 
 interface MigrationResult {
   ok: boolean;
@@ -45,6 +45,51 @@ export default function AdminToolsPage() {
   // Year 20226 fix
   const [yearFixRunning, setYearFixRunning] = useState(false);
   const [yearFixResult, setYearFixResult] = useState<MigrationResult | null>(null);
+
+  // Bulk Delete Duplicates
+  const [bulkDeleteMode, setBulkDeleteMode] = useState<'idle' | 'dryrun' | 'execute'>('idle');
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<any | null>(null);
+
+  async function runBulkDeleteDryRun() {
+    if (!user) return;
+    setBulkDeleteMode('dryrun');
+    setBulkDeleteResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/migrations/bulk-delete-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      setBulkDeleteResult(data);
+    } catch (err: any) {
+      setBulkDeleteResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setBulkDeleteMode('idle');
+    }
+  }
+
+  async function runBulkDeleteExecute() {
+    if (!user) return;
+    if (!bulkDeleteResult?.confirmed) { alert('Run the dry run first to confirm matches.'); return; }
+    if (!confirm(`This will permanently DELETE ${bulkDeleteResult.confirmed} transaction(s) from Firestore and rebuild rollups.\n\nAmbiguous (${bulkDeleteResult.ambiguous}) and not-found (${bulkDeleteResult.notFound}) rows will NOT be deleted.\n\nThis cannot be undone. Continue?`)) return;
+    setBulkDeleteMode('execute');
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/migrations/bulk-delete-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ execute: true }),
+      });
+      const data = await res.json();
+      setBulkDeleteResult(data);
+    } catch (err: any) {
+      setBulkDeleteResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setBulkDeleteMode('idle');
+    }
+  }
 
   // Bulk Accept Duplicates
   const [bulkAcceptRunning, setBulkAcceptRunning] = useState(false);
@@ -184,6 +229,103 @@ export default function AdminToolsPage() {
           One-time maintenance tasks and data migrations. Each tool is safe to run multiple times.
         </p>
       </div>
+
+      {/* Bulk Delete Duplicates */}
+      <Card className="border-red-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              <div>
+                <CardTitle className="text-base">Bulk Delete 60 Duplicate Groups (65 rows)</CardTitle>
+                <CardDescription className="mt-1">
+                  Matches each DELETE row from the spreadsheet against live Firestore transactions by
+                  agent + address + status + listing date. Runs a dry-run first so you can review
+                  matches before executing. Ambiguous and not-found rows are never deleted automatically.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-red-300 text-red-700">Destructive</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {bulkDeleteResult && (
+            <div className="space-y-3">
+              {/* Summary */}
+              <Alert variant={bulkDeleteResult.ok ? 'default' : 'destructive'}
+                className={bulkDeleteResult.ok ? 'border-blue-200 bg-blue-50' : ''}>
+                {bulkDeleteResult.ok ? <CheckCircle2 className="h-4 w-4 text-blue-600" /> : <AlertTriangle className="h-4 w-4" />}
+                <AlertTitle className={bulkDeleteResult.ok ? 'text-blue-800' : ''}>
+                  {bulkDeleteResult.ok
+                    ? bulkDeleteResult.mode === 'EXECUTE' ? 'Delete Complete' : 'Dry Run Complete'
+                    : 'Error'}
+                </AlertTitle>
+                <AlertDescription className={bulkDeleteResult.ok ? 'text-blue-700' : ''}>
+                  {bulkDeleteResult.ok ? (
+                    <div className="space-y-1 text-sm">
+                      <p>Total entries: <strong>{bulkDeleteResult.totalEntries}</strong></p>
+                      <p className="text-green-700">✓ Confirmed matches: <strong>{bulkDeleteResult.confirmed}</strong></p>
+                      <p className="text-amber-700">⚠ Ambiguous (need manual review): <strong>{bulkDeleteResult.ambiguous}</strong></p>
+                      <p className="text-red-700">✗ Not found in Firestore: <strong>{bulkDeleteResult.notFound}</strong></p>
+                      {bulkDeleteResult.mode === 'EXECUTE' && (
+                        <p className="font-semibold text-green-800">Deleted: {bulkDeleteResult.deleted} | Rollups rebuilt: {bulkDeleteResult.rollupsRebuilt}</p>
+                      )}
+                    </div>
+                  ) : bulkDeleteResult.error}
+                </AlertDescription>
+              </Alert>
+
+              {/* Not found list */}
+              {bulkDeleteResult.ok && bulkDeleteResult.notFoundList?.length > 0 && (
+                <details className="text-sm">
+                  <summary className="cursor-pointer font-medium text-amber-700">Not Found ({bulkDeleteResult.notFoundList.length})</summary>
+                  <ul className="mt-2 space-y-1 list-disc list-inside text-xs text-muted-foreground">
+                    {bulkDeleteResult.notFoundList.map((r: any, i: number) => (
+                      <li key={i}>Group {r.group}: {r.address} — {r.agent} ({r.status}, listing: {r.listingDate || 'n/a'})</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              {/* Ambiguous list */}
+              {bulkDeleteResult.ok && bulkDeleteResult.ambiguousList?.length > 0 && (
+                <details className="text-sm">
+                  <summary className="cursor-pointer font-medium text-red-700">Ambiguous — Manual Review Required ({bulkDeleteResult.ambiguousList.length})</summary>
+                  <ul className="mt-2 space-y-2 text-xs text-muted-foreground">
+                    {bulkDeleteResult.ambiguousList.map((r: any, i: number) => (
+                      <li key={i} className="border rounded p-2">
+                        <p className="font-medium">Group {r.group}: {r.address} — {r.agent}</p>
+                        <p className="text-red-600">{r.reason}</p>
+                        {r.candidates?.map((c: any, j: number) => (
+                          <p key={j} className="ml-2">• {c.id} | {c.status} | listing: {c.listingDate || 'n/a'} | closed: {c.closedDate || 'n/a'}</p>
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={runBulkDeleteDryRun}
+              disabled={bulkDeleteMode !== 'idle'}
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+            >
+              {bulkDeleteMode === 'dryrun' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running Dry Run…</> : 'Run Dry Run (Preview Only)'}
+            </Button>
+            <Button
+              onClick={runBulkDeleteExecute}
+              disabled={bulkDeleteMode !== 'idle' || !bulkDeleteResult?.confirmed}
+              variant="destructive"
+            >
+              {bulkDeleteMode === 'execute' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting…</> : `Execute Delete (${bulkDeleteResult?.confirmed ?? 0} confirmed)`}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Bulk Accept Duplicates */}
       <Card className="border-green-200">
