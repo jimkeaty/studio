@@ -241,6 +241,11 @@ export default function EditTransactionPage() {
   const commissionManualOverride = useRef(false);
   const cbpManuallyEdited = useRef(false);
   const commPctManuallyEdited = useRef(false);
+  // True once the existing transaction has been loaded and commission values populated.
+  // When true, the agent commission fetch must NOT reset commissionManualOverride — the
+  // saved values on the transaction are the source of truth until the user explicitly
+  // changes a commission field.
+  const txLoadedWithCommission = useRef(false);
   // Per-transaction commission override state — loaded from Firestore, persisted on save
   const [txCommissionOverridden, setTxCommissionOverridden] = useState(false);
   const [txCommissionOverriddenBy, setTxCommissionOverriddenBy] = useState<string | null>(null);
@@ -288,15 +293,17 @@ export default function EditTransactionPage() {
   }, [watchedClosingType, watchedDealType]);
 
   // Auto-fill commissionBasePrice from salePrice when not manually overridden
+  // Skip if the transaction was loaded with existing commission values.
   useEffect(() => {
-    if (cbpManuallyEdited.current) return;
+    if (cbpManuallyEdited.current || txLoadedWithCommission.current) return;
     const sp = Number(watchedSalePrice) || 0;
     if (sp > 0) form.setValue('commissionBasePrice', sp as any);
   }, [watchedSalePrice]);
 
   // Auto-assign commissionPercent from seller-paying % based on deal side
+  // Skip if the transaction was loaded with existing commission values.
   useEffect(() => {
-    if (commPctManuallyEdited.current) return;
+    if (commPctManuallyEdited.current || txLoadedWithCommission.current) return;
     const listingPct = Number(watchedSellerPayingListing) || 0;
     const buyerPct = Number(watchedSellerPayingBuyer) || 0;
     let autoPct = 0;
@@ -307,7 +314,9 @@ export default function EditTransactionPage() {
   }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer]);
 
   // Auto-calculate GCI when commissionBasePrice × commissionPercent both set
+  // Skip if the transaction was loaded with existing commission values.
   useEffect(() => {
+    if (txLoadedWithCommission.current) return;
     const cbp = Number(watchedCBP) || 0;
     const pct = Number(watchedCommPct) || 0;
     if (cbp > 0 && pct > 0) {
@@ -385,7 +394,13 @@ export default function EditTransactionPage() {
     let cancelled = false;
     const fetchCommission = async () => {
       setCommissionLoading(true);
-      commissionManualOverride.current = false;
+      // CRITICAL: Only reset the manual-override lock if we are NOT editing an existing
+      // transaction that already has commission values saved. If txLoadedWithCommission is
+      // true it means the form was pre-populated from Firestore — the saved values are the
+      // source of truth and must not be overwritten by the agent's default profile.
+      if (!txLoadedWithCommission.current) {
+        commissionManualOverride.current = false;
+      }
       try {
         const token = await user.getIdToken();
         const res = await fetch(`/api/admin/agent-profiles/${watchedAgentId}/commission`, {
@@ -394,7 +409,8 @@ export default function EditTransactionPage() {
         const data = await res.json();
         if (!cancelled && data.ok) {
           setAgentCommission(data);
-          if (data.defaultTransactionFee != null) {
+          // Only apply the default transaction fee when we are NOT preserving saved commission
+          if (!txLoadedWithCommission.current && data.defaultTransactionFee != null) {
             form.setValue('transactionFee', data.defaultTransactionFee as any);
           }
         }
@@ -425,14 +441,17 @@ export default function EditTransactionPage() {
         const split = tx.splitSnapshot || {};
         cbpManuallyEdited.current = !!(tx.commissionBasePrice && tx.commissionBasePrice !== tx.salePrice);
 
-        // Load per-transaction commission override metadata
-        // If override is active, lock auto-recalculation so the saved values are preserved
-        const hasOverride = !!tx.commissionOverridden;
-        setTxCommissionOverridden(hasOverride);
+        // Lock auto-recalculation for ALL existing transactions that have commission values.
+        // The saved commission is the source of truth — it must never be overwritten by the
+        // agent's default profile when editing non-commission fields.
+        const hasSavedCommission = !!(tx.gci || split.grossCommission || tx.agentPct || tx.agentDollar);
+        const hasOverride = !!tx.commissionOverridden || hasSavedCommission;
+        setTxCommissionOverridden(!!tx.commissionOverridden);
         setTxCommissionOverriddenBy(tx.commissionOverriddenBy || null);
         setTxCommissionOverriddenAt(tx.commissionOverriddenAt || null);
         if (hasOverride) {
           commissionManualOverride.current = true;
+          txLoadedWithCommission.current = true;
         }
 
         form.reset({
@@ -577,19 +596,20 @@ export default function EditTransactionPage() {
         payload.brokerProfit = brokerGci;
       }
 
-      // Persist per-transaction commission override metadata
-      // If the admin manually edited the split (commissionManualOverride.current = true),
-      // mark this transaction as overridden so future edits don't auto-recalculate.
-      if (commissionManualOverride.current || txCommissionOverridden) {
+      // Mark the transaction as having locked commission values whenever any commission
+      // data is present. This prevents future edits from auto-recalculating the split.
+      // The flag is set on every save so that transactions imported without it are
+      // retroactively protected the first time they are edited.
+      const hasCommissionValues = gci > 0 || agentDollar > 0 || brokerGci > 0;
+      if (hasCommissionValues || commissionManualOverride.current || txCommissionOverridden) {
         payload.commissionOverridden = true;
-        payload.commissionOverriddenBy = user.email || user.uid;
-        payload.commissionOverriddenAt = new Date().toISOString();
-        // Update local state to reflect the saved override
+        // Only update the override metadata if this is a new manual change
+        if (!txCommissionOverridden || commissionManualOverride.current) {
+          payload.commissionOverriddenBy = user.email || user.uid;
+          payload.commissionOverriddenAt = new Date().toISOString();
+        }
         setTxCommissionOverridden(true);
-        setTxCommissionOverriddenBy(user.email || user.uid);
-        setTxCommissionOverriddenAt(new Date().toISOString());
       } else {
-        // Override was cleared — remove the override flag
         payload.commissionOverridden = false;
         payload.commissionOverriddenBy = null;
         payload.commissionOverriddenAt = null;
