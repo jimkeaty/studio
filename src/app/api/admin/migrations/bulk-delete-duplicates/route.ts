@@ -241,7 +241,30 @@ export async function POST(req: NextRequest) {
     });
 
     if (candidates.length === 0) {
-      results.push({ group, address, agent, status, listingDate, closedDate, result: 'NOT_FOUND', reason: 'No transaction matched agent + address + status' });
+      // Debug: find any transactions matching just address (ignore agent + status)
+      // to help diagnose what field names are actually used in Firestore
+      const addrOnlyCandidates = allTx.filter((tx: any) => {
+        const txAddrRaw = tx.address || tx.propertyAddress || '';
+        const txAddrExact = norm(txAddrRaw);
+        const txAddrStripped = normAddr(txAddrRaw);
+        return txAddrExact === entryNormExact || txAddrStripped === entryAddrStripped;
+      }).slice(0, 3).map((tx: any) => ({
+        id: tx._id,
+        status: tx.status,
+        address: tx.address,
+        propertyAddress: tx.propertyAddress,
+        agentDisplayName: tx.agentDisplayName,
+        agentName: tx.agentName,
+        agentId: tx.agentId,
+        listingDate: extractDate(tx.listingDate),
+        closedDate: extractDate(tx.closedDate || tx.closeDate),
+      }));
+      results.push({
+        group, address, agent, status, listingDate, closedDate,
+        result: 'NOT_FOUND',
+        reason: 'No transaction matched agent + address + status',
+        addrOnlyCandidates,
+      } as any);
       continue;
     }
 
