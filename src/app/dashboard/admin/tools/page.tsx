@@ -289,7 +289,7 @@ export default function AdminToolsPage() {
                       <p>Total entries: <strong>{bulkDeleteResult.totalEntries}</strong></p>
                       <p className="text-green-700">✓ Confirmed matches: <strong>{bulkDeleteResult.confirmed}</strong></p>
                       <p className="text-amber-700">⚠ Ambiguous (need manual review): <strong>{bulkDeleteResult.ambiguous}</strong></p>
-                      <p className="text-red-700">✗ Not found in Firestore: <strong>{bulkDeleteResult.notFound}</strong></p>
+                      <p className="text-slate-500">✓ Likely already deleted: <strong>{bulkDeleteResult.notFound}</strong></p>
                       {bulkDeleteResult.mode === 'EXECUTE' && (
                         <p className="font-semibold text-green-800">Deleted: {bulkDeleteResult.deleted} | Rollups rebuilt: {bulkDeleteResult.rollupsRebuilt}</p>
                       )}
@@ -298,13 +298,24 @@ export default function AdminToolsPage() {
                 </AlertDescription>
               </Alert>
 
-              {/* Not found list */}
+              {/* Not found list — likely already deleted */}
               {bulkDeleteResult.ok && bulkDeleteResult.notFoundList?.length > 0 && (
                 <details className="text-sm">
-                  <summary className="cursor-pointer font-medium text-amber-700">Not Found ({bulkDeleteResult.notFoundList.length})</summary>
-                  <ul className="mt-2 space-y-1 list-disc list-inside text-xs text-muted-foreground">
+                  <summary className="cursor-pointer font-medium text-slate-500">Likely Already Deleted ({bulkDeleteResult.notFoundList.length}) — click to expand</summary>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">These transactions were not found in Firestore. If you deleted them manually through the Transaction Ledger, this is expected and no action is needed. If any have address-only candidates shown below, the agent name or status may differ in Firestore.</p>
+                  <ul className="mt-2 space-y-2 text-xs text-muted-foreground">
                     {bulkDeleteResult.notFoundList.map((r: any, i: number) => (
-                      <li key={i}>Group {r.group}: {r.address} — {r.agent} ({r.status}, listing: {r.listingDate || 'n/a'})</li>
+                      <li key={i} className="border rounded p-2">
+                        <p>Group {r.group}: <strong>{r.address}</strong> — {r.agent} ({r.status}, listing: {r.listingDate || 'n/a'})</p>
+                        {r.addrOnlyCandidates?.length > 0 && (
+                          <div className="mt-1 ml-2 text-amber-700">
+                            <p className="font-medium">⚠ Found by address only (agent/status mismatch):</p>
+                            {r.addrOnlyCandidates.map((c: any, j: number) => (
+                              <p key={j} className="ml-2">• {c.id} | status: {c.status} | agent: {c.agentDisplayName || c.agentName || c.agentId} | listing: {c.listingDate || 'n/a'}</p>
+                            ))}
+                          </div>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </details>
