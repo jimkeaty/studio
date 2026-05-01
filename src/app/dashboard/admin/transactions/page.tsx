@@ -146,8 +146,11 @@ export default function AdminTransactionLedgerPage() {
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
     const map = new Map<string, { key: string; txs: Transaction[] }>();
     for (const tx of transactions) {
-      const agent = (tx.agentDisplayName || tx.agentId || '').trim();
-      const addr = normalize(tx.address || '');
+      // Use the same normalization as the bulk-accept migration so keys match
+      const agentRaw = (tx.agentDisplayName || tx.agentName || tx.agentId || '').trim();
+      const addrRaw = (tx.address || tx.propertyAddress || '').trim();
+      const agent = normalize(agentRaw);
+      const addr = normalize(addrRaw);
       if (!agent || !addr) continue;
       const key = `${agent}|||${addr}`;
       if (!map.has(key)) map.set(key, { key, txs: [] });

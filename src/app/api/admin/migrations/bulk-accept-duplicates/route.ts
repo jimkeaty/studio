@@ -122,17 +122,15 @@ export async function POST(req: NextRequest) {
     const snap = await adminDb.collection('transactions').get();
     const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
-    // Build a map: normalizedAgent|||normalizedAddress -> actualKey (agentDisplayName|||normalizedAddress)
-    const txKeyMap = new Map<string, string>();
+    // Build a map: fully-normalized key -> same key (both sides normalized, matching ledger page)
+    const txKeySet = new Set<string>();
     for (const tx of transactions) {
-      const agent = (tx.agentDisplayName || tx.agentId || '').trim();
-      const addr = normalize(tx.address || tx.propertyAddress || '');
+      const agentRaw = (tx.agentDisplayName || tx.agentName || tx.agentId || '').trim();
+      const addrRaw = (tx.address || tx.propertyAddress || '').trim();
+      const agent = normalize(agentRaw);
+      const addr = normalize(addrRaw);
       if (!agent || !addr) continue;
-      const actualKey = `${agent}|||${addr}`;
-      const lookupKey = `${normalize(agent)}|||${addr}`;
-      if (!txKeyMap.has(lookupKey)) {
-        txKeyMap.set(lookupKey, actualKey);
-      }
+      txKeySet.add(`${agent}|||${addr}`);
     }
 
     const accepted: string[] = [];
@@ -141,16 +139,15 @@ export async function POST(req: NextRequest) {
     for (const [address, agentName] of ENTRIES) {
       const normAddr = normalize(address);
       const normAgent = normalize(agentName);
-      const lookupKey = `${normAgent}|||${normAddr}`;
-      const actualKey = txKeyMap.get(lookupKey);
+      const key = `${normAgent}|||${normAddr}`;
 
-      if (!actualKey) {
+      if (!txKeySet.has(key)) {
         notFound.push({ address, agent: agentName });
         continue;
       }
 
-      if (!accepted.includes(actualKey)) {
-        accepted.push(actualKey);
+      if (!accepted.includes(key)) {
+        accepted.push(key);
       }
     }
 
