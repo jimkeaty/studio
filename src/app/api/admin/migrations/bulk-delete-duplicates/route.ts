@@ -101,6 +101,42 @@ function norm(s: string | null | undefined): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+// Strips common street suffixes so "101 Ramblewood" matches "101 Ramblewood Drive"
+function normAddr(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.toLowerCase()
+    .replace(/\b(drive|dr|street|st|road|rd|boulevard|blvd|avenue|ave|lane|ln|court|ct|circle|cir|place|pl|trail|trl|way|wy|terrace|ter|highway|hwy|parkway|pkwy)\b/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Returns all candidate agent name strings from a transaction doc
+function txAgentNames(tx: any): string[] {
+  const names: string[] = [];
+  if (tx.agentDisplayName) names.push(norm(tx.agentDisplayName));
+  if (tx.agentName) names.push(norm(tx.agentName));
+  if (tx.agentFirstName || tx.agentLastName) {
+    names.push(norm(`${tx.agentFirstName || ''} ${tx.agentLastName || ''}`));
+  }
+  // Some docs store first/last separately on a nested object
+  if (tx.agent?.displayName) names.push(norm(tx.agent.displayName));
+  if (tx.agent?.name) names.push(norm(tx.agent.name));
+  return names.filter(n => n.length > 0);
+}
+
+// Partial name match — spreadsheet may have only first name or partial name
+function agentMatches(txNames: string[], normAgent: string): boolean {
+  if (!normAgent) return false;
+  // Exact match on any field
+  if (txNames.some(n => n === normAgent)) return true;
+  // Partial match: spreadsheet name is a substring of a tx name field (handles "Raquel" matching "Raquel Quebodeaux")
+  if (normAgent.split(' ').length === 1 && normAgent.length >= 4) {
+    if (txNames.some(n => n.includes(normAgent))) return true;
+  }
+  return false;
+}
+
 function normStatus(s: string | null | undefined): string {
   if (!s) return '';
   const v = s.toLowerCase().trim();
@@ -185,18 +221,23 @@ export async function POST(req: NextRequest) {
   });
 
   for (const [group, address, agent, status, listingDateRaw, closedDateRaw] of uniqueEntries) {
-    const normAddr = norm(address);
+    const entryNormExact = norm(address); // kept for backward compat with dedup key
     const normAgent = norm(agent);
     const normSt = normStatus(status);
     const listingDate = parseDate(listingDateRaw);
     const closedDate = parseDate(closedDateRaw);
 
     // Step 1: Match on agent + address + status
+    // Uses normAddr (suffix-stripped) for address and agentMatches (multi-field + partial) for agent
+    const entryAddrStripped = normAddr(address);
     const candidates = allTx.filter((tx: any) => {
-      const txAgent = norm(tx.agentDisplayName || tx.agentId || '');
-      const txAddr = norm(tx.address || tx.propertyAddress || '');
+      const txNames = txAgentNames(tx);
+      const txAddrRaw = tx.address || tx.propertyAddress || '';
+      const txAddrExact = norm(txAddrRaw);
+      const txAddrStripped = normAddr(txAddrRaw);
       const txStatus = normStatus(tx.status || '');
-      return txAgent === normAgent && txAddr === normAddr && txStatus === normSt;
+      const addrMatch = txAddrExact === entryNormExact || txAddrStripped === entryAddrStripped;
+      return agentMatches(txNames, normAgent) && addrMatch && txStatus === normSt;
     });
 
     if (candidates.length === 0) {
