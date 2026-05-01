@@ -21,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2 } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
@@ -339,6 +339,47 @@ export default function AddTransactionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+
+  // ── Document upload state ──────────────────────────────────────────────────
+  type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string };
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const [docUploading, setDocUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDocUpload = async (files: FileList | null) => {
+    if (!files || !user) return;
+    setDocUploading(true);
+    try {
+      const token = await user.getIdToken();
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/agent/transactions/upload-document', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          toast({ title: 'Upload failed', description: data.error || 'Unknown error', variant: 'destructive' });
+        } else {
+          setUploadedDocs((prev) => [
+            ...prev,
+            { name: data.name, url: data.url, storagePath: data.storagePath, uploadedAt: data.uploadedAt },
+          ]);
+        }
+      }
+    } catch (err: any) {
+      toast({ title: 'Upload error', description: err.message, variant: 'destructive' });
+    } finally {
+      setDocUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeDoc = (storagePath: string) => {
+    setUploadedDocs((prev) => prev.filter((d) => d.storagePath !== storagePath));
+  };
 
   // Draft auto-save
   const DRAFT_KEY = 'sb_add_transaction_draft';
@@ -670,7 +711,7 @@ export default function AddTransactionPage() {
       const res = await fetch('/api/tc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, documents: uploadedDocs }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Submission failed');
@@ -1936,6 +1977,80 @@ export default function AddTransactionPage() {
               </Grid2>
             )}
           </Section>
+
+          {/* ── Documents ────────────────────────────────────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                Documents
+              </CardTitle>
+              <CardDescription>
+                Upload your Purchase Agreement, Listing Agreement, or any other relevant paperwork.
+                Accepted formats: PDF, JPG, PNG, WEBP, HEIC, DOC, DOCX (max 25 MB each).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Uploaded file list */}
+              {uploadedDocs.length > 0 && (
+                <div className="space-y-2">
+                  {uploadedDocs.map((doc) => (
+                    <div
+                      key={doc.storagePath}
+                      className="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium truncate hover:underline text-primary"
+                        >
+                          {doc.name}
+                        </a>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 flex-shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeDoc(doc.storagePath)}
+                      >
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Remove</span>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload button */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx,application/pdf,image/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={(e) => handleDocUpload(e.target.files)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={docUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  {docUploading ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</>
+                  ) : (
+                    <><Paperclip className="h-4 w-4" /> Attach Files</>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* ── Additional Comments ───────────────────────────────────────── */}
           <Section title="Additional Comments">

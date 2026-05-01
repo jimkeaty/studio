@@ -196,6 +196,19 @@ export async function POST(req: NextRequest) {
         coAgentSplitPercent: toNum(body.coAgentSplitPercent),
       } : {}),
 
+      // Uploaded documents (Purchase Agreement, Listing Paperwork, etc.)
+      // Each entry: { name, url, storagePath, uploadedAt }
+      documents: Array.isArray(body.documents)
+        ? body.documents
+            .filter((d: any) => d && typeof d.url === 'string' && typeof d.name === 'string')
+            .map((d: any) => ({
+              name: String(d.name).slice(0, 255),
+              url: String(d.url),
+              storagePath: String(d.storagePath || ''),
+              uploadedAt: String(d.uploadedAt || new Date().toISOString()),
+            }))
+        : [],
+
       submittedAt: now,
       updatedAt: now,
     };
