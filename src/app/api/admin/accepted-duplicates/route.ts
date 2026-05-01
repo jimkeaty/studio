@@ -32,7 +32,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const snap = await adminDb.collection(COLLECTION).get();
-    const keys = snap.docs.map(d => d.id);
+    // Return the stored `key` field (plain text), NOT d.id which is base64-encoded
+    const keys = snap.docs.map(d => {
+      const data = d.data();
+      // Prefer the stored key field; fall back to decoding the doc ID for legacy docs
+      if (data.key && typeof data.key === 'string') return data.key;
+      try { return Buffer.from(d.id, 'base64url').toString('utf8'); } catch { return d.id; }
+    });
     return NextResponse.json({ ok: true, keys });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
