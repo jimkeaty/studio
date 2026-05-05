@@ -20,13 +20,32 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'closingDate',
   'closedDate',
   'listingDate',
+  // Seller
   'sellerName', 'sellerEmail', 'sellerPhone',
   'seller2Name', 'seller2Email', 'seller2Phone',
+  'seller3Name', 'seller3Email', 'seller3Phone',
+  'seller4Name', 'seller4Email', 'seller4Phone',
+  // Buyer
   'buyerName', 'buyerEmail', 'buyerPhone',
   'buyer2Name', 'buyer2Email', 'buyer2Phone',
+  'buyer3Name', 'buyer3Email', 'buyer3Phone',
+  'buyer4Name', 'buyer4Email', 'buyer4Phone',
+  // Other agent
   'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherAgentBrokerage',
+  // Client
+  'clientName', 'clientEmail', 'clientPhone', 'clientType',
+  // Lender
+  'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
+  // Title
+  'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
+  // Dates
+  'optionExpiration', 'inspectionDeadline', 'projectedCloseDate',
+  // Commission
   'sellerCommissionPct', 'buyerCommissionPct',
-  'notes',
+  // Notes
+  'notes', 'additionalComments',
+  // Documents (Purchase Agreement, Listing Paperwork, etc.)
+  'documents',
 ]);
 
 // Statuses an agent is allowed to set
@@ -171,6 +190,9 @@ export async function PATCH(
         listingDate: mergedData.listingDate ?? null,
         contractDate: mergedData.contractDate ?? null,
         closingDate: mergedData.closingDate ?? mergedData.closedDate ?? null,
+        optionExpiration: mergedData.optionExpiration ?? null,
+        inspectionDeadline: mergedData.inspectionDeadline ?? null,
+        projectedCloseDate: mergedData.projectedCloseDate ?? null,
 
         // Client contact
         clientType: mergedData.clientType ?? null,
@@ -185,6 +207,12 @@ export async function PATCH(
         seller2Name: mergedData.seller2Name ?? null,
         seller2Email: mergedData.seller2Email ?? null,
         seller2Phone: mergedData.seller2Phone ?? null,
+        seller3Name: mergedData.seller3Name ?? null,
+        seller3Email: mergedData.seller3Email ?? null,
+        seller3Phone: mergedData.seller3Phone ?? null,
+        seller4Name: mergedData.seller4Name ?? null,
+        seller4Email: mergedData.seller4Email ?? null,
+        seller4Phone: mergedData.seller4Phone ?? null,
 
         // Buyer
         buyerName: mergedData.buyerName ?? null,
@@ -193,6 +221,12 @@ export async function PATCH(
         buyer2Name: mergedData.buyer2Name ?? null,
         buyer2Email: mergedData.buyer2Email ?? null,
         buyer2Phone: mergedData.buyer2Phone ?? null,
+        buyer3Name: mergedData.buyer3Name ?? null,
+        buyer3Email: mergedData.buyer3Email ?? null,
+        buyer3Phone: mergedData.buyer3Phone ?? null,
+        buyer4Name: mergedData.buyer4Name ?? null,
+        buyer4Email: mergedData.buyer4Email ?? null,
+        buyer4Phone: mergedData.buyer4Phone ?? null,
 
         // Other agent
         otherAgentName: mergedData.otherAgentName ?? null,
@@ -200,12 +234,28 @@ export async function PATCH(
         otherAgentPhone: mergedData.otherAgentPhone ?? null,
         otherAgentBrokerage: mergedData.otherAgentBrokerage ?? null,
 
+        // Lender
+        mortgageCompany: mergedData.mortgageCompany ?? null,
+        loanOfficer: mergedData.loanOfficer ?? null,
+        loanOfficerEmail: mergedData.loanOfficerEmail ?? null,
+        loanOfficerPhone: mergedData.loanOfficerPhone ?? null,
+
+        // Title
+        titleCompany: mergedData.titleCompany ?? null,
+        titleOfficer: mergedData.titleOfficer ?? null,
+        titleOfficerEmail: mergedData.titleOfficerEmail ?? null,
+        titleOfficerPhone: mergedData.titleOfficerPhone ?? null,
+
         // Commission
         sellerCommissionPct: mergedData.sellerCommissionPct ?? null,
         buyerCommissionPct: mergedData.buyerCommissionPct ?? null,
 
         // Notes
         notes: mergedData.notes ?? null,
+        additionalComments: mergedData.additionalComments ?? null,
+
+        // Documents
+        documents: Array.isArray(mergedData.documents) ? mergedData.documents : [],
       };
 
       await adminDb.collection('tcIntakes').add(intake);

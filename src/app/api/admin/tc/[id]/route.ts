@@ -524,6 +524,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         notes: toOptStr(intake.notes),
         additionalComments: toOptStr(intake.additionalComments),
 
+        // Uploaded documents — carry over from intake to transaction
+        documents: Array.isArray(intake.documents) ? intake.documents : [],
+
         splitSnapshot,
         creditSnapshot,
 

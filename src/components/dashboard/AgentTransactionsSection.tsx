@@ -25,11 +25,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw, Paperclip, FileText, Trash2, PlusCircle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
+
+type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string };
 
 type AgentTx = {
   id: string;
@@ -55,18 +57,28 @@ type AgentTx = {
   clientName?: string;
   clientEmail?: string;
   clientPhone?: string;
+  clientType?: string;
   sellerName?: string; sellerEmail?: string; sellerPhone?: string;
   seller2Name?: string; seller2Email?: string; seller2Phone?: string;
+  seller3Name?: string; seller3Email?: string; seller3Phone?: string;
+  seller4Name?: string; seller4Email?: string; seller4Phone?: string;
   buyerName?: string; buyerEmail?: string; buyerPhone?: string;
   buyer2Name?: string; buyer2Email?: string; buyer2Phone?: string;
+  buyer3Name?: string; buyer3Email?: string; buyer3Phone?: string;
+  buyer4Name?: string; buyer4Email?: string; buyer4Phone?: string;
   otherAgentName?: string; otherAgentEmail?: string; otherAgentPhone?: string; otherAgentBrokerage?: string;
+  mortgageCompany?: string; loanOfficer?: string; loanOfficerEmail?: string; loanOfficerPhone?: string;
+  titleCompany?: string; titleOfficer?: string; titleOfficerEmail?: string; titleOfficerPhone?: string;
   sellerCommissionPct?: number;
   buyerCommissionPct?: number;
+  optionExpiration?: string | null;
+  inspectionDeadline?: string | null;
+  projectedCloseDate?: string | null;
   notes?: string;
+  additionalComments?: string;
+  documents?: UploadedDoc[];
   year?: number;
   source?: string;
-  projectedCloseDate?: string | null;
-  inspectionDeadline?: string | null;
   workingWithTc?: boolean;
 };
 
@@ -140,7 +152,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Form state — pre-filled from the transaction
+  // Form state
   const [status, setStatus] = useState(tx.status || 'active');
   const [propertyAddress, setPropertyAddress] = useState(tx.address || tx.propertyAddress || '');
   const [listPrice, setListPrice] = useState(String(tx.listPrice || ''));
@@ -148,25 +160,64 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
   const [listingDate, setListingDate] = useState(tx.listingDate || '');
   const [contractDate, setContractDate] = useState(tx.contractDate || '');
   const [closingDate, setClosingDate] = useState(tx.closingDate || tx.closedDate || '');
+  const [optionExpiration, setOptionExpiration] = useState(tx.optionExpiration || '');
+  const [inspectionDeadline, setInspectionDeadline] = useState(tx.inspectionDeadline || '');
+  const [projectedCloseDate, setProjectedCloseDate] = useState(tx.projectedCloseDate || '');
+  // Sellers
   const [sellerName, setSellerName] = useState(tx.sellerName || '');
   const [sellerEmail, setSellerEmail] = useState(tx.sellerEmail || '');
   const [sellerPhone, setSellerPhone] = useState(tx.sellerPhone || '');
   const [seller2Name, setSeller2Name] = useState(tx.seller2Name || '');
   const [seller2Email, setSeller2Email] = useState(tx.seller2Email || '');
   const [seller2Phone, setSeller2Phone] = useState(tx.seller2Phone || '');
+  const [seller3Name, setSeller3Name] = useState(tx.seller3Name || '');
+  const [seller3Email, setSeller3Email] = useState(tx.seller3Email || '');
+  const [seller3Phone, setSeller3Phone] = useState(tx.seller3Phone || '');
+  const [seller4Name, setSeller4Name] = useState(tx.seller4Name || '');
+  const [seller4Email, setSeller4Email] = useState(tx.seller4Email || '');
+  const [seller4Phone, setSeller4Phone] = useState(tx.seller4Phone || '');
+  const [showSeller3, setShowSeller3] = useState(!!(tx.seller3Name));
+  const [showSeller4, setShowSeller4] = useState(!!(tx.seller4Name));
+  // Buyers
   const [buyerName, setBuyerName] = useState(tx.buyerName || '');
   const [buyerEmail, setBuyerEmail] = useState(tx.buyerEmail || '');
   const [buyerPhone, setBuyerPhone] = useState(tx.buyerPhone || '');
   const [buyer2Name, setBuyer2Name] = useState(tx.buyer2Name || '');
   const [buyer2Email, setBuyer2Email] = useState(tx.buyer2Email || '');
   const [buyer2Phone, setBuyer2Phone] = useState(tx.buyer2Phone || '');
+  const [buyer3Name, setBuyer3Name] = useState(tx.buyer3Name || '');
+  const [buyer3Email, setBuyer3Email] = useState(tx.buyer3Email || '');
+  const [buyer3Phone, setBuyer3Phone] = useState(tx.buyer3Phone || '');
+  const [buyer4Name, setBuyer4Name] = useState(tx.buyer4Name || '');
+  const [buyer4Email, setBuyer4Email] = useState(tx.buyer4Email || '');
+  const [buyer4Phone, setBuyer4Phone] = useState(tx.buyer4Phone || '');
+  const [showBuyer3, setShowBuyer3] = useState(!!(tx.buyer3Name));
+  const [showBuyer4, setShowBuyer4] = useState(!!(tx.buyer4Name));
+  // Other agent
   const [otherAgentName, setOtherAgentName] = useState(tx.otherAgentName || '');
   const [otherAgentEmail, setOtherAgentEmail] = useState(tx.otherAgentEmail || '');
   const [otherAgentPhone, setOtherAgentPhone] = useState(tx.otherAgentPhone || '');
   const [otherAgentBrokerage, setOtherAgentBrokerage] = useState(tx.otherAgentBrokerage || '');
+  // Lender
+  const [mortgageCompany, setMortgageCompany] = useState(tx.mortgageCompany || '');
+  const [loanOfficer, setLoanOfficer] = useState(tx.loanOfficer || '');
+  const [loanOfficerEmail, setLoanOfficerEmail] = useState(tx.loanOfficerEmail || '');
+  const [loanOfficerPhone, setLoanOfficerPhone] = useState(tx.loanOfficerPhone || '');
+  // Title
+  const [titleCompany, setTitleCompany] = useState(tx.titleCompany || '');
+  const [titleOfficer, setTitleOfficer] = useState(tx.titleOfficer || '');
+  const [titleOfficerEmail, setTitleOfficerEmail] = useState(tx.titleOfficerEmail || '');
+  const [titleOfficerPhone, setTitleOfficerPhone] = useState(tx.titleOfficerPhone || '');
+  // Commission
   const [sellerCommissionPct, setSellerCommissionPct] = useState(String(tx.sellerCommissionPct || ''));
   const [buyerCommissionPct, setBuyerCommissionPct] = useState(String(tx.buyerCommissionPct || ''));
+  // Notes
   const [notes, setNotes] = useState(tx.notes || '');
+  const [additionalComments, setAdditionalComments] = useState(tx.additionalComments || '');
+  // Documents
+  const [documents, setDocuments] = useState<UploadedDoc[]>(tx.documents || []);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Reset form when tx changes
   useEffect(() => {
@@ -177,36 +228,69 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
     setListingDate(tx.listingDate || '');
     setContractDate(tx.contractDate || '');
     setClosingDate(tx.closingDate || tx.closedDate || '');
-    setSellerName(tx.sellerName || '');
-    setSellerEmail(tx.sellerEmail || '');
-    setSellerPhone(tx.sellerPhone || '');
-    setSeller2Name(tx.seller2Name || '');
-    setSeller2Email(tx.seller2Email || '');
-    setSeller2Phone(tx.seller2Phone || '');
-    setBuyerName(tx.buyerName || '');
-    setBuyerEmail(tx.buyerEmail || '');
-    setBuyerPhone(tx.buyerPhone || '');
-    setBuyer2Name(tx.buyer2Name || '');
-    setBuyer2Email(tx.buyer2Email || '');
-    setBuyer2Phone(tx.buyer2Phone || '');
-    setOtherAgentName(tx.otherAgentName || '');
-    setOtherAgentEmail(tx.otherAgentEmail || '');
-    setOtherAgentPhone(tx.otherAgentPhone || '');
-    setOtherAgentBrokerage(tx.otherAgentBrokerage || '');
+    setOptionExpiration(tx.optionExpiration || '');
+    setInspectionDeadline(tx.inspectionDeadline || '');
+    setProjectedCloseDate(tx.projectedCloseDate || '');
+    setSellerName(tx.sellerName || ''); setSellerEmail(tx.sellerEmail || ''); setSellerPhone(tx.sellerPhone || '');
+    setSeller2Name(tx.seller2Name || ''); setSeller2Email(tx.seller2Email || ''); setSeller2Phone(tx.seller2Phone || '');
+    setSeller3Name(tx.seller3Name || ''); setSeller3Email(tx.seller3Email || ''); setSeller3Phone(tx.seller3Phone || '');
+    setSeller4Name(tx.seller4Name || ''); setSeller4Email(tx.seller4Email || ''); setSeller4Phone(tx.seller4Phone || '');
+    setShowSeller3(!!(tx.seller3Name)); setShowSeller4(!!(tx.seller4Name));
+    setBuyerName(tx.buyerName || ''); setBuyerEmail(tx.buyerEmail || ''); setBuyerPhone(tx.buyerPhone || '');
+    setBuyer2Name(tx.buyer2Name || ''); setBuyer2Email(tx.buyer2Email || ''); setBuyer2Phone(tx.buyer2Phone || '');
+    setBuyer3Name(tx.buyer3Name || ''); setBuyer3Email(tx.buyer3Email || ''); setBuyer3Phone(tx.buyer3Phone || '');
+    setBuyer4Name(tx.buyer4Name || ''); setBuyer4Email(tx.buyer4Email || ''); setBuyer4Phone(tx.buyer4Phone || '');
+    setShowBuyer3(!!(tx.buyer3Name)); setShowBuyer4(!!(tx.buyer4Name));
+    setOtherAgentName(tx.otherAgentName || ''); setOtherAgentEmail(tx.otherAgentEmail || ''); setOtherAgentPhone(tx.otherAgentPhone || ''); setOtherAgentBrokerage(tx.otherAgentBrokerage || '');
+    setMortgageCompany(tx.mortgageCompany || ''); setLoanOfficer(tx.loanOfficer || ''); setLoanOfficerEmail(tx.loanOfficerEmail || ''); setLoanOfficerPhone(tx.loanOfficerPhone || '');
+    setTitleCompany(tx.titleCompany || ''); setTitleOfficer(tx.titleOfficer || ''); setTitleOfficerEmail(tx.titleOfficerEmail || ''); setTitleOfficerPhone(tx.titleOfficerPhone || '');
     setSellerCommissionPct(String(tx.sellerCommissionPct || ''));
     setBuyerCommissionPct(String(tx.buyerCommissionPct || ''));
     setNotes(tx.notes || '');
+    setAdditionalComments(tx.additionalComments || '');
+    setDocuments(tx.documents || []);
     setSaveError(null);
     setSaveSuccess(false);
+    setUploadError(null);
   }, [tx.id]);
 
   const isMovingToPending = status === 'pending' && tx.status !== 'pending';
   const isMovingToClosed = status === 'closed' && tx.status !== 'closed';
   const isMlsStatusChange = isMovingToPending || isMovingToClosed || (status === 'temp_off_market' && tx.status !== 'temp_off_market') || (status === 'cancelled' && tx.status !== 'cancelled') || (status === 'expired' && tx.status !== 'expired');
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !user) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const token = await user.getIdToken();
+      const uploaded: UploadedDoc[] = [];
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/agent/transactions/upload-document', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || `Failed to upload ${file.name}`);
+        uploaded.push({ name: file.name, url: data.url, storagePath: data.storagePath, uploadedAt: new Date().toISOString() });
+      }
+      setDocuments(prev => [...prev, ...uploaded]);
+    } catch (err: any) {
+      setUploadError(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeDoc = (idx: number) => setDocuments(prev => prev.filter((_, i) => i !== idx));
+
   const handleSave = async () => {
     if (!user) return;
-    // Require closing date when setting to Closed
     if (status === 'closed' && !closingDate) {
       setSaveError('A closing date is required to mark this transaction as Closed.');
       return;
@@ -224,14 +308,33 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
         listingDate: listingDate || undefined,
         contractDate: contractDate || undefined,
         closingDate: closingDate || undefined,
+        optionExpiration: optionExpiration || undefined,
+        inspectionDeadline: inspectionDeadline || undefined,
+        projectedCloseDate: projectedCloseDate || undefined,
         sellerName, sellerEmail, sellerPhone,
         seller2Name, seller2Email, seller2Phone,
+        seller3Name: showSeller3 ? seller3Name : '',
+        seller3Email: showSeller3 ? seller3Email : '',
+        seller3Phone: showSeller3 ? seller3Phone : '',
+        seller4Name: showSeller4 ? seller4Name : '',
+        seller4Email: showSeller4 ? seller4Email : '',
+        seller4Phone: showSeller4 ? seller4Phone : '',
         buyerName, buyerEmail, buyerPhone,
         buyer2Name, buyer2Email, buyer2Phone,
+        buyer3Name: showBuyer3 ? buyer3Name : '',
+        buyer3Email: showBuyer3 ? buyer3Email : '',
+        buyer3Phone: showBuyer3 ? buyer3Phone : '',
+        buyer4Name: showBuyer4 ? buyer4Name : '',
+        buyer4Email: showBuyer4 ? buyer4Email : '',
+        buyer4Phone: showBuyer4 ? buyer4Phone : '',
         otherAgentName, otherAgentEmail, otherAgentPhone, otherAgentBrokerage,
+        mortgageCompany, loanOfficer, loanOfficerEmail, loanOfficerPhone,
+        titleCompany, titleOfficer, titleOfficerEmail, titleOfficerPhone,
         sellerCommissionPct: sellerCommissionPct ? Number(sellerCommissionPct) : undefined,
         buyerCommissionPct: buyerCommissionPct ? Number(buyerCommissionPct) : undefined,
         notes,
+        additionalComments,
+        documents,
         resubmitToTc: isMovingToPending,
         notifyStaffQueue: isMlsStatusChange,
       };
@@ -245,7 +348,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to save');
 
       setSaveSuccess(true);
-      onSaved({ ...tx, status, propertyAddress, listPrice: listPrice ? Number(listPrice) : tx.listPrice, salePrice: salePrice ? Number(salePrice) : tx.salePrice, contractDate, closingDate, listingDate, sellerName, sellerEmail, sellerPhone, buyerName, buyerEmail, buyerPhone, otherAgentName, otherAgentEmail, otherAgentPhone, otherAgentBrokerage, notes });
+      onSaved({ ...tx, status, propertyAddress, listPrice: listPrice ? Number(listPrice) : tx.listPrice, salePrice: salePrice ? Number(salePrice) : tx.salePrice, contractDate, closingDate, listingDate, sellerName, sellerEmail, sellerPhone, buyerName, buyerEmail, buyerPhone, otherAgentName, otherAgentEmail, otherAgentPhone, otherAgentBrokerage, mortgageCompany, loanOfficer, titleCompany, notes, additionalComments, documents });
       setTimeout(() => { setSaveSuccess(false); onClose(); }, 1200);
     } catch (err: any) {
       setSaveError(err.message || 'Failed to save');
@@ -338,6 +441,18 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
                 <Label htmlFor="edit-closing-date">Closing Date</Label>
                 <Input id="edit-closing-date" type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} />
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-option-exp">Option Expiration</Label>
+                <Input id="edit-option-exp" type="date" value={optionExpiration} onChange={e => setOptionExpiration(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-inspection-dl">Inspection Deadline</Label>
+                <Input id="edit-inspection-dl" type="date" value={inspectionDeadline} onChange={e => setInspectionDeadline(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-proj-close">Projected Close Date</Label>
+                <Input id="edit-proj-close" type="date" value={projectedCloseDate} onChange={e => setProjectedCloseDate(e.target.value)} />
+              </div>
             </div>
           </div>
 
@@ -345,32 +460,32 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground border-b pb-1">Seller Information</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-seller-name">Seller Name</Label>
-                <Input id="edit-seller-name" value={sellerName} onChange={e => setSellerName(e.target.value)} placeholder="John Smith" />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-seller-email">Seller Email</Label>
-                <Input id="edit-seller-email" type="email" value={sellerEmail} onChange={e => setSellerEmail(e.target.value)} placeholder="john@email.com" />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-seller-phone">Seller Phone</Label>
-                <Input id="edit-seller-phone" value={sellerPhone} onChange={e => setSellerPhone(e.target.value)} placeholder="(555) 000-0000" />
-              </div>
+              <div className="space-y-1"><Label>Seller 1 Name</Label><Input value={sellerName} onChange={e => setSellerName(e.target.value)} placeholder="John Smith" /></div>
+              <div className="space-y-1"><Label>Seller 1 Email</Label><Input type="email" value={sellerEmail} onChange={e => setSellerEmail(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Seller 1 Phone</Label><Input value={sellerPhone} onChange={e => setSellerPhone(e.target.value)} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-seller2-name">Seller 2 Name</Label>
-                <Input id="edit-seller2-name" value={seller2Name} onChange={e => setSeller2Name(e.target.value)} placeholder="Jane Smith" />
+              <div className="space-y-1"><Label>Seller 2 Name</Label><Input value={seller2Name} onChange={e => setSeller2Name(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Seller 2 Email</Label><Input type="email" value={seller2Email} onChange={e => setSeller2Email(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Seller 2 Phone</Label><Input value={seller2Phone} onChange={e => setSeller2Phone(e.target.value)} /></div>
+            </div>
+            {showSeller3 && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1"><Label>Seller 3 Name</Label><Input value={seller3Name} onChange={e => setSeller3Name(e.target.value)} /></div>
+                <div className="space-y-1"><Label>Seller 3 Email</Label><Input type="email" value={seller3Email} onChange={e => setSeller3Email(e.target.value)} /></div>
+                <div className="space-y-1 flex flex-col"><Label>Seller 3 Phone</Label><div className="flex gap-2"><Input value={seller3Phone} onChange={e => setSeller3Phone(e.target.value)} /><Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => { setShowSeller3(false); setShowSeller4(false); setSeller3Name(''); setSeller3Email(''); setSeller3Phone(''); setSeller4Name(''); setSeller4Email(''); setSeller4Phone(''); }}><X className="h-4 w-4" /></Button></div></div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-seller2-email">Seller 2 Email</Label>
-                <Input id="edit-seller2-email" type="email" value={seller2Email} onChange={e => setSeller2Email(e.target.value)} />
+            )}
+            {showSeller3 && showSeller4 && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1"><Label>Seller 4 Name</Label><Input value={seller4Name} onChange={e => setSeller4Name(e.target.value)} /></div>
+                <div className="space-y-1"><Label>Seller 4 Email</Label><Input type="email" value={seller4Email} onChange={e => setSeller4Email(e.target.value)} /></div>
+                <div className="space-y-1 flex flex-col"><Label>Seller 4 Phone</Label><div className="flex gap-2"><Input value={seller4Phone} onChange={e => setSeller4Phone(e.target.value)} /><Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => { setShowSeller4(false); setSeller4Name(''); setSeller4Email(''); setSeller4Phone(''); }}><X className="h-4 w-4" /></Button></div></div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-seller2-phone">Seller 2 Phone</Label>
-                <Input id="edit-seller2-phone" value={seller2Phone} onChange={e => setSeller2Phone(e.target.value)} />
-              </div>
+            )}
+            <div className="flex gap-2">
+              {!showSeller3 && <Button type="button" variant="outline" size="sm" onClick={() => setShowSeller3(true)}><PlusCircle className="h-3.5 w-3.5 mr-1" />Add 3rd Seller</Button>}
+              {showSeller3 && !showSeller4 && <Button type="button" variant="outline" size="sm" onClick={() => setShowSeller4(true)}><PlusCircle className="h-3.5 w-3.5 mr-1" />Add 4th Seller</Button>}
             </div>
           </div>
 
@@ -378,55 +493,65 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground border-b pb-1">Buyer Information</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-buyer-name">Buyer Name</Label>
-                <Input id="edit-buyer-name" value={buyerName} onChange={e => setBuyerName(e.target.value)} placeholder="Alice Johnson" />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-buyer-email">Buyer Email</Label>
-                <Input id="edit-buyer-email" type="email" value={buyerEmail} onChange={e => setBuyerEmail(e.target.value)} placeholder="alice@email.com" />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-buyer-phone">Buyer Phone</Label>
-                <Input id="edit-buyer-phone" value={buyerPhone} onChange={e => setBuyerPhone(e.target.value)} placeholder="(555) 000-0000" />
-              </div>
+              <div className="space-y-1"><Label>Buyer 1 Name</Label><Input value={buyerName} onChange={e => setBuyerName(e.target.value)} placeholder="Alice Johnson" /></div>
+              <div className="space-y-1"><Label>Buyer 1 Email</Label><Input type="email" value={buyerEmail} onChange={e => setBuyerEmail(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Buyer 1 Phone</Label><Input value={buyerPhone} onChange={e => setBuyerPhone(e.target.value)} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-buyer2-name">Buyer 2 Name</Label>
-                <Input id="edit-buyer2-name" value={buyer2Name} onChange={e => setBuyer2Name(e.target.value)} />
+              <div className="space-y-1"><Label>Buyer 2 Name</Label><Input value={buyer2Name} onChange={e => setBuyer2Name(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Buyer 2 Email</Label><Input type="email" value={buyer2Email} onChange={e => setBuyer2Email(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Buyer 2 Phone</Label><Input value={buyer2Phone} onChange={e => setBuyer2Phone(e.target.value)} /></div>
+            </div>
+            {showBuyer3 && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1"><Label>Buyer 3 Name</Label><Input value={buyer3Name} onChange={e => setBuyer3Name(e.target.value)} /></div>
+                <div className="space-y-1"><Label>Buyer 3 Email</Label><Input type="email" value={buyer3Email} onChange={e => setBuyer3Email(e.target.value)} /></div>
+                <div className="space-y-1 flex flex-col"><Label>Buyer 3 Phone</Label><div className="flex gap-2"><Input value={buyer3Phone} onChange={e => setBuyer3Phone(e.target.value)} /><Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => { setShowBuyer3(false); setShowBuyer4(false); setBuyer3Name(''); setBuyer3Email(''); setBuyer3Phone(''); setBuyer4Name(''); setBuyer4Email(''); setBuyer4Phone(''); }}><X className="h-4 w-4" /></Button></div></div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-buyer2-email">Buyer 2 Email</Label>
-                <Input id="edit-buyer2-email" type="email" value={buyer2Email} onChange={e => setBuyer2Email(e.target.value)} />
+            )}
+            {showBuyer3 && showBuyer4 && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1"><Label>Buyer 4 Name</Label><Input value={buyer4Name} onChange={e => setBuyer4Name(e.target.value)} /></div>
+                <div className="space-y-1"><Label>Buyer 4 Email</Label><Input type="email" value={buyer4Email} onChange={e => setBuyer4Email(e.target.value)} /></div>
+                <div className="space-y-1 flex flex-col"><Label>Buyer 4 Phone</Label><div className="flex gap-2"><Input value={buyer4Phone} onChange={e => setBuyer4Phone(e.target.value)} /><Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => { setShowBuyer4(false); setBuyer4Name(''); setBuyer4Email(''); setBuyer4Phone(''); }}><X className="h-4 w-4" /></Button></div></div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-buyer2-phone">Buyer 2 Phone</Label>
-                <Input id="edit-buyer2-phone" value={buyer2Phone} onChange={e => setBuyer2Phone(e.target.value)} />
-              </div>
+            )}
+            <div className="flex gap-2">
+              {!showBuyer3 && <Button type="button" variant="outline" size="sm" onClick={() => setShowBuyer3(true)}><PlusCircle className="h-3.5 w-3.5 mr-1" />Add 3rd Buyer</Button>}
+              {showBuyer3 && !showBuyer4 && <Button type="button" variant="outline" size="sm" onClick={() => setShowBuyer4(true)}><PlusCircle className="h-3.5 w-3.5 mr-1" />Add 4th Buyer</Button>}
             </div>
           </div>
 
-          {/* Other Agent / Co-op */}
+          {/* Other Agent */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground border-b pb-1">Other Agent / Co-op</h3>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-other-agent-name">Other Agent Name</Label>
-                <Input id="edit-other-agent-name" value={otherAgentName} onChange={e => setOtherAgentName(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-other-agent-brokerage">Other Agent Brokerage</Label>
-                <Input id="edit-other-agent-brokerage" value={otherAgentBrokerage} onChange={e => setOtherAgentBrokerage(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-other-agent-email">Other Agent Email</Label>
-                <Input id="edit-other-agent-email" type="email" value={otherAgentEmail} onChange={e => setOtherAgentEmail(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-other-agent-phone">Other Agent Phone</Label>
-                <Input id="edit-other-agent-phone" value={otherAgentPhone} onChange={e => setOtherAgentPhone(e.target.value)} />
-              </div>
+              <div className="space-y-1"><Label>Other Agent Name</Label><Input value={otherAgentName} onChange={e => setOtherAgentName(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Other Agent Brokerage</Label><Input value={otherAgentBrokerage} onChange={e => setOtherAgentBrokerage(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Other Agent Email</Label><Input type="email" value={otherAgentEmail} onChange={e => setOtherAgentEmail(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Other Agent Phone</Label><Input value={otherAgentPhone} onChange={e => setOtherAgentPhone(e.target.value)} /></div>
+            </div>
+          </div>
+
+          {/* Lender */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-1">Lender / Mortgage</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label>Mortgage Company</Label><Input value={mortgageCompany} onChange={e => setMortgageCompany(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Loan Officer</Label><Input value={loanOfficer} onChange={e => setLoanOfficer(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Loan Officer Email</Label><Input type="email" value={loanOfficerEmail} onChange={e => setLoanOfficerEmail(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Loan Officer Phone</Label><Input value={loanOfficerPhone} onChange={e => setLoanOfficerPhone(e.target.value)} /></div>
+            </div>
+          </div>
+
+          {/* Title */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-1">Title Company</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label>Title Company</Label><Input value={titleCompany} onChange={e => setTitleCompany(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Title Officer</Label><Input value={titleOfficer} onChange={e => setTitleOfficer(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Title Officer Email</Label><Input type="email" value={titleOfficerEmail} onChange={e => setTitleOfficerEmail(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Title Officer Phone</Label><Input value={titleOfficerPhone} onChange={e => setTitleOfficerPhone(e.target.value)} /></div>
             </div>
           </div>
 
@@ -446,9 +571,36 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
           </div>
 
           {/* Notes */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground border-b pb-1">Notes</h3>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any additional notes for the TC..." rows={3} />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes for the TC..." rows={3} />
+            <Textarea value={additionalComments} onChange={e => setAdditionalComments(e.target.value)} placeholder="Additional comments..." rows={2} />
+          </div>
+
+          {/* Documents */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-1 flex items-center gap-2">
+              <Paperclip className="h-4 w-4" /> Documents
+            </h3>
+            <p className="text-xs text-muted-foreground">Upload Purchase Agreement, Listing Paperwork, or any other transaction documents (PDF, Word, images — max 25 MB each).</p>
+            {documents.length > 0 && (
+              <div className="space-y-2">
+                {documents.map((doc, idx) => (
+                  <div key={idx} className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate flex-1">{doc.name}</a>
+                    <span className="text-xs text-muted-foreground shrink-0">{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ''}</span>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => removeDoc(idx)}><X className="h-3 w-3" /></Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
+            <label className={cn('flex items-center gap-2 cursor-pointer rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground hover:bg-muted/30 transition-colors', uploading && 'opacity-50 pointer-events-none')}>
+              <Paperclip className="h-4 w-4" />
+              {uploading ? 'Uploading...' : 'Attach Files'}
+              <input type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic" className="sr-only" onChange={handleFileUpload} disabled={uploading} />
+            </label>
           </div>
 
           {/* Error / Success */}

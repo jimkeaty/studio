@@ -105,6 +105,13 @@ const UPDATABLE_FIELDS = new Set([
   // When commissionOverridden=true, rollup engine and TC approval skip
   // profile-based recalculation and use the saved split values directly.
   'commissionOverridden', 'commissionOverriddenBy', 'commissionOverriddenAt',
+  // Extra buyers/sellers (3rd and 4th parties)
+  'buyer3Name', 'buyer3Email', 'buyer3Phone',
+  'buyer4Name', 'buyer4Email', 'buyer4Phone',
+  'seller3Name', 'seller3Email', 'seller3Phone',
+  'seller4Name', 'seller4Email', 'seller4Phone',
+  // Uploaded documents (Purchase Agreement, Listing Paperwork, etc.)
+  'documents',
 ]);
 
 export async function PATCH(req: NextRequest) {
