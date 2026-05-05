@@ -24,7 +24,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, AlertTriangle, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, ChevronLeft, ChevronRight, Check, PlusCircle, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -146,12 +146,24 @@ const schema = z.object({
   buyer2Name: z.string().optional(),
   buyer2Email: z.string().email().optional().or(z.literal('')),
   buyer2Phone: z.string().optional(),
+  buyer3Name: z.string().optional(),
+  buyer3Email: z.string().email().optional().or(z.literal('')),
+  buyer3Phone: z.string().optional(),
+  buyer4Name: z.string().optional(),
+  buyer4Email: z.string().email().optional().or(z.literal('')),
+  buyer4Phone: z.string().optional(),
   sellerName: z.string().optional(),
   sellerEmail: z.string().email().optional().or(z.literal('')),
   sellerPhone: z.string().optional(),
   seller2Name: z.string().optional(),
   seller2Email: z.string().email().optional().or(z.literal('')),
   seller2Phone: z.string().optional(),
+  seller3Name: z.string().optional(),
+  seller3Email: z.string().email().optional().or(z.literal('')),
+  seller3Phone: z.string().optional(),
+  seller4Name: z.string().optional(),
+  seller4Email: z.string().email().optional().or(z.literal('')),
+  seller4Phone: z.string().optional(),
   inspectionOrdered: z.enum(['yes', 'no']).optional(),
   targetInspectionDate: z.string().optional().or(z.literal('')),
   inspectionTypes: z.array(z.string()).optional(),
@@ -247,6 +259,12 @@ export default function EditTransactionPage() {
   // changes a commission field.
   const txLoadedWithCommission = useRef(false);
   // Per-transaction commission override state — loaded from Firestore, persisted on save
+  // Extra buyer/seller visibility state
+  const [showBuyer3, setShowBuyer3] = useState(false);
+  const [showBuyer4, setShowBuyer4] = useState(false);
+  const [showSeller3, setShowSeller3] = useState(false);
+  const [showSeller4, setShowSeller4] = useState(false);
+
   const [txCommissionOverridden, setTxCommissionOverridden] = useState(false);
   const [txCommissionOverriddenBy, setTxCommissionOverriddenBy] = useState<string | null>(null);
   const [txCommissionOverriddenAt, setTxCommissionOverriddenAt] = useState<string | null>(null);
@@ -497,12 +515,24 @@ export default function EditTransactionPage() {
           buyer2Name: tx.buyer2Name || '',
           buyer2Email: tx.buyer2Email || '',
           buyer2Phone: tx.buyer2Phone || '',
+          buyer3Name: tx.buyer3Name || '',
+          buyer3Email: tx.buyer3Email || '',
+          buyer3Phone: tx.buyer3Phone || '',
+          buyer4Name: tx.buyer4Name || '',
+          buyer4Email: tx.buyer4Email || '',
+          buyer4Phone: tx.buyer4Phone || '',
           sellerName: tx.sellerName || '',
           sellerEmail: tx.sellerEmail || '',
           sellerPhone: tx.sellerPhone || '',
           seller2Name: tx.seller2Name || '',
           seller2Email: tx.seller2Email || '',
           seller2Phone: tx.seller2Phone || '',
+          seller3Name: tx.seller3Name || '',
+          seller3Email: tx.seller3Email || '',
+          seller3Phone: tx.seller3Phone || '',
+          seller4Name: tx.seller4Name || '',
+          seller4Email: tx.seller4Email || '',
+          seller4Phone: tx.seller4Phone || '',
           client2Name: tx.client2Name || '',
           client2Email: tx.client2Email || '',
           client2Phone: tx.client2Phone || '',
@@ -549,6 +579,11 @@ export default function EditTransactionPage() {
           additionalComments: tx.additionalComments || '',
           notes: tx.notes || '',
         });
+        // Auto-show extra buyer/seller rows if they have saved data
+        if (tx.buyer3Name || tx.buyer3Email || tx.buyer3Phone) setShowBuyer3(true);
+        if (tx.buyer4Name || tx.buyer4Email || tx.buyer4Phone) { setShowBuyer3(true); setShowBuyer4(true); }
+        if (tx.seller3Name || tx.seller3Email || tx.seller3Phone) setShowSeller3(true);
+        if (tx.seller4Name || tx.seller4Email || tx.seller4Phone) { setShowSeller3(true); setShowSeller4(true); }
       } catch (err: any) {
         setLoadError(err.message);
       } finally {
@@ -1009,6 +1044,50 @@ export default function EditTransactionPage() {
                     <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
                   )} />
                 </Grid3>
+                {/* 3rd Buyer */}
+                {showBuyer3 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Third Buyer</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowBuyer3(false); setShowBuyer4(false); form.setValue('buyer3Name', ''); form.setValue('buyer3Email', ''); form.setValue('buyer3Phone', ''); form.setValue('buyer4Name', ''); form.setValue('buyer4Email', ''); form.setValue('buyer4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="buyer3Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer3Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer3Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowBuyer3(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 3rd Buyer</Button>
+                )}
+                {/* 4th Buyer */}
+                {showBuyer3 && (showBuyer4 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Fourth Buyer</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowBuyer4(false); form.setValue('buyer4Name', ''); form.setValue('buyer4Email', ''); form.setValue('buyer4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="buyer4Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer4Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer4Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowBuyer4(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 4th Buyer</Button>
+                ))}
               </>
             )}
             {/* Seller section */}
@@ -1039,6 +1118,50 @@ export default function EditTransactionPage() {
                     <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
                   )} />
                 </Grid3>
+                {/* 3rd Seller */}
+                {showSeller3 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Third Seller</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowSeller3(false); setShowSeller4(false); form.setValue('seller3Name', ''); form.setValue('seller3Email', ''); form.setValue('seller3Phone', ''); form.setValue('seller4Name', ''); form.setValue('seller4Email', ''); form.setValue('seller4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="seller3Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller3Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller3Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowSeller3(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 3rd Seller</Button>
+                )}
+                {/* 4th Seller */}
+                {showSeller3 && (showSeller4 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Fourth Seller</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowSeller4(false); form.setValue('seller4Name', ''); form.setValue('seller4Email', ''); form.setValue('seller4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="seller4Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller4Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller4Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowSeller4(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 4th Seller</Button>
+                ))}
                 <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
                   <FormItem><FormLabel>Client New Address</FormLabel><FormDescription>Where the seller is moving to (for mailers)</FormDescription><FormControl><Input placeholder="New address after closing" {...field} /></FormControl></FormItem>
                 )} />

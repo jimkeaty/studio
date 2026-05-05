@@ -135,6 +135,12 @@ export async function POST(req: NextRequest) {
       buyer2Name: toStr(body.buyer2Name),
       buyer2Email: toStr(body.buyer2Email),
       buyer2Phone: toStr(body.buyer2Phone),
+      buyer3Name: toStr(body.buyer3Name),
+      buyer3Email: toStr(body.buyer3Email),
+      buyer3Phone: toStr(body.buyer3Phone),
+      buyer4Name: toStr(body.buyer4Name),
+      buyer4Email: toStr(body.buyer4Email),
+      buyer4Phone: toStr(body.buyer4Phone),
 
       // Seller contact
       sellerName: toStr(body.sellerName),
@@ -143,6 +149,12 @@ export async function POST(req: NextRequest) {
       seller2Name: toStr(body.seller2Name),
       seller2Email: toStr(body.seller2Email),
       seller2Phone: toStr(body.seller2Phone),
+      seller3Name: toStr(body.seller3Name),
+      seller3Email: toStr(body.seller3Email),
+      seller3Phone: toStr(body.seller3Phone),
+      seller4Name: toStr(body.seller4Name),
+      seller4Email: toStr(body.seller4Email),
+      seller4Phone: toStr(body.seller4Phone),
 
       // Parties
       dealSource: VALID_SOURCES.has(toStr(body.dealSource) || '') ? toStr(body.dealSource) : toStr(body.dealSource),

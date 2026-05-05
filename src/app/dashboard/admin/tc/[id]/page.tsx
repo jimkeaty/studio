@@ -642,6 +642,12 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 {(intake.buyer2Name || intake.buyer2Email) && (
                   <ContactRow label="Buyer 2" name={intake.buyer2Name} email={intake.buyer2Email} phone={intake.buyer2Phone} />
                 )}
+                {(intake.buyer3Name || intake.buyer3Email) && (
+                  <ContactRow label="Buyer 3" name={intake.buyer3Name} email={intake.buyer3Email} phone={intake.buyer3Phone} />
+                )}
+                {(intake.buyer4Name || intake.buyer4Email) && (
+                  <ContactRow label="Buyer 4" name={intake.buyer4Name} email={intake.buyer4Email} phone={intake.buyer4Phone} />
+                )}
               </div>
             )}
             {(intake.sellerName || intake.sellerEmail || intake.sellerPhone) && (
@@ -650,6 +656,12 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 <ContactRow label="" name={intake.sellerName} email={intake.sellerEmail} phone={intake.sellerPhone} />
                 {(intake.seller2Name || intake.seller2Email) && (
                   <ContactRow label="Seller 2" name={intake.seller2Name} email={intake.seller2Email} phone={intake.seller2Phone} />
+                )}
+                {(intake.seller3Name || intake.seller3Email) && (
+                  <ContactRow label="Seller 3" name={intake.seller3Name} email={intake.seller3Email} phone={intake.seller3Phone} />
+                )}
+                {(intake.seller4Name || intake.seller4Email) && (
+                  <ContactRow label="Seller 4" name={intake.seller4Name} email={intake.seller4Email} phone={intake.seller4Phone} />
                 )}
               </div>
             )}

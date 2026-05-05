@@ -557,10 +557,14 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <InfoRow label="Buyer Email" value={tx.buyerEmail} />
                 <InfoRow label="Buyer Phone" value={tx.buyerPhone} />
                 <InfoRow label="Buyer 2 Name" value={tx.buyer2Name} />
+                <InfoRow label="Buyer 3 Name" value={tx.buyer3Name} />
+                <InfoRow label="Buyer 4 Name" value={tx.buyer4Name} />
                 <InfoRow label="Seller Name" value={tx.sellerName} />
                 <InfoRow label="Seller Email" value={tx.sellerEmail} />
                 <InfoRow label="Seller Phone" value={tx.sellerPhone} />
                 <InfoRow label="Seller 2 Name" value={tx.seller2Name} />
+                <InfoRow label="Seller 3 Name" value={tx.seller3Name} />
+                <InfoRow label="Seller 4 Name" value={tx.seller4Name} />
                 <InfoRow label="Other Agent" value={tx.otherAgentName} />
                 <InfoRow label="Other Agent Email" value={tx.otherAgentEmail} />
                 <InfoRow label="Other Agent Phone" value={tx.otherAgentPhone} />

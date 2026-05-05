@@ -21,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2 } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
@@ -236,6 +236,12 @@ const schema = z.object({
   buyer2Name: z.string().optional(),
   buyer2Email: z.string().email().optional().or(z.literal('')),
   buyer2Phone: z.string().optional(),
+  buyer3Name: z.string().optional(),
+  buyer3Email: z.string().email().optional().or(z.literal('')),
+  buyer3Phone: z.string().optional(),
+  buyer4Name: z.string().optional(),
+  buyer4Email: z.string().email().optional().or(z.literal('')),
+  buyer4Phone: z.string().optional(),
 
   // Seller info
   sellerName: z.string().optional(),
@@ -244,6 +250,12 @@ const schema = z.object({
   seller2Name: z.string().optional(),
   seller2Email: z.string().email().optional().or(z.literal('')),
   seller2Phone: z.string().optional(),
+  seller3Name: z.string().optional(),
+  seller3Email: z.string().email().optional().or(z.literal('')),
+  seller3Phone: z.string().optional(),
+  seller4Name: z.string().optional(),
+  seller4Email: z.string().email().optional().or(z.literal('')),
+  seller4Phone: z.string().optional(),
 
   // Inspections
   inspectionOrdered: z.enum(['yes', 'no']).optional(),
@@ -403,6 +415,12 @@ export default function AddTransactionPage() {
     form.setValue('sellerPayingBuyerAgent', '' as any);
     commPctManuallyEdited.current = false;
   };
+
+  // Extra buyer/seller visibility state
+  const [showBuyer3, setShowBuyer3] = useState(false);
+  const [showBuyer4, setShowBuyer4] = useState(false);
+  const [showSeller3, setShowSeller3] = useState(false);
+  const [showSeller4, setShowSeller4] = useState(false);
 
   const { isAdmin: isAdminUser } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
@@ -1171,6 +1189,50 @@ export default function AddTransactionPage() {
                     <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
                   )} />
                 </Grid3>
+                {/* 3rd Buyer */}
+                {showBuyer3 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Third Buyer</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowBuyer3(false); setShowBuyer4(false); form.setValue('buyer3Name', ''); form.setValue('buyer3Email', ''); form.setValue('buyer3Phone', ''); form.setValue('buyer4Name', ''); form.setValue('buyer4Email', ''); form.setValue('buyer4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="buyer3Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer3Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer3Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowBuyer3(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 3rd Buyer</Button>
+                )}
+                {/* 4th Buyer */}
+                {showBuyer3 && (showBuyer4 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Fourth Buyer</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowBuyer4(false); form.setValue('buyer4Name', ''); form.setValue('buyer4Email', ''); form.setValue('buyer4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="buyer4Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer4Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="buyer4Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowBuyer4(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 4th Buyer</Button>
+                ))}
               </>
             )}
 
@@ -1202,6 +1264,50 @@ export default function AddTransactionPage() {
                     <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
                   )} />
                 </Grid3>
+                {/* 3rd Seller */}
+                {showSeller3 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Third Seller</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowSeller3(false); setShowSeller4(false); form.setValue('seller3Name', ''); form.setValue('seller3Email', ''); form.setValue('seller3Phone', ''); form.setValue('seller4Name', ''); form.setValue('seller4Email', ''); form.setValue('seller4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="seller3Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller3Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller3Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowSeller3(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 3rd Seller</Button>
+                )}
+                {/* 4th Seller */}
+                {showSeller3 && (showSeller4 ? (
+                  <>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Fourth Seller</p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => { setShowSeller4(false); form.setValue('seller4Name', ''); form.setValue('seller4Email', ''); form.setValue('seller4Phone', ''); }}><Trash2 className="h-3 w-3 mr-1" />Remove</Button>
+                    </div>
+                    <Grid3>
+                      <FormField control={form.control} name="seller4Name" render={({ field }) => (
+                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller4Email" render={({ field }) => (
+                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="seller4Phone" render={({ field }) => (
+                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid3>
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1 text-xs" onClick={() => setShowSeller4(true)}><PlusCircle className="h-3 w-3 mr-1" />Add 4th Seller</Button>
+                ))}
                 <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Client New Address</FormLabel>
