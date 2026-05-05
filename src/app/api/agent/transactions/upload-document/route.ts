@@ -1,6 +1,7 @@
 // POST /api/agent/transactions/upload-document
 // Accepts multipart/form-data with a `file` field.
-// Uploads to Firebase Storage under transactions/documents/ and returns a signed URL.
+// Uploads to Firebase Storage under transactions/documents/ and returns a
+// permanent download URL using a Firebase download token (no IAM signBlob needed).
 // Any authenticated user (agent or admin) may call this endpoint.
 import { NextRequest, NextResponse } from 'next/server';
 import { admin, adminAuth } from '@/lib/firebase/admin';
@@ -56,7 +57,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Validate MIME ─────────────────────────────────────────────────────────
-    // Some browsers send application/octet-stream for .heic — allow it
     const mimeType = file.type || 'application/octet-stream';
     const isAllowed =
       ALLOWED_TYPES.has(mimeType) ||
@@ -79,7 +79,6 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // ── Build storage path ────────────────────────────────────────────────────
-    // Path: transactions/documents/{uid}/{timestamp}-{sanitized-filename}
     const ext = EXTENSION_MAP[mimeType] || file.name.split('.').pop() || 'bin';
     const timestamp = Date.now();
     const safeName = file.name
@@ -87,6 +86,9 @@ export async function POST(req: NextRequest) {
       .replace(/_{2,}/g, '_')
       .slice(0, 80);
     const storagePath = `transactions/documents/${uid}/${timestamp}-${safeName}`;
+
+    // ── Generate a download token (avoids IAM signBlob requirement) ───────────
+    const downloadToken = crypto.randomUUID();
 
     // ── Upload to Storage ─────────────────────────────────────────────────────
     const bucket = admin.storage().bucket(BUCKET_NAME);
@@ -96,28 +98,26 @@ export async function POST(req: NextRequest) {
       metadata: {
         contentType: mimeType,
         metadata: {
+          firebaseStorageDownloadTokens: downloadToken,
           uploadedBy: uid,
           originalName: file.name,
         },
       },
     });
 
-    // ── Generate a long-lived signed URL (10 years) ───────────────────────────
-    // Uniform bucket-level access is enabled — makePublic() does not work.
-    const [signedUrl] = await blob.getSignedUrl({
-      action: 'read',
-      expires: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000, // 10 years
-    });
+    // ── Build permanent download URL using the token ──────────────────────────
+    const encodedPath = encodeURIComponent(storagePath);
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET_NAME}/o/${encodedPath}?alt=media&token=${downloadToken}`;
 
     return NextResponse.json({
       ok: true,
-      url: signedUrl,
+      url: downloadUrl,
       name: file.name,
       storagePath,
       uploadedAt: new Date().toISOString(),
     });
   } catch (err: any) {
     console.error('[POST /api/agent/transactions/upload-document]', err);
-    return jsonError(500, err.message || 'Internal Server Error');
+    return NextResponse.json({ ok: false, error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
