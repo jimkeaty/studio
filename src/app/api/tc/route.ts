@@ -1,6 +1,8 @@
 // POST /api/tc — any authenticated agent submits a new TC intake
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { sendNotification } from '@/lib/notifications/sendNotification';
+import { getTcUids, getStaffUidsForAgent, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
@@ -296,6 +298,54 @@ export async function POST(req: NextRequest) {
       await adminDb.collection('staffQueue').add(staffQueueItem);
     }
     // Buyer/referral transactions are saved to the transaction ledger only (no staff queue entry on new submission)
+
+    // ── Notifications ────────────────────────────────────────────────────────
+    // Fire-and-forget: don't let notification errors block the response
+    void (async () => {
+      try {
+        const workingWithTc = !!body.workingWithTc;
+        if (workingWithTc) {
+          // Notify all TC coordinators about the new intake
+          const tcUids = await getTcUids(adminDb);
+          if (tcUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'tc_new_intake',
+              recipientUids: tcUids,
+              title: 'New TC Intake Submitted',
+              body: `${agentDisplayName} submitted a new transaction: ${address}`,
+              url: '/dashboard/admin/tc',
+            });
+          }
+        } else {
+          // Not using TC — notify staff directly
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'tx_new_agent',
+              recipientUids: staffUids,
+              title: 'New Transaction Added',
+              body: `${agentDisplayName} added a new transaction: ${address}`,
+              url: '/dashboard/admin/transactions',
+            });
+          }
+        }
+        // Notify staff queue watchers if a staff queue item was created
+        if (isListingType) {
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: 'New Staff Queue Item',
+              body: `New listing submitted by ${agentDisplayName}: ${address}`,
+              url: '/dashboard/admin/staff-queue',
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error('[POST /api/tc] notification error:', notifErr);
+      }
+    })();
 
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err: any) {

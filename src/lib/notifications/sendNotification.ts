@@ -1,0 +1,293 @@
+/**
+ * sendNotification — unified multi-channel notification dispatcher
+ *
+ * Channels:
+ *  - in_app  : writes to Firestore `notifications` collection (always sent)
+ *  - push    : Firebase Cloud Messaging (FCM) via firebase-admin
+ *  - email   : Resend (RESEND_API_KEY env var required)
+ *  - sms     : Twilio (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER env vars required)
+ *
+ * Each recipient's preferences are read from their Firestore user profile
+ * (`users/{uid}.notificationPrefs`).  If no prefs exist, defaults are used.
+ *
+ * Usage:
+ *   await sendNotification(db, {
+ *     type: 'tc_new_intake',
+ *     recipientUids: ['uid1', 'uid2'],
+ *     title: 'New TC Intake',
+ *     body: '123 Main St has been submitted for review.',
+ *     url: '/dashboard/admin/tc',
+ *   });
+ */
+
+import type { Firestore } from 'firebase-admin/firestore';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'tc_new_intake'         // new transaction submitted to TC queue
+  | 'tc_approved'           // TC intake approved → agent notified
+  | 'tc_rejected'           // TC intake rejected → agent notified
+  | 'staff_queue_new'       // new item added to staff queue
+  | 'staff_queue_resolved'  // staff queue item resolved → agent notified
+  | 'staff_queue_attention' // staff queue item needs agent attention
+  | 'tx_status_change'      // transaction status changed → agent notified
+  | 'tx_new_agent'          // new transaction added by agent → TC/staff notified
+  | 'system';               // generic system notification
+
+export interface NotificationPayload {
+  type: NotificationType;
+  recipientUids: string[];
+  title: string;
+  body: string;
+  url?: string;
+  /** Optional extra data stored on the Firestore notification doc */
+  data?: Record<string, string>;
+  /** Sender display name (for email "from" name) */
+  senderName?: string;
+}
+
+export interface NotificationPrefs {
+  in_app: boolean;
+  push: boolean;
+  email: boolean;
+  sms: boolean;
+  // Per-event overrides — if undefined, falls back to channel default above
+  events?: Partial<Record<NotificationType, { in_app?: boolean; push?: boolean; email?: boolean; sms?: boolean }>>;
+}
+
+const DEFAULT_PREFS: NotificationPrefs = {
+  in_app: true,
+  push: true,
+  email: true,
+  sms: false, // SMS off by default — user must opt in
+};
+
+// ─── Main dispatcher ─────────────────────────────────────────────────────────
+
+export async function sendNotification(
+  db: Firestore,
+  payload: NotificationPayload,
+): Promise<void> {
+  const { type, recipientUids, title, body, url = '/dashboard', data } = payload;
+
+  if (!recipientUids || recipientUids.length === 0) return;
+
+  // Deduplicate UIDs
+  const uids = [...new Set(recipientUids)];
+
+  await Promise.allSettled(
+    uids.map((uid) => dispatchToUser(db, uid, type, title, body, url, data)),
+  );
+}
+
+async function dispatchToUser(
+  db: Firestore,
+  uid: string,
+  type: NotificationType,
+  title: string,
+  body: string,
+  url: string,
+  data?: Record<string, string>,
+) {
+  // Load user profile for prefs + contact info
+  const userDoc = await db.collection('users').doc(uid).get();
+  const userData = userDoc.exists ? (userDoc.data() as Record<string, any>) : {};
+
+  const rawPrefs: NotificationPrefs = userData.notificationPrefs ?? DEFAULT_PREFS;
+  const eventOverride = rawPrefs.events?.[type] ?? {};
+
+  const channels = {
+    in_app: eventOverride.in_app ?? rawPrefs.in_app ?? DEFAULT_PREFS.in_app,
+    push:   eventOverride.push   ?? rawPrefs.push   ?? DEFAULT_PREFS.push,
+    email:  eventOverride.email  ?? rawPrefs.email  ?? DEFAULT_PREFS.email,
+    sms:    eventOverride.sms    ?? rawPrefs.sms    ?? DEFAULT_PREFS.sms,
+  };
+
+  const tasks: Promise<void>[] = [];
+
+  // ── In-app ────────────────────────────────────────────────────────────────
+  if (channels.in_app) {
+    tasks.push(
+      db.collection('notifications').add({
+        recipientUid: uid,
+        type,
+        title,
+        body,
+        url,
+        read: false,
+        createdAt: new Date(),
+        ...(data ?? {}),
+      }).then(() => undefined),
+    );
+  }
+
+  // ── Push (FCM) ────────────────────────────────────────────────────────────
+  if (channels.push) {
+    tasks.push(sendPush(db, uid, title, body, url, type));
+  }
+
+  // ── Email (Resend) ────────────────────────────────────────────────────────
+  if (channels.email && userData.email) {
+    tasks.push(sendEmail(userData.email, userData.displayName || userData.name || 'User', title, body, url, type));
+  }
+
+  // ── SMS (Twilio) ──────────────────────────────────────────────────────────
+  if (channels.sms && userData.phone) {
+    tasks.push(sendSms(userData.phone, title, body, url));
+  }
+
+  await Promise.allSettled(tasks);
+}
+
+// ─── FCM Push ─────────────────────────────────────────────────────────────────
+
+async function sendPush(
+  db: Firestore,
+  uid: string,
+  title: string,
+  body: string,
+  url: string,
+  type: string,
+): Promise<void> {
+  try {
+    const tokenDoc = await db.collection('fcmTokens').doc(uid).get();
+    if (!tokenDoc.exists) return;
+    const fcmToken = tokenDoc.data()?.token as string | undefined;
+    if (!fcmToken) return;
+
+    const { getMessaging } = await import('firebase-admin/messaging');
+    await getMessaging().send({
+      token: fcmToken,
+      notification: { title, body },
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/icon-72x72.png',
+          tag: type,
+          renotify: true,
+        },
+        fcmOptions: { link: url },
+      },
+      data: { type, url },
+    });
+  } catch (err) {
+    console.error(`[sendNotification] FCM push failed for ${uid}:`, err);
+  }
+}
+
+// ─── Email via Resend ─────────────────────────────────────────────────────────
+
+async function sendEmail(
+  toEmail: string,
+  toName: string,
+  title: string,
+  body: string,
+  url: string,
+  type: NotificationType,
+): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return; // Resend not configured — skip silently
+
+  try {
+    const { Resend } = await import('resend');
+    const resend = new Resend(apiKey);
+
+    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Smart Broker USA';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa.web.app';
+    const fullUrl = url.startsWith('http') ? url : `${appUrl}${url}`;
+
+    await resend.emails.send({
+      from: `${appName} <notifications@${process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com'}>`,
+      to: [toEmail],
+      subject: title,
+      html: buildEmailHtml(appName, toName, title, body, fullUrl, type),
+    });
+  } catch (err) {
+    console.error(`[sendNotification] Resend email failed for ${toEmail}:`, err);
+  }
+}
+
+function buildEmailHtml(
+  appName: string,
+  recipientName: string,
+  title: string,
+  body: string,
+  url: string,
+  type: NotificationType,
+): string {
+  const accentColor = '#2563eb'; // blue-600
+  const typeLabel: Record<NotificationType, string> = {
+    tc_new_intake:         'TC Queue',
+    tc_approved:           'TC Approved',
+    tc_rejected:           'TC Rejected',
+    staff_queue_new:       'Staff Queue',
+    staff_queue_resolved:  'Resolved',
+    staff_queue_attention: 'Action Required',
+    tx_status_change:      'Status Update',
+    tx_new_agent:          'New Transaction',
+    system:                'System',
+  };
+  const badge = typeLabel[type] ?? 'Notification';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
+        <!-- Header -->
+        <tr><td style="background:${accentColor};padding:24px 32px;">
+          <p style="margin:0;color:#ffffff;font-size:18px;font-weight:700;">${appName}</p>
+          <span style="display:inline-block;margin-top:8px;background:rgba(255,255,255,.2);color:#fff;font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;letter-spacing:.5px;">${badge}</span>
+        </td></tr>
+        <!-- Body -->
+        <tr><td style="padding:32px;">
+          <p style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;line-height:1.3;">${title}</p>
+          <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">Hi ${recipientName},</p>
+          <p style="margin:0 0 28px;color:#374151;font-size:15px;line-height:1.6;">${body}</p>
+          <a href="${url}" style="display:inline-block;background:${accentColor};color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 28px;border-radius:8px;">View in Dashboard →</a>
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="padding:16px 32px;border-top:1px solid #f3f4f6;">
+          <p style="margin:0;color:#9ca3af;font-size:12px;">You're receiving this because you have notifications enabled. <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa.web.app'}/dashboard/settings/notifications" style="color:#6b7280;">Manage preferences</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ─── SMS via Twilio ───────────────────────────────────────────────────────────
+
+async function sendSms(
+  toPhone: string,
+  title: string,
+  body: string,
+  url: string,
+): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken  = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+
+  if (!accountSid || !authToken || !fromNumber) return; // Twilio not configured — skip silently
+
+  try {
+    const twilio = (await import('twilio')).default;
+    const client = twilio(accountSid, authToken);
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa.web.app';
+    const fullUrl = url.startsWith('http') ? url : `${appUrl}${url}`;
+    const message = `${title}\n${body}\n${fullUrl}`;
+    await client.messages.create({
+      body: message.slice(0, 1600), // SMS max
+      from: fromNumber,
+      to: toPhone,
+    });
+  } catch (err) {
+    console.error(`[sendNotification] Twilio SMS failed for ${toPhone}:`, err);
+  }
+}

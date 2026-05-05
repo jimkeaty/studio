@@ -6,6 +6,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike, isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { resolveGCI } from '@/lib/commissions';
+import { sendNotification } from '@/lib/notifications/sendNotification';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -181,6 +182,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         reviewedBy: decoded.email,
         updatedAt: now,
       });
+      // Notify the agent their intake was rejected
+      void (async () => {
+        try {
+          const intakeData = (await docRef.get()).data() as Record<string, any>;
+          const agentUid = String(intakeData?.agentId || '').trim();
+          const intakeAddress = String(intakeData?.address || 'your transaction').trim();
+          if (agentUid) {
+            await sendNotification(adminDb, {
+              type: 'tc_rejected',
+              recipientUids: [agentUid],
+              title: 'TC Intake Rejected',
+              body: `Your submission for ${intakeAddress} was not approved. Reason: ${rejectionReason}`,
+              url: '/dashboard/transactions',
+            });
+          }
+        } catch (e) { console.error('[TC reject] notification error:', e); }
+      })();
       return NextResponse.json({ ok: true, status: 'rejected' });
     }
 
@@ -608,6 +626,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       } catch (rollupErr) {
         console.warn('[TC approve] Rollup rebuild failed (non-fatal):', rollupErr);
       }
+
+      // Notify the agent their intake was approved
+      void (async () => {
+        try {
+          if (agentId) {
+            await sendNotification(adminDb, {
+              type: 'tc_approved',
+              recipientUids: [agentId],
+              title: 'TC Intake Approved ✅',
+              body: `Your transaction for ${String(intake.address || 'your property')} has been approved and added to the ledger.`,
+              url: '/dashboard/transactions',
+            });
+          }
+        } catch (e) { console.error('[TC approve] notification error:', e); }
+      })();
 
       return NextResponse.json({
         ok: true,

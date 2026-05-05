@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   BarChart3,
+  Bell,
   Building,
   ClipboardList,
   ClipboardPen,
@@ -107,6 +108,7 @@ const agentMenuItems = [
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
   { href: '/dashboard/training', label: 'Training & Help', icon: GraduationCap },
+  { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },
 ];
 
 // Shown to all users — community & entertainment

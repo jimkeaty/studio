@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { sendNotification } from '@/lib/notifications/sendNotification';
+import { getAllStaffUids, getTcUids } from '@/lib/notifications/getRecipientUids';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -265,6 +267,45 @@ export async function PATCH(
 
       await adminDb.collection('tcIntakes').add(intake);
     }
+
+    // ── Notifications ────────────────────────────────────────────────────────
+    void (async () => {
+      try {
+        const txAddress = String(txData.propertyAddress || txData.address || 'your transaction');
+        const agentName = String(txData.agentDisplayName || 'Agent');
+        // Notify TC/staff about the status change
+        if (newStatus && newStatus !== previousStatus) {
+          const workingWithTc = !!txData.workingWithTc;
+          const recipientUids = workingWithTc
+            ? await getTcUids(adminDb)
+            : await getAllStaffUids(adminDb);
+          if (recipientUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'tx_status_change',
+              recipientUids,
+              title: 'Transaction Status Updated',
+              body: `${agentName} changed ${txAddress} from ${previousStatus ?? 'unknown'} to ${newStatus}.`,
+              url: '/dashboard/admin/transactions',
+            });
+          }
+        }
+        // Notify TC about resubmission
+        if (resubmitToTc) {
+          const tcUids = await getTcUids(adminDb);
+          if (tcUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'tc_new_intake',
+              recipientUids: tcUids,
+              title: 'Transaction Resubmitted to TC',
+              body: `${agentName} resubmitted ${txAddress} for TC review (status: pending).`,
+              url: '/dashboard/admin/tc',
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error('[agent PATCH] notification error:', notifErr);
+      }
+    })();
 
     return NextResponse.json({ ok: true, updated: Object.keys(updates), resubmitted: !!resubmitToTc });
   } catch (err: any) {

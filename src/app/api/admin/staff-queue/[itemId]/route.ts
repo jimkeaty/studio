@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff } from '@/lib/auth/staffAccess';
+import { sendNotification } from '@/lib/notifications/sendNotification';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -145,6 +146,22 @@ export async function PATCH(
     }
 
     await itemRef.update(itemUpdates);
+
+    // ── Notify the agent when their staff queue item is resolved or needs attention ──
+    const agentUid = String(item.agentId || '').trim();
+    if (agentUid && (action === 'complete' || action === 'dismiss')) {
+      const txAddress = String(item.address || item.transactionAddress || 'your transaction');
+      const isComplete = action === 'complete';
+      void sendNotification(adminDb, {
+        type: 'staff_queue_resolved',
+        recipientUids: [agentUid],
+        title: isComplete ? 'Staff Review Complete ✅' : 'Staff Queue Item Dismissed',
+        body: isComplete
+          ? `Staff has completed the review for ${txAddress}. Check your transaction for any updates.`
+          : `The staff queue item for ${txAddress} was dismissed by ${reviewerName}.`,
+        url: '/dashboard/transactions',
+      }).catch(e => console.error('[staff-queue PATCH] notification error:', e));
+    }
 
     return NextResponse.json({ ok: true, updated: { id: params.itemId, ...itemUpdates } });
   } catch (err: any) {
