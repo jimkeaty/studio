@@ -561,7 +561,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           // If commission was manually set on the existing transaction, preserve it.
           // Only overwrite commission fields if the existing transaction has NOT been
           // manually overridden.
-          const updatePayload = { ...txPayload, updatedAt: now };
+          const updatePayload: Record<string, any> = { ...txPayload, updatedAt: now };
           if (existingData.commissionOverridden) {
             // Strip all commission-related fields from the update — keep what's saved
             const commissionFields = [
