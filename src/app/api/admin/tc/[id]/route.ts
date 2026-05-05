@@ -557,7 +557,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const existingTxRef = adminDb.collection('transactions').doc(existingTxId);
         const existingTxSnap = await existingTxRef.get();
         if (existingTxSnap.exists) {
-          await existingTxRef.update({ ...txPayload, updatedAt: now });
+          const existingData = existingTxSnap.data() || {};
+          // If commission was manually set on the existing transaction, preserve it.
+          // Only overwrite commission fields if the existing transaction has NOT been
+          // manually overridden.
+          const updatePayload = { ...txPayload, updatedAt: now };
+          if (existingData.commissionOverridden) {
+            // Strip all commission-related fields from the update — keep what's saved
+            const commissionFields = [
+              'splitSnapshot', 'creditSnapshot', 'commission', 'grossCommission',
+              'agentPct', 'brokerPct', 'agentDollar', 'brokerGci', 'netCommission',
+              'sellerCommissionPct', 'buyerCommissionPct', 'commissionPercent',
+              'commissionBasePrice', 'commissionOverride', 'commissionOverrideBy',
+              'commissionOverrideAt', 'calculationModel',
+            ];
+            for (const f of commissionFields) delete updatePayload[f];
+            // Preserve the override flag
+            updatePayload.commissionOverridden = true;
+          }
+          await existingTxRef.update(updatePayload);
           transactionId = existingTxId;
         } else {
           // Linked transaction was deleted — create a fresh one

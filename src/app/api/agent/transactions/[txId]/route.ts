@@ -258,6 +258,11 @@ export async function PATCH(
         documents: Array.isArray(mergedData.documents) ? mergedData.documents : [],
       };
 
+      // IMPORTANT: set approvedTransactionId so that if a TC coordinator approves
+      // this resubmission, the TC approval route UPDATES the existing transaction
+      // instead of creating a brand-new duplicate transaction.
+      intake.approvedTransactionId = txId;
+
       await adminDb.collection('tcIntakes').add(intake);
     }
 
