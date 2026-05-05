@@ -184,6 +184,8 @@ export interface Transaction {
   shortageAmount?: number | null;
   buyerBringToClosing?: number | null;
   additionalComments?: string | null;
+  // Documents
+  documents?: Array<{ url: string; name: string; storagePath?: string; uploadedAt?: string }>;
   // Legacy fields
   userId?: string;
   netCommission?: number;

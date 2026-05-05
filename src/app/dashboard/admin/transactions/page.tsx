@@ -20,7 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   Plus, FileCheck2, Clock, AlertTriangle, DollarSign, Upload, Pencil, Trash2,
   Save, X, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, ArrowRightLeft, Download, Tags,
-  Copy, ChevronDown, ChevronUp,
+  Copy, ChevronDown, ChevronUp, Paperclip, FileText,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -938,6 +938,7 @@ export default function AdminTransactionLedgerPage() {
                     <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[90px]" onClick={() => toggleSort('source')}>
                       <span className="flex items-center">Source<SortIcon col="source" /></span>
                     </TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[90px]">Docs</TableHead>
                     <TableHead className="w-[100px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1054,6 +1055,20 @@ export default function AdminTransactionLedgerPage() {
                         <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">{net ? formatCurrency(net) : '—'}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">{broker ? formatCurrency(broker) : '—'}</TableCell>
                         <TableCell className="min-w-[90px]"><Badge variant="secondary" className="text-xs capitalize">{t.source ?? 'manual'}</Badge></TableCell>
+                        <TableCell className="min-w-[90px]" onClick={e => e.stopPropagation()}>
+                          {t.documents && t.documents.length > 0 ? (
+                            <div className="flex flex-col gap-1 items-start">
+                              {t.documents.map((doc: { url: string; name: string }, i: number) => (
+                                <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline whitespace-nowrap" title={doc.name}>
+                                  <FileText className="h-3 w-3 shrink-0" />
+                                  <span className="truncate max-w-[120px]">{doc.name}</span>
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEdit(t); }} title="Edit">

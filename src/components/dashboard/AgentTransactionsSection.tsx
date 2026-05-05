@@ -917,6 +917,19 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                         <span>Contract: {formatDate(t.contractDate)}</span>
                         <span>Close: {formatDate(t.closedDate ?? t.closingDate)}</span>
                       </div>
+                      {t.documents && t.documents.length > 0 && (
+                        <div className="border-t pt-2">
+                          <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1"><Paperclip className="h-3 w-3" /> Documents ({t.documents.length})</p>
+                          <div className="flex flex-col gap-1">
+                            {t.documents.map((doc, i) => (
+                              <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-1.5 text-xs text-primary hover:underline truncate">
+                                <FileText className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{doc.name}</span>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -957,6 +970,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                       <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('netToMe')}>
                         <span className="flex items-center justify-end">Net to Me<SortIcon col="netToMe" /></span>
                       </TableHead>
+                      <TableHead className="whitespace-nowrap min-w-[90px] text-center">Docs</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1045,6 +1059,20 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                           </TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap font-semibold text-primary text-sm">
                             {net ? formatCurrency(net) : '—'}
+                          </TableCell>
+                          <TableCell className="min-w-[90px] text-center" onClick={e => e.stopPropagation()}>
+                            {t.documents && t.documents.length > 0 ? (
+                              <div className="flex flex-col gap-1 items-start">
+                                {t.documents.map((doc, i) => (
+                                  <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline whitespace-nowrap" title={doc.name}>
+                                    <FileText className="h-3 w-3 shrink-0" />
+                                    <span className="truncate max-w-[120px]">{doc.name}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
