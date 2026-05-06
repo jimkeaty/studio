@@ -241,6 +241,253 @@ export const ARTICLES: Article[] = [
 </ul>
     `,
   },
+
+  // ── NOTIFICATIONS (AGENT & STAFF) ────────────────────────────────────────────
+  {
+    id: 'notification-settings',
+    title: 'Managing Your Notification Preferences',
+    description:
+      'How to control which alerts you receive and where you receive them (In-App, Push, Email, SMS).',
+    category: 'Dashboard',
+    audience: 'both',
+    readingTimeMinutes: 3,
+    publishedAt: '2026-05-06',
+    content: `
+<h2>Overview</h2>
+<p>The Smart Broker platform sends notifications for important events like TC approvals, staff queue updates, and transaction status changes. You have full control over how you receive these alerts.</p>
+
+<h2>Accessing Notification Settings</h2>
+<p>Click <strong>Notification Settings</strong> in the sidebar (under your profile or the main menu). Here you can toggle notifications on or off globally by channel, or fine-tune them by specific events.</p>
+
+<h2>Notification Channels</h2>
+<table>
+  <thead><tr><th>Channel</th><th>Description</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><strong>In-App</strong></td><td>Alerts that appear in the bell icon menu inside the dashboard.</td><td>ON</td></tr>
+    <tr><td><strong>Push</strong></td><td>Browser or mobile device notifications. Requires you to click "Enable Push Notifications" to grant browser permission.</td><td>ON</td></tr>
+    <tr><td><strong>Email</strong></td><td>Detailed alerts sent to your registered email address.</td><td>ON</td></tr>
+    <tr><td><strong>SMS</strong></td><td>Text messages sent to your phone.</td><td>OFF (Opt-in required)</td></tr>
+  </tbody>
+</table>
+
+<h2>Event-Specific Toggles</h2>
+<p>Below the global channel toggles, you can turn specific events on or off entirely:</p>
+<ul>
+  <li><strong>TC Approvals & Rejections</strong> — Alerts when a Transaction Coordinator reviews your submitted deal.</li>
+  <li><strong>Transaction Status Changes</strong> — Alerts when a deal moves to Pending, Closed, etc.</li>
+  <li><strong>Staff Queue Updates</strong> — Alerts when admin staff process your listings.</li>
+  <li><strong>Co-Agent Splits</strong> — Alerts when a shared transaction closes and is split into your individual record.</li>
+</ul>
+    `,
+  },
+
+  // ── TRANSACTION COMPLIANCE FEE (AGENT) ───────────────────────────────────────
+  {
+    id: 'transaction-compliance-fee',
+    title: 'Handling the Transaction Compliance Fee',
+    description:
+      'How the compliance fee works, who pays it, and how it affects your commission preview.',
+    category: 'Transactions',
+    audience: 'agent',
+    readingTimeMinutes: 4,
+    publishedAt: '2026-05-06',
+    content: `
+<h2>Overview</h2>
+<p>When submitting a transaction, you must specify whether a <strong>Transaction Compliance Fee</strong> applies and who is paying for it. This ensures accurate commission calculations and clear instructions for the title company.</p>
+
+<h2>Where to Set the Fee</h2>
+<p>In the Add Transaction form, scroll down to the <strong>Additional Info</strong> section. You will see a toggle for <em>Transaction Compliance Fee?</em></p>
+<p>If your agent profile has a default fee set, this will automatically toggle to <strong>Yes</strong> and pre-fill the amount. You can change this on a per-transaction basis.</p>
+
+<h2>Who Pays the Fee?</h2>
+<p>You must select who is responsible for the fee from the dropdown:</p>
+<table>
+  <thead><tr><th>Payer</th><th>How It Affects Your Commission</th><th>What You See in Preview</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Agent</strong></td><td>The fee is deducted from your final take-home pay <em>after</em> the broker split.</td><td>A red deduction line (e.g., -$295) in the commission breakdown.</td></tr>
+    <tr><td><strong>Buyer</strong></td><td>No deduction from your commission.</td><td>A blue note reminding you to collect the fee from the buyer/title at closing.</td></tr>
+    <tr><td><strong>Seller</strong></td><td>No deduction from your commission.</td><td>A blue note stating the fee is covered by the seller.</td></tr>
+    <tr><td><strong>Seller Closing Cost</strong></td><td>No deduction from your commission.</td><td>A blue note stating the fee comes from seller concessions.</td></tr>
+  </tbody>
+</table>
+
+<h2>Important Note on Commission Tiers</h2>
+<p>Regardless of who pays the fee, your <strong>Commission Tier</strong> and <strong>Broker Split</strong> are always calculated based on the <strong>Full Gross Commission Income (GCI)</strong>. The fee is never subtracted from the GCI before the split is calculated.</p>
+    `,
+  },
+
+  // ── TC APPROVAL WORKFLOW (STAFF) ─────────────────────────────────────────────
+  {
+    id: 'tc-approval-workflow',
+    title: 'TC Queue: Reviewing & Approving Transactions',
+    description:
+      'How to process agent submissions, handle compliance fees, and approve deals into the ledger.',
+    category: 'Transactions',
+    audience: 'staff',
+    readingTimeMinutes: 5,
+    publishedAt: '2026-05-06',
+    content: `
+<h2>Overview</h2>
+<p>When an agent submits a transaction and checks "Working with TC," it enters the <strong>TC Queue</strong>. As a Transaction Coordinator or Admin, your job is to review the details, ensure compliance, and approve the deal. Approving the deal creates the official record in the Transaction Ledger.</p>
+
+<h2>The Review Process</h2>
+<ol>
+  <li>Open the <strong>TC Queue</strong> from the sidebar.</li>
+  <li>Click <strong>Review →</strong> on any Pending item.</li>
+  <li>Review the agent's submitted data on the left side of the screen.</li>
+  <li>Fill out the official form on the right side. The system will auto-fill most fields based on the agent's submission.</li>
+</ol>
+
+<h2>Handling the Transaction Compliance Fee</h2>
+<p>In the <strong>Additional Info</strong> section, you must verify the Transaction Compliance Fee settings:</p>
+<ul>
+  <li><strong>Is there a fee?</strong> (Yes/No)</li>
+  <li><strong>Amount:</strong> (e.g., $295)</li>
+  <li><strong>Who Pays:</strong> Agent, Buyer, Seller, or Seller Closing Cost.</li>
+</ul>
+<p>If the <strong>Agent</strong> pays, the fee will be deducted from their final take-home pay. If anyone else pays, the agent receives their full split, and the fee must be collected at closing.</p>
+
+<h2>Approving vs. Rejecting</h2>
+<ul>
+  <li><strong>Approve:</strong> Creates the official transaction in the ledger and sends an approval notification to the agent.</li>
+  <li><strong>Reject:</strong> Sends the transaction back to the agent with your notes. The agent will receive a notification and must edit and resubmit the deal from their dashboard.</li>
+</ul>
+    `,
+  },
+
+  // ── CO-AGENT SPLITS (ADMIN/STAFF) ─────────────────────────────────────────────
+  {
+    id: 'admin-co-agent-splits',
+    title: 'Admin: Managing Co-Agent Transaction Splits',
+    description:
+      'How the system handles co-agent deals at closing, what the ledger shows, and what to do if a split needs correction.',
+    category: 'Admin Tools',
+    audience: 'staff',
+    readingTimeMinutes: 4,
+    publishedAt: '2026-05-06',
+    content: `
+<h2>Overview</h2>
+<p>When a transaction in the ledger has a co-agent assigned, it will automatically split into two individual records the moment it is moved to <strong>Closed</strong> status. This applies whether the status is changed by the agent from their dashboard or by an admin from the Transaction Ledger.</p>
+
+<h2>What Happens at Closing</h2>
+<ol>
+  <li>The single shared transaction is <strong>permanently deleted</strong> from the ledger.</li>
+  <li>Two new individual transactions are created — one for each agent.</li>
+  <li>The Sale Price and GCI are split according to the percentages set on the original transaction.</li>
+  <li>Each agent's commission tier is applied independently to their portion of the GCI.</li>
+  <li>The Transaction Compliance Fee (if any) is split equally between the two records.</li>
+  <li>Both agents receive a notification with a link to their new individual transaction.</li>
+</ol>
+
+<h2>Audit Trail</h2>
+<p>Each split transaction carries a <code>splitFromTransactionId</code> field that references the original shared transaction's ID. This is stored in Firestore and can be used for audit or reconciliation purposes.</p>
+
+<h2>Correcting a Split</h2>
+<p>If a split produces incorrect numbers (e.g., the wrong split percentage was set), you can edit either individual transaction directly in the <strong>Transaction Ledger</strong> using the Admin Edit page. Adjust the GCI, commission fields, or agent assignment as needed. The split itself cannot be undone, but the resulting records are fully editable.</p>
+    `,
+  },
+
+  // ── TEAM COMMISSION MODEL (ADMIN/STAFF) ─────────────────────────────────────
+  {
+    id: 'admin-team-commission-model',
+    title: 'Admin: Team Leader & Member Commission Model',
+    description:
+      'How the system calculates commissions for team members on teams with a Team Leader.',
+    category: 'Team & Commission',
+    audience: 'staff',
+    readingTimeMinutes: 5,
+    publishedAt: '2026-05-06',
+    content: `
+<h2>Overview</h2>
+<p>For agents on a team that has a designated <strong>Team Leader</strong>, commission calculations involve three parties: the Brokerage, the Team Member, and the Team Leader. The Team Leader's commission tier determines the broker's cut, and the member's individual split is applied to the full GCI.</p>
+
+<h2>The Calculation Model</h2>
+<table>
+  <thead><tr><th>Party</th><th>Calculation</th><th>Example ($1,800 GCI, Leader 75%, Member 70%)</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Broker</strong></td><td>GCI × (100% − Leader Tier %)</td><td>$1,800 × 25% = <strong>$450</strong></td></tr>
+    <tr><td><strong>Team Member</strong></td><td>GCI × Member Split %</td><td>$1,800 × 70% = <strong>$1,260</strong></td></tr>
+    <tr><td><strong>Team Leader</strong></td><td>GCI − Broker − Member (the spread)</td><td>$1,800 − $450 − $1,260 = <strong>$90</strong></td></tr>
+  </tbody>
+</table>
+
+<h2>Leaderboard & Dashboard Rules</h2>
+<ul>
+  <li>The <strong>Team Member's</strong> volume and GCI are credited to their personal leaderboard and dashboard.</li>
+  <li>The <strong>Team Leader</strong> does <em>not</em> receive the team member's volume or GCI on their personal leaderboard. Only the leader's own direct transactions count toward their personal numbers.</li>
+  <li>Both the team member's and team leader's commission tiers progress based on the GCI from the transaction.</li>
+</ul>
+
+<h2>Configuring Team Commission</h2>
+<p>Team commission structures are set in <strong>Admin → Teams</strong>. Each team can use either a <em>Tiered Commission</em> model (with progression thresholds) or a <em>Fixed Commission</em> model (flat split, no tiers). Individual agent profiles can override the team default with custom tiers if needed.</p>
+    `,
+  },
+
+  // ── CO-AGENT SPLITS (AGENT) ──────────────────────────────────────────────────
+  {
+    id: 'co-agent-splits',
+    title: 'Co-Agent Transactions & Automatic Splits',
+    description:
+      'How deals with co-agents are handled and what happens when they close.',
+    category: 'Team & Commission',
+    audience: 'agent',
+    readingTimeMinutes: 3,
+    publishedAt: '2026-05-06',
+    content: `
+<h2>Submitting a Co-Agent Deal</h2>
+<p>When you work a deal with another agent in the brokerage, you only need to submit <strong>one transaction</strong>. In the Add Transaction form, toggle <em>Has Co-Agent?</em> to <strong>Yes</strong>, select the agent, and enter the split percentage (e.g., 50/50).</p>
+
+<h2>What Happens While Pending</h2>
+<p>While the deal is Active or Pending, it exists as a single shared transaction in the ledger. The primary agent manages the updates.</p>
+
+<h2>The Automatic Split at Closing</h2>
+<p>The magic happens when the transaction status is changed to <strong>Closed</strong>. The system will automatically:</p>
+<ol>
+  <li>Delete the single shared transaction.</li>
+  <li>Create <strong>two separate, individual transactions</strong> — one for you and one for your co-agent.</li>
+  <li>Split the Sale Price and GCI according to the percentages you set.</li>
+  <li>Apply each agent's individual commission tier to their portion of the GCI.</li>
+  <li>Send a notification to both agents with a link to their new individual record.</li>
+</ol>
+
+<h2>Why We Do This</h2>
+<p>Splitting the transaction at closing ensures that your personal dashboard, conversion rates, and average commission percentages remain perfectly accurate. If you split a 3% commission 50/50, your record will show you earned 3% on half the volume, rather than 1.5% on the full volume.</p>
+    `,
+  },
+
+  // ── TEAM MEMBER COMMISSION MODEL (AGENT) ─────────────────────────────────────
+  {
+    id: 'team-member-commission',
+    title: 'Understanding Your Team Commission Split',
+    description:
+      'How commission is calculated if you are on a team with a Team Leader.',
+    category: 'Team & Commission',
+    audience: 'agent',
+    readingTimeMinutes: 4,
+    publishedAt: '2026-05-06',
+    content: `
+<h2>The Commission Model</h2>
+<p>If you are a member of a team that has a Team Leader, your commission calculation involves three parties: You, the Brokerage, and the Team Leader.</p>
+
+<p>The math works like this:</p>
+<ol>
+  <li><strong>Broker Cut:</strong> The brokerage takes its percentage based on the <em>Team Leader's</em> commission tier.</li>
+  <li><strong>Your Split:</strong> You take home your agreed-upon percentage applied directly to the <em>Full GCI</em>.</li>
+  <li><strong>Leader Retains:</strong> The Team Leader keeps the spread (whatever is left over after the broker and you are paid).</li>
+</ol>
+
+<h2>Example Breakdown</h2>
+<p>Imagine a deal with <strong>$1,800 GCI</strong>. The Team Leader is on a 75/25 split with the broker. Your team member agreement gives you 70% of your deals.</p>
+<ul>
+  <li><strong>Broker gets 25%:</strong> $1,800 × 25% = <strong>$450</strong></li>
+  <li><strong>You get 70%:</strong> $1,800 × 70% = <strong>$1,260</strong></li>
+  <li><strong>Leader retains the spread:</strong> $1,800 - $450 - $1,260 = <strong>$90</strong></li>
+</ul>
+
+<h2>The Commission Preview Card</h2>
+<p>When you enter GCI in the Add Transaction form, the green preview card will show you exactly how this breaks down in real-time. You will see the Broker cut, Your Split, and the Leader Retains amount clearly separated.</p>
+    `,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
