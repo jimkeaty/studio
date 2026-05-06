@@ -29,6 +29,7 @@ type Intake = {
   id: string;
   agentDisplayName: string;
   address: string;
+  propertyAddress?: string | null;
   clientName: string;
   closingType: string;
   dealType: string;
@@ -372,7 +373,7 @@ export default function TcQueuePage() {
             const q = tcSearch.toLowerCase();
             const filteredIntakes = tcSearch
               ? intakes.filter((i) =>
-                  (i.address || '').toLowerCase().includes(q) ||
+                  (i.address || i.propertyAddress || '').toLowerCase().includes(q) ||
                   (i.agentDisplayName || '').toLowerCase().includes(q) ||
                   (i.clientName || '').toLowerCase().includes(q)
                 )
@@ -423,7 +424,7 @@ export default function TcQueuePage() {
                             </TableCell>
                             <TableCell className="font-medium">{intake.agentDisplayName}</TableCell>
                             <TableCell className="max-w-[200px] truncate text-sm">
-                              {intake.address}
+                              {intake.address || intake.propertyAddress || '—'}
                             </TableCell>
                             <TableCell className="text-sm">{intake.clientName || '—'}</TableCell>
                             <TableCell>

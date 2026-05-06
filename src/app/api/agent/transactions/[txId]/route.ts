@@ -181,17 +181,25 @@ export async function PATCH(
         agentId: mergedData.agentId,
         agentDisplayName: mergedData.agentDisplayName,
 
-        // Property
-        propertyAddress: mergedData.propertyAddress ?? null,
+        // Property — normalize address to both fields so TC queue and approval route both work
+        address: mergedData.address || mergedData.propertyAddress || null,
+        propertyAddress: mergedData.propertyAddress || mergedData.address || null,
+        closingType: mergedData.closingType ?? null,
         dealType: mergedData.dealType ?? null,
+        dealSource: mergedData.dealSource ?? null,
         transactionType: mergedData.transactionType ?? null,
         listPrice: mergedData.listPrice ?? null,
         salePrice: mergedData.salePrice ?? null,
+        commissionPercent: mergedData.commissionPercent ?? null,
+        gci: mergedData.gci ?? null,
+        transactionFee: mergedData.transactionFee ?? null,
+        earnestMoney: mergedData.earnestMoney ?? null,
 
         // Dates
         listingDate: mergedData.listingDate ?? null,
         contractDate: mergedData.contractDate ?? null,
         closingDate: mergedData.closingDate ?? mergedData.closedDate ?? null,
+        closedDate: mergedData.closedDate ?? mergedData.closingDate ?? null,
         optionExpiration: mergedData.optionExpiration ?? null,
         inspectionDeadline: mergedData.inspectionDeadline ?? null,
         projectedCloseDate: mergedData.projectedCloseDate ?? null,

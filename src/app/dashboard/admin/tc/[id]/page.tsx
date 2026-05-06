@@ -274,7 +274,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         form.reset({
           closingType: i.closingType || 'buyer',
           dealType: i.dealType || 'residential_sale',
-          address: i.address || '',
+          address: i.address || i.propertyAddress || '',
           clientName: i.clientName || '',
           dealSource: i.dealSource || '',
           listPrice: i.listPrice ?? '',
@@ -585,7 +585,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{intake.address}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{intake.address || intake.propertyAddress || 'TC Intake'}</h1>
             <p className="text-muted-foreground">{intake.agentDisplayName} — {intake.clientName}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">

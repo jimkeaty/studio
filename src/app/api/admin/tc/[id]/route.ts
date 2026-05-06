@@ -187,7 +187,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         try {
           const intakeData = (await docRef.get()).data() as Record<string, any>;
           const agentUid = String(intakeData?.agentId || '').trim();
-          const intakeAddress = String(intakeData?.address || 'your transaction').trim();
+          const intakeAddress = String(intakeData?.address || intakeData?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
               type: 'tc_rejected',
@@ -456,7 +456,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         closingType: toOptStr(intake.closingType),
         dealType,
 
-        address: intake.address,
+        address: intake.address || intake.propertyAddress || null,
         clientName: toOptStr(intake.clientName),
         dealSource: toOptStr(intake.dealSource),
 
@@ -635,7 +635,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               type: 'tc_approved',
               recipientUids: [agentId],
               title: 'TC Intake Approved ✅',
-              body: `Your transaction for ${String(intake.address || 'your property')} has been approved and added to the ledger.`,
+              body: `Your transaction for ${String(intake.address || intake.propertyAddress || 'your property')} has been approved and added to the ledger.`,
               url: '/dashboard/transactions',
             });
           }
