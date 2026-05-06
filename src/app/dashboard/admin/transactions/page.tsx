@@ -96,7 +96,7 @@ export default function AdminTransactionLedgerPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [yearFilter, setYearFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
   const [statusFilter, setStatusFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
   const [addressSearch, setAddressSearch] = useState('');
@@ -188,13 +188,15 @@ export default function AdminTransactionLedgerPage() {
 
   /* ─── Data loading ─────────────────────────────────────────────────── */
 
-  const loadTransactions = useCallback(async () => {
+  const loadTransactions = useCallback(async (yearOverride?: string) => {
     if (!user) return;
     setLoadingTx(true);
     setPageError(null);
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/admin/transactions', {
+      const year = yearOverride ?? yearFilter;
+      const url = `/api/admin/transactions?year=${encodeURIComponent(year)}`;
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -205,6 +207,7 @@ export default function AdminTransactionLedgerPage() {
     } finally {
       setLoadingTx(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const loadAgents = useCallback(async () => {
@@ -503,13 +506,12 @@ export default function AdminTransactionLedgerPage() {
   );
 
   const filtered = useMemo(() => {
+    // Year filtering is now handled server-side; client only filters by status, agent, and address
     let result = transactions.filter(t => {
-      const txYear = t.year ? String(t.year) : (t.closedDate ?? (t as any).closingDate ?? t.contractDate ?? '').slice(0, 4);
-      const yearMatch = yearFilter === 'all' || txYear === yearFilter;
       const statusMatch = statusFilter === 'all' || t.status === statusFilter;
       const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? '') === agentFilter;
       const addressMatch = !addressSearch.trim() || (t.address || '').toLowerCase().includes(addressSearch.trim().toLowerCase());
-      return yearMatch && statusMatch && agentMatch && addressMatch;
+      return statusMatch && agentMatch && addressMatch;
     });
 
     // Sort
@@ -526,7 +528,7 @@ export default function AdminTransactionLedgerPage() {
     });
 
     return result;
-  }, [transactions, yearFilter, statusFilter, agentFilter, addressSearch, sortKey, sortDir]);
+  }, [transactions, statusFilter, agentFilter, addressSearch, sortKey, sortDir]);
 
   const totalGross = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0), [filtered]);
   const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0), 0), [filtered]);
@@ -759,7 +761,7 @@ export default function AdminTransactionLedgerPage() {
           <div className="flex flex-wrap gap-4">
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted-foreground">Year</span>
-            <Select value={yearFilter} onValueChange={setYearFilter}>
+            <Select value={yearFilter} onValueChange={(v) => { setYearFilter(v); loadTransactions(v); }}>
               <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Years</SelectItem>

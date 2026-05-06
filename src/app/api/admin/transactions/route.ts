@@ -35,22 +35,49 @@ async function verifyAdmin(req: NextRequest) {
   return decoded;
 }
 
+// Statuses that are always loaded regardless of year (open deals must never be hidden)
+const ALWAYS_LOAD_STATUSES = ['active', 'pending', 'coming_soon', 'coming soon', 'temporary_off_market', 'temp off market'];
+
 export async function GET(req: NextRequest) {
   try {
     const decoded = await verifyAdmin(req);
     if (!decoded) return jsonError(403, 'Forbidden: Admin only');
 
-    const snap = await adminDb
-      .collection('transactions')
-      .get();
+    const { searchParams } = new URL(req.url);
+    const yearParam = searchParams.get('year'); // 'all' | '2025' | '2026' etc.
+    const currentYear = new Date().getFullYear();
+    const targetYear = yearParam === 'all' ? null : Number(yearParam || currentYear);
 
-    const transactions = snap.docs
-      .map(d => serializeFirestore({ id: d.id, ...d.data() }))
-      .sort((a: any, b: any) => {
-        const da = a.createdAt ?? '';
-        const db = b.createdAt ?? '';
-        return da < db ? 1 : da > db ? -1 : 0;
-      });
+    let transactions: any[];
+
+    if (targetYear === null) {
+      // "All Years" — full collection scan (same as before)
+      const snap = await adminDb.collection('transactions').get();
+      transactions = snap.docs.map(d => serializeFirestore({ id: d.id, ...d.data() }));
+    } else {
+      // Fetch closed/historical transactions for the target year AND
+      // always fetch all active/pending deals regardless of year
+      const [yearSnap, openSnap] = await Promise.all([
+        adminDb.collection('transactions').where('year', '==', targetYear).get(),
+        adminDb.collection('transactions').where('status', 'in', ALWAYS_LOAD_STATUSES).get(),
+      ]);
+
+      // Merge and deduplicate by document ID
+      const seen = new Set<string>();
+      transactions = [];
+      for (const d of [...yearSnap.docs, ...openSnap.docs]) {
+        if (!seen.has(d.id)) {
+          seen.add(d.id);
+          transactions.push(serializeFirestore({ id: d.id, ...d.data() }));
+        }
+      }
+    }
+
+    transactions.sort((a: any, b: any) => {
+      const da = a.createdAt ?? '';
+      const db = b.createdAt ?? '';
+      return da < db ? 1 : da > db ? -1 : 0;
+    });
 
     return NextResponse.json({ ok: true, transactions });
   } catch (err: any) {
