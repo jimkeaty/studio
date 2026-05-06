@@ -43,15 +43,16 @@ const EDITABLE_TX_FIELDS = new Set([
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { itemId: string } }
+  { params }: { params: Promise<{ itemId: string }> }
 ) {
   try {
+    const { itemId } = await params;
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
     if (!(await isStaff(decoded.uid))) return jsonError(403, 'Forbidden: Staff only');
 
-    const doc = await adminDb.collection('staffQueue').doc(params.itemId).get();
+    const doc = await adminDb.collection('staffQueue').doc(itemId).get();
     if (!doc.exists) return jsonError(404, 'Staff queue item not found');
 
     // Also fetch the linked transaction for full detail view
@@ -67,7 +68,7 @@ export async function GET(
         if (!item.address && !item.transactionAddress) {
           const resolvedAddress = transaction.propertyAddress || transaction.address || null;
           if (resolvedAddress) {
-            await adminDb.collection('staffQueue').doc(params.itemId).update({
+            await adminDb.collection('staffQueue').doc(itemId).update({
               address: resolvedAddress,
               transactionAddress: resolvedAddress,
             });
@@ -86,9 +87,10 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { itemId: string } }
+  { params }: { params: Promise<{ itemId: string }> }
 ) {
   try {
+    const { itemId } = await params;
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
@@ -98,7 +100,7 @@ export async function PATCH(
     const { action, txUpdates, staffNotes, queueStatus } = body;
     // action: 'update_tx' | 'complete' | 'dismiss' | 'start_review'
 
-    const itemRef = adminDb.collection('staffQueue').doc(params.itemId);
+    const itemRef = adminDb.collection('staffQueue').doc(itemId);
     const itemDoc = await itemRef.get();
     if (!itemDoc.exists) return jsonError(404, 'Staff queue item not found');
 
@@ -163,7 +165,7 @@ export async function PATCH(
       }).catch(e => console.error('[staff-queue PATCH] notification error:', e));
     }
 
-    return NextResponse.json({ ok: true, updated: { id: params.itemId, ...itemUpdates } });
+    return NextResponse.json({ ok: true, updated: { id: itemId, ...itemUpdates } });
   } catch (err: any) {
     return jsonError(500, err.message || 'Internal error');
   }

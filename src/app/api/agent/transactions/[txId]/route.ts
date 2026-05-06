@@ -65,16 +65,15 @@ const LISTING_CLOSING_TYPES = new Set(['listing', 'dual']);
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { txId: string } }
+  { params }: { params: Promise<{ txId: string }> }
 ) {
   try {
+    const { txId } = await params;
     const authHeader = req.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) return jsonError(401, 'Missing auth token');
     const token = authHeader.slice('Bearer '.length);
     const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
-
-    const { txId } = params;
     if (!txId) return jsonError(400, 'Missing transaction ID');
 
     // Fetch the existing transaction

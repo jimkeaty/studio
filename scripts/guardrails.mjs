@@ -38,6 +38,12 @@ function isServerSafe(rel) {
   // Server-only rollup rebuild helpers
   if (r.startsWith("src/lib/rollups/")) return true;
 
+  // Server-only notification dispatcher and recipient helpers (Admin SDK only, never imported by client)
+  if (r.startsWith("src/lib/notifications/")) return true;
+
+  // Server-only transaction utility helpers (co-agent split, etc.)
+  if (r.startsWith("src/lib/transactions/")) return true;
+
   return false;
 }
 
