@@ -269,7 +269,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'buyerClosingCostTotal', 'buyerClosingCostAgentCommission',
         'buyerClosingCostTxFee', 'buyerClosingCostOther',
         // Compliance / warranty
-        'warrantyPaidBy', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+        'warrantyPaidBy', 'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
         'occupancyDates', 'shortageAmount', 'buyerBringToClosing',
         // Notes
         'notes', 'additionalComments',
@@ -546,6 +546,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
         // Compliance / warranty
         warrantyPaidBy: toOptStr(intake.warrantyPaidBy),
+        txComplianceFee: toOptStr(intake.txComplianceFee),
         txComplianceFeeAmount: intake.txComplianceFeeAmount ?? null,
         txComplianceFeePaidBy: toOptStr(intake.txComplianceFeePaidBy),
         occupancyDates: toOptStr(intake.occupancyDates),

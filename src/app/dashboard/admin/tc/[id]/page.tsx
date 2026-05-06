@@ -144,6 +144,11 @@ const schema = z.object({
   titleAttorney: z.string().optional(),
   titleOffice: z.string().optional(),
 
+  // Compliance fee
+  txComplianceFee: z.enum(['yes', 'no']).optional(),
+  txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+  txComplianceFeePaidBy: z.string().optional(),
+
   // Notes
   notes: z.string().optional(),
   additionalComments: z.string().optional(),
@@ -331,6 +336,9 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           titleOfficerPhone: i.titleOfficerPhone || '',
           titleAttorney: i.titleAttorney || '',
           titleOffice: i.titleOffice || '',
+          txComplianceFee: (i.txComplianceFee as any) || undefined,
+          txComplianceFeeAmount: i.txComplianceFeeAmount ?? '',
+          txComplianceFeePaidBy: i.txComplianceFeePaidBy || '',
           notes: i.notes || '',
           additionalComments: i.additionalComments || '',
         });
@@ -568,6 +576,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
 
   const isReadOnly = intake.status === 'approved' || intake.status === 'rejected' || intake.status === 'archived';
   const isActive = intake.status === 'submitted' || intake.status === 'in_review';
+  const watchedTxComplianceFee = form.watch('txComplianceFee');
   const assignedTc = tcProfiles.find((p) => p.id === intake.assignedTcProfileId);
   const checklistCompleted = checklist.filter((c) => c.completed).length;
   const checklistTotal = checklist.length;
@@ -1214,7 +1223,47 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             </Grid3>
           </SectionCard>
 
-          {/* Section 10: Notes */}
+          {/* Section 10: Compliance Fee */}
+          <SectionCard title="Transaction Compliance Fee">
+            <FormField control={form.control} name="txComplianceFee" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Transaction Compliance Fee?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {watchedTxComplianceFee === 'yes' && (
+              <Grid2>
+                <FormField control={form.control} name="txComplianceFeeAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fee Amount ($)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} disabled={isReadOnly} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="txComplianceFeePaidBy" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Who Pays the Fee?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="agent">Agent (deducted from commission)</SelectItem>
+                        <SelectItem value="buyer">Buyer (collect at closing)</SelectItem>
+                        <SelectItem value="seller">Seller</SelectItem>
+                        <SelectItem value="seller_closing_cost">Take from Seller Paid Closing Cost to Buyer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+              </Grid2>
+            )}
+          </SectionCard>
+
+          {/* Section 11: Notes */}
           <SectionCard title="Notes & Comments">
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem>

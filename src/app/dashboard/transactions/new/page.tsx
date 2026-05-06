@@ -555,8 +555,13 @@ export default function AddTransactionPage() {
         const data = await res.json();
         if (!cancelled && data.ok) {
           setAgentCommission(data);
-          if (data.defaultTransactionFee != null) {
-            form.setValue('transactionFee', data.defaultTransactionFee as any);
+          if (data.defaultTransactionFee != null && data.defaultTransactionFee > 0) {
+            form.setValue('txComplianceFee', 'yes');
+            form.setValue('txComplianceFeeAmount', data.defaultTransactionFee as any);
+            // Default to agent-pays so the math is conservative
+            if (!form.getValues('txComplianceFeePaidBy')) {
+              form.setValue('txComplianceFeePaidBy', 'agent');
+            }
           }
         }
       } catch {}
@@ -586,7 +591,13 @@ export default function AddTransactionPage() {
       form.setValue('brokerPct', brokerPct as any);
       form.setValue('agentDollar', agentNet as any);
       form.setValue('brokerGci', brokerGci as any);
-      if (txFee > 0) form.setValue('transactionFee', txFee as any);
+      if (txFee > 0) {
+        form.setValue('txComplianceFee', 'yes');
+        form.setValue('txComplianceFeeAmount', txFee as any);
+        if (!form.getValues('txComplianceFeePaidBy')) {
+          form.setValue('txComplianceFeePaidBy', 'agent');
+        }
+      }
     }
   }, [watchedGCI, agentCommission]);
 
@@ -1777,18 +1788,6 @@ export default function AddTransactionPage() {
                       <FormDescription>Gross Commission Income</FormDescription>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="transactionFee" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Transaction Fee ($)</FormLabel>
-                      <FormControl>
-                        <CurrencyInput
-                          value={field.value as any}
-                          onChange={(val) => field.onChange(val)}
-                          placeholder="0"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )} />
                 </Grid3>
               </>
             )}
@@ -1841,15 +1840,23 @@ export default function AddTransactionPage() {
                         commissionManualOverride.current = false;
                         const gci = Number(form.getValues('gci')) || 0;
                         if (gci > 0 && agentCommission) {
-                          const tier = findActiveTier(agentCommission.tiers, gci);
+                          const ytd2 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+                          const tierLookup2 = ytd2 > 0 ? ytd2 : gci;
+                          const tier = findActiveTier(agentCommission.tiers, tierLookup2);
                           setActiveTier(tier);
                           if (tier) {
                             form.setValue('agentPct', tier.agentSplitPercent as any);
                             form.setValue('brokerPct', tier.companySplitPercent as any);
                             form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
                             form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
-                            const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-                            if (txFee > 0) form.setValue('transactionFee', txFee as any);
+                            const txFee2 = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
+                            if (txFee2 > 0) {
+                              form.setValue('txComplianceFee', 'yes');
+                              form.setValue('txComplianceFeeAmount', txFee2 as any);
+                              if (!form.getValues('txComplianceFeePaidBy')) {
+                                form.setValue('txComplianceFeePaidBy', 'agent');
+                              }
+                            }
                           }
                         }
                       }}
@@ -1910,12 +1917,21 @@ export default function AddTransactionPage() {
                 {(() => {
                   const gci = Number(form.watch('gci')) || 0;
                   const agentDollar = Number(form.watch('agentDollar')) || 0;
-                  const brokerGci = Number(form.watch('brokerGci')) || 0;
-                  const txFee = Number(form.watch('transactionFee')) || 0;
+                  const watchedTxCompFee = form.watch('txComplianceFee');
+                  const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
+                  const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
                   if (gci <= 0) return null;
-                  const agentNet = agentDollar - txFee;
+                  // Fee only reduces agent take-home when agent is paying
+                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
+                  const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
+                  const agentNet = agentDollar - feeDeduction;
                   const agentPct = gci > 0 ? Math.round((agentDollar / gci) * 100) : 0;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
+                  const feeLabel: Record<string, string> = {
+                    buyer: 'Collect from Buyer/Title at Closing',
+                    seller: 'Covered by Seller',
+                    seller_closing_cost: 'From Seller Closing Cost Concession',
+                  };
                   return (
                     <div className="mt-4 rounded-xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 dark:border-green-700 p-4">
                       <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-3">💰 Your Estimated Earnings on This Deal</p>
@@ -1928,10 +1944,17 @@ export default function AddTransactionPage() {
                           <p className="text-xs text-muted-foreground mb-0.5">Your Split ({agentPct}%)</p>
                           <p className="text-lg font-black text-foreground">{fmt(agentDollar)}</p>
                         </div>
-                        {txFee > 0 && (
+                        {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
                           <div className="text-center">
                             <p className="text-xs text-muted-foreground mb-0.5">Transaction Fee</p>
-                            <p className="text-lg font-black text-red-600">-{fmt(txFee)}</p>
+                            {agentPaysFee ? (
+                              <p className="text-lg font-black text-red-600">-{fmt(watchedTxCompFeeAmt)}</p>
+                            ) : (
+                              <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)}</p>
+                            )}
+                            {!agentPaysFee && watchedTxCompFeePaidBy && (
+                              <p className="text-xs text-blue-500 mt-0.5">{feeLabel[watchedTxCompFeePaidBy] || 'Not deducted'}</p>
+                            )}
                           </div>
                         )}
                         <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
@@ -1939,6 +1962,9 @@ export default function AddTransactionPage() {
                           <p className="text-xl font-black text-green-700 dark:text-green-300">{fmt(agentNet)}</p>
                         </div>
                       </div>
+                      {!agentPaysFee && watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
+                        <p className="text-xs text-blue-600 mt-2 font-medium">Transaction fee is not deducted from your commission — collect {fmt(watchedTxCompFeeAmt)} separately at closing.</p>
+                      )}
                     </div>
                   );
                 })()}

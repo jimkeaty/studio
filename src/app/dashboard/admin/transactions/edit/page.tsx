@@ -360,7 +360,13 @@ export default function EditTransactionPage() {
       form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
       form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-      if (txFee > 0) form.setValue('transactionFee', txFee as any);
+      if (txFee > 0) {
+        form.setValue('txComplianceFee', 'yes');
+        form.setValue('txComplianceFeeAmount', txFee as any);
+        if (!form.getValues('txComplianceFeePaidBy')) {
+          form.setValue('txComplianceFeePaidBy', 'agent');
+        }
+      }
     }
   }, [watchedGCI, agentCommission]);
 
@@ -381,7 +387,13 @@ export default function EditTransactionPage() {
       form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
       form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-      if (txFee > 0) form.setValue('transactionFee', txFee as any);
+      if (txFee > 0) {
+        form.setValue('txComplianceFee', 'yes');
+        form.setValue('txComplianceFeeAmount', txFee as any);
+        if (!form.getValues('txComplianceFeePaidBy')) {
+          form.setValue('txComplianceFeePaidBy', 'agent');
+        }
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentCommission]);
@@ -428,8 +440,12 @@ export default function EditTransactionPage() {
         if (!cancelled && data.ok) {
           setAgentCommission(data);
           // Only apply the default transaction fee when we are NOT preserving saved commission
-          if (!txLoadedWithCommission.current && data.defaultTransactionFee != null) {
-            form.setValue('transactionFee', data.defaultTransactionFee as any);
+          if (!txLoadedWithCommission.current && data.defaultTransactionFee != null && data.defaultTransactionFee > 0) {
+            form.setValue('txComplianceFee', 'yes');
+            form.setValue('txComplianceFeeAmount', data.defaultTransactionFee as any);
+            if (!form.getValues('txComplianceFeePaidBy')) {
+              form.setValue('txComplianceFeePaidBy', 'agent');
+            }
           }
         }
       } catch { /* silently ignore */ }
@@ -1547,12 +1563,18 @@ export default function EditTransactionPage() {
                               form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
                               form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
                               const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-                              if (txFee > 0) form.setValue('transactionFee', txFee as any);
+                              if (txFee > 0) {
+                                form.setValue('txComplianceFee', 'yes');
+                                form.setValue('txComplianceFeeAmount', txFee as any);
+                                if (!form.getValues('txComplianceFeePaidBy')) {
+                                  form.setValue('txComplianceFeePaidBy', 'agent');
+                                }
+                              }
                             }
                           }
                         }}
                       >
-                        Clear Override &amp; Recalculate from Profile
+                        Recalculate from Profile
                       </button>
                     </div>
                   </div>
@@ -1608,7 +1630,13 @@ export default function EditTransactionPage() {
                             form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
                             form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
                             const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-                            if (txFee > 0) form.setValue('transactionFee', txFee as any);
+                            if (txFee > 0) {
+                              form.setValue('txComplianceFee', 'yes');
+                              form.setValue('txComplianceFeeAmount', txFee as any);
+                              if (!form.getValues('txComplianceFeePaidBy')) {
+                                form.setValue('txComplianceFeePaidBy', 'agent');
+                              }
+                            }
                           }
                         }
                       }}
