@@ -85,6 +85,14 @@
         { "fieldPath": "year", "order": "ASCENDING" },
         { "fieldPath": "segment", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "staffUsers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "firebaseUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

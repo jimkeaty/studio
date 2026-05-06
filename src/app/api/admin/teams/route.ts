@@ -64,11 +64,13 @@ export async function GET(req: NextRequest) {
 
     const snap = await adminDb
       .collection('teams')
-      .orderBy('teamName', 'asc')
       .limit(500)
       .get();
 
-    const teams = snap.docs.map((doc) => doc.data());
+    // Sort in-memory to avoid requiring a Firestore composite index on teamName
+    const teams = snap.docs
+      .map((doc) => doc.data())
+      .sort((a, b) => (a.teamName || '').localeCompare(b.teamName || ''));
 
     return NextResponse.json({
       ok: true,
