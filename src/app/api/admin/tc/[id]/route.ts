@@ -42,6 +42,24 @@ function toOptStr(v: any): string | null {
   return s || null;
 }
 
+/**
+ * Firestore rejects `undefined` values. This helper recursively replaces every
+ * `undefined` with `null` so the payload is always safe to write.
+ */
+function sanitizeForFirestore(obj: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined) {
+      out[k] = null;
+    } else if (v !== null && typeof v === 'object' && !Array.isArray(v) && typeof v.toDate !== 'function') {
+      out[k] = sanitizeForFirestore(v as Record<string, any>);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 type Params = { params: Promise<{ id: string }> };
 
 // ── Helper: check both collections for the intake ─────────────────────────
@@ -579,7 +597,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           // If commission was manually set on the existing transaction, preserve it.
           // Only overwrite commission fields if the existing transaction has NOT been
           // manually overridden.
-          const updatePayload: Record<string, any> = { ...txPayload, updatedAt: now };
+          const updatePayload: Record<string, any> = sanitizeForFirestore({ ...txPayload, updatedAt: now });
           if (existingData.commissionOverridden) {
             // Strip all commission-related fields from the update — keep what's saved
             const commissionFields = [
@@ -597,12 +615,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           transactionId = existingTxId;
         } else {
           // Linked transaction was deleted — create a fresh one
-          const txRef = await adminDb.collection('transactions').add(txPayload);
+          const txRef = await adminDb.collection('transactions').add(sanitizeForFirestore(txPayload));
           transactionId = txRef.id;
         }
       } else {
         // First-time approval — create a new transaction
-        const txRef = await adminDb.collection('transactions').add(txPayload);
+        const txRef = await adminDb.collection('transactions').add(sanitizeForFirestore(txPayload));
         transactionId = txRef.id;
       }
 
