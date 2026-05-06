@@ -173,14 +173,20 @@ export async function GET(
 
     // ── 2. If tiers are empty, try team plan bands ────────────────────────────
     //
-    // IMPORTANT: For team members on a team WITH a leader, the math is two-step:
-    //   Step 1: leaderStructureGross = GCI × leaderPercent
-    //   Step 2: memberPaid = leaderStructureGross × memberPercent
+    // CORRECT COMMISSION MODEL for team members on a team WITH a leader:
     //
-    // The tiers returned here store the EFFECTIVE agent percent of full GCI
-    // (leaderPercent × memberPercent / 100) so the form auto-calc is correct.
-    // We also return a `teamMemberLeaderSplit` object so the form can display
-    // the two-step breakdown clearly.
+    //   companySplitPercent = companyPercent from the leader band
+    //                       = 100 - leaderPercent  (e.g. 25%)
+    //
+    //   agentSplitPercent   = memberPercent applied to FULL GCI directly
+    //                       (e.g. 70% of $1,800 = $1,260)
+    //
+    //   leaderRetains       = GCI - companyRetained - memberPaid
+    //                       = leaderStructureGross - memberPaid
+    //                       (e.g. $1,350 - $450 - $1,260 = $90)
+    //
+    // The leaderPercent is used ONLY to determine the broker/company cut.
+    // The memberPercent is the member's direct % of full GCI.
     //
     // For team LEADERS, agentSplitPercent = leaderPercent (their cut of GCI).
     // For LEADERLESS team members, agentSplitPercent = memberPercent of GCI directly.
@@ -233,20 +239,22 @@ export async function GET(
                 }
               } else if (isWithLeader) {
                 // Member on a team WITH a leader:
-                // agentSplitPercent = effective % of full GCI = leaderPercent × memberPercent / 100
-                // We also return teamMemberLeaderSplit so the form can show the two-step breakdown.
+                //   agentSplitPercent   = memberPercent (member's direct % of full GCI)
+                //   companySplitPercent = companyPercent from the leader band
+                //   leaderRetains       = GCI - companyRetained - memberPaid (the spread)
+                //
+                // The leaderPercent is used ONLY to set the broker/company cut.
+                // memberPercent is the member's own split of the full GCI.
                 const leaderBands: any[] = planData.leaderStructureBands || [];
                 const memberBands: any[] = planData.memberDefaultBands || [];
 
                 if (leaderBands.length > 0 && memberBands.length > 0) {
                   // Build tiers by pairing each leader band with the matching member band.
-                  // Since both band arrays are typically aligned by threshold, we zip them.
-                  // For the effective split, we use the first member band's memberPercent
-                  // applied against each leader band (most common config: single member band).
-                  // If member bands are also tiered, we match by fromCompanyDollar.
+                  // Tier thresholds are driven by the leader band (company-dollar progression).
+                  // Member band is matched by its fromCompanyDollar threshold.
                   tiers = leaderBands.map((lb: any, i: number) => {
                     // Find the member band whose threshold contains this leader band's from value
-                    const matchingMemberBand = memberBands.find((mb: any, mi: number) => {
+                    const matchingMemberBand = memberBands.find((mb: any) => {
                       const mbFrom = Number(mb.fromCompanyDollar || 0);
                       const mbTo =
                         mb.toCompanyDollar === null || mb.toCompanyDollar === undefined
@@ -258,7 +266,6 @@ export async function GET(
 
                     const leaderPct = Number(lb.leaderPercent || 0);
                     const memberPct = Number(matchingMemberBand?.memberPercent || 0);
-                    const effectiveAgentPct = Number(((leaderPct * memberPct) / 100).toFixed(4));
                     const companyPct = Number(lb.companyPercent || 0);
 
                     return {
@@ -268,13 +275,13 @@ export async function GET(
                         lb.toCompanyDollar === null || lb.toCompanyDollar === undefined
                           ? null
                           : Number(lb.toCompanyDollar),
-                      // Effective percent of full GCI that the member takes home
-                      agentSplitPercent: effectiveAgentPct,
-                      // Company retains companyPercent of full GCI
+                      // Member's direct % of full GCI (NOT leaderPercent × memberPercent)
+                      agentSplitPercent: memberPct,
+                      // Company retains companyPercent of full GCI (= 100 - leaderPercent)
                       companySplitPercent: companyPct,
-                      // Store raw percents for display breakdown
+                      // Store raw percents for display breakdown in the preview card
                       leaderStructurePercent: leaderPct,
-                      memberPercentOfLeaderSide: memberPct,
+                      memberPercentOfLeaderSide: memberPct, // kept for type compat; now = direct GCI %
                       transactionFee: null,
                       capAmount: null,
                       notes: '',

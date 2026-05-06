@@ -428,8 +428,17 @@ export async function resolveTransactionCalculation(
     resolvedMemberPlanId = null;
   }
 
+  // CORRECT MODEL: memberPercent is the member's direct % of full GCI.
+  // The leaderPercent is used ONLY to determine the broker/company cut.
+  // Leader retains the spread between the leader side and the member payout.
+  //
+  // Example: GCI=$1,800, leader=75% (company=25%), member=70%
+  //   companyRetained    = $1,800 × 25% = $450
+  //   leaderStructureGross = $1,800 × 75% = $1,350
+  //   memberPaid         = $1,800 × 70% = $1,260
+  //   leaderRetains      = $1,350 - $1,260 = $90
   const memberPercentOfLeaderSide = Number(memberBand.memberPercent || 0);
-  const memberPaid = asMoney(leaderStructureGross * (memberPercentOfLeaderSide / 100));
+  const memberPaid = asMoney(commission * (memberPercentOfLeaderSide / 100));
   const leaderRetainedAfterMember = asMoney(leaderStructureGross - memberPaid);
 
   return {

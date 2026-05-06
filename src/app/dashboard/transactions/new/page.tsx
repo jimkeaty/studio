@@ -1960,14 +1960,19 @@ export default function AddTransactionPage() {
                     seller_closing_cost: 'From Seller Closing Cost Concession',
                   };
 
-                  // Detect team-member-with-leader scenario from the active tier
+                  // Detect team-member-with-leader scenario from the active tier.
+                  // leaderStructurePercent = leader's side % (used only to compute broker cut)
+                  // agentSplitPercent (= memberPercentOfLeaderSide) = member's direct % of full GCI
                   const isTeamMemberWithLeader = !!(activeTier?.leaderStructurePercent && activeTier?.memberPercentOfLeaderSide);
-                  const leaderStructurePct = activeTier?.leaderStructurePercent ?? 0;
-                  const memberOfLeaderPct = activeTier?.memberPercentOfLeaderSide ?? 0;
+                  const leaderStructurePct = activeTier?.leaderStructurePercent ?? 0;   // e.g. 75%
+                  const memberDirectPct = activeTier?.agentSplitPercent ?? 0;           // e.g. 70%
+                  const companyPct = activeTier?.companySplitPercent ?? 0;              // e.g. 25%
+                  // leaderStructureGross = GCI × leaderPercent (the leader's side before member payout)
                   const leaderStructureGross = isTeamMemberWithLeader ? Number((gci * (leaderStructurePct / 100)).toFixed(2)) : 0;
                   const companyRetained = isTeamMemberWithLeader
-                    ? Number((gci * ((activeTier?.companySplitPercent ?? 0) / 100)).toFixed(2))
+                    ? Number((gci * (companyPct / 100)).toFixed(2))
                     : Number((gci - agentDollar).toFixed(2));
+                  // Leader retains the spread: leaderStructureGross - memberPaid
                   const leaderRetained = isTeamMemberWithLeader
                     ? Number((leaderStructureGross - agentDollar).toFixed(2))
                     : 0;
@@ -1985,11 +1990,11 @@ export default function AddTransactionPage() {
                               <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
                             </div>
                             <div className="text-center">
-                              <p className="text-xs text-muted-foreground mb-0.5">Leader Side ({leaderStructurePct}%)</p>
-                              <p className="text-lg font-black text-foreground">{fmt(leaderStructureGross)}</p>
+                              <p className="text-xs text-muted-foreground mb-0.5">Broker ({companyPct}%)</p>
+                              <p className="text-lg font-black text-foreground">{fmt(companyRetained)}</p>
                             </div>
                             <div className="text-center">
-                              <p className="text-xs text-muted-foreground mb-0.5">Your Cut ({memberOfLeaderPct}% of leader)</p>
+                              <p className="text-xs text-muted-foreground mb-0.5">Your Split ({memberDirectPct}%)</p>
                               <p className="text-lg font-black text-foreground">{fmtExact(agentDollar)}</p>
                             </div>
                             <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
@@ -2000,12 +2005,12 @@ export default function AddTransactionPage() {
                           {/* Commission flow breakdown */}
                           <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 grid grid-cols-3 gap-2 text-center">
                             <div>
-                              <p className="text-xs text-muted-foreground">Leader Retains</p>
+                              <p className="text-xs text-muted-foreground">Leader Retains (spread)</p>
                               <p className="text-sm font-bold text-amber-600 dark:text-amber-400">{fmtExact(leaderRetained)}</p>
                             </div>
                             <div>
-                              <p className="text-xs text-muted-foreground">Company Retained</p>
-                              <p className="text-sm font-bold text-muted-foreground">{fmt(companyRetained)}</p>
+                              <p className="text-xs text-muted-foreground">Leader Side ({leaderStructurePct}%)</p>
+                              <p className="text-sm font-bold text-muted-foreground">{fmt(leaderStructureGross)}</p>
                             </div>
                             {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
                               <div>
