@@ -50,11 +50,27 @@ type CommissionTier = {
   tierName: string;
   fromCompanyDollar: number;
   toCompanyDollar: number | null;
-  agentSplitPercent: number;
+  agentSplitPercent: number;          // Effective % of full GCI the agent takes home
   companySplitPercent: number;
   transactionFee: number | null;
   capAmount: number | null;
   notes: string;
+  // Present only for team members on a team WITH a leader
+  leaderStructurePercent?: number;    // Leader's cut of GCI (e.g. 80%)
+  memberPercentOfLeaderSide?: number; // Member's cut of leader side (e.g. 75%)
+};
+
+type TeamMemberLeaderSplitBand = {
+  fromCompanyDollar: number;
+  toCompanyDollar: number | null;
+  leaderPercent: number;
+  companyPercent: number;
+};
+
+type TeamMemberBand = {
+  fromCompanyDollar: number;
+  toCompanyDollar: number | null;
+  memberPercent: number;
 };
 
 type AgentCommissionData = {
@@ -64,6 +80,12 @@ type AgentCommissionData = {
   tiersSource?: string;
   defaultTransactionFee: number | null;
   tiers: CommissionTier[];
+  // Non-null only for team members on a team WITH a leader.
+  // When present, the commission preview shows the two-step breakdown.
+  teamMemberLeaderSplit?: {
+    leaderStructureBands: TeamMemberLeaderSplitBand[];
+    memberDefaultBands: TeamMemberBand[];
+  } | null;
   ytdTierProgressionCompanyDollar?: number;
 };
 
@@ -582,8 +604,13 @@ export default function AddTransactionPage() {
     const tier = findActiveTier(agentCommission.tiers, tierLookupAmount);
     setActiveTier(tier);
     if (tier) {
-      const agentPct = tier.agentSplitPercent;
-      const brokerPct = tier.companySplitPercent;
+      // For team members on a team WITH a leader, the tier's agentSplitPercent is already
+      // the EFFECTIVE % of full GCI (leaderPercent × memberPercent / 100), so the formula
+      // agentNet = GCI × agentSplitPercent is correct for all agent types.
+      // The leaderStructurePercent and memberPercentOfLeaderSide fields are only used
+      // for the preview card display breakdown.
+      const agentPct = tier.agentSplitPercent;    // Effective % of full GCI
+      const brokerPct = tier.companySplitPercent;  // Company's % of full GCI
       const agentNet = Number((gci * (agentPct / 100)).toFixed(2));
       const brokerGci = Number((gci * (brokerPct / 100)).toFixed(2));
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
@@ -1925,45 +1952,110 @@ export default function AddTransactionPage() {
                   const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
                   const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
                   const agentNet = agentDollar - feeDeduction;
-                  const agentPct = gci > 0 ? Math.round((agentDollar / gci) * 100) : 0;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
+                  const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
                   const feeLabel: Record<string, string> = {
                     buyer: 'Collect from Buyer/Title at Closing',
                     seller: 'Covered by Seller',
                     seller_closing_cost: 'From Seller Closing Cost Concession',
                   };
+
+                  // Detect team-member-with-leader scenario from the active tier
+                  const isTeamMemberWithLeader = !!(activeTier?.leaderStructurePercent && activeTier?.memberPercentOfLeaderSide);
+                  const leaderStructurePct = activeTier?.leaderStructurePercent ?? 0;
+                  const memberOfLeaderPct = activeTier?.memberPercentOfLeaderSide ?? 0;
+                  const leaderStructureGross = isTeamMemberWithLeader ? Number((gci * (leaderStructurePct / 100)).toFixed(2)) : 0;
+                  const companyRetained = isTeamMemberWithLeader
+                    ? Number((gci * ((activeTier?.companySplitPercent ?? 0) / 100)).toFixed(2))
+                    : Number((gci - agentDollar).toFixed(2));
+                  const leaderRetained = isTeamMemberWithLeader
+                    ? Number((leaderStructureGross - agentDollar).toFixed(2))
+                    : 0;
+
                   return (
                     <div className="mt-4 rounded-xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 dark:border-green-700 p-4">
                       <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-3">💰 Your Estimated Earnings on This Deal</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div className="text-center">
-                          <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
-                          <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-muted-foreground mb-0.5">Your Split ({agentPct}%)</p>
-                          <p className="text-lg font-black text-foreground">{fmt(agentDollar)}</p>
-                        </div>
-                        {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
-                          <div className="text-center">
-                            <p className="text-xs text-muted-foreground mb-0.5">Transaction Fee</p>
-                            {agentPaysFee ? (
-                              <p className="text-lg font-black text-red-600">-{fmt(watchedTxCompFeeAmt)}</p>
-                            ) : (
-                              <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)}</p>
-                            )}
-                            {!agentPaysFee && watchedTxCompFeePaidBy && (
-                              <p className="text-xs text-blue-500 mt-0.5">{feeLabel[watchedTxCompFeePaidBy] || 'Not deducted'}</p>
+
+                      {isTeamMemberWithLeader ? (
+                        // ── Two-step team member breakdown ──────────────────────────────────
+                        <>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
+                              <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground mb-0.5">Leader Side ({leaderStructurePct}%)</p>
+                              <p className="text-lg font-black text-foreground">{fmt(leaderStructureGross)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground mb-0.5">Your Cut ({memberOfLeaderPct}% of leader)</p>
+                              <p className="text-lg font-black text-foreground">{fmtExact(agentDollar)}</p>
+                            </div>
+                            <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
+                              <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
+                              <p className="text-xl font-black text-green-700 dark:text-green-300">{fmtExact(agentNet)}</p>
+                            </div>
+                          </div>
+                          {/* Commission flow breakdown */}
+                          <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Leader Retains</p>
+                              <p className="text-sm font-bold text-amber-600 dark:text-amber-400">{fmtExact(leaderRetained)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Company Retained</p>
+                              <p className="text-sm font-bold text-muted-foreground">{fmt(companyRetained)}</p>
+                            </div>
+                            {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Transaction Fee</p>
+                                {agentPaysFee ? (
+                                  <p className="text-sm font-bold text-red-600">-{fmt(watchedTxCompFeeAmt)}</p>
+                                ) : (
+                                  <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)}</p>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                        <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
-                          <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
-                          <p className="text-xl font-black text-green-700 dark:text-green-300">{fmt(agentNet)}</p>
-                        </div>
-                      </div>
-                      {!agentPaysFee && watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
-                        <p className="text-xs text-blue-600 mt-2 font-medium">Transaction fee is not deducted from your commission — collect {fmt(watchedTxCompFeeAmt)} separately at closing.</p>
+                          {!agentPaysFee && watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
+                            <p className="text-xs text-blue-600 mt-2 font-medium">Transaction fee is not deducted from your commission — collect {fmt(watchedTxCompFeeAmt)} separately at closing.</p>
+                          )}
+                        </>
+                      ) : (
+                        // ── Standard single-step breakdown ──────────────────────────────────
+                        <>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
+                              <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground mb-0.5">Your Split ({gci > 0 ? Math.round((agentDollar / gci) * 100) : 0}%)</p>
+                              <p className="text-lg font-black text-foreground">{fmt(agentDollar)}</p>
+                            </div>
+                            {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
+                              <div className="text-center">
+                                <p className="text-xs text-muted-foreground mb-0.5">Transaction Fee</p>
+                                {agentPaysFee ? (
+                                  <p className="text-lg font-black text-red-600">-{fmt(watchedTxCompFeeAmt)}</p>
+                                ) : (
+                                  <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)}</p>
+                                )}
+                                {!agentPaysFee && watchedTxCompFeePaidBy && (
+                                  <p className="text-xs text-blue-500 mt-0.5">{feeLabel[watchedTxCompFeePaidBy] || 'Not deducted'}</p>
+                                )}
+                              </div>
+                            )}
+                            <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
+                              <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
+                              <p className="text-xl font-black text-green-700 dark:text-green-300">{fmt(agentNet)}</p>
+                            </div>
+                          </div>
+                          {!agentPaysFee && watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
+                            <p className="text-xs text-blue-600 mt-2 font-medium">Transaction fee is not deducted from your commission — collect {fmt(watchedTxCompFeeAmt)} separately at closing.</p>
+                          )}
+                        </>
                       )}
                     </div>
                   );

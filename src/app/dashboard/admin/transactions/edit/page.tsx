@@ -51,11 +51,14 @@ type CommissionTier = {
   tierName: string;
   fromCompanyDollar: number;
   toCompanyDollar: number | null;
-  agentSplitPercent: number;
+  agentSplitPercent: number;          // Effective % of full GCI the agent takes home
   companySplitPercent: number;
   transactionFee: number | null;
   capAmount: number | null;
   notes: string;
+  // Present only for team members on a team WITH a leader
+  leaderStructurePercent?: number;    // Leader's cut of GCI (e.g. 80%)
+  memberPercentOfLeaderSide?: number; // Member's cut of leader side (e.g. 75%)
 };
 type AgentCommissionData = {
   agentType: string;
@@ -64,6 +67,11 @@ type AgentCommissionData = {
   tiersSource?: string;
   defaultTransactionFee: number | null;
   tiers: CommissionTier[];
+  // Non-null only for team members on a team WITH a leader.
+  teamMemberLeaderSplit?: {
+    leaderStructureBands: Array<{ fromCompanyDollar: number; toCompanyDollar: number | null; leaderPercent: number; companyPercent: number }>;
+    memberDefaultBands: Array<{ fromCompanyDollar: number; toCompanyDollar: number | null; memberPercent: number }>;
+  } | null;
   /** YTD cumulative companyDollar for tier band lookup. For team leaders this
    * includes team member production credits. 0 if rollup not yet available. */
   ytdTierProgressionCompanyDollar?: number;
@@ -343,7 +351,12 @@ export default function EditTransactionPage() {
     }
   }, [watchedCBP, watchedCommPct]);
 
-  // Auto-calculate commission split when GCI or agent commission profile changes
+  // Auto-calculate commission split when GCI or agent commission profile changes.
+  // NOTE: For team members on a team WITH a leader, tier.agentSplitPercent is already
+  // the EFFECTIVE % of full GCI (leaderPercent × memberPercent / 100), so the formula
+  // agentNet = GCI × agentSplitPercent is correct for ALL agent types.
+  // The leaderStructurePercent and memberPercentOfLeaderSide fields on the tier are
+  // only used for the preview card display breakdown.
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(watchedGCI) || 0;

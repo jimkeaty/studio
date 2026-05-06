@@ -172,41 +172,172 @@ export async function GET(
     let tiersSource = 'agent_custom';
 
     // ── 2. If tiers are empty, try team plan bands ────────────────────────────
+    //
+    // IMPORTANT: For team members on a team WITH a leader, the math is two-step:
+    //   Step 1: leaderStructureGross = GCI × leaderPercent
+    //   Step 2: memberPaid = leaderStructureGross × memberPercent
+    //
+    // The tiers returned here store the EFFECTIVE agent percent of full GCI
+    // (leaderPercent × memberPercent / 100) so the form auto-calc is correct.
+    // We also return a `teamMemberLeaderSplit` object so the form can display
+    // the two-step breakdown clearly.
+    //
+    // For team LEADERS, agentSplitPercent = leaderPercent (their cut of GCI).
+    // For LEADERLESS team members, agentSplitPercent = memberPercent of GCI directly.
+    let teamMemberLeaderSplit: {
+      leaderStructureBands: Array<{
+        fromCompanyDollar: number;
+        toCompanyDollar: number | null;
+        leaderPercent: number;
+        companyPercent: number;
+      }>;
+      memberDefaultBands: Array<{
+        fromCompanyDollar: number;
+        toCompanyDollar: number | null;
+        memberPercent: number;
+      }>;
+    } | null = null;
+
     if (tiers.length === 0 && agentType === 'team' && primaryTeamId) {
       try {
         const teamSnap = await adminDb.collection('teams').doc(primaryTeamId).get();
         if (teamSnap.exists) {
           const teamData = teamSnap.data() || {};
           const teamPlanId: string | null = teamData.teamPlanId || null;
+          const teamStructureType: string = teamData.structureType || 'with_leader';
           if (teamPlanId) {
             const planSnap = await adminDb.collection('teamPlans').doc(teamPlanId).get();
             if (planSnap.exists) {
               const planData = planSnap.data() || {};
-              const bands =
-                teamRole === 'leader'
-                  ? (planData.leaderStructureBands || [])
-                  : (planData.memberDefaultBands || []);
-              if (bands.length > 0) {
-                tiers = bands.map((b: any, i: number) => ({
-                  tierName: b.tierName || `Band ${i + 1}`,
-                  fromCompanyDollar: Number(b.fromCompanyDollar || 0),
-                  toCompanyDollar:
-                    b.toCompanyDollar === null || b.toCompanyDollar === undefined
-                      ? null
-                      : Number(b.toCompanyDollar),
-                  agentSplitPercent:
-                    teamRole === 'leader'
-                      ? Number(b.leaderPercent || 0)
-                      : Number(b.memberPercent || 0),
-                  companySplitPercent:
-                    teamRole === 'leader'
-                      ? Number(b.companyPercent || 0)
-                      : Number(100 - (b.memberPercent || 0)),
-                  transactionFee: null,
-                  capAmount: null,
-                  notes: '',
-                }));
-                tiersSource = 'team_plan';
+              const planStructureType: string = planData.structureType || teamStructureType;
+              const isWithLeader = planStructureType === 'with_leader';
+
+              if (teamRole === 'leader') {
+                // Leader: agentSplitPercent = leaderPercent (their cut of GCI)
+                const bands = planData.leaderStructureBands || [];
+                if (bands.length > 0) {
+                  tiers = bands.map((b: any, i: number) => ({
+                    tierName: b.tierName || `Band ${i + 1}`,
+                    fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                    toCompanyDollar:
+                      b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                        ? null
+                        : Number(b.toCompanyDollar),
+                    agentSplitPercent: Number(b.leaderPercent || 0),
+                    companySplitPercent: Number(b.companyPercent || 0),
+                    transactionFee: null,
+                    capAmount: null,
+                    notes: '',
+                  }));
+                  tiersSource = 'team_plan';
+                }
+              } else if (isWithLeader) {
+                // Member on a team WITH a leader:
+                // agentSplitPercent = effective % of full GCI = leaderPercent × memberPercent / 100
+                // We also return teamMemberLeaderSplit so the form can show the two-step breakdown.
+                const leaderBands: any[] = planData.leaderStructureBands || [];
+                const memberBands: any[] = planData.memberDefaultBands || [];
+
+                if (leaderBands.length > 0 && memberBands.length > 0) {
+                  // Build tiers by pairing each leader band with the matching member band.
+                  // Since both band arrays are typically aligned by threshold, we zip them.
+                  // For the effective split, we use the first member band's memberPercent
+                  // applied against each leader band (most common config: single member band).
+                  // If member bands are also tiered, we match by fromCompanyDollar.
+                  tiers = leaderBands.map((lb: any, i: number) => {
+                    // Find the member band whose threshold contains this leader band's from value
+                    const matchingMemberBand = memberBands.find((mb: any, mi: number) => {
+                      const mbFrom = Number(mb.fromCompanyDollar || 0);
+                      const mbTo =
+                        mb.toCompanyDollar === null || mb.toCompanyDollar === undefined
+                          ? null
+                          : Number(mb.toCompanyDollar);
+                      const lbFrom = Number(lb.fromCompanyDollar || 0);
+                      return lbFrom >= mbFrom && (mbTo === null || lbFrom < mbTo);
+                    }) || memberBands[memberBands.length - 1];
+
+                    const leaderPct = Number(lb.leaderPercent || 0);
+                    const memberPct = Number(matchingMemberBand?.memberPercent || 0);
+                    const effectiveAgentPct = Number(((leaderPct * memberPct) / 100).toFixed(4));
+                    const companyPct = Number(lb.companyPercent || 0);
+
+                    return {
+                      tierName: lb.tierName || `Band ${i + 1}`,
+                      fromCompanyDollar: Number(lb.fromCompanyDollar || 0),
+                      toCompanyDollar:
+                        lb.toCompanyDollar === null || lb.toCompanyDollar === undefined
+                          ? null
+                          : Number(lb.toCompanyDollar),
+                      // Effective percent of full GCI that the member takes home
+                      agentSplitPercent: effectiveAgentPct,
+                      // Company retains companyPercent of full GCI
+                      companySplitPercent: companyPct,
+                      // Store raw percents for display breakdown
+                      leaderStructurePercent: leaderPct,
+                      memberPercentOfLeaderSide: memberPct,
+                      transactionFee: null,
+                      capAmount: null,
+                      notes: '',
+                    };
+                  });
+                  tiersSource = 'team_plan';
+
+                  // Expose the raw leader/member bands so the form can render the two-step breakdown
+                  teamMemberLeaderSplit = {
+                    leaderStructureBands: leaderBands.map((b: any) => ({
+                      fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                      toCompanyDollar:
+                        b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                          ? null
+                          : Number(b.toCompanyDollar),
+                      leaderPercent: Number(b.leaderPercent || 0),
+                      companyPercent: Number(b.companyPercent || 0),
+                    })),
+                    memberDefaultBands: memberBands.map((b: any) => ({
+                      fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                      toCompanyDollar:
+                        b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                          ? null
+                          : Number(b.toCompanyDollar),
+                      memberPercent: Number(b.memberPercent || 0),
+                    })),
+                  };
+                } else if (memberBands.length > 0) {
+                  // Only member bands present — treat memberPercent as % of GCI (leaderless-style fallback)
+                  tiers = memberBands.map((b: any, i: number) => ({
+                    tierName: b.tierName || `Band ${i + 1}`,
+                    fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                    toCompanyDollar:
+                      b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                        ? null
+                        : Number(b.toCompanyDollar),
+                    agentSplitPercent: Number(b.memberPercent || 0),
+                    companySplitPercent: Math.max(0, 100 - Number(b.memberPercent || 0)),
+                    transactionFee: null,
+                    capAmount: null,
+                    notes: '',
+                  }));
+                  tiersSource = 'team_plan';
+                }
+              } else {
+                // Leaderless team member: memberPercent is % of full GCI
+                const bands = planData.memberDefaultBands || [];
+                if (bands.length > 0) {
+                  tiers = bands.map((b: any, i: number) => ({
+                    tierName: b.tierName || `Band ${i + 1}`,
+                    fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                    toCompanyDollar:
+                      b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                        ? null
+                        : Number(b.toCompanyDollar),
+                    agentSplitPercent: Number(b.memberPercent || 0),
+                    companySplitPercent: Math.max(0, 100 - Number(b.memberPercent || 0)),
+                    transactionFee: null,
+                    capAmount: null,
+                    notes: '',
+                  }));
+                  tiersSource = 'team_plan';
+                }
               }
             }
           }
@@ -311,6 +442,13 @@ export async function GET(
       tiersSource,
       defaultTransactionFee,
       tiers,
+      // Present for team members on a team WITH a leader — null for all other agent types.
+      // When present, the form should display the two-step commission breakdown:
+      //   Step 1: leaderStructureGross = GCI × leaderStructureBand.leaderPercent
+      //   Step 2: memberPaid = leaderStructureGross × memberDefaultBand.memberPercent
+      // The tiers[].agentSplitPercent already contains the EFFECTIVE % of full GCI
+      // (leaderPercent × memberPercent / 100) so auto-calc is always correct.
+      teamMemberLeaderSplit,
       ytdTierProgressionCompanyDollar,
       // Anniversary cycle boundaries for display in progress bars / dashboard
       cycleStart,
