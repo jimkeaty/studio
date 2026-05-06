@@ -33,6 +33,7 @@ export type NotificationType =
   | 'staff_queue_attention' // staff queue item needs agent attention
   | 'tx_status_change'      // transaction status changed → agent notified
   | 'tx_new_agent'          // new transaction added by agent → TC/staff notified
+  | 'co_agent_split'        // co-agent transaction split on close → both agents notified
   | 'system';               // generic system notification
 
 export interface NotificationPayload {
@@ -228,6 +229,7 @@ function buildEmailHtml(
     staff_queue_attention: 'Action Required',
     tx_status_change:      'Status Update',
     tx_new_agent:          'New Transaction',
+    co_agent_split:        'Transaction Split',
     system:                'System',
   };
   const badge = typeLabel[type] ?? 'Notification';

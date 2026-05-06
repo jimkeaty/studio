@@ -6,6 +6,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
+import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -304,6 +305,28 @@ export async function PATCH(req: NextRequest) {
     } catch (notifErr: any) {
       console.warn('[api/admin/transactions] Notification trigger failed (non-fatal):', notifErr?.message);
     }
+    // ── Co-agent split on close ─────────────────────────────────────────────
+    // If this transaction has a co-agent and is now being marked closed,
+    // split it into two individual transactions (one per agent) and delete the original.
+    if (updates.status === 'closed' && existingData?.status !== 'closed') {
+      const txData = updatedSnap.data() as any;
+      if (txData?.hasCoAgent && txData?.coAgent?.agentId && txData?.source !== 'co_agent_split') {
+        try {
+          const splitResult = await splitCoAgentTransaction(id);
+          if (splitResult) {
+            return NextResponse.json({
+              ok: true,
+              split: true,
+              primaryTransactionId: splitResult.primaryTransactionId,
+              coAgentTransactionId: splitResult.coAgentTransactionId,
+            });
+          }
+        } catch (splitErr: any) {
+          console.warn('[api/admin/transactions] Co-agent split failed (non-fatal):', splitErr?.message);
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true, transaction: updated });
   } catch (err: any) {
     console.error('[api/admin/transactions PATCH]', err);
