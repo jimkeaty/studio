@@ -892,17 +892,17 @@ export default function AdminTransactionLedgerPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[40px] px-2 align-middle">
-                      <div className="flex items-center justify-center">
+                    <TableHead className="w-[40px] px-0 align-middle">
+                      <label className="flex items-center justify-center w-full h-full min-h-[40px] cursor-pointer px-2">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300 cursor-pointer block"
+                          className="h-4 w-4 rounded border-gray-300 cursor-pointer"
                           checked={filtered.length > 0 && selectedIds.size === filtered.length}
                           ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length; }}
                           onChange={toggleSelectAll}
                           title="Select all visible"
                         />
-                      </div>
+                      </label>
                     </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap w-[100px]" onClick={() => toggleSort('status')}>
                       <span className="flex items-center">Status<SortIcon col="status" /></span>
@@ -956,15 +956,15 @@ export default function AdminTransactionLedgerPage() {
                         className={cn('cursor-pointer hover:bg-muted/40 transition-colors group', selectedIds.has(t.id) && 'bg-destructive/5')}
                         onClick={() => openEdit(t)}
                       >
-                        <TableCell className="w-[40px] px-2 align-middle" onClick={e => { e.stopPropagation(); toggleSelect(t.id); }}>
-                          <div className="flex items-center justify-center">
+                        <TableCell className="w-[40px] px-0 align-middle" onClick={e => e.stopPropagation()}>
+                          <label className="flex items-center justify-center w-full h-full min-h-[40px] cursor-pointer px-2">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300 cursor-pointer block"
+                              className="h-4 w-4 rounded border-gray-300 cursor-pointer"
                               checked={selectedIds.has(t.id)}
                               onChange={() => toggleSelect(t.id)}
                             />
-                          </div>
+                          </label>
                         </TableCell>
                         <TableCell className="w-[130px]">
                           <DropdownMenu>
