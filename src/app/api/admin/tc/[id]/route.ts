@@ -294,10 +294,38 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         return jsonError(400, 'Intake is already approved');
       }
 
-      const agentId = String(intake.agentId || '').trim();
+      let agentId = String(intake.agentId || '').trim();
       const agentDisplayName = String(intake.agentDisplayName || '').trim();
 
       if (!agentId) return jsonError(400, 'Intake has no agentId — cannot approve');
+
+      // Normalize agentId: the intake may store the agent's Firebase UID instead of
+      // the slug-based agentProfiles document ID. Resolve to the canonical slug so
+      // all downstream lookups (commission calculation, rollups, ledger) are consistent.
+      try {
+        const directSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
+        if (!directSnap.exists) {
+          // Try resolving by firebaseUid field
+          const byUidSnap = await adminDb
+            .collection('agentProfiles')
+            .where('firebaseUid', '==', agentId)
+            .limit(1)
+            .get();
+          if (!byUidSnap.empty) {
+            agentId = byUidSnap.docs[0].id; // use the slug as the canonical agentId
+          } else {
+            // Try resolving by agentId field (in case stored differently)
+            const bySlugFieldSnap = await adminDb
+              .collection('agentProfiles')
+              .where('agentId', '==', agentId)
+              .limit(1)
+              .get();
+            if (!bySlugFieldSnap.empty) {
+              agentId = bySlugFieldSnap.docs[0].id;
+            }
+          }
+        }
+      } catch { /* non-fatal — proceed with original agentId */ }
 
       // Determine GCI for split calculation
       const rawGci = resolveGCI({

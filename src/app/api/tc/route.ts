@@ -67,8 +67,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Agent info — use requesting user if not overridden
-    const agentId = toStr(body.agentId) || uid;
+    // Normalize agentId to the slug-based agentProfiles document ID so downstream
+    // commission calculation and rollup queries work correctly.
+    let agentId = toStr(body.agentId) || uid;
     const agentDisplayName = toStr(body.agentDisplayName) || toStr(decoded.name) || email;
+    try {
+      const directSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
+      if (!directSnap.exists) {
+        const byUidSnap = await adminDb
+          .collection('agentProfiles')
+          .where('firebaseUid', '==', agentId)
+          .limit(1)
+          .get();
+        if (!byUidSnap.empty) {
+          agentId = byUidSnap.docs[0].id;
+        }
+      }
+    } catch { /* non-fatal */ }
 
     // Determine if the submitter is an admin (used to gate commission split fields)
     const isAdmin = await isAdminLike(uid);

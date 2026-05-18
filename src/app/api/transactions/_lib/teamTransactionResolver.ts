@@ -79,11 +79,33 @@ function getActiveMemberBand(
 }
 
 async function getAgentProfile(agentId: string): Promise<AgentProfile> {
+  // First try direct doc lookup (slug-keyed profiles, e.g. 'scott-domingue')
   const snap = await adminDb.collection('agentProfiles').doc(agentId).get();
-  if (!snap.exists) {
-    throw new Error(`Agent profile not found for ${agentId}`);
+  if (snap.exists) {
+    return snap.data() as AgentProfile;
   }
-  return snap.data() as AgentProfile;
+
+  // Fallback: the intake may store the agent's Firebase UID instead of the slug.
+  // Query by the agentId field (which stores the slug) or by firebaseUid field.
+  const bySlugSnap = await adminDb
+    .collection('agentProfiles')
+    .where('agentId', '==', agentId)
+    .limit(1)
+    .get();
+  if (!bySlugSnap.empty) {
+    return bySlugSnap.docs[0].data() as AgentProfile;
+  }
+
+  const byUidSnap = await adminDb
+    .collection('agentProfiles')
+    .where('firebaseUid', '==', agentId)
+    .limit(1)
+    .get();
+  if (!byUidSnap.empty) {
+    return byUidSnap.docs[0].data() as AgentProfile;
+  }
+
+  throw new Error(`Agent profile not found for ${agentId}`);
 }
 
 async function getTeam(teamId: string): Promise<Team> {
