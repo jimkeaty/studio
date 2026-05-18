@@ -96,6 +96,30 @@ export async function GET(
       }
     }
 
+    // Fetch linked TC intake documents if available
+    let intakeDocuments: any[] = [];
+    const tcIntakeId = item.tcIntakeId || null;
+    if (tcIntakeId) {
+      try {
+        const intakeDoc = await adminDb.collection('tcIntakes').doc(tcIntakeId).get();
+        if (intakeDoc.exists) {
+          const intakeData = serializeFirestore(intakeDoc.data());
+          if (Array.isArray(intakeData.documents)) {
+            intakeDocuments = intakeData.documents;
+          }
+        }
+      } catch {
+        // Non-fatal: intake may not exist
+      }
+    }
+    // Merge documents: transaction docs + intake docs (deduplicated by url)
+    const txDocs: any[] = transaction?.documents || [];
+    const allDocUrls = new Set(txDocs.map((d: any) => d.url));
+    const mergedDocuments = [
+      ...txDocs,
+      ...intakeDocuments.filter((d: any) => d.url && !allDocUrls.has(d.url)),
+    ];
+
     // Fetch checklist subcollection — seed defaults if empty
     const checklistSnap = await itemRef.collection('checklist').orderBy('order', 'asc').get();
     let checklist: any[] = [];
@@ -132,6 +156,7 @@ export async function GET(
       ok: true,
       item: { id: doc.id, ...item },
       transaction,
+      documents: mergedDocuments,
       checklist,
       activityLog,
       staffProfiles,

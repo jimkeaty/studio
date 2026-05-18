@@ -110,7 +110,6 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   active:          { label: 'Active',          color: 'bg-blue-500/80 text-white' },
   temp_off_market: { label: 'Temp Off Market', color: 'bg-orange-500/80 text-white' },
   pending:         { label: 'Pending',         color: 'bg-yellow-500/80 text-white' },
-  sold:            { label: 'Sold',            color: 'bg-green-600/80 text-white' },
   closed:          { label: 'Closed',          color: 'bg-green-600/80 text-white' },
   canceled:        { label: 'Canceled',        color: 'bg-red-500/80 text-white' },
   cancelled:       { label: 'Canceled',        color: 'bg-red-500/80 text-white' },
@@ -771,9 +770,9 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
 
   const activeCount = transactions.filter(t => t.status === 'active' || t.status === 'temp_off_market').length;
   const pendingCount = transactions.filter(t => t.status === 'pending').length;
-  const closedCount = transactions.filter(t => t.status === 'closed' || t.status === 'sold').length;
+  const closedCount = transactions.filter(t => t.status === 'closed').length;
   const netPending = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
-  const netClosed = transactions.filter(t => t.status === 'closed' || t.status === 'sold').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
+  const netClosed = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
 
   /* ─── Render ─────────────────────────────────────────────────────────── */
 
@@ -978,7 +977,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                       const net = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
                       const sc = statusConfig[t.status] || statusConfig.pending;
                       const addr = t.address || t.propertyAddress || '—';
-                      const canEdit = t.status !== 'sold'; // all statuses except sold are editable by agent
+                      const canEdit = t.status !== 'closed'; // closed transactions are read-only for agents
                       return (
                         <TableRow
                           key={t.id}

@@ -54,7 +54,6 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   active: { label: 'Active', color: 'bg-blue-500/80 text-white' },
   temp_off_market: { label: 'Temp Off Market', color: 'bg-orange-500/80 text-white' },
   pending: { label: 'Pending', color: 'bg-yellow-500/80 text-white' },
-  sold: { label: 'Sold', color: 'bg-green-600/80 text-white' },
   closed: { label: 'Closed', color: 'bg-green-600/80 text-white' },
   canceled: { label: 'Canceled', color: 'bg-red-500/80 text-white' },
   cancelled: { label: 'Canceled', color: 'bg-red-500/80 text-white' },
@@ -63,7 +62,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 const YEARS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
 
-const ALL_STATUSES = ['active', 'temp_off_market', 'pending', 'sold', 'closed', 'canceled', 'expired'] as const;
+const ALL_STATUSES = ['active', 'temp_off_market', 'pending', 'closed', 'canceled', 'expired'] as const;
 
 /* ─── Sorting ────────────────────────────────────────────────────────── */
 
@@ -984,7 +983,7 @@ export default function AdminTransactionLedgerPage() {
                                 .filter(s => {
                                   if (s === t.status) return false; // hide current
                                   if ((s as string) === 'temp_off_market' &&
-                                    (t.status === 'closed' || t.status === 'sold')) return false;
+                                    t.status === 'closed') return false;
                                   return true;
                                 })
                                 .map(s => (
@@ -1016,7 +1015,7 @@ export default function AdminTransactionLedgerPage() {
                                       (s as string) === 'active' ? 'bg-blue-500' :
                                       (s as string) === 'temp_off_market' ? 'bg-orange-500' :
                                       (s as string) === 'pending' ? 'bg-yellow-500' :
-                                      (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
+                                      (s as string) === 'closed' ? 'bg-green-600' :
                                       (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
                                       'bg-gray-500'
                                     )} />
@@ -1137,7 +1136,7 @@ export default function AdminTransactionLedgerPage() {
                   </span>
                 </div>
               </div>
-              {(quickStatusTx?.status === 'closed' || quickStatusTx?.status === 'sold') && (
+              {quickStatusTx?.status === 'closed' && (
                 <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-300">
                   <strong>Note:</strong> Closed listings cannot be moved to Temp Off Market. Only status corrections (e.g. Cancelled) are available.
                 </div>
@@ -1151,9 +1150,9 @@ export default function AdminTransactionLedgerPage() {
                   <SelectContent>
                     {ALL_STATUSES
                       .filter(s => {
-                        // Temp Off Market is not available for closed/sold listings
+                        // Temp Off Market is not available for closed listings
                         if ((s as string) === 'temp_off_market' &&
-                          (quickStatusTx?.status === 'closed' || quickStatusTx?.status === 'sold')) {
+                          quickStatusTx?.status === 'closed') {
                           return false;
                         }
                         return true;
@@ -1166,7 +1165,7 @@ export default function AdminTransactionLedgerPage() {
                               (s as string) === 'active' ? 'bg-blue-500' :
                               (s as string) === 'temp_off_market' ? 'bg-orange-500' :
               (s as string) === 'pending' ? 'bg-yellow-500' :
-              (s as string) === 'sold' || (s as string) === 'closed' ? 'bg-green-600' :
+              (s as string) === 'closed' ? 'bg-green-600' :
                               (s as string) === 'canceled' || (s as string) === 'cancelled' ? 'bg-red-500' :
                               'bg-gray-500'
                             )} />

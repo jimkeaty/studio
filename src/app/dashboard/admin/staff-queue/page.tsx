@@ -92,8 +92,8 @@ const TX_STATUS_LABELS: Record<string, string> = {
 };
 
 export default function StaffQueuePage() {
-  const { user } = useUser();
-  const isStaff = useIsStaff();
+  const { user, loading: userLoading } = useUser();
+  const { isStaff, loading: staffLoading } = useIsStaff();
 
   const [items, setItems] = useState<StaffQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +145,15 @@ export default function StaffQueuePage() {
   const completedCount = items.filter((i) => i.status === 'completed').length;
   const dismissedCount = items.filter((i) => i.status === 'dismissed').length;
 
-  if (!isStaff) {
+  if (userLoading || staffLoading) {
+    return (
+      <div className="space-y-4 p-4 md:p-6">
+        <Skeleton className="h-12 w-1/3" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+  if (!user || !isStaff) {
     return (
       <div className="p-8">
         <Alert variant="destructive">
@@ -305,7 +313,7 @@ export default function StaffQueuePage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium text-sm truncate max-w-[240px]">{item.transactionAddress || '—'}</div>
+                          <div className="font-medium text-sm truncate max-w-[240px]">{item.transactionAddress || (item as any).address || '—'}</div>
                           {item.tcWorking && (
                             <span className="text-[10px] text-indigo-600 font-medium">Working with TC</span>
                           )}

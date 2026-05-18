@@ -52,7 +52,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
 ]);
 
 // Statuses an agent is allowed to set
-const AGENT_ALLOWED_STATUSES = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'sold']);
+const AGENT_ALLOWED_STATUSES = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired']);
 
 // Listing-specific status changes that always trigger a Staff Queue notification
 const LISTING_STATUS_TRIGGERS = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'coming_soon']);

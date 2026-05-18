@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
 
     for (const tx of allTxDocs) {
       const status = (String(tx.status ?? '')).toLowerCase();
-      if (!['closed', 'sold'].includes(status)) continue;
+      if (status !== 'closed') continue;
 
       const splitSnapshot = tx.splitSnapshot as Record<string, unknown> | undefined;
       const agentNet = n(

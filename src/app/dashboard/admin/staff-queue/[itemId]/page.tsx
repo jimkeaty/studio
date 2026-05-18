@@ -234,6 +234,7 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
 
@@ -256,6 +257,7 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
 
         setItem(data.item);
         setTransaction(data.transaction || null);
+        setDocuments(data.documents || data.transaction?.documents || []);
         if (data.checklist?.length) setChecklist(data.checklist);
         if (data.staffProfiles?.length) {
           setStaffProfiles(data.staffProfiles.filter((p: StaffProfile) => p.status === 'active'));
@@ -1144,10 +1146,10 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           </SectionCard>
 
           {/* Documents (read-only) */}
-          {transaction?.documents?.length > 0 && (
+          {documents.length > 0 && (
             <SectionCard title="Uploaded Documents" icon={<Paperclip className="h-4 w-4" />}>
               <div className="space-y-2">
-                {transaction.documents.map((doc: any, idx: number) => (
+                {documents.map((doc: any, idx: number) => (
                   <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
                     <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <div className="min-w-0 flex-1">

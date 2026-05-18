@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
       const status = (tx.status ?? '').toLowerCase();
       // Agent net = splitSnapshot.agentNetCommission (never GCI)
       const agentNet = n(tx.splitSnapshot?.agentNetCommission ?? tx.splitSnapshot?.agentDollar ?? tx.commission);
-      if (['closed', 'sold'].includes(status)) {
+      if (status === 'closed') {
         netEarned += agentNet;
         closedUnits += 1;
       } else if (['pending', 'under_contract', 'active'].includes(status)) {
