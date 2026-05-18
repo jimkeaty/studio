@@ -1,4 +1,5 @@
 import { adminDb } from '@/lib/firebase/admin';
+import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
 import type {
   AgentProfile,
   AgentTier,
@@ -152,6 +153,35 @@ async function getMemberPlan(memberPlanId: string): Promise<MemberPlan> {
   return snap.data() as MemberPlan;
 }
 
+/**
+ * Look up the agent's cumulative YTD tier-progression company dollar from
+ * their agentYearRollups document. This is the correct value to use for
+ * tier bracket selection — NOT the single-transaction GCI.
+ *
+ * Returns 0 if the rollup does not exist yet (new agent / first transaction).
+ */
+async function getAgentYtdCompanyDollar(
+  agentId: string,
+  profile: AgentProfile
+): Promise<number> {
+  try {
+    const anniversaryMonth = Number((profile as any).anniversaryMonth ?? 0);
+    const anniversaryDay = Number((profile as any).anniversaryDay ?? 0);
+    const today = new Date();
+    const cycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+    const rollupYear = cycle.cycleStart.getUTCFullYear();
+    const rollupSnap = await adminDb
+      .collection('agentYearRollups')
+      .doc(`${agentId}_${rollupYear}`)
+      .get();
+    if (!rollupSnap.exists) return 0;
+    const r = rollupSnap.data() || {};
+    return Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
+  } catch {
+    return 0; // non-fatal — fall back to 0 (first-tier behaviour)
+  }
+}
+
 export async function resolveTransactionCalculation(
   input: ResolveTransactionInput
 ): Promise<ResolvedTransactionCalculation> {
@@ -160,13 +190,57 @@ export async function resolveTransactionCalculation(
 
   // ─── Independent agent path ──────────────────────────────────────────────────
   if (profile.agentType === 'independent') {
-    const tier = getActiveIndividualTier(profile.tiers || [], commission);
+    // ── Flat commission plan: fixed split, no tiers, no progression ──
+    if ((profile as any).commissionMode === 'flat') {
+      const flatAgentPct = Number((profile as any).flatAgentPercent ?? 0);
+      const flatCompanyPct = Number((profile as any).flatCompanyPercent ?? Math.max(0, 100 - flatAgentPct));
+      const agentNetCommission = asMoney(commission * (flatAgentPct / 100));
+      const companyRetained = asMoney(commission * (flatCompanyPct / 100));
+      return {
+        calculationModel: 'individual',
+        agentType: profile.agentType,
+        splitSnapshot: {
+          primaryTeamId: null,
+          teamPlanId: null,
+          memberPlanId: null,
+          grossCommission: commission,
+          agentSplitPercent: flatAgentPct,
+          companySplitPercent: flatCompanyPct,
+          agentNetCommission,
+          leaderStructurePercent: null,
+          leaderStructureGross: null,
+          memberPercentOfLeaderSide: null,
+          memberPaid: null,
+          leaderRetainedAfterMember: null,
+          companyRetained,
+        },
+        creditSnapshot: {
+          leaderboardAgentId: profile.agentId,
+          leaderboardAgentDisplayName: input.agentDisplayName,
+          progressionMemberAgentId: profile.agentId,
+          progressionLeaderAgentId: null,
+          progressionTeamId: null,
+          progressionCompanyDollarCredit: companyRetained,
+        },
+      };
+    }
+
+    // ── Tiered commission plan: use cumulative YTD company dollar for tier lookup ──
+    // Use cumulative YTD company dollar for tier bracket selection.
+    // Two-pass approach: first find the tier using YTD alone, compute the company
+    // dollar this transaction adds, then check if the total crosses into the next tier.
+    const ytdCompanyDollar = await getAgentYtdCompanyDollar(profile.agentId, profile);
+    const tier = getActiveIndividualTier(profile.tiers || [], ytdCompanyDollar) ||
+                 getActiveIndividualTier(profile.tiers || [], 0);
     if (!tier) {
       throw new Error(`No active individual tier found for ${profile.agentId}`);
     }
+    const companyDollarThisTx = asMoney(commission * (Number(tier.companySplitPercent || 0) / 100));
+    const totalAfterTx = ytdCompanyDollar + companyDollarThisTx;
+    const upgradedTier = getActiveIndividualTier(profile.tiers || [], totalAfterTx) || tier;
 
-    const agentSplitPercent = Number(tier.agentSplitPercent || 0);
-    const companySplitPercent = Number(tier.companySplitPercent || 0);
+    const agentSplitPercent = Number(upgradedTier.agentSplitPercent || 0);
+    const companySplitPercent = Number(upgradedTier.companySplitPercent || 0);
     const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
     const companyRetained = asMoney(commission * (companySplitPercent / 100));
 
@@ -291,6 +365,9 @@ export async function resolveTransactionCalculation(
     let agentSplitPercent: number;
     let companySplitPercent: number;
 
+    // Fetch YTD company dollar for tier progression in leaderless team paths
+    const leaderlessYtd = await getAgentYtdCompanyDollar(profile.agentId, profile);
+
     // Priority 1: custom override bands on the agent profile
     if (
       profile.teamMemberCompMode === 'custom' &&
@@ -299,8 +376,8 @@ export async function resolveTransactionCalculation(
     ) {
       const memberBand = getActiveMemberBand(
         profile.teamMemberOverrideBands as MemberPlanBand[],
-        commission
-      );
+        leaderlessYtd
+      ) || getActiveMemberBand(profile.teamMemberOverrideBands as MemberPlanBand[], 0);
       if (!memberBand) {
         throw new Error(
           `No active custom member tier found for leaderless team member ${profile.agentId}`
@@ -314,7 +391,8 @@ export async function resolveTransactionCalculation(
       Array.isArray(teamPlan.memberDefaultBands) &&
       teamPlan.memberDefaultBands.length > 0
     ) {
-      const memberBand = getActiveMemberBand(teamPlan.memberDefaultBands, commission);
+      const memberBand = getActiveMemberBand(teamPlan.memberDefaultBands, leaderlessYtd) ||
+                         getActiveMemberBand(teamPlan.memberDefaultBands, 0);
       if (!memberBand) {
         throw new Error(
           `No active member default band found for leaderless team ${team.teamId}`
@@ -324,7 +402,8 @@ export async function resolveTransactionCalculation(
       companySplitPercent = Math.max(0, 100 - agentSplitPercent);
     } else {
       // Priority 3: legacy fallback — individual tiers on the agent profile
-      const tier = getActiveIndividualTier(profile.tiers || [], commission);
+      const tier = getActiveIndividualTier(profile.tiers || [], leaderlessYtd) ||
+                   getActiveIndividualTier(profile.tiers || [], 0);
       if (!tier) {
         throw new Error(
           `No active tier found for leaderless team member ${profile.agentId}`
@@ -368,7 +447,10 @@ export async function resolveTransactionCalculation(
 
   // ─── Team with leader path ────────────────────────────────────────────────────
   // teamPlan is guaranteed non-null here (checked above for !isLeaderless).
-  const leaderBand = getActiveLeaderBand(teamPlan!.leaderStructureBands || [], commission);
+  // Use cumulative YTD company dollar for leader band progression.
+  const leaderYtd = await getAgentYtdCompanyDollar(profile.agentId, profile);
+  const leaderBand = getActiveLeaderBand(teamPlan!.leaderStructureBands || [], leaderYtd) ||
+                     getActiveLeaderBand(teamPlan!.leaderStructureBands || [], 0);
 
   if (!leaderBand) {
     throw new Error(`No active leader structure band found for ${team.teamId}`);
