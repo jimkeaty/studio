@@ -88,7 +88,7 @@ const ACTION_CONFIG: Record<ActionType, { label: string; color: string }> = {
 const TX_STATUS_LABELS: Record<string, string> = {
   active: 'Active', pending: 'Pending', temp_off_market: 'Temp Off Market',
   closed: 'Closed', cancelled: 'Cancelled', canceled: 'Canceled',
-  expired: 'Expired', sold: 'Sold',
+  expired: 'Expired', coming_soon: 'Coming Soon',
 };
 
 export default function StaffQueuePage() {
@@ -143,6 +143,7 @@ export default function StaffQueuePage() {
   const pendingCount = items.filter((i) => i.status === 'pending_review').length;
   const inProgressCount = items.filter((i) => i.status === 'in_progress').length;
   const completedCount = items.filter((i) => i.status === 'completed').length;
+  const dismissedCount = items.filter((i) => i.status === 'dismissed').length;
 
   if (!isStaff) {
     return (
@@ -176,11 +177,12 @@ export default function StaffQueuePage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
           { label: 'Pending Review', value: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
           { label: 'In Progress', value: inProgressCount, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
           { label: 'Completed', value: completedCount, color: 'text-green-600', bg: 'bg-green-50 border-green-200' },
+          { label: 'Dismissed', value: dismissedCount, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200' },
           { label: 'Total (filtered)', value: filtered.length, color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200' },
         ].map((c) => (
           <Card key={c.label} className={cn('border', c.bg)}>
@@ -280,6 +282,7 @@ export default function StaffQueuePage() {
                     <TableHead className="whitespace-nowrap min-w-[200px]">Address</TableHead>
                     <TableHead className="whitespace-nowrap min-w-[130px]">Agent</TableHead>
                     <TableHead className="whitespace-nowrap min-w-[160px]">Status Change</TableHead>
+                    <TableHead className="whitespace-nowrap min-w-[130px]">Assigned To</TableHead>
                     <TableHead className="whitespace-nowrap min-w-[120px]">Submitted</TableHead>
                     <TableHead className="whitespace-nowrap min-w-[130px]">Reviewed By</TableHead>
                     <TableHead className="whitespace-nowrap w-[100px] text-right">Actions</TableHead>
@@ -327,6 +330,9 @@ export default function StaffQueuePage() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {formatDateShort(item.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {(item as any).assignedStaffName || (item as any).assignedStaffId ? ((item as any).assignedStaffName || 'Assigned') : '—'}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {item.reviewedByName || '—'}
