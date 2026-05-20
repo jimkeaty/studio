@@ -53,3 +53,32 @@ env:
     availability:
       - BUILD
       - RUNTIME
+
+  # ── App identity ──────────────────────────────────────────────────────────
+  - variable: NEXT_PUBLIC_APP_NAME
+    value: "Smart Broker USA"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_APP_URL
+    value: "https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ── Twilio SMS (secrets stored in Google Cloud Secret Manager) ────────────
+  - variable: TWILIO_ACCOUNT_SID
+    secret: TWILIO_ACCOUNT_SID
+    availability:
+      - RUNTIME
+
+  - variable: TWILIO_AUTH_TOKEN
+    secret: TWILIO_AUTH_TOKEN
+    availability:
+      - RUNTIME
+
+  - variable: TWILIO_FROM_NUMBER
+    secret: TWILIO_FROM_NUMBER
+    availability:
+      - RUNTIME
