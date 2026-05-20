@@ -141,7 +141,7 @@ export async function GET(
         const ref = itemRef.collection('checklist').doc(ci.id);
         const data = { ...ci, completed: false, completedBy: null, completedAt: null, createdAt: now };
         batch.set(ref, data);
-        checklist.push({ id: ci.id, ...data });
+        checklist.push({ ...data, id: ci.id });
       }
       await batch.commit();
     } else {
