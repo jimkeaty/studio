@@ -31,8 +31,9 @@ export async function GET(req: NextRequest) {
     const userDoc = await adminDb.collection('users').doc(uid).get();
     const userData = userDoc.exists ? (userDoc.data() as Record<string, any>) : {};
     const prefs = userData.notificationPrefs ?? DEFAULT_PREFS;
+    const phone = userData.phone || '';
 
-    return NextResponse.json({ ok: true, prefs });
+    return NextResponse.json({ ok: true, prefs, phone });
   } catch (err: any) {
     return jsonError(500, err.message || 'Internal error');
   }
@@ -46,16 +47,22 @@ export async function PATCH(req: NextRequest) {
     const uid = decoded.uid;
 
     const body = await req.json();
-    const { prefs } = body;
+    const { prefs, phone } = body;
     if (!prefs || typeof prefs !== 'object') {
       return jsonError(400, 'Invalid preferences payload');
     }
 
+    // Build update payload — always save prefs, optionally save phone
+    const update: Record<string, any> = {
+      notificationPrefs: prefs,
+      updatedAt: new Date().toISOString(),
+    };
+    if (typeof phone === 'string') {
+      update.phone = phone.trim();
+    }
+
     // Merge into the users/{uid} document
-    await adminDb.collection('users').doc(uid).set(
-      { notificationPrefs: prefs, updatedAt: new Date().toISOString() },
-      { merge: true },
-    );
+    await adminDb.collection('users').doc(uid).set(update, { merge: true });
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {

@@ -6,6 +6,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,7 @@ import {
   AlertCircle,
   Loader2,
   Save,
+  Phone,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -165,7 +167,7 @@ const CHANNELS: { key: ChannelKey; label: string; icon: React.ElementType; descr
     key: 'sms',
     label: 'SMS',
     icon: MessageSquare,
-    description: 'Text message notifications (opt-in required)',
+    description: 'Text message notifications to your mobile number',
   },
 ];
 
@@ -181,7 +183,13 @@ export default function NotificationSettingsPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // ── Load preferences ────────────────────────────────────────────────────────
+  // Phone number state
+  const [phone, setPhone] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneSaveStatus, setPhoneSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  // ── Load preferences + phone ────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -194,6 +202,9 @@ export default function NotificationSettingsPage() {
         const data = await res.json();
         if (!cancelled && data.ok) {
           setPrefs({ ...DEFAULT_PREFS, ...data.prefs, events: data.prefs.events ?? {} });
+          const savedPhone = data.phone || '';
+          setPhone(savedPhone);
+          setPhoneInput(savedPhone);
         }
       } catch {
         // silently fall back to defaults
@@ -236,6 +247,40 @@ export default function NotificationSettingsPage() {
     }
   }, [user, prefs]);
 
+  // ── Save phone number ───────────────────────────────────────────────────────
+  const handleSavePhone = useCallback(async () => {
+    if (!user) return;
+    setSavingPhone(true);
+    setPhoneSaveStatus('idle');
+    try {
+      const token = await user.getIdToken();
+      // Normalize: strip non-digits then format as E.164 +1XXXXXXXXXX
+      const digits = phoneInput.replace(/\D/g, '');
+      const normalized = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : phoneInput.trim();
+      const res = await fetch('/api/notifications/preferences', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ prefs, phone: normalized }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setPhone(normalized);
+        setPhoneInput(normalized);
+        setPhoneSaveStatus('success');
+        setTimeout(() => setPhoneSaveStatus('idle'), 3000);
+      } else {
+        setPhoneSaveStatus('error');
+      }
+    } catch {
+      setPhoneSaveStatus('error');
+    } finally {
+      setSavingPhone(false);
+    }
+  }, [user, phoneInput, prefs]);
+
   // ── Toggle helpers ──────────────────────────────────────────────────────────
   const toggleGlobalChannel = (channel: ChannelKey) => {
     setPrefs((prev) => ({ ...prev, [channel]: !prev[channel] }));
@@ -244,7 +289,7 @@ export default function NotificationSettingsPage() {
   const getEventChannelValue = (type: NotificationType, channel: ChannelKey): boolean => {
     const override = prefs.events[type];
     if (override && typeof override[channel] === 'boolean') return override[channel] as boolean;
-    return prefs[channel]; // fall back to global
+    return prefs[channel];
   };
 
   const toggleEventChannel = (type: NotificationType, channel: ChannelKey) => {
@@ -304,6 +349,67 @@ export default function NotificationSettingsPage() {
         </div>
       )}
 
+      {/* ── SMS Phone Number card ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Phone className="h-4 w-4" />
+            SMS Phone Number
+          </CardTitle>
+          <CardDescription>
+            Enter your mobile number to receive SMS notifications. Standard messaging rates may apply.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="tel"
+                placeholder="(555) 867-5309"
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSavePhone}
+              disabled={savingPhone || phoneInput === phone}
+              className="shrink-0"
+            >
+              {savingPhone ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Save Number
+            </Button>
+          </div>
+          {phoneSaveStatus === 'success' && (
+            <p className="text-xs text-emerald-600 flex items-center gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Phone number saved. SMS is ready to use.
+            </p>
+          )}
+          {phoneSaveStatus === 'error' && (
+            <p className="text-xs text-red-600 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5" /> Failed to save phone number. Please try again.
+            </p>
+          )}
+          {phone && phoneSaveStatus === 'idle' && (
+            <p className="text-xs text-muted-foreground">
+              Current number: <span className="font-medium text-foreground">{phone}</span>
+            </p>
+          )}
+          {!phone && phoneSaveStatus === 'idle' && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5" /> No phone number saved — SMS notifications will not be delivered until you add one.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ── Push notification permission card ── */}
       <Card>
         <CardHeader className="pb-3">
@@ -326,7 +432,7 @@ export default function NotificationSettingsPage() {
           {permission === 'denied' && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <BellOff className="h-4 w-4" />
-              <span>Push notifications are blocked. Enable them in your browser settings to receive push alerts.</span>
+              <span>Push notifications are blocked. Please update your browser site settings to allow notifications.</span>
             </div>
           )}
           {permission === 'default' && (
@@ -376,17 +482,23 @@ export default function NotificationSettingsPage() {
                 <div className="min-w-0">
                   <Label htmlFor={`global-${ch.key}`} className="font-medium cursor-pointer">
                     {ch.label}
-                    {ch.key === 'sms' && (
+                    {ch.key === 'sms' && !phone && (
+                      <Badge variant="outline" className="ml-2 text-[10px] py-0 border-amber-300 text-amber-600">No number saved</Badge>
+                    )}
+                    {ch.key === 'sms' && phone && (
                       <Badge variant="secondary" className="ml-2 text-[10px] py-0">Opt-in</Badge>
                     )}
                   </Label>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{ch.description}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {ch.key === 'sms' && phone ? `Sending to ${phone}` : ch.description}
+                  </p>
                 </div>
               </div>
               <Switch
                 id={`global-${ch.key}`}
                 checked={prefs[ch.key]}
                 onCheckedChange={() => toggleGlobalChannel(ch.key)}
+                disabled={ch.key === 'sms' && !phone}
               />
             </div>
           ))}
@@ -414,11 +526,11 @@ export default function NotificationSettingsPage() {
                         id={`${event.type}-${ch.key}`}
                         checked={getEventChannelValue(event.type, ch.key)}
                         onCheckedChange={() => toggleEventChannel(event.type, ch.key)}
-                        disabled={!prefs[ch.key]}
+                        disabled={!prefs[ch.key] || (ch.key === 'sms' && !phone)}
                       />
                       <Label
                         htmlFor={`${event.type}-${ch.key}`}
-                        className={`text-xs cursor-pointer ${!prefs[ch.key] ? 'text-muted-foreground/50' : ''}`}
+                        className={`text-xs cursor-pointer ${(!prefs[ch.key] || (ch.key === 'sms' && !phone)) ? 'text-muted-foreground/50' : ''}`}
                       >
                         <ch.icon className="h-3 w-3 inline mr-1" />
                         {ch.label}
