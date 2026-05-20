@@ -245,6 +245,10 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
 
   // ── Load item ────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!userLoading && !user) {
+      setLoading(false);
+      return;
+    }
     const load = async () => {
       if (!user) return;
       try {
@@ -270,9 +274,8 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
             )
           );
         }
-
-        // Populate form from linked transaction (preferred) or queue item
-        const src = data.transaction || data.item;
+        // Populate form: transaction > tcIntake > queue item (in priority order)
+        const src = data.transaction || data.tcIntake || data.item;
         form.reset({
           closingType: src.closingType || undefined,
           dealType: src.dealType || undefined,

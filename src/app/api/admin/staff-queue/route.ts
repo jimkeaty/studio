@@ -57,28 +57,52 @@ export async function GET(req: NextRequest) {
       ...serializeFirestore(d.data()),
     }));
 
-    // Enrich items missing transactionAddress by fetching linked transaction
-    const needsEnrich = items.filter((i: any) => !i.transactionAddress && !i.address && i.transactionId);
+    // Normalize: ensure every item has a resolved display address.
+    // Items may store address in 'address' or 'transactionAddress' fields.
+    // Items with tcIntakeId (new_listing) may need enrichment from the intake doc.
+    // Items with transactionId (status_change) may need enrichment from the transaction doc.
+    const needsEnrich = items.filter((i: any) => {
+      const addr = (i.transactionAddress || '').trim() || (i.address || '').trim();
+      return !addr;
+    });
     if (needsEnrich.length > 0) {
       await Promise.all(needsEnrich.map(async (item: any) => {
         try {
-          const txDoc = await adminDb.collection('transactions').doc(item.transactionId).get();
-          if (txDoc.exists) {
-            const tx = txDoc.data()!;
-            const resolvedAddress = tx.propertyAddress || tx.address || '';
-            if (resolvedAddress) {
-              item.transactionAddress = resolvedAddress;
-              // Backfill the queue document so future fetches don't need enrichment
-              await adminDb.collection('staffQueue').doc(item.id).update({
-                transactionAddress: resolvedAddress,
-                address: resolvedAddress,
-              }).catch(() => {/* non-fatal */});
+          let resolvedAddress = '';
+          // Try transaction first
+          if (item.transactionId) {
+            const txDoc = await adminDb.collection('transactions').doc(item.transactionId).get();
+            if (txDoc.exists) {
+              const tx = txDoc.data()!;
+              resolvedAddress = (tx.propertyAddress || tx.address || '').trim();
             }
+          }
+          // Fall back to TC intake
+          if (!resolvedAddress && item.tcIntakeId) {
+            const intakeDoc = await adminDb.collection('tcIntakes').doc(item.tcIntakeId).get();
+            if (intakeDoc.exists) {
+              const intake = intakeDoc.data()!;
+              resolvedAddress = (intake.address || intake.propertyAddress || '').trim();
+            }
+          }
+          if (resolvedAddress) {
+            item.transactionAddress = resolvedAddress;
+            item.address = resolvedAddress;
+            // Backfill so future fetches are instant
+            await adminDb.collection('staffQueue').doc(item.id).update({
+              transactionAddress: resolvedAddress,
+              address: resolvedAddress,
+            }).catch(() => {/* non-fatal */});
           }
         } catch {
           // Non-fatal: skip enrichment for this item
         }
       }));
+    }
+    // Normalize: copy address → transactionAddress (or vice versa) so the list page always has a value
+    for (const item of items as any[]) {
+      if (!item.transactionAddress && item.address) item.transactionAddress = item.address;
+      else if (!item.address && item.transactionAddress) item.address = item.transactionAddress;
     }
 
     // Sort: pending_review first, then in_progress, then completed/dismissed

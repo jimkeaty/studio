@@ -96,16 +96,27 @@ export async function GET(
       }
     }
 
-    // Fetch linked TC intake documents if available
+    // Fetch linked TC intake (for new_listing items that don't have a transaction yet)
+    let tcIntake: any = null;
     let intakeDocuments: any[] = [];
     const tcIntakeId = item.tcIntakeId || null;
     if (tcIntakeId) {
       try {
         const intakeDoc = await adminDb.collection('tcIntakes').doc(tcIntakeId).get();
         if (intakeDoc.exists) {
-          const intakeData = serializeFirestore(intakeDoc.data());
-          if (Array.isArray(intakeData.documents)) {
-            intakeDocuments = intakeData.documents;
+          tcIntake = serializeFirestore(intakeDoc.data());
+          tcIntake.id = intakeDoc.id;
+          if (Array.isArray(tcIntake.documents)) {
+            intakeDocuments = tcIntake.documents;
+          }
+          // Backfill address on queue item if missing
+          if (!item.address && !item.transactionAddress) {
+            const resolvedAddress = (tcIntake.address || tcIntake.propertyAddress || '').trim();
+            if (resolvedAddress) {
+              await itemRef.update({ address: resolvedAddress, transactionAddress: resolvedAddress }).catch(() => {});
+              item.address = resolvedAddress;
+              item.transactionAddress = resolvedAddress;
+            }
           }
         }
       } catch {
@@ -156,6 +167,7 @@ export async function GET(
       ok: true,
       item: { id: doc.id, ...item },
       transaction,
+      tcIntake,
       documents: mergedDocuments,
       checklist,
       activityLog,

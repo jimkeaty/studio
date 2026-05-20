@@ -25,8 +25,10 @@ type ActionType = 'new_listing' | 'status_change' | 'update' | 'closed_buyer';
 
 type StaffQueueItem = {
   id: string;
-  transactionId: string;
+  transactionId: string | null;
+  tcIntakeId?: string | null;
   transactionAddress: string;
+  address?: string;
   agentId: string;
   agentName: string;
   actionType: ActionType;
@@ -131,9 +133,10 @@ export default function StaffQueuePage() {
 
   const filtered = items.filter((item) => {
     const q = search.toLowerCase();
+    const displayAddr = item.transactionAddress || item.address || '';
     const matchSearch =
       !q ||
-      item.transactionAddress?.toLowerCase().includes(q) ||
+      displayAddr.toLowerCase().includes(q) ||
       item.agentName?.toLowerCase().includes(q) ||
       item.submittedByName?.toLowerCase().includes(q);
     const matchAction = actionFilter === 'all' || item.actionType === actionFilter;
@@ -313,7 +316,7 @@ export default function StaffQueuePage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium text-sm truncate max-w-[240px]">{item.transactionAddress || (item as any).address || '—'}</div>
+                          <div className="font-medium text-sm truncate max-w-[240px]">{item.transactionAddress || item.address || '—'}</div>
                           {item.tcWorking && (
                             <span className="text-[10px] text-indigo-600 font-medium">Working with TC</span>
                           )}
