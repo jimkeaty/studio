@@ -41,12 +41,11 @@ import {
   Wrench,
   MapPin,
   GraduationCap,
+  HelpCircle,
 } from 'lucide-react';
-import { Card, CardDescription, CardTitle } from '../ui/card';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 
 // ─── Mobile Bottom Tab Bar ────────────────────────────────────────────────────
-// 4-tab layout: Home | Tracker | [Add Deal center] | Compete | Leaderboard
 const mobileTabItems = [
   { href: '/dashboard',                   label: 'Home',        icon: LayoutGrid },
   { href: '/dashboard/tracker',           label: 'Tracker',     icon: ClipboardPen },
@@ -70,9 +69,7 @@ export function MobileBottomTabBar() {
             href={item.href}
             className={[
               'flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
-              isAddDeal
-                ? 'relative -mt-3'
-                : '',
+              isAddDeal ? 'relative -mt-3' : '',
               isActive && !isAddDeal ? 'text-primary' : !isAddDeal ? 'text-muted-foreground hover:text-foreground' : '',
             ].join(' ')}
           >
@@ -100,7 +97,7 @@ type BrandingData = {
   primaryColor: string | null;
 };
 
-// Shown to all users (agent + admin)
+// Shown to all users (agent + admin) — core nav
 const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
@@ -108,7 +105,6 @@ const agentMenuItems = [
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
   { href: '/dashboard/training', label: 'Training & Help', icon: GraduationCap },
-  { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },
 ];
 
 // Shown to all users — community & entertainment
@@ -119,6 +115,11 @@ const communityMenuItems = [
 const tvModeMenuItems = [
   { href: '/leaderboard', label: 'Leaderboard TV', icon: BarChart3 },
   { href: '/new-activity', label: 'Activity Board TV', icon: Newspaper },
+];
+
+// Settings items shown to non-admin users only (admins get these inside their Settings group)
+const agentSettingsItems = [
+  { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },
 ];
 
 // ── Grouped admin menu sections ───────────────────────────────────────────────
@@ -161,6 +162,7 @@ const adminMenuGroups = [
     label: 'Settings',
     items: [
       { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
+      { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },
     ],
   },
   {
@@ -185,8 +187,6 @@ export function SidebarNav() {
   const { isImpersonating } = useImpersonation();
   const [branding, setBranding] = useState<BrandingData | null>(null);
 
-  const visibleAgentItems = agentMenuItems;
-
   // Fetch branding settings (public endpoint, no auth needed)
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +195,7 @@ export function SidebarNav() {
       .then((data) => {
         if (!cancelled && data.ok) setBranding(data.branding);
       })
-      .catch(() => {}); // Silently fail, fallback to defaults
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -233,8 +233,9 @@ export function SidebarNav() {
       </SidebarHeader>
 
       <SidebarContent className="p-2">
+        {/* Core agent nav — visible to all */}
         <SidebarMenu>
-          {visibleAgentItems.map((item) => (
+          {agentMenuItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <Link href={item.href}>
                 <SidebarMenuButton
@@ -283,6 +284,31 @@ export function SidebarNav() {
           ))}
         </SidebarMenu>
 
+        {/* Settings — shown to non-admin users only (admins get it in their Settings group) */}
+        {!showAdminMenu && (
+          <>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Settings</p>
+              {agentSettingsItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <Link href={item.href}>
+                    <SidebarMenuButton
+                      isActive={pathname === item.href || pathname.startsWith(`${item.href}/`)}
+                      tooltip={item.label}
+                      className="justify-start"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </>
+        )}
+
+        {/* Admin sections */}
         {!isImpersonating && showAdminMenu && (
           <>
             <SidebarSeparator className="my-2" />
@@ -315,16 +341,20 @@ export function SidebarNav() {
         )}
       </SidebarContent>
 
+      {/* Compact footer — just a support link, no tall card */}
       <SidebarFooter className="p-2 border-t border-slate-700/60">
-        <Card className="bg-slate-800 border-slate-700">
-          <CardTitle className="p-3 pb-0 text-base font-semibold text-white">Need help?</CardTitle>
-          <CardDescription className="p-3 pt-0 text-sm text-slate-400">
-            Contact support for assistance with your account.
-          </CardDescription>
-          <div className="p-3 pt-0">
-            <Button size="sm" className="w-full bg-slate-700 hover:bg-slate-600 text-white border-slate-600">Contact Support</Button>
-          </div>
-        </Card>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Contact Support"
+              className="justify-start text-slate-400 hover:text-white"
+              onClick={() => window.open('mailto:support@smartbrokerusa.com', '_blank')}
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>Contact Support</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
