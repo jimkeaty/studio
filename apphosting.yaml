@@ -82,3 +82,15 @@ env:
     secret: TWILIO_FROM_NUMBER
     availability:
       - RUNTIME
+
+  # ── Resend Email ──────────────────────────────────────────────────────────
+  # Server-side only (no NEXT_PUBLIC_ prefix) — never exposed to the browser
+  - variable: RESEND_API_KEY
+    value: "re_eGc2KRjT_Eby6qmpbZ66jQebzFZYzRh7C"
+    availability:
+      - RUNTIME
+
+  - variable: RESEND_FROM_DOMAIN
+    value: "smartbrokerusa.com"
+    availability:
+      - RUNTIME

@@ -91,6 +91,50 @@ function relativeTime(iso: string): string {
   }
 }
 
+// ─── Bell chime via Web Audio API ────────────────────────────────────────────
+/**
+ * Plays a two-tone bell chime using the Web Audio API.
+ * No audio file needed — the tones are synthesised in the browser.
+ * The function is a no-op if the browser doesn't support Web Audio.
+ */
+function playBellChime() {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+
+    const ctx = new AudioContext();
+
+    const playTone = (frequency: number, startTime: number, duration: number) => {
+      const oscillator = ctx.createOscillator();
+      const gainNode   = ctx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, startTime);
+
+      // Quick attack, slow decay — classic bell envelope
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(0.4, startTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+
+    const now = ctx.currentTime;
+    // First tone: E5 (659 Hz), second tone: C5 (523 Hz) — pleasant ding-dong
+    playTone(659, now,        0.8);
+    playTone(523, now + 0.25, 1.0);
+
+    // Close context after chime finishes to free resources
+    setTimeout(() => ctx.close(), 2000);
+  } catch {
+    // Web Audio not available or blocked — fail silently
+  }
+}
+
 // ─── Dark mode toggle ─────────────────────────────────────────────────────────
 function DarkModeToggle() {
   const [isDark, setIsDark] = useState(false);
@@ -134,13 +178,28 @@ export function Header() {
   const router = useRouter();
   const pageTitle = usePageTitle();
 
-  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifOpen, setNotifOpen]       = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading]           = useState(false);
+  const [fetched, setFetched]           = useState(false);
+  const [bellPulse, setBellPulse]       = useState(false); // triggers CSS pulse animation
+  const dropdownRef   = useRef<HTMLDivElement>(null);
+  const prevUnreadRef = useRef<number>(0);   // tracks previous unread count across polls
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // ── Bell pulse animation ───────────────────────────────────────────────────
+  // Fires for 2 s whenever new unread notifications arrive
+  useEffect(() => {
+    if (unreadCount > prevUnreadRef.current) {
+      // New notifications arrived — play chime + pulse bell
+      playBellChime();
+      setBellPulse(true);
+      const timer = setTimeout(() => setBellPulse(false), 2000);
+      return () => clearTimeout(timer);
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount]);
 
   // ── Fetch real notifications from API ──────────────────────────────────────
   const fetchNotifications = useCallback(async () => {
@@ -179,12 +238,13 @@ export function Header() {
     }
   }, [notifOpen, fetched, fetchNotifications]);
 
-  // Re-fetch every 60 seconds while dropdown is open
+  // Poll every 60 seconds regardless of dropdown state so the badge and
+  // bell chime fire even when the panel is closed
   useEffect(() => {
-    if (!notifOpen) return;
+    if (!user) return;
     const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
-  }, [notifOpen, fetchNotifications]);
+  }, [user, fetchNotifications]);
 
   // ── Click outside to close ─────────────────────────────────────────────────
   useEffect(() => {
@@ -287,14 +347,27 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-9 w-9 rounded-full"
+            className={cn(
+              'relative h-9 w-9 rounded-full transition-transform',
+              bellPulse && 'animate-bell-ring',
+            )}
             onClick={() => setNotifOpen(prev => !prev)}
             aria-label="Notifications"
             aria-expanded={notifOpen}
           >
-            <Bell className="h-5 w-5" />
+            <Bell
+              className={cn(
+                'h-5 w-5 transition-colors',
+                bellPulse && 'text-amber-500',
+              )}
+            />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
+              <span
+                className={cn(
+                  'absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none',
+                  bellPulse && 'animate-ping-once',
+                )}
+              >
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
