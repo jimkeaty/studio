@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
           agentId,
           agentDisplayName,
           commission,
+          transactionDate: closedDate || contractDate,
         })
         splitSnapshot = calculation.splitSnapshot
         creditSnapshot = calculation.creditSnapshot
@@ -147,6 +148,7 @@ export async function POST(req: NextRequest) {
             agentId,
             agentDisplayName,
             commission: primaryShare,
+            transactionDate: closedDate || contractDate,
           })
           splitSnapshot = primaryCalc.splitSnapshot
           creditSnapshot = primaryCalc.creditSnapshot
@@ -164,6 +166,7 @@ export async function POST(req: NextRequest) {
             agentId: coAgentId,
             agentDisplayName: coAgentDisplayName,
             commission: coShare,
+            transactionDate: closedDate || contractDate,
           })
           coSplitSnapshot = coCalc.splitSnapshot
           coCreditSnapshot = coCalc.creditSnapshot

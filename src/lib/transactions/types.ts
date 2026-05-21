@@ -48,6 +48,12 @@ export type ResolveTransactionInput = {
   agentId: string;
   agentDisplayName: string;
   commission: number;
+  /**
+   * Optional: the date of the transaction (closedDate or contractDate).
+   * When provided, the anniversary cycle is computed relative to this date
+   * rather than today, ensuring correct tier lookup for past-dated transactions.
+   */
+  transactionDate?: string | Date | null;
 };
 
 // ── Co-Agent Support ──────────────────────────────────────────────────────────

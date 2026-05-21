@@ -1,4 +1,5 @@
 import { adminDb } from '@/lib/firebase/admin';
+import { nameSimilarity } from '@/lib/agents/fuzzyMatch';
 import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
 import type {
   AgentProfile,
@@ -106,6 +107,37 @@ async function getAgentProfile(agentId: string): Promise<AgentProfile> {
     return byUidSnap.docs[0].data() as AgentProfile;
   }
 
+  // Fallback: fuzzy name match — handles cases where the stored agentId slug
+  // doesn't exactly match the profile doc ID (e.g. 'charles-ditch' vs 'charles-ditsch',
+  // or when a display name is passed instead of a slug).
+  // Convert the agentId slug back to a readable name for comparison.
+  const agentIdAsName = agentId.replace(/-/g, ' ');
+  try {
+    const allProfilesSnap = await adminDb.collection('agentProfiles').get();
+    let bestDocData: AgentProfile | null = null;
+    let bestDocId = '';
+    let bestScore = 0;
+    for (const profileDoc of allProfilesSnap.docs) {
+      const profileData = profileDoc.data() as AgentProfile;
+      const profileName = String(profileData.displayName || profileDoc.id).replace(/-/g, ' ');
+      const score = nameSimilarity(agentIdAsName, profileName);
+      if (score > bestScore) {
+        bestScore = score;
+        bestDocData = profileData;
+        bestDocId = profileDoc.id;
+      }
+    }
+    // Accept fuzzy match at >= 0.75 similarity
+    if (bestDocData && bestScore >= 0.75) {
+      console.warn(
+        `[getAgentProfile] Fuzzy matched '${agentId}' → '${bestDocId}' (score: ${bestScore.toFixed(2)})`
+      );
+      return bestDocData;
+    }
+  } catch (fuzzyErr: any) {
+    console.warn('[getAgentProfile] Fuzzy fallback failed:', fuzzyErr?.message);
+  }
+
   throw new Error(`Agent profile not found for ${agentId}`);
 }
 
@@ -162,13 +194,24 @@ async function getMemberPlan(memberPlanId: string): Promise<MemberPlan> {
  */
 async function getAgentYtdCompanyDollar(
   agentId: string,
-  profile: AgentProfile
+  profile: AgentProfile,
+  referenceDate?: string | Date | null
 ): Promise<number> {
   try {
     const anniversaryMonth = Number((profile as any).anniversaryMonth ?? 0);
     const anniversaryDay = Number((profile as any).anniversaryDay ?? 0);
-    const today = new Date();
-    const cycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+    // Use the transaction date (if provided) to find the correct anniversary cycle.
+    // This ensures past-dated transactions (e.g. a January closing entered in May)
+    // use the cycle that was active when the transaction actually occurred,
+    // not the cycle that is active today.
+    let refDate: Date;
+    if (referenceDate) {
+      const d = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+      refDate = isNaN(d.getTime()) ? new Date() : d;
+    } else {
+      refDate = new Date();
+    }
+    const cycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, refDate);
     const rollupYear = cycle.cycleStart.getUTCFullYear();
     const rollupSnap = await adminDb
       .collection('agentYearRollups')
@@ -229,7 +272,7 @@ export async function resolveTransactionCalculation(
     // Use cumulative YTD company dollar for tier bracket selection.
     // Two-pass approach: first find the tier using YTD alone, compute the company
     // dollar this transaction adds, then check if the total crosses into the next tier.
-    const ytdCompanyDollar = await getAgentYtdCompanyDollar(profile.agentId, profile);
+    const ytdCompanyDollar = await getAgentYtdCompanyDollar(profile.agentId, profile, input.transactionDate);
     const tier = getActiveIndividualTier(profile.tiers || [], ytdCompanyDollar) ||
                  getActiveIndividualTier(profile.tiers || [], 0);
     if (!tier) {
@@ -366,7 +409,7 @@ export async function resolveTransactionCalculation(
     let companySplitPercent: number;
 
     // Fetch YTD company dollar for tier progression in leaderless team paths
-    const leaderlessYtd = await getAgentYtdCompanyDollar(profile.agentId, profile);
+    const leaderlessYtd = await getAgentYtdCompanyDollar(profile.agentId, profile, input.transactionDate);
 
     // Priority 1: custom override bands on the agent profile
     if (
@@ -448,7 +491,7 @@ export async function resolveTransactionCalculation(
   // ─── Team with leader path ────────────────────────────────────────────────────
   // teamPlan is guaranteed non-null here (checked above for !isLeaderless).
   // Use cumulative YTD company dollar for leader band progression.
-  const leaderYtd = await getAgentYtdCompanyDollar(profile.agentId, profile);
+  const leaderYtd = await getAgentYtdCompanyDollar(profile.agentId, profile, input.transactionDate);
   const leaderBand = getActiveLeaderBand(teamPlan!.leaderStructureBands || [], leaderYtd) ||
                      getActiveLeaderBand(teamPlan!.leaderStructureBands || [], 0);
 

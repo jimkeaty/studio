@@ -489,7 +489,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const primaryShare = hasCoAgent && coAgentId ? commission * (primarySplitPct / 100) : commission;
         const coShare = hasCoAgent && coAgentId ? commission * (coSplitPct / 100) : 0;
 
-        const calc = await resolveTransactionCalculation({ agentId, agentDisplayName, commission: primaryShare });
+        const txDate = intake.closedDate || intake.contractDate || null;
+        const calc = await resolveTransactionCalculation({ agentId, agentDisplayName, commission: primaryShare, transactionDate: txDate });
         splitSnapshot = calc.splitSnapshot as any;
         creditSnapshot = calc.creditSnapshot as any;
         agentType = calc.agentType;
@@ -504,6 +505,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               agentId: coAgentId,
               agentDisplayName: coAgentDisplayName,
               commission: coShare,
+              transactionDate: txDate,
             });
             coSplitSnapshot = coCalc.splitSnapshot;
             coCreditSnapshot = coCalc.creditSnapshot;

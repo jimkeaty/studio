@@ -5,6 +5,9 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid } from '@/lib/notifications/getRecipientUids';
+import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
+import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
+import { resolveGCI } from '@/lib/commissions';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -47,6 +50,11 @@ const EDITABLE_TX_FIELDS = new Set([
   'titleCompany', 'titleOffice', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone', 'titleAttorney',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
   'notes', 'additionalComments', 'staffNotes',
+]);
+
+// Fields that trigger a commission recalculation when changed
+const COMMISSION_TRIGGER_FIELDS = new Set([
+  'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice',
 ]);
 
 // Default checklist items seeded for new staff queue items (mirrors TC queue checklist)
@@ -218,13 +226,77 @@ export async function PATCH(
     // ── Apply transaction field updates ─────────────────────────────────────
     if (txUpdates && item.transactionId) {
       const txRef = adminDb.collection('transactions').doc(item.transactionId);
+
+      // Fetch current transaction state for merging
+      const currentTxDoc = await txRef.get();
+      const currentTx = currentTxDoc.exists ? (currentTxDoc.data() as any) : {};
+
       const allowed: Record<string, any> = {};
       for (const [k, v] of Object.entries(txUpdates)) {
         if (EDITABLE_TX_FIELDS.has(k)) allowed[k] = v;
       }
+
       if (Object.keys(allowed).length > 0) {
         allowed.updatedAt = now;
+
+        // ── Auto-recalculate commission when financial fields change ──────────
+        // If any commission-triggering field changed, recompute the splitSnapshot
+        // so agent net, company dollar, and tier are always up to date.
+        const hasCommissionChange = Object.keys(txUpdates).some(k => COMMISSION_TRIGGER_FIELDS.has(k));
+        if (hasCommissionChange) {
+          try {
+            // Merge new values over current transaction to get the effective GCI
+            const merged = { ...currentTx, ...allowed };
+            const newGCI = resolveGCI({
+              gci: merged.gci,
+              salePrice: merged.salePrice,
+              commissionPercent: merged.commissionPercent,
+              commissionBasePrice: merged.commissionBasePrice,
+            });
+
+            if (newGCI > 0) {
+              const agentId = String(currentTx.agentId || item.agentId || '').trim();
+              const agentDisplayName = String(currentTx.agentDisplayName || item.agentDisplayName || '').trim();
+
+              if (agentId) {
+                const txDate = allowed.closedDate || allowed.contractDate ||
+                  currentTx.closedDate || currentTx.contractDate || null;
+                const calculation = await resolveTransactionCalculation({
+                  agentId,
+                  agentDisplayName,
+                  commission: newGCI,
+                  transactionDate: txDate,
+                });
+                allowed.commission = newGCI;
+                allowed.splitSnapshot = calculation.splitSnapshot;
+                allowed.creditSnapshot = calculation.creditSnapshot;
+                allowed.agentType = calculation.agentType;
+                allowed.calculationModel = calculation.calculationModel;
+              }
+            }
+          } catch (calcErr: any) {
+            // Non-fatal: log but don't block the save
+            console.warn('[staff-queue PATCH] Commission recalculation failed (non-fatal):', calcErr?.message);
+          }
+        }
+
         await txRef.update(allowed);
+
+        // Rebuild agent rollup so leaderboard and tier progression stay in sync
+        try {
+          const agentId = String(currentTx.agentId || item.agentId || '').trim();
+          const txYear = Number(
+            allowed.year ||
+            (allowed.closedDate ? new Date(allowed.closedDate).getFullYear() : null) ||
+            currentTx.year ||
+            new Date().getFullYear()
+          );
+          if (agentId && txYear) {
+            await rebuildAgentRollup(adminDb, agentId, txYear);
+          }
+        } catch (rollupErr: any) {
+          console.warn('[staff-queue PATCH] Rollup rebuild failed (non-fatal):', rollupErr?.message);
+        }
       }
     }
 
