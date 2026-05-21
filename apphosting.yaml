@@ -86,7 +86,7 @@ env:
   # ── Resend Email ──────────────────────────────────────────────────────────
   # Server-side only (no NEXT_PUBLIC_ prefix) — never exposed to the browser
   - variable: RESEND_API_KEY
-    value: "re_eGc2KRjT_Eby6qmpbZ66jQebzFZYzRh7C"
+    secret: RESEND_API_KEY
     availability:
       - RUNTIME
 
