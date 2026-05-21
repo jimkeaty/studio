@@ -67,26 +67,25 @@ env:
       - BUILD
       - RUNTIME
 
-  # ── Twilio SMS (secrets stored in Google Cloud Secret Manager) ────────────
+  # ── Twilio SMS ────────────────────────────────────────────────────────────
   - variable: TWILIO_ACCOUNT_SID
-    secret: TWILIO_ACCOUNT_SID
+    value: "AC0921c42c35fee25c393448b4549c700"
     availability:
       - RUNTIME
 
   - variable: TWILIO_AUTH_TOKEN
-    secret: TWILIO_AUTH_TOKEN
+    value: "a4de41c25959c8a76d81ad7c84a3cbf5"
     availability:
       - RUNTIME
 
   - variable: TWILIO_FROM_NUMBER
-    secret: TWILIO_FROM_NUMBER
+    value: "+13372703108"
     availability:
       - RUNTIME
 
   # ── Resend Email ──────────────────────────────────────────────────────────
-  # Server-side only (no NEXT_PUBLIC_ prefix) — never exposed to the browser
   - variable: RESEND_API_KEY
-    secret: RESEND_API_KEY
+    value: "re_eGc2KRjT_Eby6qmpbZ66jQebzFZYzRh7C"
     availability:
       - RUNTIME
 
