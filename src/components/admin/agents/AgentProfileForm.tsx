@@ -42,6 +42,7 @@ export type AgentProfileFormValues = {
   lastName: string;
   displayName: string;
   email: string;
+  phone: string;
   office: string;
   status: 'active' | 'grace_period' | 'inactive' | 'out';
   startDate: string;
@@ -159,6 +160,7 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   lastName: '',
   displayName: '',
   email: '',
+  phone: '',
   office: '',
   status: 'active',
   startDate: '',
@@ -984,6 +986,7 @@ export default function AgentProfileForm({
         lastName: values.lastName,
         displayName: values.displayName,
         email: values.email || null,
+        phone: values.phone || null,
         office: values.office || null,
         status: values.status,
         startDate: values.startDate,
@@ -1210,7 +1213,16 @@ export default function AgentProfileForm({
               type="email"
             />
           </div>
-
+          <div>
+            <label className="mb-1 block text-sm font-medium">Cell Phone</label>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={values.phone}
+              onChange={(e) => updateField('phone', e.target.value)}
+              placeholder="(555) 867-5309"
+              type="tel"
+            />
+          </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Office</label>
             <input

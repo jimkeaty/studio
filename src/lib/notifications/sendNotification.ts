@@ -134,8 +134,24 @@ async function dispatchToUser(
   }
 
   // ── SMS (Twilio) ──────────────────────────────────────────────────────────
-  if (channels.sms && userData.phone) {
-    tasks.push(sendSms(userData.phone, title, body, url));
+  // Phone can be set on the users doc (self-service via Notification Settings)
+  // or on the agentProfiles doc (set by admin). Fall back to agentProfiles.
+  let smsPhone: string | null = userData.phone || null;
+  if (!smsPhone && userData.email) {
+    try {
+      const agentSnap = await db.collection('agentProfiles')
+        .where('email', '==', userData.email)
+        .limit(1)
+        .get();
+      if (!agentSnap.empty) {
+        smsPhone = agentSnap.docs[0].data().phone || null;
+      }
+    } catch {
+      // agentProfiles lookup failed — skip silently
+    }
+  }
+  if (channels.sms && smsPhone) {
+    tasks.push(sendSms(smsPhone, title, body, url));
   }
 
   await Promise.allSettled(tasks);

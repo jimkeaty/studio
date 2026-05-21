@@ -59,6 +59,7 @@ export default function AgentProfileEditor({
           lastName: agent.lastName || '',
           displayName: agent.displayName || '',
           email: agent.email || '',
+          phone: agent.phone || '',
           office: agent.office || '',
           status: agent.status || 'active',
           startDate: agent.startDate || '',

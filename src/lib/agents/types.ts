@@ -50,6 +50,7 @@ export type AgentProfile = {
   lastName: string;
   displayName: string;
   email: string | null;
+  phone: string | null;
   office: string | null;
   status: AgentProfileStatus;
   startDate: string;
@@ -91,6 +92,7 @@ export type AgentProfileInput = {
   lastName: string;
   displayName: string;
   email?: string | null;
+  phone?: string | null;
   office?: string | null;
   status: AgentProfileStatus;
   startDate: string;
