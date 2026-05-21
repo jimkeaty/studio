@@ -7,6 +7,7 @@ import { isAdminLike, isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { resolveGCI } from '@/lib/commissions';
 import { sendNotification } from '@/lib/notifications/sendNotification';
+import { getAgentUid } from '@/lib/notifications/getRecipientUids';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -190,7 +191,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Notify agent when TC updates checklist or changes status
       void (async () => {
         try {
-          const agentUid = String(intake?.agentId || '').trim();
+          const agentIdSlug = String(intake?.agentId || '').trim();
+          const agentUid = agentIdSlug ? await getAgentUid(adminDb, agentIdSlug) : null;
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             if (body.status && body.status !== intake.status) {
@@ -237,7 +239,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       void (async () => {
         try {
           const intakeData = (await docRef.get()).data() as Record<string, any>;
-          const agentUid = String(intakeData?.agentId || '').trim();
+          const agentIdSlug2 = String(intakeData?.agentId || '').trim();
+          const agentUid = agentIdSlug2 ? await getAgentUid(adminDb, agentIdSlug2) : null;
           const intakeAddress = String(intakeData?.address || intakeData?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
@@ -263,7 +266,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       });
       void (async () => {
         try {
-          const agentUid = String(intake?.agentId || '').trim();
+          const agentIdSlug4 = String(intake?.agentId || '').trim();
+          const agentUid = agentIdSlug4 ? await getAgentUid(adminDb, agentIdSlug4) : null;
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
@@ -335,7 +339,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Notify agent that TC has edited their transaction
       void (async () => {
         try {
-          const agentUid = String(intake?.agentId || '').trim();
+          const agentIdSlug3 = String(intake?.agentId || '').trim();
+          const agentUid = agentIdSlug3 ? await getAgentUid(adminDb, agentIdSlug3) : null;
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
@@ -741,10 +746,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Notify the agent their intake was approved
       void (async () => {
         try {
-          if (agentId) {
+          const resolvedAgentUid = agentId ? await getAgentUid(adminDb, agentId) : null;
+          if (resolvedAgentUid) {
             await sendNotification(adminDb, {
               type: 'tc_approved',
-              recipientUids: [agentId],
+              recipientUids: [resolvedAgentUid],
               title: 'TC Intake Approved ✅',
               body: `Your transaction for ${String(intake.address || intake.propertyAddress || 'your property')} has been approved and added to the ledger.`,
               url: '/dashboard/transactions',

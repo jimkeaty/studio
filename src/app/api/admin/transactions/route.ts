@@ -8,7 +8,7 @@ import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-import { getTcUids } from '@/lib/notifications/getRecipientUids';
+import { getTcUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -282,11 +282,12 @@ export async function PATCH(req: NextRequest) {
     // ── Notifications: status changes and edits ──────────────────────────
     try {
       const txData = updatedSnap.data() as any;
-      const agentUid = String(txData?.agentId || '').trim();
+      const agentIdSlug = String(txData?.agentId || '').trim();
       const address = String(txData?.address || txData?.propertyAddress || 'your transaction').trim();
       const newStatus = updates.status;
       const statusChanged = newStatus && existingData?.status !== newStatus;
-
+      // Resolve the agent's Firebase UID from the agentId slug
+      const agentUid = agentIdSlug ? (await getAgentUid(adminDb, agentIdSlug)) : null;
       // Status change → notify agent
       if (agentUid && statusChanged) {
         const statusLabels: Record<string, string> = {
@@ -306,7 +307,7 @@ export async function PATCH(req: NextRequest) {
       }
 
       // Any edit (not just status) → notify TC so they stay in sync
-      if (agentUid) {
+      if (agentIdSlug) {
         const tcUids = await getTcUids(adminDb);
         if (tcUids.length > 0) {
           const changeDesc = statusChanged

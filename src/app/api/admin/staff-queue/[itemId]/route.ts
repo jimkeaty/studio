@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
+import { getAgentUid } from '@/lib/notifications/getRecipientUids';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -308,8 +309,9 @@ export async function PATCH(
       });
     }
 
-       // ── Notify agent of staff actions ───────────────────────────────────────
-    const agentUid = String(item.agentId || '').trim();
+    // ── Notify agent of staff actions ───────────────────────────────────────
+    const agentIdSlug = String(item.agentId || '').trim();
+    const agentUid = agentIdSlug ? await getAgentUid(adminDb, agentIdSlug) : null;
     if (agentUid) {
       const txAddress = String(item.address || item.transactionAddress || 'your transaction');
       let notifTitle: string | null = null;
