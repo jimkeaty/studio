@@ -7,6 +7,8 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
+import { sendNotification } from '@/lib/notifications/sendNotification';
+import { getTcUids } from '@/lib/notifications/getRecipientUids';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -277,56 +279,46 @@ export async function PATCH(req: NextRequest) {
       console.warn('[api/admin/transactions PATCH] Rollup rebuild failed (non-fatal):', rollupErr?.message);
     }
 
-    // ── Fire push notification on status changes ─────────────────────────
+    // ── Notifications: status changes and edits ──────────────────────────
     try {
-      const newStatus = updates.status;
       const txData = updatedSnap.data() as any;
       const agentUid = String(txData?.agentId || '').trim();
-      const address = String(txData?.address || 'your transaction').trim();
-      if (agentUid && newStatus && existingData?.status !== newStatus) {
-        let notifPayload: { type: string; title: string; body: string; url?: string } | null = null;
-        if (newStatus === 'approved') {
-          notifPayload = {
-            type: 'deal_approved',
-            title: 'Deal Approved ✅',
-            body: `${address} has been reviewed and approved.`,
-            url: '/dashboard',
-          };
-        } else if (newStatus === 'closed') {
-          notifPayload = {
-            type: 'deal_approved',
-            title: 'Deal Closed 🎉',
-            body: `Congratulations! ${address} has been marked as closed.`,
-            url: '/dashboard',
-          };
-        }
-        if (notifPayload) {
-          // Write directly to Firestore notifications collection
-          // The bell icon in the header fetches from this collection
-          await adminDb.collection('notifications').add({
-            recipientUid: agentUid,
-            type: notifPayload.type,
-            title: notifPayload.title,
-            body: notifPayload.body,
-            url: notifPayload.url || '/dashboard',
-            read: false,
-            createdAt: new Date(),
+      const address = String(txData?.address || txData?.propertyAddress || 'your transaction').trim();
+      const newStatus = updates.status;
+      const statusChanged = newStatus && existingData?.status !== newStatus;
+
+      // Status change → notify agent
+      if (agentUid && statusChanged) {
+        const statusLabels: Record<string, string> = {
+          active: 'Active', pending: 'Pending', closed: 'Closed',
+          coming_soon: 'Coming Soon', temp_off_market: 'Temp Off Market',
+          canceled: 'Canceled', expired: 'Expired',
+        };
+        const fromLabel = statusLabels[existingData?.status] ?? existingData?.status ?? 'Unknown';
+        const toLabel = statusLabels[newStatus] ?? newStatus;
+        await sendNotification(adminDb, {
+          type: 'tx_status_change',
+          recipientUids: [agentUid],
+          title: `Transaction Status Updated: ${toLabel}`,
+          body: `${address} has been updated from ${fromLabel} to ${toLabel}.`,
+          url: '/dashboard/transactions',
+        });
+      }
+
+      // Any edit (not just status) → notify TC so they stay in sync
+      if (agentUid) {
+        const tcUids = await getTcUids(adminDb);
+        if (tcUids.length > 0) {
+          const changeDesc = statusChanged
+            ? `Status changed to ${updates.status}`
+            : 'Transaction details were updated';
+          await sendNotification(adminDb, {
+            type: 'tx_status_change',
+            recipientUids: tcUids,
+            title: 'Transaction Updated',
+            body: `${address}: ${changeDesc}.`,
+            url: '/dashboard/admin/transactions',
           });
-          // Also attempt FCM push if agent has a registered token
-          const tokenSnap = await adminDb.collection('fcmTokens').doc(agentUid).get();
-          const fcmToken = tokenSnap.exists ? tokenSnap.data()?.token : null;
-          if (fcmToken) {
-            try {
-              const { getMessaging } = await import('firebase-admin/messaging');
-              await getMessaging().send({
-                token: fcmToken,
-                notification: { title: notifPayload.title, body: notifPayload.body },
-                webpush: { fcmOptions: { link: notifPayload.url || '/dashboard' } },
-              });
-            } catch (fcmErr: any) {
-              console.warn('[FCM push] non-fatal:', fcmErr?.message);
-            }
-          }
         }
       }
     } catch (notifErr: any) {

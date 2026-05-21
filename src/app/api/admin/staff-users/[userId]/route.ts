@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const now = new Date();
     const updates: Record<string, any> = { updatedAt: now };
-    const allowed = ['displayName', 'phone', 'role', 'status'];
+    const allowed = ['displayName', 'phone', 'role', 'status', 'notificationPrefs'];
     for (const field of allowed) {
       if (!(field in body)) continue;
       if (field === 'role') {
@@ -48,6 +48,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       updates[field] = typeof body[field] === 'string' ? body[field].trim() : body[field];
     }
     await docRef.update(updates);
+    // Sync phone + notificationPrefs to the users collection (used by sendNotification)
+    const staffData = doc.data()!;
+    const firebaseUid = staffData.firebaseUid;
+    if (firebaseUid && ('phone' in body || 'notificationPrefs' in body)) {
+      const userUpdates: Record<string, any> = {};
+      if ('phone' in body) userUpdates.phone = typeof body.phone === 'string' ? body.phone.trim() : body.phone;
+      if ('notificationPrefs' in body) userUpdates.notificationPrefs = body.notificationPrefs;
+      await adminDb.collection('users').doc(firebaseUid).set(userUpdates, { merge: true });
+    }
     const updated = await docRef.get();
     const data = updated.data()!;
     return NextResponse.json({

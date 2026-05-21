@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
@@ -22,11 +23,17 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Pencil, UserX, UserCheck, Mail, Shield, Building2, ClipboardList, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { Plus, Pencil, UserX, UserCheck, Mail, Shield, Building2, ClipboardList, AlertTriangle, CheckCircle2, Bell, MessageSquare, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-
 type StaffRole = 'office_admin' | 'tc_admin' | 'tc';
+
+type NotifPrefs = {
+  inApp: boolean;
+  email: boolean;
+  sms: boolean;
+};
 
 type StaffUser = {
   id: string;
@@ -39,6 +46,7 @@ type StaffUser = {
   authCreated: boolean;
   createdAt: string;
   updatedAt: string;
+  notificationPrefs?: NotifPrefs;
 };
 
 const ROLE_LABELS: Record<StaffRole, string> = {
@@ -65,11 +73,14 @@ const ROLE_COLORS: Record<StaffRole, string> = {
   tc: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
 };
 
+const defaultNotifPrefs = (): NotifPrefs => ({ inApp: true, email: false, sms: false });
+
 const emptyForm = {
   displayName: '',
   email: '',
   phone: '',
   role: 'office_admin' as StaffRole,
+  notificationPrefs: defaultNotifPrefs(),
 };
 
 export default function StaffUsersPage() {
@@ -188,6 +199,7 @@ export default function StaffUsersPage() {
       email: staffUser.email,
       phone: staffUser.phone || '',
       role: staffUser.role,
+      notificationPrefs: staffUser.notificationPrefs ?? defaultNotifPrefs(),
     });
     setDialogOpen(true);
   };
@@ -196,6 +208,10 @@ export default function StaffUsersPage() {
     setEditingId(null);
     setForm(emptyForm);
     setDialogOpen(true);
+  };
+
+  const setNotifPref = (key: keyof NotifPrefs, val: boolean) => {
+    setForm((f) => ({ ...f, notificationPrefs: { ...f.notificationPrefs, [key]: val } }));
   };
 
   if (!isAdmin) {
@@ -225,12 +241,12 @@ export default function StaffUsersPage() {
               Add Staff User
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? 'Edit Staff User' : 'Add Staff User'}</DialogTitle>
               <DialogDescription>
                 {editingId
-                  ? 'Update this staff user\'s details and role.'
+                  ? 'Update this staff user\'s details, role, and notification preferences.'
                   : 'A password setup email will be sent automatically when you save.'}
               </DialogDescription>
             </DialogHeader>
@@ -241,6 +257,8 @@ export default function StaffUsersPage() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
+
+              {/* Basic Info */}
               <div className="space-y-1.5">
                 <Label htmlFor="displayName">Full Name *</Label>
                 <Input
@@ -265,13 +283,14 @@ export default function StaffUsersPage() {
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="phone">Phone (optional)</Label>
+                <Label htmlFor="phone">Cell Phone (for SMS notifications)</Label>
                 <Input
                   id="phone"
                   value={form.phone}
                   onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
                   placeholder="(555) 000-0000"
                 />
+                <p className="text-xs text-muted-foreground">Required to receive SMS notifications.</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="role">Role *</Label>
@@ -290,6 +309,67 @@ export default function StaffUsersPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <Separator />
+
+              {/* Notification Preferences */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-semibold">Notification Preferences</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose how this user receives notifications for new intakes, status changes, and queue updates.
+                </p>
+
+                {/* In-App */}
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-3">
+                    <Bell className="h-4 w-4 text-blue-500" />
+                    <div>
+                      <p className="text-sm font-medium">In-App</p>
+                      <p className="text-xs text-muted-foreground">Bell icon in the dashboard header</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={form.notificationPrefs.inApp}
+                    onCheckedChange={(v) => setNotifPref('inApp', v)}
+                  />
+                </div>
+
+                {/* Email */}
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-3">
+                    <MessageSquare className="h-4 w-4 text-green-500" />
+                    <div>
+                      <p className="text-sm font-medium">Email</p>
+                      <p className="text-xs text-muted-foreground">Sent to {form.email || 'their email address'}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={form.notificationPrefs.email}
+                    onCheckedChange={(v) => setNotifPref('email', v)}
+                  />
+                </div>
+
+                {/* SMS */}
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-3">
+                    <Smartphone className="h-4 w-4 text-purple-500" />
+                    <div>
+                      <p className="text-sm font-medium">SMS Text Message</p>
+                      <p className="text-xs text-muted-foreground">
+                        {form.phone ? `Sent to ${form.phone}` : 'Enter a cell phone number above to enable'}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={form.notificationPrefs.sms}
+                    onCheckedChange={(v) => setNotifPref('sms', v)}
+                    disabled={!form.phone.trim()}
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -358,17 +438,21 @@ export default function StaffUsersPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Notifications</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Login</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.map((u) => {
                   const Icon = ROLE_ICONS[u.role];
+                  const prefs = u.notificationPrefs ?? defaultNotifPrefs();
                   return (
                     <TableRow key={u.id} className={u.status === 'inactive' ? 'opacity-50' : ''}>
-                      <TableCell className="font-medium">{u.displayName}</TableCell>
+                      <TableCell className="font-medium">
+                        <div>{u.displayName}</div>
+                        {u.phone && <div className="text-xs text-muted-foreground">{u.phone}</div>}
+                      </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         <div className="flex items-center gap-1.5">
                           <Mail className="h-3 w-3" />
@@ -382,14 +466,31 @@ export default function StaffUsersPage() {
                         </span>
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {prefs.inApp && (
+                            <span title="In-App" className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-1.5 py-0.5 text-xs font-medium gap-1">
+                              <Bell className="h-2.5 w-2.5" /> App
+                            </span>
+                          )}
+                          {prefs.email && (
+                            <span title="Email" className="inline-flex items-center rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 px-1.5 py-0.5 text-xs font-medium gap-1">
+                              <MessageSquare className="h-2.5 w-2.5" /> Email
+                            </span>
+                          )}
+                          {prefs.sms && (
+                            <span title="SMS" className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 px-1.5 py-0.5 text-xs font-medium gap-1">
+                              <Smartphone className="h-2.5 w-2.5" /> SMS
+                            </span>
+                          )}
+                          {!prefs.inApp && !prefs.email && !prefs.sms && (
+                            <span className="text-xs text-muted-foreground">None</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant={u.status === 'active' ? 'default' : 'secondary'}>
                           {u.status}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className={cn('text-xs', u.firebaseUid ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground')}>
-                          {u.firebaseUid ? '✓ Account created' : '— Pending'}
-                        </span>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">

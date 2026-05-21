@@ -187,6 +187,39 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         await batch.commit();
       }
 
+      // Notify agent when TC updates checklist or changes status
+      void (async () => {
+        try {
+          const agentUid = String(intake?.agentId || '').trim();
+          const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
+          if (agentUid) {
+            if (body.status && body.status !== intake.status) {
+              // Status change notification
+              const statusLabels: Record<string, string> = {
+                submitted: 'Submitted', in_review: 'In Review',
+                approved: 'Approved', rejected: 'Rejected',
+              };
+              await sendNotification(adminDb, {
+                type: 'tc_approved',
+                recipientUids: [agentUid],
+                title: `TC Queue Status Updated: ${statusLabels[body.status] ?? body.status}`,
+                body: `Your transaction for ${intakeAddress} is now ${statusLabels[body.status] ?? body.status}.`,
+                url: '/dashboard/transactions',
+              });
+            } else if (body.checklist && Array.isArray(body.checklist) && body.checklist.some((c: any) => c.completed)) {
+              // Checklist task completed notification
+              await sendNotification(adminDb, {
+                type: 'tc_approved',
+                recipientUids: [agentUid],
+                title: 'TC Checklist Updated',
+                body: `Your TC coordinator updated a checklist task for ${intakeAddress}.`,
+                url: '/dashboard/transactions',
+              });
+            }
+          }
+        } catch (e) { console.error('[TC workflow] notification error:', e); }
+      })();
+
       return NextResponse.json({ ok: true, status: updates.status || 'updated' });
     }
 
@@ -220,7 +253,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ ok: true, status: 'rejected' });
     }
 
-    // ── IN_REVIEW ────────────────────────────────────────────────────────────
+    // ── IN_REVIEW → notify agent ────────────────────────────────────────────
     if (action === 'in_review') {
       await docRef.update({
         status: 'in_review',
@@ -228,10 +261,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         reviewedBy: decoded.email,
         updatedAt: now,
       });
+      void (async () => {
+        try {
+          const agentUid = String(intake?.agentId || '').trim();
+          const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
+          if (agentUid) {
+            await sendNotification(adminDb, {
+              type: 'tc_approved',
+              recipientUids: [agentUid],
+              title: 'TC Is Reviewing Your Transaction',
+              body: `Your TC coordinator has started reviewing ${intakeAddress}.`,
+              url: '/dashboard/transactions',
+            });
+          }
+        } catch (e) { console.error('[TC in_review] notification error:', e); }
+      })();
       return NextResponse.json({ ok: true, status: 'in_review' });
     }
 
-    // ── UPDATE (save edits without changing status) ──────────────────────────
+    // ── UPDATE (save edits without changing status) ──────────────────────
     if (action === 'update') {
       const updates: Record<string, any> = { updatedAt: now };
       const editableFields = [
@@ -284,6 +332,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
       }
       await docRef.update(updates);
+      // Notify agent that TC has edited their transaction
+      void (async () => {
+        try {
+          const agentUid = String(intake?.agentId || '').trim();
+          const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
+          if (agentUid) {
+            await sendNotification(adminDb, {
+              type: 'tc_approved',
+              recipientUids: [agentUid],
+              title: 'TC Updated Your Transaction',
+              body: `Your TC coordinator made updates to ${intakeAddress}.`,
+              url: '/dashboard/transactions',
+            });
+          }
+        } catch (e) { console.error('[TC update] notification error:', e); }
+      })();
       return NextResponse.json({ ok: true, status: 'updated' });
     }
 

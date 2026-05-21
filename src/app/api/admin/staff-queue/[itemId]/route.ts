@@ -308,20 +308,42 @@ export async function PATCH(
       });
     }
 
-    // ── Notify agent when resolved ───────────────────────────────────────────
+       // ── Notify agent of staff actions ───────────────────────────────────────
     const agentUid = String(item.agentId || '').trim();
-    if (agentUid && (action === 'complete' || action === 'dismiss')) {
+    if (agentUid) {
       const txAddress = String(item.address || item.transactionAddress || 'your transaction');
-      const isComplete = action === 'complete';
-      void sendNotification(adminDb, {
-        type: 'staff_queue_resolved',
-        recipientUids: [agentUid],
-        title: isComplete ? 'Staff Review Complete ✅' : 'Staff Queue Item Dismissed',
-        body: isComplete
-          ? `Staff has completed the review for ${txAddress}. Check your transaction for any updates.`
-          : `The staff queue item for ${txAddress} was dismissed by ${reviewerName}.`,
-        url: '/dashboard/transactions',
-      }).catch(e => console.error('[staff-queue PATCH] notification error:', e));
+      let notifTitle: string | null = null;
+      let notifBody: string | null = null;
+
+      if (action === 'complete') {
+        notifTitle = 'Staff Review Complete ✅';
+        notifBody = `Staff has completed the review for ${txAddress}. Check your transaction for any updates.`;
+      } else if (action === 'dismiss') {
+        notifTitle = 'Staff Queue Item Dismissed';
+        notifBody = `The staff queue item for ${txAddress} was dismissed by ${reviewerName}.`;
+      } else if (action === 'start_review') {
+        notifTitle = 'Staff Started Reviewing Your Listing';
+        notifBody = `${reviewerName} has started reviewing ${txAddress}.`;
+      } else if (action === 'save' || txUpdates) {
+        notifTitle = 'Staff Updated Your Transaction';
+        notifBody = `${reviewerName} made updates to ${txAddress}.`;
+      } else if (checklist && Array.isArray(checklist) && checklist.some((c: any) => c.completed)) {
+        notifTitle = 'Staff Checklist Updated';
+        notifBody = `${reviewerName} completed a checklist task for ${txAddress}.`;
+      } else if (activityEntry) {
+        notifTitle = 'Staff Activity Updated';
+        notifBody = `${reviewerName} logged an activity update for ${txAddress}.`;
+      }
+
+      if (notifTitle && notifBody) {
+        void sendNotification(adminDb, {
+          type: 'staff_queue_resolved',
+          recipientUids: [agentUid],
+          title: notifTitle,
+          body: notifBody,
+          url: '/dashboard/transactions',
+        }).catch(e => console.error('[staff-queue PATCH] notification error:', e));
+      }
     }
 
     return NextResponse.json({ ok: true, updated: { id: itemId, ...itemUpdates } });
