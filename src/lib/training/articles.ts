@@ -534,6 +534,64 @@ export const ARTICLES: Article[] = [
 <p><strong>Yes.</strong> The tool is strictly additive. It will <em>never</em> overwrite, delete, or modify an existing Team Membership or Member Plan. If an agent already has the correct records, the tool simply skips them and marks them as "already OK."</p>
     `,
   },
+
+  // ── CO-AGENT TRANSACTIONS ────────────────────────────────────────────────────
+  {
+    id: 'co-agent-transactions',
+    title: 'Co-Agent Transactions: How They Work',
+    description:
+      'Understand how co-agent commission splits are calculated, how both agents see the transaction, and what happens automatically at closing.',
+    category: 'Transactions',
+    audience: 'both',
+    readingTimeMinutes: 5,
+    publishedAt: '2026-05-23',
+    content: `
+<h2>What Is a Co-Agent Transaction?</h2>
+<p>A co-agent transaction is any deal where two agents from the brokerage work the same side together and agree to split the commission. When submitting a transaction, the primary agent (the one who submits the form) can designate a co-agent and enter the percentage split — for example, 60% to the primary agent and 40% to the co-agent.</p>
+
+<h2>How the Commission Split Is Calculated</h2>
+<p>The system does <strong>not</strong> give both agents credit for the full sale price or the full gross commission. Instead, it divides everything proportionally before running any commission calculation:</p>
+<table>
+  <thead><tr><th>Metric</th><th>Primary Agent (60% example)</th><th>Co-Agent (40% example)</th></tr></thead>
+  <tbody>
+    <tr><td>Sale price credit</td><td>60% of sale price</td><td>40% of sale price</td></tr>
+    <tr><td>Gross commission (GCI)</td><td>60% of total GCI</td><td>40% of total GCI</td></tr>
+    <tr><td>Agent net commission</td><td>Calculated against their own plan &amp; tier</td><td>Calculated against their own plan &amp; tier</td></tr>
+    <tr><td>Company dollar</td><td>Based on their own tier</td><td>Based on their own tier</td></tr>
+    <tr><td>Leaderboard side credit</td><td>0.6 sides</td><td>0.4 sides</td></tr>
+  </tbody>
+</table>
+<p>This means each agent's commission plan, tier, and anniversary-cycle progression are all calculated independently based on their own share — not the full deal amount. The total sides across both agents always adds up to 1.0, so leaderboard rankings remain accurate.</p>
+
+<h2>Seeing the Transaction Before Closing</h2>
+<p>From the moment the primary agent submits a transaction, <strong>both agents can see it</strong> in their My Transactions dashboard. The co-agent sees the same shared transaction record as the primary agent, so any edits made by the primary agent, TC, or staff are reflected for the co-agent automatically — in real time, with no manual sync required.</p>
+<blockquote>The co-agent's view is <strong>read-only</strong> before closing. Only the primary agent, TC, and staff can edit the transaction. The co-agent can view all details and open any attached documents.</blockquote>
+<p>Co-agent transactions are clearly labeled in the dashboard with a blue <strong>🤝 Co-Agent · [Primary Agent Name]</strong> badge so there is no confusion about which transactions are shared views versus personal submissions.</p>
+
+<h2>What Happens at Closing</h2>
+<p>When the transaction is marked <strong>Closed</strong>, the system automatically performs a split in the background:</p>
+<ol>
+  <li>Two brand-new, fully independent transaction records are created — one for the primary agent and one for the co-agent.</li>
+  <li>Each record contains only that agent's proportional numbers (their share of the sale price, GCI, and compliance fee).</li>
+  <li>Each agent's commission is recalculated against their own plan and tier using their individual share.</li>
+  <li>The original shared transaction is deleted so there are no duplicates.</li>
+  <li>Rollups and leaderboard stats are rebuilt for both agents immediately.</li>
+  <li>Both agents receive a <strong>Transaction Closed &amp; Split</strong> notification showing their individual GCI and split percentage.</li>
+</ol>
+<p>After the split, each agent has their own fully editable closed transaction in their dashboard and in the admin transaction ledger — completely independent of the other agent.</p>
+
+<h2>Summary: Co-Agent Transaction Lifecycle</h2>
+<table>
+  <thead><tr><th>Stage</th><th>Primary Agent</th><th>Co-Agent</th></tr></thead>
+  <tbody>
+    <tr><td>Submitted (pending TC review)</td><td>Sees it with ⏳ Pending TC Review badge</td><td>Sees it with 🤝 Co-Agent badge (read-only)</td></tr>
+    <tr><td>TC approved (active / pending)</td><td>Full edit access</td><td>Read-only shared view</td></tr>
+    <tr><td>Marked Closed</td><td>Split transaction auto-created with their numbers</td><td>Split transaction auto-created with their numbers</td></tr>
+    <tr><td>After closing</td><td>Own independent closed transaction</td><td>Own independent closed transaction</td></tr>
+  </tbody>
+</table>
+    `,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
