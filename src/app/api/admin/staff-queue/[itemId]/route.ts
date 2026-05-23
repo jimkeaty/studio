@@ -364,6 +364,16 @@ export async function PATCH(
       // Just save fields — no status change
       logAction = 'Updated';
       logDetail = `Updated by ${reviewerEmail}`;
+    } else if (action === 'add_documents') {
+      // Persist the updated documents array to the linked transaction
+      const newDocs = body.documents;
+      if (Array.isArray(newDocs) && item.transactionId) {
+        await adminDb.collection('transactions').doc(item.transactionId).update({
+          documents: newDocs,
+          updatedAt: now,
+        });
+      }
+      return NextResponse.json({ ok: true });
     } else if (queueStatus) {
       itemUpdates.status = queueStatus;
     }

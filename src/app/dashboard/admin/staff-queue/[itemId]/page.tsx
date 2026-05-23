@@ -31,6 +31,7 @@ import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, ExternalLink,
   ClipboardList, UserCheck, Activity, Archive, Trash2,
   Phone, Mail, Building2, User, Users, RefreshCw, AlertTriangle, FileText, Paperclip,
+  UploadCloud, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -235,6 +236,8 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
 
@@ -374,6 +377,59 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
   const buildTxUpdates = (values: FormValues) => {
     const { staffNotes, notes, additionalComments, ...txFields } = values;
     return { ...txFields, notes, additionalComments };
+  };
+
+  // ── Document upload ────────────────────────────────────────────────────────
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !user) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const token = await user.getIdToken();
+      const uploaded: any[] = [];
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/admin/staff-queue/upload-document', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || `Failed to upload ${file.name}`);
+        uploaded.push({ name: file.name, url: data.url, storagePath: data.storagePath, uploadedAt: new Date().toISOString(), uploadedBy: 'staff' });
+      }
+      const newDocs = [...documents, ...uploaded];
+      setDocuments(newDocs);
+      // Persist to the linked transaction
+      if (item?.transactionId) {
+        const token2 = await user.getIdToken();
+        await fetch(`/api/admin/staff-queue/${itemId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token2}` },
+          body: JSON.stringify({ action: 'add_documents', documents: newDocs }),
+        });
+      }
+    } catch (err: any) {
+      setUploadError(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeDoc = async (idx: number) => {
+    const newDocs = documents.filter((_, i) => i !== idx);
+    setDocuments(newDocs);
+    if (item?.transactionId && user) {
+      const token = await user.getIdToken();
+      await fetch(`/api/admin/staff-queue/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'add_documents', documents: newDocs }),
+      }).catch(() => {});
+    }
   };
 
   const handleSave = async (values: FormValues) => {
@@ -1148,34 +1204,79 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
             )} />
           </SectionCard>
 
-          {/* Documents (read-only) */}
-          {documents.length > 0 && (
-            <SectionCard title="Uploaded Documents" icon={<Paperclip className="h-4 w-4" />}>
-              <div className="space-y-2">
-                {documents.map((doc: any, idx: number) => (
-                  <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
-                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <a
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1"
-                      >
-                        {doc.name}
-                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                      </a>
-                      {doc.uploadedAt && (
+          {/* Documents — upload + view */}
+          <SectionCard title="Documents" icon={<Paperclip className="h-4 w-4" />}>
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Upload contracts, disclosures, or any transaction documents (PDF, Word, images — max 25 MB each).
+                Documents added by the agent or TC are also shown here.
+              </p>
+
+              {/* Document list */}
+              {documents.length > 0 && (
+                <div className="space-y-2">
+                  {documents.map((doc: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1"
+                        >
+                          {doc.name}
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        </a>
                         <p className="text-xs text-muted-foreground">
-                          Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                          {doc.uploadedBy === 'staff' ? 'Uploaded by staff' : doc.uploadedBy === 'tc' ? 'Uploaded by TC' : 'Uploaded by agent'}
+                          {doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ''}
                         </p>
+                      </div>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => removeDoc(idx)}
+                          className="ml-auto p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Remove document"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
+                  ))}
+                </div>
+              )}
+
+              {documents.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No documents attached yet.</p>
+              )}
+
+              {/* Upload error */}
+              {uploadError && (
+                <p className="text-xs text-destructive">{uploadError}</p>
+              )}
+
+              {/* Upload button */}
+              {!isReadOnly && (
+                <label className={cn(
+                  'flex items-center gap-2 cursor-pointer rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground hover:bg-muted/30 transition-colors',
+                  uploading && 'opacity-50 pointer-events-none'
+                )}>
+                  <UploadCloud className="h-4 w-4" />
+                  {uploading ? 'Uploading…' : 'Attach Files'}
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic"
+                    className="sr-only"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                  />
+                </label>
+              )}
+            </div>
+          </SectionCard>
 
           {/* Bottom action buttons */}
           {!isReadOnly && (
