@@ -400,17 +400,19 @@ export default function TcQueuePage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Submitted</TableHead>
-                        <TableHead>Agent</TableHead>
-                        <TableHead>Address</TableHead>
-                        <TableHead>Client</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Contract Date</TableHead>
-                        <TableHead>Proj. Close</TableHead>
-                        <TableHead className="text-right">GCI</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Assigned TC</TableHead>
-                        <TableHead className="text-center">Action</TableHead>
+                        <TableHead className="whitespace-nowrap">Status</TableHead>
+                        <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                        <TableHead className="whitespace-nowrap min-w-[200px]">Address</TableHead>
+                        <TableHead className="whitespace-nowrap">Agent</TableHead>
+                        <TableHead className="whitespace-nowrap">Client</TableHead>
+                        <TableHead className="whitespace-nowrap">Side</TableHead>
+                        <TableHead className="whitespace-nowrap">Deal Type</TableHead>
+                        <TableHead className="whitespace-nowrap">Contract Date</TableHead>
+                        <TableHead className="whitespace-nowrap">Proj. Close</TableHead>
+                        <TableHead className="whitespace-nowrap text-right">Sale Price</TableHead>
+                        <TableHead className="whitespace-nowrap text-right">GCI</TableHead>
+                        <TableHead className="whitespace-nowrap">Assigned TC</TableHead>
+                        <TableHead className="whitespace-nowrap text-center">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -418,38 +420,40 @@ export default function TcQueuePage() {
                         const cfg = STATUS_CONFIG[intake.status] ?? STATUS_CONFIG.submitted;
                         const assignedStaff = tcStaff.find((s) => s.id === intake.assignedTcProfileId);
                         return (
-                          <TableRow key={intake.id}>
-                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                              {formatDate(intake.submittedAt)}
-                            </TableCell>
-                            <TableCell className="font-medium">{intake.agentDisplayName}</TableCell>
-                            <TableCell className="max-w-[200px] truncate text-sm">
-                              {intake.address || intake.propertyAddress || '—'}
-                            </TableCell>
-                            <TableCell className="text-sm">{intake.clientName || '—'}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-1">
-                                {intake.closingType && (
-                                  <Badge variant="outline" className="text-xs w-fit">
-                                    {CLOSING_TYPE_LABEL[intake.closingType] ?? intake.closingType}
-                                  </Badge>
-                                )}
-                                {intake.dealType && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {DEAL_TYPE_LABEL[intake.dealType] ?? intake.dealType}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">{formatDate(intake.contractDate)}</TableCell>
-                            <TableCell className="text-sm">{formatDate(intake.projectedCloseDate)}</TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatCurrency(intake.gci)}
-                            </TableCell>
+                          <TableRow key={intake.id} className="hover:bg-muted/40">
                             <TableCell>
                               <Badge className={cn('flex items-center gap-1 w-fit', cfg.color)}>
                                 {cfg.icon} {cfg.label}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDate(intake.submittedAt)}
+                            </TableCell>
+                            <TableCell className="min-w-[200px]">
+                              <div className="font-medium text-sm truncate max-w-[240px]">{intake.address || intake.propertyAddress || '—'}</div>
+                              {intake.approvedTransactionId && (
+                                <span className="text-[10px] text-green-600 font-medium">TC Approved</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium whitespace-nowrap">{intake.agentDisplayName}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{intake.clientName || '—'}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {intake.closingType ? (
+                                <Badge variant="outline" className="text-xs">
+                                  {CLOSING_TYPE_LABEL[intake.closingType] ?? intake.closingType}
+                                </Badge>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {DEAL_TYPE_LABEL[intake.dealType] ?? intake.dealType ?? '—'}
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{formatDate(intake.contractDate)}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{formatDate(intake.projectedCloseDate)}</TableCell>
+                            <TableCell className="text-right font-medium whitespace-nowrap">
+                              {formatCurrency(intake.salePrice)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium whitespace-nowrap">
+                              {formatCurrency(intake.gci)}
                             </TableCell>
                             <TableCell>
                               <Select
