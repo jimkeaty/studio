@@ -126,6 +126,10 @@ export default function AdminToolsPage() {
   const [seedRunning, setSeedRunning] = useState(false);
   const [seedAuditRunning, setSeedAuditRunning] = useState(false);
 
+  // Backfill Team Memberships
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<any | null>(null);
+
   async function runSeedAudit() {
     if (!user) return;
     setSeedAuditRunning(true);
@@ -160,6 +164,25 @@ export default function AdminToolsPage() {
       setSeedAuditResult({ ok: false, error: err?.message || 'Unknown error' });
     } finally {
       setSeedRunning(false);
+    }
+  }
+
+  async function runBackfillMemberships() {
+    if (!user) return;
+    setBackfillRunning(true);
+    setBackfillResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/backfill-memberships', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setBackfillResult(data);
+    } catch (e: any) {
+      setBackfillResult({ ok: false, error: e?.message || 'Unknown error' });
+    } finally {
+      setBackfillRunning(false);
     }
   }
 
@@ -836,6 +859,68 @@ export default function AdminToolsPage() {
               {seedRunning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Seeding&hellip;</> : 'Seed Missing Records'}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Backfill Team Memberships */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-base">Backfill Team Memberships &amp; Plans</CardTitle>
+                <CardDescription className="mt-1">
+                  Scans all team agents and auto-creates any missing{' '}
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded">teamMemberships</code> and{' '}
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded">memberPlans</code> records in Firestore.
+                  Safe to run multiple times — never overwrites existing records.
+                  Run this after adding new agents or teams to ensure commissions calculate correctly.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs">Commission Fix</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {backfillResult && (
+            <Alert variant={backfillResult.ok ? 'default' : 'destructive'}>
+              {backfillResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle>{backfillResult.ok ? 'Backfill Complete' : 'Backfill Failed'}</AlertTitle>
+              <AlertDescription>
+                {backfillResult.ok ? (
+                  <>
+                    Processed <strong>{backfillResult.summary?.total ?? 0}</strong> team agents &mdash;{' '}
+                    <strong>{backfillResult.summary?.created ?? 0}</strong> created,{' '}
+                    <strong>{backfillResult.summary?.alreadyOk ?? 0}</strong> already OK,{' '}
+                    <strong>{backfillResult.summary?.skipped ?? 0}</strong> skipped.
+                    {backfillResult.results && backfillResult.results.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-muted-foreground hover:underline">
+                          View details ({backfillResult.results.length} agents)
+                        </summary>
+                        <ul className="mt-1 space-y-1 text-xs font-mono text-muted-foreground">
+                          {backfillResult.results.map((r: any) => (
+                            <li key={r.agentId} className={r.error ? 'text-destructive' : ''}>
+                              {r.displayName} ({r.role}) &mdash; membership: {r.membershipStatus}, plan: {r.memberPlanStatus}
+                              {r.error && <span className="ml-1 text-destructive">&#9888; {r.error}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </>
+                ) : (
+                  backfillResult.error
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+          <Button onClick={runBackfillMemberships} disabled={backfillRunning}>
+            {backfillRunning
+              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Running Backfill&hellip;</>
+              : 'Backfill Missing Memberships'}
+          </Button>
         </CardContent>
       </Card>
 

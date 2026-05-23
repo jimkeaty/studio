@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { deriveAnniversary } from '@/lib/agents/deriveAnniversary';
 import type { AgentProfileInput, AgentTier, TeamMemberCompMode, TeamMemberOverrideBand } from '@/lib/agents/types';
+import type { MemberPlan, MemberPlanBand, TeamMembership, TeamPlan } from '@/lib/teams/types';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
@@ -210,6 +211,126 @@ function normalizeInput(body: AgentProfileInput) {
   };
 }
 
+/**
+ * Auto-create or update teamMemberships and memberPlans records in Firestore
+ * whenever a team agent profile is saved. Ensures commission calculations always
+ * work without manual seeding.
+ */
+async function upsertTeamMembershipAndPlan(
+  agentId: string,
+  teamId: string,
+  role: 'leader' | 'member',
+  startDate: string,
+  displayName: string,
+  teamMemberCompMode: string,
+  teamMemberOverrideBands: TeamMemberOverrideBand[],
+  agentTiers: AgentTier[],
+): Promise<{ membershipId: string; memberPlanId: string | null }> {
+  const now = new Date().toISOString();
+  const membershipId = `${teamId}__${agentId}__${role}`;
+  const memberPlanId = `${agentId}-member-plan-v1`;
+
+  // Look up the team plan to get default member bands
+  let teamPlan: TeamPlan | null = null;
+  const teamsSnap = await adminDb.collection('teams').doc(teamId).get();
+  if (teamsSnap.exists) {
+    const teamData = teamsSnap.data() as any;
+    if (teamData?.teamPlanId) {
+      const planSnap = await adminDb.collection('teamPlans').doc(teamData.teamPlanId).get();
+      if (planSnap.exists) {
+        teamPlan = planSnap.data() as TeamPlan;
+      }
+    }
+  }
+
+  // Determine payout bands for the memberPlan
+  let payoutBands: MemberPlanBand[] = [];
+
+  if (role === 'member') {
+    if (teamMemberCompMode === 'custom' && teamMemberOverrideBands.length > 0) {
+      payoutBands = teamMemberOverrideBands.map(b => ({
+        fromCompanyDollar: Number(b.fromCompanyDollar),
+        toCompanyDollar: b.toCompanyDollar != null ? Number(b.toCompanyDollar) : null,
+        memberPercent: Number(b.memberPercent),
+      }));
+    } else if (teamPlan?.memberDefaultBands && teamPlan.memberDefaultBands.length > 0) {
+      payoutBands = teamPlan.memberDefaultBands.map(b => ({
+        fromCompanyDollar: Number(b.fromCompanyDollar),
+        toCompanyDollar: b.toCompanyDollar != null ? Number(b.toCompanyDollar) : null,
+        memberPercent: Number(b.memberPercent),
+      }));
+    } else {
+      payoutBands = [{ fromCompanyDollar: 0, toCompanyDollar: null, memberPercent: 70 }];
+    }
+  } else {
+    // Leader: use their personal tiers converted to memberPercent bands
+    if (agentTiers && agentTiers.length > 0) {
+      payoutBands = agentTiers.map(t => ({
+        fromCompanyDollar: Number(t.fromCompanyDollar),
+        toCompanyDollar: t.toCompanyDollar != null ? Number(t.toCompanyDollar) : null,
+        memberPercent: Number(t.agentSplitPercent),
+      }));
+    } else if (teamPlan?.memberDefaultBands && teamPlan.memberDefaultBands.length > 0) {
+      payoutBands = teamPlan.memberDefaultBands.map(b => ({
+        fromCompanyDollar: Number(b.fromCompanyDollar),
+        toCompanyDollar: b.toCompanyDollar != null ? Number(b.toCompanyDollar) : null,
+        memberPercent: Number(b.memberPercent),
+      }));
+    } else {
+      payoutBands = [{ fromCompanyDollar: 0, toCompanyDollar: null, memberPercent: 70 }];
+    }
+  }
+
+  // Upsert the memberPlan
+  const memberPlan: MemberPlan = {
+    memberPlanId,
+    teamId,
+    agentId,
+    planName: `${displayName} ${role === 'leader' ? 'Leader' : 'Member'} Plan`,
+    status: 'active',
+    thresholdMetric: 'companyDollar',
+    thresholdMarkers: teamPlan?.thresholdMarkers || [],
+    payoutBands,
+    createdAt: now,
+    updatedAt: now,
+    notes: `Auto-generated when agent profile was saved`,
+  };
+
+  // Preserve createdAt if plan already exists
+  const existingPlan = await adminDb.collection('memberPlans').doc(memberPlanId).get();
+  if (existingPlan.exists) {
+    const existingData = existingPlan.data() as MemberPlan;
+    memberPlan.createdAt = existingData.createdAt || now;
+  }
+
+  await adminDb.collection('memberPlans').doc(memberPlanId).set(memberPlan);
+
+  // Upsert the membership
+  const membership: TeamMembership = {
+    membershipId,
+    teamId,
+    agentId,
+    role,
+    memberPlanId,
+    effectiveStart: startDate,
+    effectiveEnd: null,
+    activeFlag: true,
+    createdAt: now,
+    updatedAt: now,
+    notes: `Auto-created when agent profile was saved`,
+  };
+
+  const existingMembership = await adminDb.collection('teamMemberships').doc(membershipId).get();
+  if (existingMembership.exists) {
+    const existingData = existingMembership.data() as TeamMembership;
+    membership.createdAt = existingData.createdAt || now;
+  }
+
+  await adminDb.collection('teamMemberships').doc(membershipId).set(membership);
+
+  return { membershipId, memberPlanId };
+}
+
 type RouteContext = {
   params: Promise<{
     agentId: string;
@@ -297,11 +418,38 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     await ref.update(updated);
 
+    // Auto-upsert team membership and member plan if this is a team agent
+    let membershipResult: { membershipId: string; memberPlanId: string | null } | null = null;
+    if (normalized.agentType === 'team' && normalized.primaryTeamId && normalized.teamRole) {
+      try {
+        membershipResult = await upsertTeamMembershipAndPlan(
+          agentId,
+          normalized.primaryTeamId,
+          normalized.teamRole as 'leader' | 'member',
+          normalized.startDate,
+          normalized.displayName,
+          normalized.teamMemberCompMode,
+          normalized.teamMemberOverrideBands,
+          normalized.tiers,
+        );
+
+        // Update defaultPlanId on the profile if it wasn't already set
+        if (membershipResult.memberPlanId && !normalized.defaultPlanId) {
+          await ref.update({ defaultPlanId: membershipResult.memberPlanId, updatedAt: new Date().toISOString() });
+        }
+      } catch (membershipErr: any) {
+        console.warn(`[agent-profiles/[agentId]][PATCH] Auto-membership upsert failed for ${agentId}:`, membershipErr?.message);
+      }
+    }
+
     const fresh = await ref.get();
 
     return NextResponse.json({
       ok: true,
       agent: fresh.data(),
+      membershipUpserted: membershipResult !== null,
+      membershipId: membershipResult?.membershipId ?? null,
+      memberPlanId: membershipResult?.memberPlanId ?? null,
     });
   } catch (err: any) {
     if (err?.message === 'UNAUTHORIZED') {
