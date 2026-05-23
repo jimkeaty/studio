@@ -22,6 +22,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2 } from 'lucide-react';
+import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
+import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
@@ -764,6 +766,59 @@ export default function AddTransactionPage() {
     setSubmitting(true);
     try {
       const token = await user.getIdToken();
+
+      // ── Auto-save contacts to the Contacts Book ──────────────────────────
+      const saveContact = async (type: string, fields: Record<string, any>) => {
+        const hasData = Object.values(fields).some((v) => v && String(v).trim());
+        if (!hasData) return;
+        try {
+          await fetch('/api/contacts', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, upsert: true, ...fields }),
+          });
+        } catch { /* non-fatal */ }
+      };
+      // Save lender
+      await saveContact('lender', {
+        mortgageCompany: values.mortgageCompany,
+        loanOfficer: values.loanOfficer,
+        loanOfficerEmail: values.loanOfficerEmail,
+        loanOfficerPhone: values.loanOfficerPhone,
+        lenderOffice: values.lenderOffice,
+      });
+      // Save title company
+      await saveContact('title', {
+        titleCompany: values.titleCompany,
+        titleOfficer: values.titleOfficer,
+        titleOfficerEmail: values.titleOfficerEmail,
+        titleOfficerPhone: values.titleOfficerPhone,
+        titleAttorney: values.titleAttorney,
+        titleOffice: values.titleOffice,
+      });
+      // Save cooperating agent
+      await saveContact('other_agent', {
+        otherAgentName: values.otherAgentName,
+        otherAgentEmail: values.otherAgentEmail,
+        otherAgentPhone: values.otherAgentPhone,
+        otherBrokerage: values.otherBrokerage,
+      });
+      // Save inspector
+      await saveContact('inspector', { inspectorName: values.inspectorName });
+      // Save clients (buyer/seller/client)
+      const clientFields = [
+        { name: values.clientName, email: values.clientEmail, phone: values.clientPhone },
+        { name: values.client2Name, email: values.client2Email, phone: values.client2Phone },
+        { name: values.buyerName, email: values.buyerEmail, phone: values.buyerPhone },
+        { name: values.buyer2Name, email: values.buyer2Email, phone: values.buyer2Phone },
+        { name: values.sellerName, email: values.sellerEmail, phone: values.sellerPhone },
+        { name: values.seller2Name, email: values.seller2Email, phone: values.seller2Phone },
+      ];
+      for (const cf of clientFields) {
+        if (cf.name || cf.email) await saveContact('client', cf);
+      }
+      // ── End auto-save ─────────────────────────────────────────────────────
+
       const res = await fetch('/api/tc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -1381,7 +1436,20 @@ export default function AddTransactionPage() {
             <Section title="Cooperating Agent">
               <Grid2>
                 <FormField control={form.control} name="otherAgentName" render={({ field }) => (
-                  <FormItem><FormLabel>Agent Name</FormLabel><FormControl><Input placeholder="Other agent on this deal" {...field} /></FormControl></FormItem>
+                  <FormItem><FormLabel>Agent Name</FormLabel><FormControl>
+                    <ContactAutocomplete
+                      type="other_agent"
+                      placeholder="Other agent on this deal"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onSelect={(c: SavedContact) => {
+                        form.setValue('otherAgentName', c.name || '');
+                        form.setValue('otherAgentEmail', c.email || '');
+                        form.setValue('otherAgentPhone', c.phone || '');
+                        form.setValue('otherBrokerage', c.brokerage || '');
+                      }}
+                    />
+                  </FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="otherBrokerage" render={({ field }) => (
                   <FormItem><FormLabel>Brokerage</FormLabel><FormControl><Input placeholder="Their brokerage" {...field} /></FormControl></FormItem>
@@ -1400,7 +1468,21 @@ export default function AddTransactionPage() {
           <Section title="Mortgage / Lender">
             <Grid2>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
-                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl><Input placeholder="First Federal Bank" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl>
+                  <ContactAutocomplete
+                    type="lender"
+                    placeholder="First Federal Bank"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    onSelect={(c: SavedContact) => {
+                      form.setValue('mortgageCompany', c.companyName || c.name || '');
+                      form.setValue('loanOfficer', c.officerName || '');
+                      form.setValue('loanOfficerEmail', c.email || '');
+                      form.setValue('loanOfficerPhone', c.phone || '');
+                      form.setValue('lenderOffice', c.office || '');
+                    }}
+                  />
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="loanOfficer" render={({ field }) => (
                 <FormItem><FormLabel>Loan Officer Name</FormLabel><FormControl><Input placeholder="John Smith" {...field} /></FormControl></FormItem>
@@ -1423,7 +1505,22 @@ export default function AddTransactionPage() {
           <Section title="Title Company">
             <Grid2>
               <FormField control={form.control} name="titleCompany" render={({ field }) => (
-                <FormItem><FormLabel>Title Company</FormLabel><FormControl><Input placeholder="Acadian Title" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Title Company</FormLabel><FormControl>
+                  <ContactAutocomplete
+                    type="title"
+                    placeholder="Acadian Title"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    onSelect={(c: SavedContact) => {
+                      form.setValue('titleCompany', c.companyName || c.name || '');
+                      form.setValue('titleOfficer', c.officerName || '');
+                      form.setValue('titleOfficerEmail', c.email || '');
+                      form.setValue('titleOfficerPhone', c.phone || '');
+                      form.setValue('titleAttorney', c.attorney || '');
+                      form.setValue('titleOffice', c.office || '');
+                    }}
+                  />
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="titleOfficer" render={({ field }) => (
                 <FormItem><FormLabel>Title Officer Name</FormLabel><FormControl><Input placeholder="Jane Doe" {...field} /></FormControl></FormItem>
@@ -1575,7 +1672,17 @@ export default function AddTransactionPage() {
             )}
             <div className="max-w-md">
               <FormField control={form.control} name="inspectorName" render={({ field }) => (
-                <FormItem><FormLabel>Inspector Name / Company</FormLabel><FormControl><Input placeholder="Inspector name or company" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Inspector Name / Company</FormLabel><FormControl>
+                  <ContactAutocomplete
+                    type="inspector"
+                    placeholder="Inspector name or company"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    onSelect={(c: SavedContact) => {
+                      form.setValue('inspectorName', c.name || '');
+                    }}
+                  />
+                </FormControl></FormItem>
               )} />
             </div>
           </Section>
