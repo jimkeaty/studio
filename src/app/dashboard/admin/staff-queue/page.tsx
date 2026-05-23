@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,6 +46,13 @@ type StaffQueueItem = {
   staffNotes?: string;
   createdAt: string;
   updatedAt: string;
+  // Enriched ledger fields
+  salePrice?: number | null;
+  gci?: number | null;
+  closingType?: string | null;
+  dealType?: string | null;
+  contractDate?: string | null;
+  closedDate?: string | null;
 };
 
 const formatDate = (s?: string | null) => {
@@ -92,6 +100,25 @@ const TX_STATUS_LABELS: Record<string, string> = {
   closed: 'Closed', cancelled: 'Cancelled', canceled: 'Canceled',
   expired: 'Expired', coming_soon: 'Coming Soon',
 };
+
+const CLOSING_TYPE_LABEL: Record<string, string> = {
+  buyers_agent: "Buyer's Agent",
+  listing_agent: 'Listing Agent',
+  dual_agent: 'Dual Agent',
+  referral: 'Referral',
+  rental: 'Rental',
+};
+
+const DEAL_TYPE_LABEL: Record<string, string> = {
+  residential: 'Residential',
+  commercial: 'Commercial',
+  land: 'Land',
+  rental: 'Rental',
+  referral: 'Referral',
+};
+
+const formatCurrency = (v?: number | null) =>
+  v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
 export default function StaffQueuePage() {
   const { user, loading: userLoading } = useUser();
@@ -288,14 +315,18 @@ export default function StaffQueuePage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="whitespace-nowrap w-[140px]">Queue Status</TableHead>
-                    <TableHead className="whitespace-nowrap w-[120px]">Action Type</TableHead>
+                    <TableHead className="whitespace-nowrap">Queue Status</TableHead>
+                    <TableHead className="whitespace-nowrap">Action Type</TableHead>
                     <TableHead className="whitespace-nowrap min-w-[200px]">Address</TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[130px]">Agent</TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[160px]">Status Change</TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[130px]">Assigned To</TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[120px]">Submitted</TableHead>
-                    <TableHead className="whitespace-nowrap min-w-[130px]">Reviewed By</TableHead>
+                    <TableHead className="whitespace-nowrap">Agent</TableHead>
+                    <TableHead className="whitespace-nowrap">Side</TableHead>
+                    <TableHead className="whitespace-nowrap">Deal Type</TableHead>
+                    <TableHead className="whitespace-nowrap">Contract Date</TableHead>
+                    <TableHead className="whitespace-nowrap">Close Date</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">Sale Price</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">GCI</TableHead>
+                    <TableHead className="whitespace-nowrap">Status Change</TableHead>
+                    <TableHead className="whitespace-nowrap">Submitted</TableHead>
                     <TableHead className="whitespace-nowrap w-[100px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -315,13 +346,31 @@ export default function StaffQueuePage() {
                             {ac.label}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-[200px]">
                           <div className="font-medium text-sm truncate max-w-[240px]">{item.transactionAddress || item.address || '—'}</div>
                           {item.tcWorking && (
                             <span className="text-[10px] text-indigo-600 font-medium">Working with TC</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm whitespace-nowrap">{item.agentName || item.submittedByName || '—'}</TableCell>
+                        <TableCell className="text-sm font-medium whitespace-nowrap">{item.agentName || item.submittedByName || '—'}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {item.closingType ? (
+                            <Badge variant="outline" className="text-xs">
+                              {CLOSING_TYPE_LABEL[item.closingType] ?? item.closingType}
+                            </Badge>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {DEAL_TYPE_LABEL[item.dealType ?? ''] ?? item.dealType ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">{formatDateShort(item.contractDate)}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">{formatDateShort(item.closedDate)}</TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">
+                          {formatCurrency(item.salePrice)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">
+                          {formatCurrency(item.gci)}
+                        </TableCell>
                         <TableCell>
                           {(item.actionType === 'status_change' || item.actionType === 'closed_buyer') && (item.previousStatus || item.newStatus) ? (
                             <div className="flex items-center gap-1.5 text-xs">
@@ -341,12 +390,6 @@ export default function StaffQueuePage() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {formatDateShort(item.createdAt)}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {(item as any).assignedStaffName || (item as any).assignedStaffId ? ((item as any).assignedStaffName || 'Assigned') : '—'}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {item.reviewedByName || '—'}
                         </TableCell>
                         <TableCell className="text-right">
                           <Link href={`/dashboard/admin/staff-queue/${item.id}`}>
