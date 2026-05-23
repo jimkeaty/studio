@@ -244,6 +244,70 @@ export async function POST(req: NextRequest) {
 
     const ref = await adminDb.collection('tcIntakes').add(intake);
 
+    // ── Create a transactions doc immediately so the agent sees it right away ──
+    // The doc is marked reviewStatus:'pending_review' so the admin ledger can
+    // distinguish it from fully-approved transactions. When TC approves the intake,
+    // the approval route updates this same doc (via approvedTransactionId linkage)
+    // rather than creating a duplicate.
+    const txDoc: Record<string, any> = {
+      agentId,
+      agentDisplayName,
+      submittedByUid: uid,
+      address,
+      propertyAddress: address,
+      status: toStr(body.status) || 'active',
+      closingType,
+      transactionType: dealType,
+      dealType,
+      listPrice: toNum(body.listPrice),
+      salePrice: toNum(body.salePrice),
+      dealValue: toNum(body.salePrice) || toNum(body.listPrice),
+      listingDate: toStr(body.listingDate) || null,
+      contractDate: contractDate || null,
+      closingDate: toStr(body.closedDate) || toStr(body.closingDate) || null,
+      closedDate: toStr(body.closedDate) || null,
+      optionExpiration: toStr(body.optionExpiration) || null,
+      inspectionDeadline: toStr(body.inspectionDeadline) || null,
+      projectedCloseDate: toStr(body.projectedCloseDate) || null,
+      clientName,
+      clientEmail: toStr(body.clientEmail) || null,
+      clientPhone: toStr(body.clientPhone) || null,
+      sellerName: toStr(body.sellerName) || null,
+      sellerEmail: toStr(body.sellerEmail) || null,
+      sellerPhone: toStr(body.sellerPhone) || null,
+      buyerName: toStr(body.buyerName) || null,
+      buyerEmail: toStr(body.buyerEmail) || null,
+      buyerPhone: toStr(body.buyerPhone) || null,
+      otherAgentName: toStr(body.otherAgentName) || null,
+      otherAgentEmail: toStr(body.otherAgentEmail) || null,
+      otherAgentPhone: toStr(body.otherAgentPhone) || null,
+      otherAgentBrokerage: toStr(body.otherBrokerage) || null,
+      mortgageCompany: toStr(body.mortgageCompany) || null,
+      loanOfficer: toStr(body.loanOfficer) || null,
+      loanOfficerEmail: toStr(body.loanOfficerEmail) || null,
+      loanOfficerPhone: toStr(body.loanOfficerPhone) || null,
+      titleCompany: toStr(body.titleCompany) || null,
+      titleOfficer: toStr(body.titleOfficer) || null,
+      titleOfficerEmail: toStr(body.titleOfficerEmail) || null,
+      titleOfficerPhone: toStr(body.titleOfficerPhone) || null,
+      notes: toStr(body.notes) || null,
+      additionalComments: toStr(body.additionalComments) || null,
+      documents: Array.isArray(body.documents)
+        ? body.documents.filter((d: any) => d?.url && d?.name)
+        : [],
+      workingWithTc: !!body.workingWithTc,
+      // Review status flags — cleared when TC approves
+      reviewStatus: 'pending_review',
+      tcIntakeId: ref.id,
+      year: new Date().getFullYear(),
+      source: 'agent_submission',
+      createdAt: now,
+      updatedAt: now,
+    };
+    const txRef = await adminDb.collection('transactions').add(txDoc);
+    // Link the tcIntake back to this transaction so approval updates it in place
+    await ref.update({ approvedTransactionId: txRef.id });
+
     // Create default checklist items as a subcollection (same as admin-created intakes)
     const defaultChecklist = [
       { order: 1, label: 'Contract received & verified' },
@@ -362,7 +426,7 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    return NextResponse.json({ ok: true, id: ref.id });
+    return NextResponse.json({ ok: true, id: ref.id, transactionId: txRef.id });
   } catch (err: any) {
     console.error('[POST /api/tc]', err);
     return jsonError(500, err.message || 'Internal Server Error');

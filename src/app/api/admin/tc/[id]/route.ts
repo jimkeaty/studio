@@ -336,6 +336,45 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
       }
       await docRef.update(updates);
+
+      // ── Sync edits to the linked transactions doc so the agent sees them immediately ──
+      // If this intake already has an approvedTransactionId (set either at agent submission
+      // or at a prior approval), mirror the same field changes to the transactions doc.
+      // Fields that are intake-only (workflow status, checklist, etc.) are excluded.
+      const linkedTxId = toOptStr(intake.approvedTransactionId);
+      if (linkedTxId) {
+        const txSyncFields = [
+          'address', 'listingStatus', 'closingType', 'dealType', 'clientName',
+          'listPrice', 'salePrice', 'listingDate', 'contractDate', 'optionExpiration',
+          'inspectionDeadline', 'projectedCloseDate', 'closedDate',
+          'clientType', 'clientEmail', 'clientPhone',
+          'buyerName', 'buyerEmail', 'buyerPhone',
+          'buyer2Name', 'buyer2Email', 'buyer2Phone',
+          'sellerName', 'sellerEmail', 'sellerPhone',
+          'seller2Name', 'seller2Email', 'seller2Phone',
+          'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
+          'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
+          'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
+          'notes', 'additionalComments',
+        ];
+        const txSyncUpdate: Record<string, any> = { updatedAt: now };
+        for (const f of txSyncFields) {
+          if (f in updates) {
+            // Map intake-specific field names to transaction field names
+            if (f === 'listingStatus') txSyncUpdate.status = updates[f];
+            else if (f === 'otherBrokerage') txSyncUpdate.otherAgentBrokerage = updates[f];
+            else txSyncUpdate[f] = updates[f];
+          }
+        }
+        // Also sync address to propertyAddress
+        if (updates.address) txSyncUpdate.propertyAddress = updates.address;
+        try {
+          await adminDb.collection('transactions').doc(linkedTxId).update(txSyncUpdate);
+        } catch (syncErr: any) {
+          console.warn('[TC update] Failed to sync to transactions doc:', syncErr.message);
+        }
+      }
+
       // Notify agent that TC has edited their transaction
       void (async () => {
         try {
@@ -669,6 +708,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         year,
         source: 'tc_form',
         intakeId: id,
+        // Clear the pending-review flag set at agent submission time
+        reviewStatus: null,
         createdAt: now,
         updatedAt: now,
       };

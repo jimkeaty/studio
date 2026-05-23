@@ -1027,6 +1027,11 @@ export default function AdminTransactionLedgerPage() {
                         </TableCell>
                         <TableCell className="min-w-[160px] max-w-[220px]">
                           <div className="font-medium truncate text-sm">{t.address || '—'}</div>
+                          {(t as any).reviewStatus === 'pending_review' && (
+                            <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                              ⏳ Pending TC Review
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="min-w-[140px] whitespace-nowrap">
                           <div className="flex flex-col gap-0.5">

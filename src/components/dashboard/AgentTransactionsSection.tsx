@@ -897,6 +897,11 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                         <div className="min-w-0">
                           <p className="font-semibold text-sm leading-tight truncate">{addr}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{closingTypeLabel[t.closingType || ''] ?? t.closingType ?? '—'} · {txTypeLabel[t.transactionType || ''] ?? '—'}</p>
+                          {(t as any).reviewStatus === 'pending_review' && (
+                            <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                              ⏳ Pending TC Review
+                            </span>
+                          )}
                         </div>
                         <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0', sc.color)}>
                           {sc.label}
@@ -1037,6 +1042,11 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                             <div className="font-medium truncate text-sm">{addr}</div>
                             {(t.sellerName || t.buyerName) && (
                               <div className="text-xs text-muted-foreground truncate">{t.sellerName || t.buyerName}</div>
+                            )}
+                            {(t as any).reviewStatus === 'pending_review' && (
+                              <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                                ⏳ Pending TC Review
+                              </span>
                             )}
                           </TableCell>
                           <TableCell className="min-w-[90px]">
