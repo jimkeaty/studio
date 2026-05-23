@@ -42,6 +42,7 @@ import {
   MapPin,
   GraduationCap,
   HelpCircle,
+  BookUser,
 } from 'lucide-react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 
@@ -104,6 +105,7 @@ const agentMenuItems = [
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
+  { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
   { href: '/dashboard/training', label: 'Training & Help', icon: GraduationCap },
 ];
 
@@ -148,6 +150,7 @@ const adminMenuGroups = [
       { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
       { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
       { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
+      { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
     ],
   },
   {
