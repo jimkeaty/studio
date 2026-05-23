@@ -112,6 +112,26 @@ export async function POST(req: NextRequest) {
     };
     const docRef = await adminDb.collection('staffUsers').add(profileData);
 
+    // Seed the users/{uid} doc so sendNotification can resolve email/phone/prefs
+    // without needing to fall back to staffUsers on every notification send.
+    if (firebaseUid) {
+      await adminDb.collection('users').doc(firebaseUid).set({
+        email: normalizedEmail,
+        displayName: displayName.trim(),
+        phone: phone?.trim() || null,
+        role: newRole || 'office_admin',
+        notificationPrefs: {
+          in_app: true,
+          push: true,
+          email: true,
+          sms: false,
+          events: {},
+        },
+        createdAt: now,
+        updatedAt: now,
+      }, { merge: true });
+    }
+
     // Create in-app welcome notification
     await adminDb.collection('notifications').add({
       recipientUid: firebaseUid,

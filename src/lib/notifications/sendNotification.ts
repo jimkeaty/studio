@@ -95,7 +95,45 @@ async function dispatchToUser(
   const userDoc = await db.collection('users').doc(uid).get();
   const userData = userDoc.exists ? (userDoc.data() as Record<string, any>) : {};
 
-  const rawPrefs: NotificationPrefs = userData.notificationPrefs ?? DEFAULT_PREFS;
+  // ── Resolve contact info ──────────────────────────────────────────────────
+  // If the users/{uid} doc is missing email/phone (common for staff users whose
+  // doc was created before the self-link flow), fall back to the staffUsers record.
+  let resolvedEmail: string = userData.email || '';
+  let resolvedName:  string = userData.displayName || userData.name || '';
+  let resolvedPhone: string = userData.phone || '';
+  if (!resolvedEmail) {
+    try {
+      const staffSnap = await db
+        .collection('staffUsers')
+        .where('firebaseUid', '==', uid)
+        .limit(1)
+        .get();
+      if (!staffSnap.empty) {
+        const sd = staffSnap.docs[0].data() as Record<string, any>;
+        resolvedEmail = sd.email || '';
+        resolvedName  = resolvedName || sd.displayName || sd.name || '';
+        resolvedPhone = resolvedPhone || sd.phone || '';
+      }
+    } catch {
+      // staffUsers lookup failed — skip silently
+    }
+  }
+
+  // ── Resolve notification preferences ─────────────────────────────────────
+  // Stored prefs may use either 'in_app' (canonical) or legacy 'inApp' (camelCase).
+  // Normalise both so the channel check always works.
+  const storedPrefs = userData.notificationPrefs as Record<string, any> | undefined;
+  const normalisedPrefs: NotificationPrefs = storedPrefs
+    ? {
+        in_app: storedPrefs.in_app ?? storedPrefs.inApp ?? DEFAULT_PREFS.in_app,
+        push:   storedPrefs.push   ?? DEFAULT_PREFS.push,
+        email:  storedPrefs.email  ?? DEFAULT_PREFS.email,
+        sms:    storedPrefs.sms    ?? DEFAULT_PREFS.sms,
+        events: storedPrefs.events ?? {},
+      }
+    : DEFAULT_PREFS;
+
+  const rawPrefs: NotificationPrefs = normalisedPrefs;
   const eventOverride = rawPrefs.events?.[type] ?? {};
 
   const channels = {
@@ -129,18 +167,17 @@ async function dispatchToUser(
   }
 
   // ── Email (Resend) ────────────────────────────────────────────────────────
-  if (channels.email && userData.email) {
-    tasks.push(sendEmail(userData.email, userData.displayName || userData.name || 'User', title, body, url, type));
+  if (channels.email && resolvedEmail) {
+    tasks.push(sendEmail(resolvedEmail, resolvedName || 'User', title, body, url, type));
   }
 
   // ── SMS (Twilio) ──────────────────────────────────────────────────────────
-  // Phone can be set on the users doc (self-service via Notification Settings)
-  // or on the agentProfiles doc (set by admin). Fall back to agentProfiles.
-  let smsPhone: string | null = userData.phone || null;
-  if (!smsPhone && userData.email) {
+  // Phone priority: users/{uid}.phone > staffUsers.phone > agentProfiles.phone
+  let smsPhone: string | null = resolvedPhone || null;
+  if (!smsPhone && resolvedEmail) {
     try {
       const agentSnap = await db.collection('agentProfiles')
-        .where('email', '==', userData.email)
+        .where('email', '==', resolvedEmail)
         .limit(1)
         .get();
       if (!agentSnap.empty) {

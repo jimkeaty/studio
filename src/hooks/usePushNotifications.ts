@@ -38,17 +38,22 @@ export function usePushNotifications() {
 
   // Register FCM token via API route (keeps Firestore writes server-side)
   const saveFcmToken = useCallback(async (token: string, _userId: string) => {
+    if (!user) return;
     try {
+      const idToken = await user.getIdToken();
       await fetch('/api/notifications/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({ token, platform: 'web', userAgent: navigator.userAgent }),
       });
       console.log('[FCM] Token saved via API');
     } catch (err) {
       console.error('[FCM] Failed to save token:', err);
     }
-  }, []);
+  }, [user]);
 
   // Request permission and get FCM token
   const requestPermission = useCallback(async (): Promise<boolean> => {

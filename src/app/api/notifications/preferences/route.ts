@@ -52,9 +52,17 @@ export async function PATCH(req: NextRequest) {
       return jsonError(400, 'Invalid preferences payload');
     }
 
+    // Normalise legacy camelCase keys (inApp -> in_app) so the backend always
+    // reads a consistent schema regardless of which UI saved the prefs.
+    const normalisedPrefs: Record<string, any> = { ...prefs };
+    if ('inApp' in normalisedPrefs && !('in_app' in normalisedPrefs)) {
+      normalisedPrefs.in_app = normalisedPrefs.inApp;
+    }
+    delete normalisedPrefs.inApp; // remove legacy key
+
     // Build update payload — always save prefs, optionally save phone
     const update: Record<string, any> = {
-      notificationPrefs: prefs,
+      notificationPrefs: normalisedPrefs,
       updatedAt: new Date().toISOString(),
     };
     if (typeof phone === 'string') {

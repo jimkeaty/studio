@@ -49,12 +49,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     await docRef.update(updates);
     // Sync phone + notificationPrefs to the users collection (used by sendNotification)
+    // Normalise legacy camelCase 'inApp' key to canonical 'in_app' on the way in.
     const staffData = doc.data()!;
     const firebaseUid = staffData.firebaseUid;
     if (firebaseUid && ('phone' in body || 'notificationPrefs' in body)) {
       const userUpdates: Record<string, any> = {};
       if ('phone' in body) userUpdates.phone = typeof body.phone === 'string' ? body.phone.trim() : body.phone;
-      if ('notificationPrefs' in body) userUpdates.notificationPrefs = body.notificationPrefs;
+      if ('notificationPrefs' in body) {
+        const rawPrefs = body.notificationPrefs as Record<string, any>;
+        const normPrefs: Record<string, any> = { ...rawPrefs };
+        if ('inApp' in normPrefs && !('in_app' in normPrefs)) {
+          normPrefs.in_app = normPrefs.inApp;
+        }
+        delete normPrefs.inApp;
+        userUpdates.notificationPrefs = normPrefs;
+      }
       await adminDb.collection('users').doc(firebaseUid).set(userUpdates, { merge: true });
     }
     const updated = await docRef.get();
