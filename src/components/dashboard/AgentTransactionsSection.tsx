@@ -80,6 +80,11 @@ type AgentTx = {
   year?: number;
   source?: string;
   workingWithTc?: boolean;
+  _isCoAgentView?: boolean;
+  hasCoAgent?: boolean;
+  coAgent?: { agentId?: string; agentDisplayName?: string; splitPercent?: number };
+  primaryAgentSplitPercent?: number;
+  primaryAgentDisplayName?: string;
 };
 
 /* ─── Constants ──────────────────────────────────────────────────────────── */
@@ -887,11 +892,13 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                   const net = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
                   const sc = statusConfig[t.status] || statusConfig.pending;
                   const addr = t.address || t.propertyAddress || '—';
+                  const isCoAgentViewMobile = !!(t as any)._isCoAgentView;
+                  const canEditMobile = t.status !== 'closed' && !isCoAgentViewMobile;
                   return (
                     <div
                       key={t.id}
-                      className="rounded-xl border bg-card p-4 space-y-3 cursor-pointer hover:bg-muted/40 transition-colors"
-                      onClick={() => openEdit(t)}
+                      className={cn('rounded-xl border bg-card p-4 space-y-3 transition-colors', canEditMobile ? 'cursor-pointer hover:bg-muted/40' : 'opacity-90')}
+                      onClick={() => canEditMobile && openEdit(t)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -900,6 +907,11 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                           {(t as any).reviewStatus === 'pending_review' && (
                             <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
                               ⏳ Pending TC Review
+                            </span>
+                          )}
+                          {isCoAgentViewMobile && (
+                            <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap">
+                              🤝 Co-Agent · {t.primaryAgentDisplayName || (t as any).agentDisplayName || 'Primary Agent'}
                             </span>
                           )}
                         </div>
@@ -982,11 +994,12 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                       const net = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
                       const sc = statusConfig[t.status] || statusConfig.pending;
                       const addr = t.address || t.propertyAddress || '—';
-                      const canEdit = t.status !== 'closed'; // closed transactions are read-only for agents
+                      const isCoAgentView = !!(t as any)._isCoAgentView;
+                      const canEdit = t.status !== 'closed' && !isCoAgentView; // closed + co-agent views are read-only
                       return (
                         <TableRow
                           key={t.id}
-                          className={cn('transition-colors group', canEdit && 'cursor-pointer hover:bg-muted/40')}
+                          className={cn('transition-colors group', canEdit && 'cursor-pointer hover:bg-muted/40', isCoAgentView && 'opacity-90')}
                           onClick={() => canEdit && openEdit(t)}
                         >
                           {/* Inline status dropdown */}
@@ -1046,6 +1059,11 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                             {(t as any).reviewStatus === 'pending_review' && (
                               <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
                                 ⏳ Pending TC Review
+                              </span>
+                            )}
+                            {isCoAgentView && (
+                              <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap">
+                                🤝 Co-Agent · {t.primaryAgentDisplayName || (t as any).agentDisplayName || 'Primary Agent'}
                               </span>
                             )}
                           </TableCell>
