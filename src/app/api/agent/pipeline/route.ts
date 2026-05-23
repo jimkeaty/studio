@@ -48,7 +48,16 @@ async function resolveQueryIds(uid: string): Promise<string[]> {
       .limit(1)
       .get();
     if (!byField.empty) {
-      ids.add(byField.docs[0].id); // also add the doc ID (slug)
+      const profileDoc = byField.docs[0];
+      ids.add(profileDoc.id); // also add the doc ID (slug)
+      // ── Write-back: stamp firebaseUid on the agentProfile so notification lookups work ──
+      // This is idempotent — only writes if the field is missing or empty.
+      const existingUid = profileDoc.data()?.firebaseUid;
+      if (!existingUid) {
+        try {
+          await adminDb.collection('agentProfiles').doc(profileDoc.id).update({ firebaseUid: uid });
+        } catch { /* non-fatal */ }
+      }
     }
   } catch (err: any) {
     console.warn('[api/agent/pipeline] resolveQueryIds failed:', err.message);

@@ -31,8 +31,8 @@ export async function getAllStaffUids(db: Firestore): Promise<string[]> {
 
 /** Get UIDs of staff users assigned to a specific transaction/agent */
 export async function getStaffUidsForAgent(db: Firestore, agentId: string): Promise<string[]> {
-  // First check if the agent has a specific TC assigned
-  const agentDoc = await db.collection('agents').doc(agentId).get();
+  // First check if the agent has a specific TC assigned in agentProfiles
+  const agentDoc = await db.collection('agentProfiles').doc(agentId).get();
   if (agentDoc.exists) {
     const assignedTcUid = agentDoc.data()?.assignedTcUid as string | undefined;
     if (assignedTcUid) return [assignedTcUid];
@@ -41,16 +41,63 @@ export async function getStaffUidsForAgent(db: Firestore, agentId: string): Prom
   return getTcUids(db);
 }
 
-/** Get the Firebase UID for an agent by their agentId */
-export async function getAgentUid(db: Firestore, agentId: string): Promise<string | null> {
-  // Agents may be stored in 'agents' collection with a 'uid' or 'firebaseUid' field
-  const agentDoc = await db.collection('agents').doc(agentId).get();
-  if (agentDoc.exists) {
-    const data = agentDoc.data() as Record<string, any>;
-    return (data.uid || data.firebaseUid || data.userId || null) as string | null;
-  }
-  // Also try users collection
-  const userSnap = await db.collection('users').where('agentId', '==', agentId).limit(1).get();
-  if (!userSnap.empty) return userSnap.docs[0].id;
+/**
+ * Get the Firebase UID for an agent by their agentId (slug).
+ *
+ * Resolution order:
+ *  1. If a submittedByUid is provided directly, use it — this is the most reliable
+ *     since it is the actual Firebase Auth UID captured at submission time.
+ *  2. agentProfiles/{agentId}.firebaseUid  (set when agent logs in and links their account)
+ *  3. agentProfiles where firebaseUid == agentId  (in case agentId IS the UID)
+ *  4. users collection where agentId field matches
+ *  5. Legacy 'agents' collection (fallback for old data)
+ */
+export async function getAgentUid(
+  db: Firestore,
+  agentId: string,
+  submittedByUid?: string | null,
+): Promise<string | null> {
+  // Strategy 0: Use the directly supplied submittedByUid if available
+  if (submittedByUid) return submittedByUid;
+
+  // Strategy 1: agentProfiles doc by slug ID, check firebaseUid field
+  try {
+    const profileDoc = await db.collection('agentProfiles').doc(agentId).get();
+    if (profileDoc.exists) {
+      const data = profileDoc.data() as Record<string, any>;
+      const uid = data.firebaseUid || data.uid || data.userId || null;
+      if (uid) return uid as string;
+    }
+  } catch { /* non-fatal */ }
+
+  // Strategy 2: agentProfiles where firebaseUid field == agentId (agentId might be a UID)
+  try {
+    const byUidSnap = await db
+      .collection('agentProfiles')
+      .where('firebaseUid', '==', agentId)
+      .limit(1)
+      .get();
+    if (!byUidSnap.empty) return agentId; // agentId IS the Firebase UID
+  } catch { /* non-fatal */ }
+
+  // Strategy 3: users collection where agentId field matches the slug
+  try {
+    const userSnap = await db
+      .collection('users')
+      .where('agentId', '==', agentId)
+      .limit(1)
+      .get();
+    if (!userSnap.empty) return userSnap.docs[0].id;
+  } catch { /* non-fatal */ }
+
+  // Strategy 4: Legacy 'agents' collection (old data path)
+  try {
+    const agentDoc = await db.collection('agents').doc(agentId).get();
+    if (agentDoc.exists) {
+      const data = agentDoc.data() as Record<string, any>;
+      return (data.uid || data.firebaseUid || data.userId || null) as string | null;
+    }
+  } catch { /* non-fatal */ }
+
   return null;
 }

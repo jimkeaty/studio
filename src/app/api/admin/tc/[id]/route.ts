@@ -192,7 +192,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       void (async () => {
         try {
           const agentIdSlug = String(intake?.agentId || '').trim();
-          const agentUid = agentIdSlug ? await getAgentUid(adminDb, agentIdSlug) : null;
+          const submittedByUid0 = String(intake?.submittedByUid || intake?.submittedBy || '').trim() || null;
+          const agentUid = submittedByUid0 || (agentIdSlug ? await getAgentUid(adminDb, agentIdSlug, submittedByUid0) : null);
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             if (body.status && body.status !== intake.status) {
@@ -240,7 +241,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         try {
           const intakeData = (await docRef.get()).data() as Record<string, any>;
           const agentIdSlug2 = String(intakeData?.agentId || '').trim();
-          const agentUid = agentIdSlug2 ? await getAgentUid(adminDb, agentIdSlug2) : null;
+          const submittedByUid2 = String(intakeData?.submittedByUid || intakeData?.submittedBy || '').trim() || null;
+          const agentUid = submittedByUid2 || (agentIdSlug2 ? await getAgentUid(adminDb, agentIdSlug2, submittedByUid2) : null);
           const intakeAddress = String(intakeData?.address || intakeData?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
@@ -267,7 +269,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       void (async () => {
         try {
           const agentIdSlug4 = String(intake?.agentId || '').trim();
-          const agentUid = agentIdSlug4 ? await getAgentUid(adminDb, agentIdSlug4) : null;
+          const submittedByUid4 = String(intake?.submittedByUid || intake?.submittedBy || '').trim() || null;
+          const agentUid = submittedByUid4 || (agentIdSlug4 ? await getAgentUid(adminDb, agentIdSlug4, submittedByUid4) : null);
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
@@ -379,7 +382,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       void (async () => {
         try {
           const agentIdSlug3 = String(intake?.agentId || '').trim();
-          const agentUid = agentIdSlug3 ? await getAgentUid(adminDb, agentIdSlug3) : null;
+          const submittedByUid3 = String(intake?.submittedByUid || intake?.submittedBy || '').trim() || null;
+          const agentUid = submittedByUid3 || (agentIdSlug3 ? await getAgentUid(adminDb, agentIdSlug3, submittedByUid3) : null);
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
@@ -789,7 +793,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Notify the agent their intake was approved
       void (async () => {
         try {
-          const resolvedAgentUid = agentId ? await getAgentUid(adminDb, agentId) : null;
+          const submittedByUidApproval = String(intake?.submittedByUid || intake?.submittedBy || '').trim() || null;
+          const resolvedAgentUid = submittedByUidApproval || (agentId ? await getAgentUid(adminDb, agentId, submittedByUidApproval) : null);
           if (resolvedAgentUid) {
             await sendNotification(adminDb, {
               type: 'tc_approved',
