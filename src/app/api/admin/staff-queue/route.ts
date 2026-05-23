@@ -57,48 +57,59 @@ export async function GET(req: NextRequest) {
       ...serializeFirestore(d.data()),
     }));
 
-    // Normalize: ensure every item has a resolved display address.
-    // Items may store address in 'address' or 'transactionAddress' fields.
-    // Items with tcIntakeId (new_listing) may need enrichment from the intake doc.
-    // Items with transactionId (status_change) may need enrichment from the transaction doc.
-    const needsEnrich = items.filter((i: any) => {
-      const addr = (i.transactionAddress || '').trim() || (i.address || '').trim();
-      return !addr;
-    });
-    if (needsEnrich.length > 0) {
-      await Promise.all(needsEnrich.map(async (item: any) => {
-        try {
-          let resolvedAddress = '';
-          // Try transaction first
-          if (item.transactionId) {
-            const txDoc = await adminDb.collection('transactions').doc(item.transactionId).get();
-            if (txDoc.exists) {
-              const tx = txDoc.data()!;
-              resolvedAddress = (tx.propertyAddress || tx.address || '').trim();
-            }
+    // Enrich all items with ledger-style fields from linked transaction or tcIntake.
+    // This covers: address (if missing), salePrice, closingType, dealType, contractDate, closedDate.
+    await Promise.all(items.map(async (item: any) => {
+      try {
+        let resolvedAddress = (item.transactionAddress || '').trim() || (item.address || '').trim();
+        let salePrice: number | null = item.salePrice ?? null;
+        let closingType: string | null = item.closingType ?? null;
+        let dealType: string | null = item.dealType ?? null;
+        let contractDate: string | null = item.contractDate ?? null;
+        let closedDate: string | null = item.closedDate ?? null;
+        let gci: number | null = item.gci ?? null;
+
+        // Try linked transaction first
+        if (item.transactionId && (!resolvedAddress || salePrice == null || !closingType)) {
+          const txDoc = await adminDb.collection('transactions').doc(item.transactionId).get();
+          if (txDoc.exists) {
+            const tx = txDoc.data()!;
+            if (!resolvedAddress) resolvedAddress = (tx.propertyAddress || tx.address || '').trim();
+            if (salePrice == null) salePrice = tx.salePrice ?? tx.dealValue ?? null;
+            if (!closingType) closingType = tx.closingType ?? null;
+            if (!dealType) dealType = tx.transactionType ?? tx.dealType ?? null;
+            if (!contractDate) contractDate = tx.contractDate ?? null;
+            if (!closedDate) closedDate = tx.closedDate ?? tx.closingDate ?? null;
+            if (gci == null) gci = tx.splitSnapshot?.grossCommission ?? tx.commission ?? null;
           }
-          // Fall back to TC intake
-          if (!resolvedAddress && item.tcIntakeId) {
-            const intakeDoc = await adminDb.collection('tcIntakes').doc(item.tcIntakeId).get();
-            if (intakeDoc.exists) {
-              const intake = intakeDoc.data()!;
-              resolvedAddress = (intake.address || intake.propertyAddress || '').trim();
-            }
-          }
-          if (resolvedAddress) {
-            item.transactionAddress = resolvedAddress;
-            item.address = resolvedAddress;
-            // Backfill so future fetches are instant
-            await adminDb.collection('staffQueue').doc(item.id).update({
-              transactionAddress: resolvedAddress,
-              address: resolvedAddress,
-            }).catch(() => {/* non-fatal */});
-          }
-        } catch {
-          // Non-fatal: skip enrichment for this item
         }
-      }));
-    }
+        // Fall back to TC intake
+        if (item.tcIntakeId && (!resolvedAddress || salePrice == null)) {
+          const intakeDoc = await adminDb.collection('tcIntakes').doc(item.tcIntakeId).get();
+          if (intakeDoc.exists) {
+            const intake = intakeDoc.data()!;
+            if (!resolvedAddress) resolvedAddress = (intake.address || intake.propertyAddress || '').trim();
+            if (salePrice == null) salePrice = intake.salePrice ?? null;
+            if (!closingType) closingType = intake.closingType ?? null;
+            if (!dealType) dealType = intake.dealType ?? null;
+            if (!contractDate) contractDate = intake.contractDate ?? null;
+            if (!closedDate) closedDate = intake.projectedCloseDate ?? null;
+            if (gci == null) gci = intake.gci ?? null;
+          }
+        }
+
+        // Apply enriched fields
+        if (resolvedAddress) { item.transactionAddress = resolvedAddress; item.address = resolvedAddress; }
+        if (salePrice != null) item.salePrice = salePrice;
+        if (closingType) item.closingType = closingType;
+        if (dealType) item.dealType = dealType;
+        if (contractDate) item.contractDate = contractDate;
+        if (closedDate) item.closedDate = closedDate;
+        if (gci != null) item.gci = gci;
+      } catch {
+        // Non-fatal: skip enrichment for this item
+      }
+    }));
     // Normalize: copy address → transactionAddress (or vice versa) so the list page always has a value
     for (const item of items as any[]) {
       if (!item.transactionAddress && item.address) item.transactionAddress = item.address;
