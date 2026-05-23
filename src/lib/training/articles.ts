@@ -488,6 +488,52 @@ export const ARTICLES: Article[] = [
 <p>When you enter GCI in the Add Transaction form, the green preview card will show you exactly how this breaks down in real-time. You will see the Broker cut, Your Split, and the Leader Retains amount clearly separated.</p>
     `,
   },
+
+  // ── BACKFILL TEAM MEMBERSHIPS (ADMIN) ────────────────────────────────────────
+  {
+    id: 'admin-backfill-memberships',
+    title: 'Admin: Backfill Team Memberships & Plans',
+    description:
+      'Learn what the Backfill tool does, why it exists, and when to use it to ensure team agent commissions calculate correctly.',
+    category: 'Admin Tools',
+    audience: 'staff',
+    readingTimeMinutes: 3,
+    publishedAt: '2026-05-23',
+    content: `
+<h2>What is the Backfill Tool?</h2>
+<p>The <strong>Backfill Team Memberships &amp; Plans</strong> tool is an administrative utility located in <strong>Admin &rarr; Tools</strong>. Its purpose is to scan every agent in the brokerage who is assigned to a team and ensure they have the correct underlying data records required for commission calculations.</p>
+
+<h2>Why Does It Exist?</h2>
+<p>For commissions to calculate correctly—especially for tiered plans and team leader splits—the system relies on three interconnected records in the database:</p>
+<ol>
+  <li><strong>Agent Profile:</strong> The main record containing the agent's name, team assignment, and role.</li>
+  <li><strong>Team Membership:</strong> A relational record linking the agent to their specific team.</li>
+  <li><strong>Member Plan:</strong> A financial record detailing the agent's specific commission tiers or flat split.</li>
+</ol>
+<p>In the past, if an agent was added to a team but the membership and plan records were not manually created, their commissions would fail to calculate or throw errors (like "Profile not found"). The Backfill tool automatically detects any missing records and creates them based on the agent's profile settings.</p>
+
+<h2>When Should I Use It?</h2>
+<p>You should run the Backfill tool in the following scenarios:</p>
+<ul>
+  <li><strong>After a bulk import:</strong> If you import a list of new agents into the system.</li>
+  <li><strong>If commissions aren't calculating:</strong> If an agent's transaction is throwing an error during staff approval.</li>
+  <li><strong>Periodic maintenance:</strong> It is completely safe to run at any time to ensure data integrity.</li>
+</ul>
+<blockquote><strong>Note:</strong> The system now automatically creates these records whenever you save an agent profile. The Backfill tool is primarily for catching historical data gaps or fixing issues after bulk imports.</blockquote>
+
+<h2>How to Use It</h2>
+<ol>
+  <li>Navigate to <strong>Admin &rarr; Tools</strong> in the sidebar.</li>
+  <li>Scroll down to the <strong>Backfill Team Memberships &amp; Plans</strong> card.</li>
+  <li>Click the <strong>Backfill Missing Memberships</strong> button.</li>
+  <li>Wait for the process to complete. A summary alert will appear showing how many agents were processed, how many records were created, and how many were already correct.</li>
+  <li>You can click <strong>View details</strong> to see a line-by-line breakdown of every agent processed.</li>
+</ol>
+
+<h2>Is It Safe?</h2>
+<p><strong>Yes.</strong> The tool is strictly additive. It will <em>never</em> overwrite, delete, or modify an existing Team Membership or Member Plan. If an agent already has the correct records, the tool simply skips them and marks them as "already OK."</p>
+    `,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
