@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck } from 'lucide-react';
 
 interface MigrationResult {
   ok: boolean;
@@ -120,6 +120,48 @@ export default function AdminToolsPage() {
     ok: boolean; accepted?: number; notFound?: number;
     notFoundList?: { address: string; agent: string }[]; error?: string;
   } | null>(null);
+
+  // Firestore Seed / Validate
+  const [seedAuditResult, setSeedAuditResult] = useState<any | null>(null);
+  const [seedRunning, setSeedRunning] = useState(false);
+  const [seedAuditRunning, setSeedAuditRunning] = useState(false);
+
+  async function runSeedAudit() {
+    if (!user) return;
+    setSeedAuditRunning(true);
+    setSeedAuditResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/seed-validate', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setSeedAuditResult(data);
+    } catch (err: any) {
+      setSeedAuditResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setSeedAuditRunning(false);
+    }
+  }
+
+  async function runSeedFix() {
+    if (!user) return;
+    setSeedRunning(true);
+    setSeedAuditResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/seed-validate', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setSeedAuditResult(data);
+    } catch (err: any) {
+      setSeedAuditResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setSeedRunning(false);
+    }
+  }
 
   // Manual Agent Merge
   const [allAgents, setAllAgents] = useState<AgentRow[]>([]);
@@ -717,6 +759,83 @@ export default function AdminToolsPage() {
               </Alert>
             )
           )}
+        </CardContent>
+      </Card>
+
+      {/* Firestore Seed & Validate */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-base">Firestore Seed &amp; Validate</CardTitle>
+                <CardDescription className="mt-1">
+                  Checks that all required team, commission plan, membership, and member plan records exist in Firestore.
+                  Run <strong>Audit</strong> to see what&apos;s missing, then <strong>Seed Missing Records</strong> to fix any gaps.
+                  Safe to run at any time &mdash; only writes records that are absent.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs">Data Integrity</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {seedAuditResult && (
+            <Alert variant={seedAuditResult.ok ? 'default' : 'destructive'}>
+              {seedAuditResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle>
+                {seedAuditResult.ok
+                  ? seedAuditResult.totalSeeded !== undefined
+                    ? seedAuditResult.totalSeeded === 0
+                      ? 'All Records Present — Nothing to Seed'
+                      : `Seeded ${seedAuditResult.totalSeeded} Missing Record(s)`
+                    : seedAuditResult.healthy
+                    ? 'All Records Present'
+                    : `${seedAuditResult.summary?.totalMissing} Missing Record(s) Found`
+                  : 'Error'}
+              </AlertTitle>
+              <AlertDescription>
+                {seedAuditResult.error && <p>{seedAuditResult.error}</p>}
+                {seedAuditResult.collections && (
+                  <div className="mt-2 space-y-2 text-xs">
+                    {Object.entries(seedAuditResult.collections).map(([col, info]: [string, any]) => (
+                      <div key={col}>
+                        <span className="font-semibold capitalize">{col}:</span>{' '}
+                        <span className="text-green-600">{info.present.length} present</span>
+                        {info.missing.length > 0 && (
+                          <span className="text-red-500 ml-2">{info.missing.length} missing: {info.missing.join(', ')}</span>
+                        )}
+                        {info.extra.length > 0 && (
+                          <span className="text-amber-500 ml-2">{info.extra.length} extra (user-created)</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {seedAuditResult.details && (
+                  <div className="mt-2 space-y-1 text-xs">
+                    {Object.entries(seedAuditResult.details).map(([col, info]: [string, any]) => (
+                      <div key={col}>
+                        <span className="font-semibold capitalize">{col}:</span>{' '}
+                        {(info as any).seeded > 0
+                          ? <span className="text-green-600">seeded {(info as any).seeded} record(s): {(info as any).missing.join(', ')}</span>
+                          : <span className="text-muted-foreground">nothing to seed</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={runSeedAudit} disabled={seedAuditRunning || seedRunning}>
+              {seedAuditRunning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Auditing&hellip;</> : 'Audit Firestore'}
+            </Button>
+            <Button onClick={runSeedFix} disabled={seedRunning || seedAuditRunning}>
+              {seedRunning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Seeding&hellip;</> : 'Seed Missing Records'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
