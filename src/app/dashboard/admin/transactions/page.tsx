@@ -66,7 +66,7 @@ const ALL_STATUSES = ['active', 'temp_off_market', 'pending', 'closed', 'cancele
 
 /* ─── Sorting ────────────────────────────────────────────────────────── */
 
-type SortKey = 'status' | 'address' | 'agent' | 'closingType' | 'dealType' | 'contractDate' | 'closedDate' | 'dealValue' | 'grossComm' | 'netAgent' | 'companyRetained' | 'source';
+type SortKey = 'status' | 'address' | 'agent' | 'closingType' | 'dealType' | 'contractDate' | 'projectedCloseDate' | 'closedDate' | 'dealValue' | 'grossComm' | 'netAgent' | 'companyRetained' | 'source';
 type SortDir = 'asc' | 'desc';
 
 function getSortValue(tx: Transaction, key: SortKey): string | number {
@@ -77,6 +77,7 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
     case 'closingType': return (tx as any).closingType || '';
     case 'dealType': return tx.transactionType || '';
     case 'contractDate': return tx.contractDate || '';
+    case 'projectedCloseDate': return (tx as any).projectedCloseDate || '';
     case 'closedDate': return tx.closedDate || (tx as any).closingDate || '';
     case 'dealValue': return tx.dealValue || 0;
     case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
@@ -921,6 +922,9 @@ export default function AdminTransactionLedgerPage() {
                     <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[120px]" onClick={() => toggleSort('contractDate')}>
                       <span className="flex items-center">Contract Date<SortIcon col="contractDate" /></span>
                     </TableHead>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[130px]" onClick={() => toggleSort('projectedCloseDate')}>
+                      <span className="flex items-center">Proj. Close Date<SortIcon col="projectedCloseDate" /></span>
+                    </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px]" onClick={() => toggleSort('closedDate')}>
                       <span className="flex items-center">Close Date<SortIcon col="closedDate" /></span>
                     </TableHead>
@@ -1055,6 +1059,7 @@ export default function AdminTransactionLedgerPage() {
                           </span>
                         </TableCell>
                         <TableCell className="min-w-[120px] whitespace-nowrap">{formatDate(t.contractDate)}</TableCell>
+                        <TableCell className="min-w-[130px] whitespace-nowrap">{formatDate((t as any).projectedCloseDate) || '—'}</TableCell>
                         <TableCell className="min-w-[110px] whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">{gross ? formatCurrency(gross) : '—'}</TableCell>
