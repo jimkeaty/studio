@@ -963,7 +963,7 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
               {([
                 ['listingDate', 'Listing Date'],
                 ['contractDate', 'Under Contract Date'],
-                ['optionExpiration', 'Option Expiration'],
+                ['optionExpiration', 'Listing Expiration Date'],
                 ['inspectionDeadline', 'Inspection Deadline'],
                 ['surveyDeadline', 'Survey Deadline'],
                 ['projectedCloseDate', 'Projected Close Date'],

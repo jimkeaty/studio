@@ -3044,12 +3044,20 @@ function SmartHeader({
               )}
             </p>
           </div>
-          <a href="/dashboard/transactions/new" className="shrink-0">
-            <button className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/30 text-white text-xs sm:text-sm font-semibold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-colors whitespace-nowrap">
-              <PlusCircle className="h-4 w-4" />
-              <span>Add Deal</span>
-            </button>
-          </a>
+          <div className="flex flex-col sm:flex-row items-end gap-2 shrink-0">
+            <a href="/dashboard/transactions/new?type=listing">
+              <button className="flex items-center gap-1.5 bg-amber-400/20 hover:bg-amber-400/30 active:bg-amber-400/40 border border-amber-300/40 text-amber-100 text-xs sm:text-sm font-semibold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-colors whitespace-nowrap">
+                <PlusCircle className="h-4 w-4" />
+                <span>Add Listing</span>
+              </button>
+            </a>
+            <a href="/dashboard/transactions/new?type=buyer">
+              <button className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/30 text-white text-xs sm:text-sm font-semibold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-colors whitespace-nowrap">
+                <PlusCircle className="h-4 w-4" />
+                <span>Add Transaction</span>
+              </button>
+            </a>
+          </div>
         </div>
         {/* Stats row — scrollable on very small screens */}
         <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 scrollbar-hide">

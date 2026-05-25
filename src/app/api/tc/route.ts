@@ -421,6 +421,55 @@ export async function POST(req: NextRequest) {
             });
           }
         }
+        // Sign Order notification — send to all staff if agent requested a sign order
+        const signOrderRequested = body.signOrderRequested === true;
+        if (isListingType && signOrderRequested) {
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            const signService = toStr(body.signServiceType) || 'Not specified';
+            const signDate = toStr(body.signRequestedDate) || 'Not specified';
+            const signAdditional = Array.isArray(body.signAdditionalOptions) && body.signAdditionalOptions.length > 0
+              ? body.signAdditionalOptions.join(', ')
+              : 'None';
+            const signOwner = toStr(body.signOwnerName) || 'Not provided';
+            const signSpecial = toStr(body.signSpecialRequests) || 'None';
+            const signBody = `Agent: ${agentDisplayName}\nProperty: ${address}\nService: ${signService}\nRequested Date: ${signDate}\nAdditional Options: ${signAdditional}\nOwner Name (for sign): ${signOwner}\nSpecial Requests: ${signSpecial}\n\nPlease add QR code/text rider number as needed before forwarding to PostMan337.`;
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: `Sign Order Request — ${address}`,
+              body: signBody,
+              url: '/dashboard/admin/staff-queue',
+            });
+          }
+        }
+        // ShowingTime Setup notification — send to all staff if agent requested ShowingTime setup
+        const showingTimeRequested = body.showingTimeRequested === true;
+        if (isListingType && showingTimeRequested) {
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            const showingType = toStr(body.showingNewOrChange) === 'change' ? 'Change/Update' : 'New Setup';
+            const apptHandling = Array.isArray(body.showingApptHandling) && body.showingApptHandling.length > 0
+              ? body.showingApptHandling.join(', ')
+              : 'Not specified';
+            const lockboxType = toStr(body.showingLockboxType) || 'Not specified';
+            const lockboxLocation = toStr(body.showingLockboxLocation) || 'Not specified';
+            const alarmDisarm = toStr(body.showingAlarmDisarm) || 'None';
+            const alarmArm = toStr(body.showingAlarmArm) || 'None';
+            const notesToAgent = Array.isArray(body.showingNotesToAgent) && body.showingNotesToAgent.length > 0
+              ? body.showingNotesToAgent.join(', ')
+              : 'None';
+            const notesToStaff = toStr(body.showingNotesToStaff) || 'None';
+            const showingBody = `Agent: ${agentDisplayName}\nProperty: ${address}\nRequest Type: ${showingType}\nAppointment Handling: ${apptHandling}\nLockbox Type: ${lockboxType}\nLockbox Location: ${lockboxLocation}\nAlarm Disarm: ${alarmDisarm} | Arm: ${alarmArm}\nNotes to Showing Agent: ${notesToAgent}\nNotes to Staff: ${notesToStaff}\n\nPlease set up in ShowingTime portal or email the completed form.`;
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: `ShowingTime Setup Request — ${address}`,
+              body: showingBody,
+              url: '/dashboard/admin/staff-queue',
+            });
+          }
+        }
       } catch (notifErr) {
         console.error('[POST /api/tc] notification error:', notifErr);
       }

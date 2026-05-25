@@ -63,7 +63,7 @@ const HEADERS = [
   'Closed Date',
   'Projected Close Date',
   'Listing Date',
-  'Option Expiration',
+  'Listing Expiration Date',
   'Inspection Deadline',
   'Survey Deadline',
   'Loan Application Deadline',

@@ -447,7 +447,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
                 <Input id="edit-closing-date" type="date" value={closingDate} onChange={e => setClosingDate(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="edit-option-exp">Option Expiration</Label>
+                <Label htmlFor="edit-option-exp">Listing Expiration Date</Label>
                 <Input id="edit-option-exp" type="date" value={optionExpiration} onChange={e => setOptionExpiration(e.target.value)} />
               </div>
               <div className="space-y-1">
