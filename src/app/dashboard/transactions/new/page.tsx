@@ -21,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Sparkles, AlertCircle, ChevronRight } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight } from 'lucide-react';
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
 import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
@@ -1052,6 +1052,21 @@ export default function AddTransactionPage() {
               <span className="text-xs font-medium">{pdfHighlightFields.size} fields need review</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Back to upload button — shown when agent skipped to manual */}
+      {pdfStep === 'form' && !pdfName && (
+        <div className="flex items-center gap-3 rounded-xl border border-dashed border-muted-foreground/30 bg-muted/30 px-4 py-3">
+          <Upload className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <p className="text-sm text-muted-foreground flex-1">Changed your mind? Upload a purchase agreement to auto-fill the form.</p>
+          <button
+            type="button"
+            onClick={() => { setPdfStep('upload'); setPdfName(''); setPdfHighlightFields(new Set()); }}
+            className="text-sm font-medium text-primary underline underline-offset-2 hover:text-primary/80 flex-shrink-0"
+          >
+            Upload PDF Instead
+          </button>
         </div>
       )}
 
