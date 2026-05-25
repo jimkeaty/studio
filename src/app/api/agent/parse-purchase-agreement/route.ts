@@ -5,6 +5,9 @@ import OpenAI from 'openai';
 // OpenAI client initialized inside handler — avoids build-time crash when env var is absent
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
+// Maximum request body size for Next.js App Router
+export const maxDuration = 60; // seconds (Firebase App Hosting supports up to 60s)
+
 /* ─── Auth helper ─────────────────────────────────────────────────────── */
 async function getUid(req: NextRequest): Promise<string | null> {
   const auth = req.headers.get('authorization') || '';
@@ -20,7 +23,7 @@ async function getUid(req: NextRequest): Promise<string | null> {
 
 /* ─── System prompt ───────────────────────────────────────────────────── */
 const SYSTEM_PROMPT = `You are a real estate transaction data extraction assistant. 
-You will be given the full text of a purchase agreement / sales contract PDF.
+You will be given a purchase agreement / sales contract PDF.
 Extract the fields listed below and return ONLY a valid JSON object — no markdown, no explanation.
 
 For each field, also include a confidence score (0.0–1.0) in a parallel "_confidence" object.
@@ -122,6 +125,9 @@ export async function POST(req: NextRequest) {
   const uid = await getUid(req);
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const openai = getOpenAI();
+  let uploadedFileId: string | null = null;
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
@@ -137,44 +143,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File too large (max 25 MB)' }, { status: 400 });
     }
 
-    // Extract text from PDF using pdf-parse (pure JS, no native modules)
+    // Upload PDF to OpenAI Files API so gpt-4o can read it natively.
+    // This handles Authentisign/LREC custom font encoding that breaks text extraction.
+    // gpt-4o extracts both text and page images from PDFs automatically.
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    let pdfText = '';
     try {
-      // Use pdf-parse v2 class-based API
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ data: buffer });
-      const result = await parser.getText();
-      pdfText = result.text?.trim() || '';
-    } catch (parseErr) {
-      console.error('PDF parse error:', parseErr);
+      const blob = new Blob([buffer], { type: 'application/pdf' });
+      const fileForUpload = new File([blob], file.name, { type: 'application/pdf' });
+      const uploadedFile = await openai.files.create({
+        file: fileForUpload,
+        purpose: 'user_data',
+      });
+      uploadedFileId = uploadedFile.id;
+    } catch (uploadErr) {
+      console.error('OpenAI file upload error:', uploadErr);
       return NextResponse.json({
-        error: 'Could not read PDF. Please ensure the file is not password protected.',
+        error: 'Could not upload PDF for analysis. Please try again.',
       }, { status: 422 });
     }
 
-    if (!pdfText || pdfText.length < 50) {
-      return NextResponse.json({
-        error: 'PDF appears to be empty or image-only (scanned). Please upload a text-based PDF.',
-      }, { status: 422 });
-    }
-
-    // Truncate to ~120k chars to stay within gpt-4o-mini context window
-    const truncated = pdfText.length > 120000 ? pdfText.slice(0, 120000) + '\n[...truncated]' : pdfText;
-
-    // Call OpenAI Chat Completions API with gpt-4o-mini
-    const openai = getOpenAI();
+    // Call gpt-4o with the uploaded file — it extracts both text and page images
     let raw = '';
     try {
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         temperature: 0,
         max_tokens: 2048,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `Here is the full text of the purchase agreement:\n\n${truncated}` },
+          {
+            role: 'user',
+            content: [
+              {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                type: 'file' as any,
+                file: { file_id: uploadedFileId },
+              },
+              {
+                type: 'text',
+                text: 'Extract all fields from this purchase agreement and return the JSON as instructed.',
+              },
+            ],
+          },
         ],
       });
       raw = completion.choices[0]?.message?.content?.trim() || '';
@@ -209,5 +221,15 @@ export async function POST(req: NextRequest) {
     console.error('parse-purchase-agreement error:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: `Extraction failed: ${message}` }, { status: 500 });
+  } finally {
+    // Clean up the uploaded file from OpenAI to avoid storage accumulation
+    if (uploadedFileId) {
+      try {
+        await openai.files.delete(uploadedFileId);
+      } catch {
+        // Non-critical — log but don't fail the request
+        console.warn('Could not delete OpenAI file:', uploadedFileId);
+      }
+    }
   }
 }

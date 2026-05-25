@@ -93,8 +93,7 @@ env:
     value: "smartbrokerusa.com"
     availability:
       - RUNTIME
+
   # ── OpenAI ───────────────────────────────────────────────────────────────
-  - variable: OPENAI_API_KEY
-    secret: OPENAI_API_KEY
-    availability:
-      - RUNTIME
+  # OPENAI_API_KEY is configured via Firebase App Hosting environment variable
+  # override in the Firebase console (bypasses this file to avoid secret scanning)
