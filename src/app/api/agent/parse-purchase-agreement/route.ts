@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth } from 'firebase-admin/auth';
-import { initAdminApp } from '@/lib/firebase/admin';
+import { adminAuth } from '@/lib/firebase/admin';
 import OpenAI from 'openai';
-
-initAdminApp();
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -13,7 +10,7 @@ async function getUid(req: NextRequest): Promise<string | null> {
   const token = auth.replace('Bearer ', '').trim();
   if (!token) return null;
   try {
-    const decoded = await getAuth().verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
     return decoded.uid;
   } catch {
     return null;
@@ -145,8 +142,9 @@ export async function POST(req: NextRequest) {
 
     let pdfText = '';
     try {
-      // Dynamic import to avoid SSR issues
-      const pdfParse = (await import('pdf-parse')).default;
+      // Dynamic import — pdf-parse v2 exports as named export
+      const pdfParseModule = await import('pdf-parse');
+      const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
       const parsed = await pdfParse(buffer);
       pdfText = parsed.text;
     } catch (err) {
