@@ -22,7 +22,7 @@ async function getUid(req: NextRequest): Promise<string | null> {
 }
 
 /* ─── System prompt ───────────────────────────────────────────────────── */
-const SYSTEM_PROMPT = `You are a real estate transaction data extraction assistant. 
+const SYSTEM_PROMPT = `You are a real estate transaction data extraction assistant specializing in Louisiana LREC (Louisiana Real Estate Commission) purchase agreements.
 You will be given a purchase agreement / sales contract PDF.
 Extract the fields listed below and return ONLY a valid JSON object — no markdown, no explanation.
 
@@ -42,8 +42,11 @@ Return this exact JSON shape:
     "loanApplicationDeadline": "",
     "appraisalDeadline": "",
     "finalLoanCommitmentDeadline": "",
-    "optionExpiration": "",
+    "titleDeadline": "",
+    "offerExpirationDate": "",
+    "offerExpirationTime": "",
     "earnestMoney": null,
+    "depositHeldBy": "",
     "closingType": "",
     "dealType": "",
     "clientType": "",
@@ -63,6 +66,7 @@ Return this exact JSON shape:
     "otherAgentEmail": "",
     "otherAgentPhone": "",
     "otherBrokerage": "",
+    "commissionPaidBySeller": null,
     "mortgageCompany": "",
     "loanOfficer": "",
     "loanOfficerEmail": "",
@@ -96,9 +100,16 @@ Return this exact JSON shape:
     "contractDate": 0.0,
     "projectedCloseDate": 0.0,
     "inspectionDeadline": 0.0,
+    "loanApplicationDeadline": 0.0,
+    "appraisalDeadline": 0.0,
+    "finalLoanCommitmentDeadline": 0.0,
+    "titleDeadline": 0.0,
+    "offerExpirationDate": 0.0,
     "buyerName": 0.0,
     "sellerName": 0.0,
     "otherAgentName": 0.0,
+    "depositHeldBy": 0.0,
+    "commissionPaidBySeller": 0.0,
     "mortgageCompany": 0.0,
     "titleCompany": 0.0,
     "loanType": 0.0,
@@ -108,15 +119,84 @@ Return this exact JSON shape:
   }
 }
 
-Rules:
+=== LOUISIANA LREC DATE CALCULATION RULES ===
+
+This is a Louisiana LREC Residential Agreement to Buy and Sell. Dates are NOT written explicitly in the contract — they are CALCULATED from the Under Contract Date using the rules below.
+
+1. UNDER CONTRACT DATE (= contractDate):
+   - This is the date of the LAST signature on the purchase agreement OR the counter offer (whichever is most recent).
+   - Look for the most recent signature date among all parties (buyer and seller).
+   - This is the "date of acceptance" and the "commencement" date.
+
+2. LOAN APPLICATION DEADLINE (= loanApplicationDeadline):
+   - Found in the Financing section: "written authorization to lender to proceed with the loan approval process within __ calendar days after the date of acceptance."
+   - The blank is typically filled with 5.
+   - Calculate: contractDate + 5 calendar days (counting starts the NEXT day after contractDate).
+   - Example: contractDate = May 25, 2026 → loanApplicationDeadline = May 30, 2026.
+
+3. INSPECTION DEADLINE (= inspectionDeadline):
+   - Found in the Due Diligence and Inspection Period section: "__ calendar days after commencement."
+   - The blank is typically filled with 7.
+   - Calculate: contractDate + 7 calendar days (counting starts the NEXT day after contractDate).
+   - Example: contractDate = May 25, 2026 → inspectionDeadline = June 1, 2026.
+
+4. SURVEY DEADLINE (= surveyDeadline):
+   - Same date as inspectionDeadline.
+
+5. APPRAISAL DEADLINE (= appraisalDeadline):
+   - Calculate: projectedCloseDate − 10 calendar days.
+   - Example: projectedCloseDate = July 1, 2026 → appraisalDeadline = June 21, 2026.
+
+6. FINAL LOAN COMMITMENT DEADLINE (= finalLoanCommitmentDeadline):
+   - Calculate: projectedCloseDate − 5 calendar days.
+   - Example: projectedCloseDate = July 1, 2026 → finalLoanCommitmentDeadline = June 26, 2026.
+
+7. TITLE DEADLINE (= titleDeadline):
+   - Calculate: projectedCloseDate − 3 calendar days.
+   - Example: projectedCloseDate = July 1, 2026 → titleDeadline = June 28, 2026.
+
+8. OFFER EXPIRATION (= offerExpirationDate + offerExpirationTime):
+   - Found in the "Expiration of Offer" section of the contract.
+   - Extract the date and time exactly as written (e.g., "May 26, 2026 at 5:00 PM").
+   - offerExpirationDate: YYYY-MM-DD format.
+   - offerExpirationTime: 12-hour format string, e.g. "5:00 PM".
+
+IMPORTANT: If the contractDate is not yet known (e.g., the contract has not been signed yet), leave all calculated date fields as "" and set their confidence to 0.0. If the contractDate IS present, you MUST calculate all derived dates using the rules above.
+
+=== PEOPLE AND CONTACT FIELDS ===
+
+- buyerName / buyer2Name: Found in the Buyers section of the contract (typically near the bottom, in the signature/party identification area).
+  - If two buyers are listed, put the first in buyerName and the second in buyer2Name.
+
+- sellerName / seller2Name: Found in the Sellers section of the contract.
+  - If two sellers are listed, put the first in sellerName and the second in seller2Name.
+
+- otherAgentName: This is the COOPERATING AGENT — specifically the "Seller's Designated Agent" listed at the TOP of the purchase agreement.
+  - Their brokerage name goes in otherBrokerage.
+  - Their phone/email goes in otherAgentPhone / otherAgentEmail.
+
+- depositHeldBy: Look for who is holding the earnest money deposit.
+  - If it says "Listing Broker" or "Listing Agent's Broker", return "listing_broker".
+  - If it says "Selling Broker" or "Buyer's Broker", return "selling_broker".
+  - If it says a specific company name, return that company name.
+  - If not found, return "".
+
+- commissionPaidBySeller: Look for a clause where the seller agrees to pay the buyer's broker/agent a commission.
+  - Extract the percentage as a number (e.g., if it says "3% of the purchase price", return 3).
+  - If not found or not applicable, return null.
+
+=== GENERAL RULES ===
+
 - Dates must be in YYYY-MM-DD format (e.g. "2025-06-15"). If only month/day/year text is found, convert it.
 - Dollar amounts must be numbers only (no $ or commas). E.g. 425000 not "$425,000".
+- Percentages must be numbers only (e.g. 3 not "3%").
 - closingType: infer from context — "buyer" if agent represents buyer, "listing" if agent represents seller, "dual" if both, "referral" if referral fee only.
 - dealType: one of "residential_sale", "residential_lease", "land", "commercial_sale", "commercial_lease".
 - clientType: "buyer", "seller", or "dual".
 - mineralRights: "included", "excluded", "reserved", or "not_mentioned".
 - loanType: e.g. "conventional", "FHA", "VA", "USDA", "cash", "owner_finance", or the exact text found.
 - financingContingency: "yes", "no", or the contingency deadline date if found.
+- If a COUNTER OFFER is present in the document, its terms SUPERSEDE the purchase agreement for any fields it modifies. Always use the most recent/final agreed-upon values.
 - For fields not found, use "" for strings and null for numbers.
 - Do not invent data. Only extract what is clearly present in the document.`;
 
