@@ -1,7 +1,8 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
@@ -370,6 +371,8 @@ export default function AddTransactionPage() {
   const { user, loading: userLoading } = useUser();
   const { effectiveUid, effectiveName, isImpersonating } = useEffectiveUser();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const urlDraftId = searchParams?.get('draft') ?? null;
   const [submitted, setSubmitted] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -551,6 +554,7 @@ export default function AddTransactionPage() {
   const DRAFT_KEY = 'sb_add_transaction_draft';
   const [hasDraft, setHasDraft] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(urlDraftId);
 
   // Commission auto-calculation state
   const [agentCommission, setAgentCommission] = useState<AgentCommissionData | null>(null);
@@ -766,24 +770,71 @@ export default function AddTransactionPage() {
     form.setValue('notes', watchedAdditionalComments || '');
   }, [watchedAdditionalComments]);
 
-  // Auto-save draft to localStorage every 30 seconds
+    // ── Load draft from URL param (?draft=draftId) ────────────────────────────
+  useEffect(() => {
+    if (!urlDraftId || !user || draftRestored) return;
+    const loadDraft = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/agent/drafts/${urlDraftId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          toast({ title: 'Draft not found', description: 'Could not load the draft.', variant: 'destructive' });
+          return;
+        }
+        const values = data.fields || {};
+        Object.entries(values).forEach(([key, val]) => {
+          if (val !== undefined && val !== null && val !== '') {
+            form.setValue(key as any, val as any);
+          }
+        });
+        setActiveDraftId(urlDraftId);
+        setDraftRestored(true);
+        setHasDraft(false);
+        toast({ title: 'Draft loaded', description: 'Your saved draft has been restored.' });
+      } catch (err: any) {
+        toast({ title: 'Error loading draft', description: err.message, variant: 'destructive' });
+      }
+    };
+    loadDraft();
+  }, [urlDraftId, user]);
+
+  // ── Auto-save draft to Firestore every 30 seconds ─────────────────────────
   useEffect(() => {
     if (submitted) return;
+    // Also check localStorage for legacy drafts
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (saved) setHasDraft(true);
     } catch {}
-    const interval = setInterval(() => {
+    if (!user) return;
+    const interval = setInterval(async () => {
       try {
         const values = form.getValues();
         const hasContent = values.address || values.clientName || values.salePrice;
-        if (hasContent) {
-          localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, savedAt: Date.now() }));
+        if (!hasContent) return;
+        const token = await user.getIdToken();
+        const res = await fetch('/api/agent/drafts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            draftId: activeDraftId || undefined,
+            fields: values,
+            label: values.address || values.clientName || 'Untitled Draft',
+          }),
+        });
+        const data = await res.json();
+        if (data.ok && data.draftId && !activeDraftId) {
+          setActiveDraftId(data.draftId);
         }
+        // Also keep localStorage as fallback
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, savedAt: Date.now() }));
       } catch {}
     }, 30000);
     return () => clearInterval(interval);
-  }, [submitted]);
+  }, [submitted, user, activeDraftId]);
 
   const restoreDraft = () => {
     try {
@@ -800,10 +851,21 @@ export default function AddTransactionPage() {
       toast({ title: 'Draft restored', description: 'Your previous form data has been loaded.' });
     } catch {}
   };
-
-  const discardDraft = () => {
+  const discardDraft = async () => {
     try { localStorage.removeItem(DRAFT_KEY); } catch {}
     setHasDraft(false);
+    // Also delete from Firestore if we have an activeDraftId
+    if (activeDraftId && user) {
+      try {
+        const token = await user.getIdToken();
+        await fetch('/api/agent/drafts', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ draftId: activeDraftId }),
+        });
+        setActiveDraftId(null);
+      } catch {}
+    }
   };
 
   const toggleInspectionType = (type: string) => {
@@ -959,6 +1021,16 @@ export default function AddTransactionPage() {
       setResultId(data.id);
       // Clear draft on successful submit
       try { localStorage.removeItem(DRAFT_KEY); } catch {}
+      if (activeDraftId && user) {
+        try {
+          const token = await user.getIdToken();
+          await fetch('/api/agent/drafts', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ draftId: activeDraftId }),
+          });
+        } catch {}
+      }
       setSubmitted(true);
       toast({
         title: 'Transaction submitted to TC Queue',

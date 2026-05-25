@@ -25,9 +25,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw, Paperclip, FileText, Trash2, PlusCircle } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw, Paperclip, FileText, Trash2, PlusCircle, FileEdit, Clock } from 'lucide-react';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -644,23 +645,24 @@ type Props = {
 
 export function AgentTransactionsSection({ agentId, viewAs }: Props) {
   const { user } = useUser();
-
   const [transactions, setTransactions] = useState<AgentTx[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   // Filters
   const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [addressSearch, setAddressSearch] = useState('');
-
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>('closedDate');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-
   // Edit drawer
   const [editTx, setEditTx] = useState<AgentTx | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  // Drafts
+  type DraftSummary = { draftId: string; label: string | null; address: string | null; clientName: string | null; salePrice: number | null; savedAt: string | null };
+  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
 
   /* ─── Load transactions ──────────────────────────────────────────────── */
 
@@ -696,9 +698,44 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
     }
   }, [user, agentId, viewAs]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (user) load();
   }, [user, load]);
+
+  /* ─── Load drafts ────────────────────────────────────────────────────── */
+
+  const loadDrafts = useCallback(async () => {
+    if (!user) return;
+    setDraftsLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/agent/drafts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok) setDrafts(data.drafts || []);
+    } catch {}
+    finally { setDraftsLoading(false); }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) loadDrafts();
+  }, [user, loadDrafts]);
+
+  const deleteDraft = async (draftId: string) => {
+    if (!user) return;
+    setDeletingDraftId(draftId);
+    try {
+      const token = await user.getIdToken();
+      await fetch('/api/agent/drafts', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ draftId }),
+      });
+      setDrafts(prev => prev.filter(d => d.draftId !== draftId));
+    } catch {}
+    finally { setDeletingDraftId(null); }
+  };
 
   /* ─── Filtering & sorting ────────────────────────────────────────────── */
 
@@ -816,6 +853,80 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
           <p className="text-2xl font-bold mt-1">{transactions.length}</p>
         </Card>
       </div>
+
+      {/* Drafts */}
+      {(drafts.length > 0 || draftsLoading) && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileEdit className="h-4 w-4 text-amber-600" />
+                <CardTitle className="text-sm font-semibold text-amber-800 dark:text-amber-300">Saved Drafts</CardTitle>
+                <Badge variant="outline" className="text-xs border-amber-300 text-amber-700">{drafts.length}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">Resume or delete incomplete transactions</p>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {draftsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {drafts.map((draft) => {
+                  const title = draft.address || draft.label || draft.clientName || 'Untitled Draft';
+                  const subtitle = [
+                    draft.address && draft.clientName ? draft.clientName : null,
+                    draft.salePrice ? `$${Number(draft.salePrice).toLocaleString()}` : null,
+                  ].filter(Boolean).join(' · ');
+                  const savedAgo = draft.savedAt
+                    ? formatDistanceToNow(new Date(draft.savedAt), { addSuffix: true })
+                    : null;
+                  return (
+                    <div
+                      key={draft.draftId}
+                      className="flex items-center justify-between gap-3 rounded-md border border-amber-200 dark:border-amber-800 bg-white dark:bg-amber-950/30 px-3 py-2.5"
+                    >
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        <FileText className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{title}</p>
+                          {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
+                          {savedAgo && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <Clock className="h-3 w-3" />
+                              Saved {savedAgo}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Link href={`/dashboard/transactions/new?draft=${draft.draftId}`}>
+                          <Button size="sm" variant="outline" className="text-xs h-7 border-amber-400 text-amber-700 hover:bg-amber-100">
+                            <FileEdit className="h-3 w-3 mr-1" />
+                            Resume
+                          </Button>
+                        </Link>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs h-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => deleteDraft(draft.draftId)}
+                          disabled={deletingDraftId === draft.draftId}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>
