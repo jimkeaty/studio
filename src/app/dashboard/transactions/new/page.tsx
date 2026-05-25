@@ -21,7 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2 } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Sparkles, AlertCircle, ChevronRight } from 'lucide-react';
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
 import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
@@ -375,6 +375,123 @@ export default function AddTransactionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+
+  // ── PDF extraction state ──────────────────────────────────────────────────
+  type PdfStep = 'upload' | 'extracting' | 'review' | 'form';
+  const [pdfStep, setPdfStep] = useState<PdfStep>('upload');
+  const [pdfName, setPdfName] = useState<string>('');
+  const [pdfConfidence, setPdfConfidence] = useState<Record<string, number>>({});
+  const [pdfHighlightFields, setPdfHighlightFields] = useState<Set<string>>(new Set());
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePdfUpload = async (file: File) => {
+    if (!user) return;
+    setPdfStep('extracting');
+    setPdfName(file.name);
+    try {
+      const token = await user.getIdToken();
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/agent/parse-purchase-agreement', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast({ title: 'Extraction failed', description: data.error || 'Could not read the PDF. Please fill the form manually.', variant: 'destructive' });
+        setPdfStep('form');
+        return;
+      }
+      const f = data.fields || {};
+      const conf = data.confidence || {};
+      setPdfConfidence(conf);
+      // Fields with confidence < 0.7 get highlighted for agent review
+      const lowConf = new Set<string>(Object.entries(conf).filter(([, v]) => (v as number) < 0.7 && (v as number) > 0).map(([k]) => k));
+      setPdfHighlightFields(lowConf);
+      // Map extracted fields to form values
+      const setIfPresent = (key: string, val: unknown) => {
+        if (val !== null && val !== undefined && val !== '') form.setValue(key as any, val as any);
+      };
+      setIfPresent('address', f.address);
+      setIfPresent('salePrice', f.salePrice);
+      setIfPresent('listPrice', f.listPrice);
+      setIfPresent('contractDate', f.contractDate);
+      setIfPresent('projectedCloseDate', f.projectedCloseDate);
+      setIfPresent('inspectionDeadline', f.inspectionDeadline);
+      setIfPresent('surveyDeadline', f.surveyDeadline);
+      setIfPresent('loanApplicationDeadline', f.loanApplicationDeadline);
+      setIfPresent('appraisalDeadline', f.appraisalDeadline);
+      setIfPresent('finalLoanCommitmentDeadline', f.finalLoanCommitmentDeadline);
+      setIfPresent('optionExpiration', f.optionExpiration);
+      setIfPresent('earnestMoney', f.earnestMoney);
+      setIfPresent('buyerName', f.buyerName);
+      setIfPresent('buyerEmail', f.buyerEmail);
+      setIfPresent('buyerPhone', f.buyerPhone);
+      setIfPresent('buyer2Name', f.buyer2Name);
+      setIfPresent('buyer2Email', f.buyer2Email);
+      setIfPresent('buyer2Phone', f.buyer2Phone);
+      setIfPresent('sellerName', f.sellerName);
+      setIfPresent('sellerEmail', f.sellerEmail);
+      setIfPresent('sellerPhone', f.sellerPhone);
+      setIfPresent('seller2Name', f.seller2Name);
+      setIfPresent('seller2Email', f.seller2Email);
+      setIfPresent('seller2Phone', f.seller2Phone);
+      setIfPresent('otherAgentName', f.otherAgentName);
+      setIfPresent('otherAgentEmail', f.otherAgentEmail);
+      setIfPresent('otherAgentPhone', f.otherAgentPhone);
+      setIfPresent('otherBrokerage', f.otherBrokerage);
+      setIfPresent('mortgageCompany', f.mortgageCompany);
+      setIfPresent('loanOfficer', f.loanOfficer);
+      setIfPresent('loanOfficerEmail', f.loanOfficerEmail);
+      setIfPresent('loanOfficerPhone', f.loanOfficerPhone);
+      setIfPresent('titleCompany', f.titleCompany);
+      setIfPresent('titleOfficer', f.titleOfficer);
+      setIfPresent('titleOfficerEmail', f.titleOfficerEmail);
+      setIfPresent('titleOfficerPhone', f.titleOfficerPhone);
+      setIfPresent('titleAttorney', f.titleAttorney);
+      setIfPresent('inspectorName', f.inspectorName);
+      // clientName fallback — use buyer or seller name
+      if (!form.getValues('clientName')) {
+        const cn = f.buyerName || f.sellerName || '';
+        if (cn) form.setValue('clientName', cn as string);
+      }
+      // closingType inference
+      if (f.closingType && ['buyer','listing','dual','referral'].includes(f.closingType as string)) {
+        form.setValue('closingType', f.closingType as any);
+      }
+      // dealType inference
+      if (f.dealType && ['residential_sale','residential_lease','land','commercial_sale','commercial_lease'].includes(f.dealType as string)) {
+        form.setValue('dealType', f.dealType as any);
+      }
+      // clientType inference
+      if (f.clientType && ['buyer','seller','dual'].includes(f.clientType as string)) {
+        form.setValue('clientType', f.clientType as any);
+      }
+      // Store extra fields in notes if present
+      const extraNotes: string[] = [];
+      if (f.loanType) extraNotes.push(`Loan Type: ${f.loanType}`);
+      if (f.loanAmount) extraNotes.push(`Loan Amount: $${Number(f.loanAmount).toLocaleString()}`);
+      if (f.downPaymentAmount) extraNotes.push(`Down Payment: $${Number(f.downPaymentAmount).toLocaleString()}`);
+      if (f.downPaymentPercent) extraNotes.push(`Down Payment %: ${f.downPaymentPercent}%`);
+      if (f.interestRate) extraNotes.push(`Interest Rate: ${f.interestRate}%`);
+      if (f.loanTerm) extraNotes.push(`Loan Term: ${f.loanTerm} years`);
+      if (f.financingContingency && f.financingContingency !== 'no') extraNotes.push(`Financing Contingency: ${f.financingContingency}`);
+      if (f.mineralRights && f.mineralRights !== 'not_mentioned') extraNotes.push(`Mineral Rights: ${f.mineralRights}${f.mineralRightsClause ? ' — ' + f.mineralRightsClause : ''}`);
+      if (f.homeWarranty === 'yes') extraNotes.push(`Home Warranty: Yes${f.homeWarrantyAmount ? ' ($' + Number(f.homeWarrantyAmount).toLocaleString() + ')' : ''}${f.homeWarrantyPaidBy ? ', paid by ' + f.homeWarrantyPaidBy : ''}`);
+      if (f.sellerConcessions) extraNotes.push(`Seller Concessions: $${Number(f.sellerConcessions).toLocaleString()}`);
+      if (f.notes) extraNotes.push(f.notes as string);
+      if (extraNotes.length > 0) {
+        const existing = form.getValues('notes') || '';
+        form.setValue('notes', (existing ? existing + '\n\n' : '') + '[AI Extracted]\n' + extraNotes.join('\n'));
+      }
+      setPdfStep('form');
+      toast({ title: '✅ Purchase agreement scanned', description: `${Object.values(conf).filter(v => (v as number) >= 0.7).length} fields auto-filled. Review highlighted fields before submitting.` });
+    } catch (err: any) {
+      toast({ title: 'Extraction error', description: err.message, variant: 'destructive' });
+      setPdfStep('form');
+    }
+  };
 
   // ── Document upload state ──────────────────────────────────────────────────
   type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string };
@@ -849,13 +966,97 @@ export default function AddTransactionPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Add Transaction</h1>
           <p className="text-muted-foreground mt-1">
-            Fill in all relevant details below. Transaction will be submitted to the TC Queue for review before appearing in the ledger.
+            {pdfStep === 'upload' ? 'Upload a purchase agreement to auto-fill the form, or skip to fill manually.' : pdfStep === 'extracting' ? 'Reading your purchase agreement...' : 'Review the auto-filled details below and submit to the TC Queue.'}
           </p>
         </div>
         <Badge variant="outline" className="mt-1">
           <ClipboardList className="h-3 w-3 mr-1" /> TC Queue Review
         </Badge>
       </div>
+
+      {/* ── PDF Upload Landing ──────────────────────────────────────────────── */}
+      {pdfStep === 'upload' && (
+        <Card className="border-2 border-dashed border-primary/30 bg-primary/5 hover:border-primary/60 transition-colors">
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Sparkles className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Upload Purchase Agreement</h2>
+                <p className="text-muted-foreground mt-1 max-w-md">Drop your PDF here and we'll auto-fill the form — property address, dates, buyer/seller info, lender, title company, co-agent, financing terms, and more.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 mt-2">
+                <Button
+                  type="button"
+                  size="lg"
+                  onClick={() => pdfInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <UploadCloud className="h-5 w-5" /> Choose PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setPdfStep('form')}
+                  className="gap-2"
+                >
+                  Skip — Fill Manually <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">PDF only · Max 25 MB · Text-based PDFs only (not scanned images)</p>
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handlePdfUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Extracting spinner ─────────────────────────────────────────────── */}
+      {pdfStep === 'extracting' && (
+        <Card>
+          <CardContent className="py-16">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <Loader2 className="h-12 w-12 text-primary animate-spin" />
+              <div>
+                <h2 className="text-xl font-bold">Reading Purchase Agreement</h2>
+                <p className="text-muted-foreground mt-1">{pdfName}</p>
+                <p className="text-sm text-muted-foreground mt-2">Extracting property details, dates, contacts, and financing terms...</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── PDF source banner (shown after extraction) ─────────────────────── */}
+      {pdfStep === 'form' && pdfName && (
+        <div className="flex items-center gap-3 rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-700 px-4 py-3">
+          <FileText className="h-5 w-5 text-green-600 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-green-800 dark:text-green-300">Auto-filled from purchase agreement</p>
+            <p className="text-xs text-green-700 dark:text-green-400 truncate">{pdfName}</p>
+          </div>
+          {pdfHighlightFields.size > 0 && (
+            <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 flex-shrink-0">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-xs font-medium">{pdfHighlightFields.size} fields need review</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Form — only shown after PDF step */}
+      {(pdfStep === 'form') && (<>
 
       {/* Draft restore banner */}
       {hasDraft && !draftRestored && (
@@ -2422,6 +2623,7 @@ export default function AddTransactionPage() {
 
         </form>
       </Form>
+      </>)}
     </div>
   );
 }
