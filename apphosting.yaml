@@ -93,3 +93,8 @@ env:
     value: "smartbrokerusa.com"
     availability:
       - RUNTIME
+  # ── OpenAI ───────────────────────────────────────────────────────────────
+  - variable: OPENAI_API_KEY
+    secret: OPENAI_API_KEY
+    availability:
+      - RUNTIME
