@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// OpenAI client initialized inside handler — avoids build-time crash when env var is absent
+function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
 /* ─── Auth helper ─────────────────────────────────────────────────────── */
 async function getUid(req: NextRequest): Promise<string | null> {
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
     const truncated = pdfText.slice(0, 60000);
 
     // Call OpenAI
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4.1-mini',
       temperature: 0,
       max_tokens: 2000,
