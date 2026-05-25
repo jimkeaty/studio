@@ -92,6 +92,8 @@ Return this exact JSON shape:
     "occupancyAgreement": "",
     "occupancyDates": "",
     "sellerConcessions": null,
+    "hasPrivateWell": false,
+    "hasSepticSystem": false,
     "notes": ""
   },
   "_confidence": {
@@ -115,7 +117,9 @@ Return this exact JSON shape:
     "loanType": 0.0,
     "loanAmount": 0.0,
     "mineralRights": 0.0,
-    "financingContingency": 0.0
+    "financingContingency": 0.0,
+    "hasPrivateWell": 0.0,
+    "hasSepticSystem": 0.0
   }
 }
 
@@ -198,7 +202,23 @@ IMPORTANT: If the contractDate is not yet known (e.g., the contract has not been
 - financingContingency: "yes", "no", or the contingency deadline date if found.
 - If a COUNTER OFFER is present in the document, its terms SUPERSEDE the purchase agreement for any fields it modifies. Always use the most recent/final agreed-upon values.
 - For fields not found, use "" for strings and null for numbers.
-- Do not invent data. Only extract what is clearly present in the document.`;
+- Do not invent data. Only extract what is clearly present in the document.
+
+=== PRIVATE WELL AND SEPTIC/SEWER DETECTION ===
+
+- hasPrivateWell (boolean): Set to true if the contract indicates the property has a private water well.
+  - Look in the "Private Water/Sewer" section of the LREC contract (typically a section titled "Private Water and/or Sewer" or similar).
+  - Also look for any checkbox, clause, or notation indicating "private well", "water well", "well water", or "private water supply".
+  - If a well inspection is mentioned or required, set to true.
+  - If the property is on municipal/city water only, set to false.
+  - Default: false.
+
+- hasSepticSystem (boolean): Set to true if the contract indicates the property has a septic system or private sewer.
+  - Look in the "Private Water/Sewer" section of the LREC contract.
+  - Also look for any checkbox, clause, or notation indicating "septic", "septic tank", "private sewer", "sewer system", or "on-site sewage".
+  - If a septic inspection is mentioned or required, set to true.
+  - If the property is on municipal/city sewer only, set to false.
+  - Default: false.`;
 
 /* ─── POST /api/agent/parse-purchase-agreement ────────────────────────── */
 export async function POST(req: NextRequest) {

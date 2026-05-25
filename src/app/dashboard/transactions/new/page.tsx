@@ -40,6 +40,8 @@ const INSPECTION_TYPE_OPTIONS = [
   'Termite Inspection',
   'Radon Inspection',
   'Sewer Scope Inspection',
+  'Water Well Inspection',
+  'Septic/Sewer Inspection',
   'HVAC Inspection',
   'Generator Inspection',
   'Foundation Inspection',
@@ -467,6 +469,20 @@ export default function AddTransactionPage() {
       setIfPresent('titleOfficerPhone', f.titleOfficerPhone);
       setIfPresent('titleAttorney', f.titleAttorney);
       setIfPresent('inspectorName', f.inspectorName);
+      // Auto-select well/septic inspection types from PDF
+      if (f.hasPrivateWell || f.hasSepticSystem) {
+        const currentTypes = form.getValues('inspectionTypes') || [];
+        const updated = [...currentTypes];
+        if (f.hasPrivateWell && !updated.includes('Water Well Inspection')) {
+          updated.push('Water Well Inspection');
+        }
+        if (f.hasSepticSystem && !updated.includes('Septic/Sewer Inspection')) {
+          updated.push('Septic/Sewer Inspection');
+        }
+        if (updated.length !== currentTypes.length) {
+          form.setValue('inspectionTypes', updated);
+        }
+      }
       // clientName fallback — use buyer or seller name
       if (!form.getValues('clientName')) {
         const cn = f.buyerName || f.sellerName || '';
