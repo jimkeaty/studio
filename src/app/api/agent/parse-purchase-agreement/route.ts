@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin';
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 
 // OpenAI client initialized inside handler — avoids build-time crash when env var is absent
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
@@ -137,41 +137,58 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File too large (max 25 MB)' }, { status: 400 });
     }
 
-    // Extract text from PDF using pdf-parse
+    // Upload the PDF to OpenAI Files API so OpenAI can read it natively.
+    // This completely avoids pdf-parse and its native module issues in the Firebase runtime.
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const openai = getOpenAI();
 
-    let pdfText = '';
+    let uploadedFile: OpenAI.Files.FileObject;
     try {
-      // Dynamic import — pdf-parse v2 exports as named export
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
-      const parsed = await pdfParse(buffer);
-      pdfText = parsed.text;
-    } catch (err) {
-      console.error('pdf-parse error:', err);
-      return NextResponse.json({ error: 'Could not read PDF. Please ensure the file is not password-protected.' }, { status: 422 });
+      uploadedFile = await openai.files.create({
+        file: await toFile(buffer, file.name, { type: 'application/pdf' }),
+        purpose: 'assistants',
+      });
+    } catch (uploadErr) {
+      console.error('OpenAI file upload error:', uploadErr);
+      return NextResponse.json({ error: 'Could not upload PDF for processing. Please try again.' }, { status: 422 });
     }
 
-    if (!pdfText || pdfText.trim().length < 100) {
-      return NextResponse.json({ error: 'PDF appears to be a scanned image. Text extraction requires a text-based PDF.' }, { status: 422 });
+    // Use the Responses API with file input — OpenAI reads the PDF natively
+    let raw = '';
+    try {
+      const response = await openai.responses.create({
+        model: 'gpt-4.1-mini',
+        input: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_file',
+                file_id: uploadedFile.id,
+              },
+              {
+                type: 'input_text',
+                text: `${SYSTEM_PROMPT}\n\nPlease extract all the fields from this purchase agreement PDF and return the JSON as instructed.`,
+              },
+            ],
+          },
+        ],
+      });
+      raw = response.output_text?.trim() || '';
+    } catch (aiErr) {
+      console.error('OpenAI extraction error:', aiErr);
+      // Clean up the uploaded file before returning
+      try { await openai.files.delete(uploadedFile.id); } catch {}
+      return NextResponse.json({ error: 'AI extraction failed. Please fill the form manually.' }, { status: 422 });
     }
 
-    // Truncate to ~60k chars to stay within token limits (purchase agreements are rarely longer)
-    const truncated = pdfText.slice(0, 60000);
+    // Clean up the uploaded file (fire and forget)
+    openai.files.delete(uploadedFile.id).catch(() => {});
 
-    // Call OpenAI
-    const completion = await getOpenAI().chat.completions.create({
-      model: 'gpt-4.1-mini',
-      temperature: 0,
-      max_tokens: 2000,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `PURCHASE AGREEMENT TEXT:\n\n${truncated}` },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content?.trim() || '';
+    if (!raw) {
+      return NextResponse.json({ error: 'AI extraction returned no data. Please fill the form manually.' }, { status: 422 });
+    }
 
     // Parse JSON response
     let extracted: { fields: Record<string, unknown>; _confidence: Record<string, number> };
