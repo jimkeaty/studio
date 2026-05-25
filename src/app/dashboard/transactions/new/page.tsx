@@ -423,8 +423,21 @@ export default function AddTransactionPage() {
       setIfPresent('loanApplicationDeadline', f.loanApplicationDeadline);
       setIfPresent('appraisalDeadline', f.appraisalDeadline);
       setIfPresent('finalLoanCommitmentDeadline', f.finalLoanCommitmentDeadline);
+      setIfPresent('titleDeadline', f.titleDeadline);
       setIfPresent('optionExpiration', f.optionExpiration);
       setIfPresent('earnestMoney', f.earnestMoney);
+      // Deposit holder: map depositHeldBy from API to depositHolder form field
+      if (f.depositHeldBy) {
+        const dh = String(f.depositHeldBy).toLowerCase().replace(/\s+/g, '_');
+        if (dh === 'listing_broker') {
+          form.setValue('depositHolder', 'listing_broker');
+        } else if (dh === 'selling_broker') {
+          form.setValue('depositHolder', 'selling_broker');
+        } else {
+          form.setValue('depositHolder', 'other');
+          form.setValue('depositHolderOther', String(f.depositHeldBy));
+        }
+      }
       setIfPresent('buyerName', f.buyerName);
       setIfPresent('buyerEmail', f.buyerEmail);
       setIfPresent('buyerPhone', f.buyerPhone);
