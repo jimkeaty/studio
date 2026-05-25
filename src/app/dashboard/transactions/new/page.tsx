@@ -1317,7 +1317,20 @@ export default function AddTransactionPage() {
               <FormField control={form.control} name="clientName" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Client Name <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Input placeholder="Buyer or seller name" {...field} /></FormControl>
+                  <FormControl>
+                    <ContactAutocomplete
+                      type="client"
+                      placeholder="Start typing to search saved contacts…"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onSelect={(c: SavedContact) => {
+                        form.setValue('clientName', c.name || '');
+                        if (c.email) form.setValue('clientEmail', c.email);
+                        if (c.phone) form.setValue('clientPhone', c.phone);
+                        if (c.newAddress) form.setValue('clientNewAddress', c.newAddress);
+                      }}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -1335,7 +1348,22 @@ export default function AddTransactionPage() {
                 </FormItem>
               )} />
             </Grid2>
-
+            {/* Client contact details */}
+            <Grid2>
+              <FormField control={form.control} name="clientEmail" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client Email</FormLabel>
+                  <FormControl><Input type="email" placeholder="client@email.com" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="clientPhone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client Phone</FormLabel>
+                  <FormControl><Input type="tel" placeholder="(337) 555-1234" {...field} /></FormControl>
+                </FormItem>
+              )} />
+            </Grid2>
             {/* TC Working File */}
             <FormField control={form.control} name="tcWorking" render={({ field }) => (
               <FormItem>
