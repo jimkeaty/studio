@@ -15,6 +15,8 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
+import type { SavedContact } from '@/hooks/useContactSearch';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -874,7 +876,20 @@ export default function EditTransactionPage() {
               <FormField control={form.control} name="clientName" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Client Name <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Input placeholder="Buyer or seller name" {...field} /></FormControl>
+                  <FormControl>
+                    <ContactAutocomplete
+                      type="client"
+                      placeholder="Search saved contacts…"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onSelect={(c: SavedContact) => {
+                        form.setValue('clientName', c.name || '');
+                        if (c.email) form.setValue('clientEmail' as any, c.email);
+                        if (c.phone) form.setValue('clientPhone' as any, c.phone);
+                        if (c.newAddress) form.setValue('clientNewAddress' as any, c.newAddress);
+                      }}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -1219,7 +1234,20 @@ export default function EditTransactionPage() {
           {watchedClosingType !== 'dual' && <Section title="Cooperating Agent">
             <Grid2>
               <FormField control={form.control} name="otherAgentName" render={({ field }) => (
-                <FormItem><FormLabel>Agent Name</FormLabel><FormControl><Input placeholder="Other agent on this deal" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Agent Name</FormLabel><FormControl>
+                  <ContactAutocomplete
+                    type="other_agent"
+                    placeholder="Search saved agents…"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    onSelect={(c: SavedContact) => {
+                      form.setValue('otherAgentName', c.name || '');
+                      form.setValue('otherBrokerage' as any, c.brokerage || '');
+                      form.setValue('otherAgentEmail' as any, c.email || '');
+                      form.setValue('otherAgentPhone' as any, c.phone || '');
+                    }}
+                  />
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="otherBrokerage" render={({ field }) => (
                 <FormItem><FormLabel>Brokerage</FormLabel><FormControl><Input placeholder="Their brokerage" {...field} /></FormControl></FormItem>
@@ -1237,7 +1265,21 @@ export default function EditTransactionPage() {
           <Section title="Mortgage / Lender">
             <Grid2>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
-                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl><Input placeholder="First Federal Bank" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl>
+                  <ContactAutocomplete
+                    type="lender"
+                    placeholder="Search saved lenders…"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    onSelect={(c: SavedContact) => {
+                      form.setValue('mortgageCompany', c.companyName || c.name || '');
+                      form.setValue('loanOfficer' as any, c.officerName || '');
+                      form.setValue('loanOfficerEmail' as any, c.email || '');
+                      form.setValue('loanOfficerPhone' as any, c.phone || '');
+                      form.setValue('lenderOffice' as any, c.office || '');
+                    }}
+                  />
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="loanOfficer" render={({ field }) => (
                 <FormItem><FormLabel>Loan Officer Name</FormLabel><FormControl><Input placeholder="John Smith" {...field} /></FormControl></FormItem>
@@ -1260,7 +1302,22 @@ export default function EditTransactionPage() {
           <Section title="Title Company">
             <Grid2>
               <FormField control={form.control} name="titleCompany" render={({ field }) => (
-                <FormItem><FormLabel>Title Company</FormLabel><FormControl><Input placeholder="Acadian Title" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>Title Company</FormLabel><FormControl>
+                  <ContactAutocomplete
+                    type="title"
+                    placeholder="Search saved title companies…"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    onSelect={(c: SavedContact) => {
+                      form.setValue('titleCompany', c.companyName || c.name || '');
+                      form.setValue('titleOfficer' as any, c.officerName || '');
+                      form.setValue('titleOfficerEmail' as any, c.email || '');
+                      form.setValue('titleOfficerPhone' as any, c.phone || '');
+                      form.setValue('titleAttorney' as any, c.attorney || '');
+                      form.setValue('titleOffice' as any, c.office || '');
+                    }}
+                  />
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="titleOfficer" render={({ field }) => (
                 <FormItem><FormLabel>Title Officer Name</FormLabel><FormControl><Input placeholder="Jane Doe" {...field} /></FormControl></FormItem>

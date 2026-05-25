@@ -14,6 +14,8 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
+import type { SavedContact } from '@/hooks/useContactSearch';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -974,7 +976,22 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               <FormField control={form.control} name="clientName" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Client Name</FormLabel>
-                  <FormControl><Input {...field} disabled={isReadOnly} /></FormControl>
+                  <FormControl>
+                    {isReadOnly ? <Input {...field} disabled /> : (
+                      <ContactAutocomplete
+                        type="client"
+                        placeholder="Search saved contacts…"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        onSelect={(c: SavedContact) => {
+                          form.setValue('clientName', c.name || '');
+                          if (c.email) form.setValue('clientEmail' as any, c.email);
+                          if (c.phone) form.setValue('clientPhone' as any, c.phone);
+                          if (c.newAddress) form.setValue('clientNewAddress' as any, c.newAddress);
+                        }}
+                      />
+                    )}
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -1164,7 +1181,23 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           <SectionCard title="Lender / Mortgage" icon={<Building2 className="h-4 w-4" />}>
             <Grid3>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
-                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl>
+                  {isReadOnly ? <Input {...field} disabled /> : (
+                    <ContactAutocomplete
+                      type="lender"
+                      placeholder="Search saved lenders…"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onSelect={(c: SavedContact) => {
+                        form.setValue('mortgageCompany', c.companyName || c.name || '');
+                        form.setValue('loanOfficer' as any, c.officerName || '');
+                        form.setValue('loanOfficerEmail' as any, c.email || '');
+                        form.setValue('loanOfficerPhone' as any, c.phone || '');
+                        form.setValue('lenderOffice' as any, c.office || '');
+                      }}
+                    />
+                  )}
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="lenderOffice" render={({ field }) => (
                 <FormItem><FormLabel>Lender Office</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
@@ -1185,7 +1218,24 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           <SectionCard title="Title Company" icon={<Building2 className="h-4 w-4" />}>
             <Grid3>
               <FormField control={form.control} name="titleCompany" render={({ field }) => (
-                <FormItem><FormLabel>Title Company</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                <FormItem><FormLabel>Title Company</FormLabel><FormControl>
+                  {isReadOnly ? <Input {...field} disabled /> : (
+                    <ContactAutocomplete
+                      type="title"
+                      placeholder="Search saved title companies…"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onSelect={(c: SavedContact) => {
+                        form.setValue('titleCompany', c.companyName || c.name || '');
+                        form.setValue('titleOfficer' as any, c.officerName || '');
+                        form.setValue('titleOfficerEmail' as any, c.email || '');
+                        form.setValue('titleOfficerPhone' as any, c.phone || '');
+                        form.setValue('titleAttorney' as any, c.attorney || '');
+                        form.setValue('titleOffice' as any, c.office || '');
+                      }}
+                    />
+                  )}
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="titleOffice" render={({ field }) => (
                 <FormItem><FormLabel>Title Office</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
@@ -1209,7 +1259,22 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           <SectionCard title="Other Agent / Brokerage">
             <Grid3>
               <FormField control={form.control} name="otherAgentName" render={({ field }) => (
-                <FormItem><FormLabel>Other Agent Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                <FormItem><FormLabel>Other Agent Name</FormLabel><FormControl>
+                  {isReadOnly ? <Input {...field} disabled /> : (
+                    <ContactAutocomplete
+                      type="other_agent"
+                      placeholder="Search saved agents…"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onSelect={(c: SavedContact) => {
+                        form.setValue('otherAgentName', c.name || '');
+                        form.setValue('otherBrokerage' as any, c.brokerage || '');
+                        form.setValue('otherAgentEmail' as any, c.email || '');
+                        form.setValue('otherAgentPhone' as any, c.phone || '');
+                      }}
+                    />
+                  )}
+                </FormControl></FormItem>
               )} />
               <FormField control={form.control} name="otherAgentEmail" render={({ field }) => (
                 <FormItem><FormLabel>Other Agent Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
