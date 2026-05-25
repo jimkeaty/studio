@@ -309,6 +309,7 @@ const schema = z.object({
 
   // Additional info
   warrantyAtClosing: z.enum(['yes', 'no']).optional(),
+  warrantyAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   warrantyPaidBy: z.string().optional(),
   txComplianceFee: z.enum(['yes', 'no']).optional(),
   txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -510,7 +511,26 @@ export default function AddTransactionPage() {
       if (f.loanTerm) extraNotes.push(`Loan Term: ${f.loanTerm} years`);
       if (f.financingContingency && f.financingContingency !== 'no') extraNotes.push(`Financing Contingency: ${f.financingContingency}`);
       if (f.mineralRights && f.mineralRights !== 'not_mentioned') extraNotes.push(`Mineral Rights: ${f.mineralRights}${f.mineralRightsClause ? ' — ' + f.mineralRightsClause : ''}`);
-      if (f.homeWarranty === 'yes') extraNotes.push(`Home Warranty: Yes${f.homeWarrantyAmount ? ' ($' + Number(f.homeWarrantyAmount).toLocaleString() + ')' : ''}${f.homeWarrantyPaidBy ? ', paid by ' + f.homeWarrantyPaidBy : ''}`);
+      // Map commissionPaidBySeller → sellerPayingBuyerAgent (% mode only)
+      if (f.commissionPaidBySeller != null && Number(f.commissionPaidBySeller) > 0 && commissionMode === 'percent') {
+        form.setValue('sellerPayingBuyerAgent', Number(f.commissionPaidBySeller) as any);
+      }
+      // Map homeWarranty fields → warrantyAtClosing / warrantyAmount / warrantyPaidBy
+      if (f.homeWarranty === 'yes') {
+        form.setValue('warrantyAtClosing', 'yes');
+        if (f.homeWarrantyAmount && Number(f.homeWarrantyAmount) > 0) {
+          form.setValue('warrantyAmount', Number(f.homeWarrantyAmount) as any);
+        }
+        if (f.homeWarrantyPaidBy) {
+          const paidBy = String(f.homeWarrantyPaidBy).toLowerCase();
+          if (paidBy === 'seller') form.setValue('warrantyPaidBy', 'seller');
+          else if (paidBy === 'buyer') form.setValue('warrantyPaidBy', 'buyer');
+          // If unclear/other, leave blank per business rule
+        }
+      } else if (f.homeWarranty === 'no') {
+        form.setValue('warrantyAtClosing', 'no');
+      }
+      // (homeWarranty === '' or null means unclear — leave blank)
       if (f.sellerConcessions) extraNotes.push(`Seller Concessions: $${Number(f.sellerConcessions).toLocaleString()}`);
       if (f.notes) extraNotes.push(f.notes as string);
       if (extraNotes.length > 0) {
@@ -2511,20 +2531,36 @@ export default function AddTransactionPage() {
               </FormItem>
             )} />
             {warrantyAtClosing === 'yes' && (
-              <div className="max-w-xs">
-                <FormField control={form.control} name="warrantyPaidBy" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Who is paying?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="buyer">Buyer</SelectItem>
-                        <SelectItem value="seller">Seller</SelectItem>
-                        <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )} />
+              <div className="flex flex-wrap gap-4">
+                <div className="max-w-xs">
+                  <FormField control={form.control} name="warrantyPaidBy" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Who is paying?</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="buyer">Buyer</SelectItem>
+                          <SelectItem value="seller">Seller</SelectItem>
+                          <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
+                <div className="max-w-xs">
+                  <FormField control={form.control} name="warrantyAmount" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Not to Exceed ($)</FormLabel>
+                      <FormControl>
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => field.onChange(val)}
+                          placeholder="700"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                </div>
               </div>
             )}
 

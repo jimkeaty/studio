@@ -185,9 +185,27 @@ IMPORTANT: If the contractDate is not yet known (e.g., the contract has not been
   - If it says a specific company name, return that company name.
   - If not found, return "".
 
-- commissionPaidBySeller: Look for a clause where the seller agrees to pay the buyer's broker/agent a commission.
-  - Extract the percentage as a number (e.g., if it says "3% of the purchase price", return 3).
+- commissionPaidBySeller: Look for the buyer broker compensation clause (typically labeled "Buyer Broker Compensation at Closing" or similar).
+  - The seller agrees to pay the buyer's broker/agent a commission at closing.
+  - Extract the percentage as a number only (e.g., if it says "3%", return 3).
+  - If a COUNTER OFFER modifies this amount, use the counter offer value.
+  - If there is ANY ambiguity about who is paying or what the percentage is, return null.
   - If not found or not applicable, return null.
+
+- homeWarranty: Look for a home service/warranty plan clause (typically labeled "Home Service/Warranty" or similar).
+  - If the contract states a warranty plan WILL be purchased at closing, return "yes".
+  - If the contract states a warranty plan will NOT be purchased, return "no".
+  - If it is unclear, crossed out, or not mentioned, return "".
+
+- homeWarrantyAmount: The maximum dollar amount for the warranty plan (e.g., "not to exceed $700" → return 700).
+  - Return as a number only. If not stated, return null.
+
+- homeWarrantyPaidBy: Who is paying for the warranty plan.
+  - Return "seller" if the seller is paying.
+  - Return "buyer" if the buyer is paying.
+  - IMPORTANT: If a COUNTER OFFER changes who is paying, the counter offer supersedes — use the counter offer value.
+  - If there is ANY confusion or ambiguity about who is paying, return "" (leave blank). It is always better to leave blank than to guess.
+  - If not stated, return "".
 
 === GENERAL RULES ===
 
