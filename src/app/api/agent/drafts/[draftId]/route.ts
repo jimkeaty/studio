@@ -16,7 +16,7 @@ function jsonError(status: number, error: string) {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { draftId: string } }
+  { params }: { params: Promise<{ draftId: string }> }
 ) {
   const token = getBearerToken(req);
   if (!token) return jsonError(401, 'Unauthorized');
@@ -28,7 +28,7 @@ export async function GET(
     return jsonError(401, 'Invalid token');
   }
 
-  const { draftId } = params;
+  const { draftId } = await params;
   if (!draftId) return jsonError(400, 'draftId is required');
 
   try {

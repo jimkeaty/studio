@@ -535,6 +535,206 @@ export const ARTICLES: Article[] = [
     `,
   },
 
+  // ── PDF UPLOAD & AUTO-FILL (AGENT) ─────────────────────────────────────────
+  {
+    id: 'agent-pdf-upload-autofill',
+    title: 'Upload a Purchase Agreement to Auto-Fill Your Transaction',
+    description:
+      'How to use the document upload feature to instantly populate your Add Transaction form from a Louisiana LREC purchase agreement — including all dates, deadlines, and contact fields.',
+    category: 'Transactions',
+    audience: 'agent',
+    readingTimeMinutes: 5,
+    publishedAt: '2026-05-25',
+    content: `
+<h2>Overview</h2>
+<p>When adding a new transaction, you can upload your signed Louisiana LREC purchase agreement (or counter offer) as a PDF and the system will automatically read the contract and fill in the form for you. This saves significant time and reduces the risk of manual data entry errors.</p>
+<p>The feature uses AI (powered by OpenAI GPT-4o) to read the full text and images of your PDF — including custom-encoded fonts and signature pages — so it works reliably on Authentisign-executed documents.</p>
+
+<h2>How to Use It</h2>
+<ol>
+  <li>Click <strong>Add Transaction</strong> in the sidebar.</li>
+  <li>At the top of the form, find the <strong>Upload Purchase Agreement</strong> card.</li>
+  <li>Click <strong>Choose File</strong> (or drag and drop) and select your signed PDF.</li>
+  <li>Click <strong>Upload &amp; Auto-Fill</strong>. The system will process the document — this typically takes 10–20 seconds.</li>
+  <li>Once complete, review the filled-in fields and make any corrections before submitting.</li>
+</ol>
+<blockquote><strong>Always review the auto-filled fields before submitting.</strong> While the system is highly accurate, you are responsible for confirming that all dates and contact information are correct.</blockquote>
+
+<h2>What Gets Auto-Filled</h2>
+<p>The system reads the entire contract and populates the following fields automatically:</p>
+<table>
+  <thead><tr><th>Section</th><th>Fields Populated</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Property</strong></td><td>Property address, sale price</td></tr>
+    <tr><td><strong>Dates</strong></td><td>Contract date (last signature date), projected close date, offer expiration date &amp; time</td></tr>
+    <tr><td><strong>Calculated Deadlines</strong></td><td>Loan application deadline, inspection deadline, survey deadline, appraisal deadline, final loan commitment deadline, title deadline</td></tr>
+    <tr><td><strong>Buyers</strong></td><td>Buyer 1 and Buyer 2 names</td></tr>
+    <tr><td><strong>Sellers</strong></td><td>Seller 1 and Seller 2 names</td></tr>
+    <tr><td><strong>Cooperating Agent</strong></td><td>Other agent name, brokerage, email, and phone</td></tr>
+    <tr><td><strong>Financial Details</strong></td><td>Who is holding the deposit (Listing Broker, Selling Broker, or Other), commission paid by seller (%)</td></tr>
+  </tbody>
+</table>
+
+<h2>How Deadlines Are Calculated</h2>
+<p>All deadlines are calculated automatically using the standard Louisiana LREC rules. You do not need to count days manually.</p>
+<table>
+  <thead><tr><th>Deadline</th><th>How It Is Calculated</th></tr></thead>
+  <tbody>
+    <tr><td>Loan Application</td><td>Contract date + 5 calendar days (counting starts the day after the contract date)</td></tr>
+    <tr><td>Inspection</td><td>Contract date + 7 calendar days</td></tr>
+    <tr><td>Survey</td><td>Same as Inspection deadline</td></tr>
+    <tr><td>Appraisal</td><td>Projected close date − 10 calendar days</td></tr>
+    <tr><td>Final Loan Commitment</td><td>Projected close date − 5 calendar days</td></tr>
+    <tr><td>Title</td><td>Projected close date − 3 calendar days</td></tr>
+  </tbody>
+</table>
+<blockquote>The <strong>Contract Date</strong> is always the date of the <em>last</em> signature — whether that is the buyer's acceptance, the seller's acceptance, or the date a counter offer was signed. If a counter offer is present in the PDF, its terms and dates take precedence over the original offer.</blockquote>
+
+<h2>Tips for Best Results</h2>
+<ul>
+  <li><strong>Upload the fully executed document.</strong> The system determines the contract date from the last signature. Uploading an unsigned or partially signed document will result in a missing or incorrect contract date.</li>
+  <li><strong>Include counter offers.</strong> If a counter offer was signed, include it in the same PDF (or upload the combined executed document). Counter offer terms override the original offer.</li>
+  <li><strong>PDF format only.</strong> The upload accepts PDF files only. If your document is in another format, convert it to PDF before uploading.</li>
+  <li><strong>File size.</strong> The system handles standard-length LREC contracts (typically 10–15 pages) without issue.</li>
+</ul>
+
+<h2>What to Do If a Field Is Wrong or Missing</h2>
+<p>The auto-fill is a starting point, not a final answer. If any field is blank or incorrect:</p>
+<ul>
+  <li>Simply type the correct value directly into the field — all fields are fully editable after the auto-fill runs.</li>
+  <li>If a deadline is wrong, check that the contract date and projected close date were read correctly, as all deadlines are derived from those two anchor dates.</li>
+  <li>If the cooperating agent information is missing, it may not have been present on the first page of the document. You can enter it manually in the <strong>Cooperating Agent</strong> section.</li>
+</ul>
+    `,
+  },
+
+  // ── TRANSACTION DRAFTS (AGENT) ───────────────────────────────────────────────
+  {
+    id: 'agent-transaction-drafts',
+    title: 'Saving and Resuming Transaction Drafts',
+    description:
+      'How the auto-save draft system works so you never lose your progress when adding a new transaction.',
+    category: 'Transactions',
+    audience: 'agent',
+    readingTimeMinutes: 3,
+    publishedAt: '2026-05-25',
+    content: `
+<h2>Overview</h2>
+<p>When you start filling out the <strong>Add Transaction</strong> form, the system automatically saves your progress as a draft every 30 seconds. If you get disconnected, close the browser tab, or simply need to step away and come back later, your work is never lost.</p>
+
+<h2>Where Your Drafts Are Saved</h2>
+<p>Drafts are saved securely to the cloud (Firestore) under your account — not just in your browser. This means you can start a transaction on your phone, close the app, and resume it later on your desktop exactly where you left off.</p>
+
+<h2>Viewing Your Saved Drafts</h2>
+<p>When you have one or more saved drafts, an <strong>amber "Saved Drafts" card</strong> will appear on your dashboard in the <strong>My Transactions</strong> section, just above the filters and transaction table. Each draft shows:</p>
+<ul>
+  <li>The property address (or client name if no address was entered yet)</li>
+  <li>The sale price (if entered)</li>
+  <li>How long ago the draft was last saved (e.g., "Saved 2 hours ago")</li>
+</ul>
+
+<h2>Resuming a Draft</h2>
+<p>Click the <strong>Resume</strong> button on any draft row. The Add Transaction form will open with all your previously entered data pre-loaded — including any PDF auto-fill results, all contact fields, dates, and financial details.</p>
+
+<h2>Deleting a Draft</h2>
+<p>If you no longer need a draft (for example, the deal fell through before you submitted), click the <strong>trash icon</strong> on the draft row. The draft is permanently deleted from the cloud immediately.</p>
+<blockquote>Drafts are also automatically deleted when you successfully submit a transaction, so your Saved Drafts list stays clean without any manual cleanup.</blockquote>
+
+<h2>When Does Auto-Save Trigger?</h2>
+<p>The auto-save runs every 30 seconds, but only if you have entered at least one of the following: a property address, a client name, or a sale price. A completely blank form will not create a draft.</p>
+
+<h2>How Many Drafts Can I Have?</h2>
+<p>There is no limit. You can have multiple drafts open at the same time — for example, if you are working several deals simultaneously and want to prep each one before submitting. Each draft is stored separately and identified by its address or client name.</p>
+    `,
+  },
+
+  // ── PDF UPLOAD & AUTO-FILL (STAFF) ────────────────────────────────────────────
+  {
+    id: 'staff-pdf-upload-autofill',
+    title: 'Staff Guide: How the PDF Auto-Fill Feature Works',
+    description:
+      'A technical overview of the purchase agreement upload and auto-fill system for staff and TCs — including what the AI reads, how dates are calculated, and how to troubleshoot common issues.',
+    category: 'Transactions',
+    audience: 'staff',
+    readingTimeMinutes: 6,
+    publishedAt: '2026-05-25',
+    content: `
+<h2>Overview</h2>
+<p>The Smart Broker platform includes an AI-powered PDF extraction feature that allows agents to upload a signed Louisiana LREC purchase agreement and have the Add Transaction form populated automatically. This guide explains how the system works under the hood so that staff and TCs can assist agents, verify accuracy, and troubleshoot issues.</p>
+
+<h2>How the System Works</h2>
+<ol>
+  <li>The agent uploads a PDF through the <strong>Upload Purchase Agreement</strong> card at the top of the Add Transaction form.</li>
+  <li>The PDF is securely transmitted to the OpenAI Files API and processed by <strong>GPT-4o</strong>, which reads the full document including text, images, and signature pages.</li>
+  <li>The AI extracts all relevant fields and calculates all deadlines using Louisiana LREC rules.</li>
+  <li>The extracted data is returned to the form and populates the fields automatically.</li>
+  <li>The uploaded file is immediately deleted from OpenAI's servers after extraction — it is never stored externally.</li>
+</ol>
+<blockquote>The system uses GPT-4o's native PDF reading capability, which means it can accurately read Authentisign-executed documents even when the underlying text uses custom or encoded fonts that would cause standard PDF text-extraction tools to produce garbled output.</blockquote>
+
+<h2>Fields Extracted and Calculated</h2>
+<table>
+  <thead><tr><th>Field</th><th>Source in Contract</th></tr></thead>
+  <tbody>
+    <tr><td>Property address</td><td>Property description section</td></tr>
+    <tr><td>Sale price</td><td>Purchase price clause</td></tr>
+    <tr><td>Contract date</td><td>Date of the <em>last</em> signature (buyer, seller, or counter offer)</td></tr>
+    <tr><td>Projected close date</td><td>Closing date clause</td></tr>
+    <tr><td>Offer expiration date &amp; time</td><td>"Expiration of Offer" section</td></tr>
+    <tr><td>Loan application deadline</td><td>Calculated: contract date + 5 calendar days</td></tr>
+    <tr><td>Inspection deadline</td><td>Calculated: contract date + 7 calendar days</td></tr>
+    <tr><td>Survey deadline</td><td>Same as inspection deadline</td></tr>
+    <tr><td>Appraisal deadline</td><td>Calculated: projected close date − 10 calendar days</td></tr>
+    <tr><td>Final loan commitment deadline</td><td>Calculated: projected close date − 5 calendar days</td></tr>
+    <tr><td>Title deadline</td><td>Calculated: projected close date − 3 calendar days</td></tr>
+    <tr><td>Buyer 1 &amp; Buyer 2 names</td><td>Buyers section</td></tr>
+    <tr><td>Seller 1 &amp; Seller 2 names</td><td>Sellers section</td></tr>
+    <tr><td>Cooperating agent name, brokerage, email, phone</td><td>Seller's Designated Agent block at top of document</td></tr>
+    <tr><td>Deposit holder</td><td>Deposit section (Listing Broker, Selling Broker, or Other)</td></tr>
+    <tr><td>Commission paid by seller (%)</td><td>Seller-paying-buyer's-broker clause</td></tr>
+  </tbody>
+</table>
+
+<h2>Counter Offer Handling</h2>
+<p>If the uploaded PDF contains a counter offer, the AI is instructed to treat the counter offer terms as the authoritative source. Any field modified by the counter offer (price, dates, terms) will reflect the counter offer value, not the original offer. The contract date will be set to the date the counter offer was signed — the date of the last signature on the entire document.</p>
+
+<h2>Deadline Calculation Rules (Louisiana LREC)</h2>
+<p>All deadlines are calculated using the standard Louisiana LREC counting convention: <strong>day counting begins the day after the contract date</strong> (i.e., the contract date itself is Day 0, and Day 1 is the following calendar day). No business-day adjustments are made — all counts use calendar days.</p>
+<table>
+  <thead><tr><th>Deadline</th><th>Formula</th><th>Example (Contract Date: May 26)</th></tr></thead>
+  <tbody>
+    <tr><td>Loan Application</td><td>Contract date + 5 days</td><td>May 31</td></tr>
+    <tr><td>Inspection</td><td>Contract date + 7 days</td><td>June 2</td></tr>
+    <tr><td>Survey</td><td>Same as Inspection</td><td>June 2</td></tr>
+    <tr><td>Appraisal</td><td>Close date − 10 days</td><td>(depends on close date)</td></tr>
+    <tr><td>Final Loan Commitment</td><td>Close date − 5 days</td><td>(depends on close date)</td></tr>
+    <tr><td>Title</td><td>Close date − 3 days</td><td>(depends on close date)</td></tr>
+  </tbody>
+</table>
+
+<h2>Troubleshooting Common Issues</h2>
+<table>
+  <thead><tr><th>Issue</th><th>Likely Cause</th><th>Resolution</th></tr></thead>
+  <tbody>
+    <tr><td>Contract date is wrong or missing</td><td>The PDF is unsigned or only partially executed</td><td>Ask the agent to upload the fully executed document with all signatures</td></tr>
+    <tr><td>Deadlines are off by one day</td><td>Agent manually adjusted the contract date after upload</td><td>Verify the contract date is correct; all deadlines recalculate from that anchor</td></tr>
+    <tr><td>Cooperating agent fields are blank</td><td>The agent block was not on the first page of the document, or the agent is a buyer's agent with no co-agent listed</td><td>Enter the cooperating agent information manually</td></tr>
+    <tr><td>Deposit holder shows "Other"</td><td>The contract names a specific title company or escrow agent rather than listing/selling broker</td><td>The "Other" text field will contain the name from the contract; verify it is correct</td></tr>
+    <tr><td>Upload takes more than 30 seconds</td><td>Large file or slow connection</td><td>The system has a 60-second timeout; if it fails, ask the agent to try again or enter data manually</td></tr>
+    <tr><td>Fields are blank after upload</td><td>The PDF may be a scanned image with no readable text layer</td><td>GPT-4o can read scanned images, but quality must be sufficient; try a higher-quality scan or enter data manually</td></tr>
+  </tbody>
+</table>
+
+<h2>Privacy and Security</h2>
+<ul>
+  <li>The PDF is transmitted over an encrypted HTTPS connection.</li>
+  <li>The file is uploaded to OpenAI's Files API with <code>purpose: user_data</code> and is automatically deleted from OpenAI's servers immediately after the extraction is complete.</li>
+  <li>No contract data is stored by OpenAI beyond the duration of the single API call.</li>
+  <li>The extracted field values are stored only in the agent's transaction draft in Firestore under their account.</li>
+</ul>
+    `,
+  },
+
   // ── CO-AGENT TRANSACTIONS ────────────────────────────────────────────────────
   {
     id: 'co-agent-transactions',
