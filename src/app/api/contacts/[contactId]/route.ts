@@ -14,14 +14,14 @@ function jsonError(status: number, error: string) {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { contactId: string } }
+  context: { params: Promise<{ contactId: string }> }
 ) {
   try {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
 
-    const { contactId } = params;
+    const { contactId } = await context.params;
     const body = await req.json();
 
     const doc = await adminDb.collection('contacts').doc(contactId).get();
@@ -47,14 +47,14 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { contactId: string } }
+  context: { params: Promise<{ contactId: string }> }
 ) {
   try {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
     await adminAuth.verifyIdToken(token);
 
-    const { contactId } = params;
+    const { contactId } = await context.params;
     const doc = await adminDb.collection('contacts').doc(contactId).get();
     if (!doc.exists) return jsonError(404, 'Contact not found');
 
