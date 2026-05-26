@@ -95,9 +95,15 @@ export async function GET(req: NextRequest) {
         agents.push({ agentId, agentName: `${agentName} (${statusLabel})` });
       }
 
-      agents.sort((a, b) => a.agentName.localeCompare(b.agentName));
+      // Exclude demo accounts from the roster
+      // Build a set of demo agentIds to exclude
+      const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
+      const demoIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
+      const visibleAgents = agents.filter(a => !demoIds.has(a.agentId));
 
-      return NextResponse.json({ ok: true, source: 'profiles', count: agents.length, agents });
+      visibleAgents.sort((a, b) => a.agentName.localeCompare(b.agentName));
+
+      return NextResponse.json({ ok: true, source: 'profiles', count: visibleAgents.length, agents: visibleAgents });
     }
 
     // Fallback: agentYearRollups

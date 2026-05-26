@@ -106,6 +106,7 @@ export async function GET(req: NextRequest) {
     const agents: any[] = [];
     for (const doc of profileSnap.docs) {
       const d = doc.data();
+      if (d.isDemoAccount === true) continue; // skip demo accounts
       agents.push({ id: doc.id, ...d });
     }
 

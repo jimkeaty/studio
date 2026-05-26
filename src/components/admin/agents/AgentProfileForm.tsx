@@ -66,6 +66,7 @@ export type AgentProfileFormValues = {
   gracePeriodEnabled: boolean;
   notes: string;
   endDate: string;
+  isDemoAccount: boolean;
 };
 
 type AgentProfileFormProps = {
@@ -183,6 +184,7 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   defaultTransactionFee: 395,
   gracePeriodEnabled: false,
   notes: '',
+  isDemoAccount: false,
   endDate: '',
 };
 
@@ -1047,6 +1049,7 @@ export default function AgentProfileForm({
             : Number(values.defaultTransactionFee),
         gracePeriodEnabled: values.gracePeriodEnabled ?? false,
         notes: values.notes || null,
+        isDemoAccount: values.isDemoAccount ?? false,
         endDate: values.endDate || null,
       };
 
@@ -1324,6 +1327,26 @@ export default function AgentProfileForm({
               New agents receive an automatic &quot;A&quot; grade on income, deals, and volume metrics
               for their first 90 days. This gives them time to ramp up before performance grades
               affect their dashboard. Uncheck this once the agent is established.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-start gap-3 rounded-md border border-purple-200 bg-purple-50 p-4">
+          <input
+            type="checkbox"
+            id="isDemoAccount"
+            checked={values.isDemoAccount ?? false}
+            onChange={(e) => updateField('isDemoAccount', e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300"
+          />
+          <div>
+            <label htmlFor="isDemoAccount" className="block text-sm font-medium text-purple-900 cursor-pointer">
+              Demo Account
+            </label>
+            <p className="text-xs text-purple-700 mt-0.5">
+              When enabled, this agent and all their transactions are hidden from the transaction ledger,
+              leaderboard, broker command stats, and agent roster. The account remains fully functional
+              for demonstration purposes.
             </p>
           </div>
         </div>

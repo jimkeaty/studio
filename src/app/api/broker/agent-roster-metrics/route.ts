@@ -166,6 +166,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Exclude demo accounts from the roster metrics
+    const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
+    const demoIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
+    for (const id of demoIds) profileMap.delete(id);
+
     const agents = [...profileMap.values()];
     if (agents.length === 0) {
       return NextResponse.json({ ok: true, year: yearNum, agents: [] });

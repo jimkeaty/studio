@@ -208,6 +208,7 @@ function normalizeInput(body: AgentProfileInput) {
         : null,
     gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
+    isDemoAccount: body.isDemoAccount === true,
     endDate: body.endDate?.trim() || null,
   };
 }

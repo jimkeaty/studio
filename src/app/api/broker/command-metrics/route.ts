@@ -103,13 +103,17 @@ export async function GET(req: NextRequest) {
     const teamIdParam = searchParams.get('teamId'); // null = all teams
     const typeFilter = searchParams.get('type'); // null = all types, e.g. "commercial_sale", "rental", "land", "residential_sale"
 
-    // 3. Fetch teams list + agent profiles for team filtering
-    const [teamsSnap, agentProfilesSnap] = await Promise.all([
+    // 3. Fetch teams list + agent profiles for team filtering + demo accounts to exclude
+    const [teamsSnap, agentProfilesSnap, demoProfilesSnap] = await Promise.all([
       adminDb.collection('teams').where('status', '==', 'active').get(),
       teamIdParam
         ? adminDb.collection('agentProfiles').where('primaryTeamId', '==', teamIdParam).get()
         : Promise.resolve(null),
+      adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get(),
     ]);
+
+    // Build set of demo agentIds to exclude from all stats
+    const demoAgentIds = new Set(demoProfilesSnap.docs.map(d => String(d.data().agentId || d.id)));
 
     const teams = teamsSnap.docs.map(d => ({
       teamId: d.data().teamId as string,
@@ -133,6 +137,10 @@ export async function GET(req: NextRequest) {
 
     const filterTransactions = (txList: Transaction[]): Transaction[] => {
       let result = txList;
+      // Exclude demo account transactions
+      if (demoAgentIds.size > 0) {
+        result = result.filter(t => !demoAgentIds.has(String(t.agentId || '')));
+      }
       // Team filter
       if (teamAgentIds) {
         result = result.filter(t =>

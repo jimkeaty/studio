@@ -83,6 +83,7 @@ export default function AgentProfileEditor({
           defaultTransactionFee: agent.defaultTransactionFee ?? '',
           gracePeriodEnabled: agent.gracePeriodEnabled ?? false,
           notes: agent.notes || '',
+          isDemoAccount: agent.isDemoAccount ?? false,
         });
       } catch (err: any) {
         if (!isMounted) return;

@@ -120,5 +120,6 @@ export type AgentProfileInput = {
   defaultTransactionFee?: number | null;
   gracePeriodEnabled?: boolean;
   notes?: string | null;
+  isDemoAccount?: boolean; // Hides agent + transactions from ledger, leaderboard, command stats, and roster
   forceCreate?: boolean; // Skip fuzzy duplicate check
 };

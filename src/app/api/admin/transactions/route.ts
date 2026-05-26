@@ -76,6 +76,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // ── Filter out demo account transactions ─────────────────────────────
+    // Load all demo agent IDs from agentProfiles and exclude their transactions
+    const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
+    const demoAgentIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
+    if (demoAgentIds.size > 0) {
+      transactions = transactions.filter((t: any) => !demoAgentIds.has(String(t.agentId || '')));
+    }
+
     transactions.sort((a: any, b: any) => {
       const da = a.createdAt ?? '';
       const db = b.createdAt ?? '';
