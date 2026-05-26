@@ -113,11 +113,21 @@ export async function GET(
       });
     }
 
+    // ── 0a. Agent's own stored tiers — ALWAYS the source of truth ─────────────
+    // If the agent profile has tiers saved, use them unconditionally regardless
+    // of commissionMode. This ensures custom tiers set by admin are never
+    // overridden by team plan defaults or template fallbacks.
+    const agentStoredTiers = (data.tiers || []).map(normalizeTier);
+    if (agentStoredTiers.length > 0) {
+      // Agent has saved tiers — skip all fallback logic and proceed directly
+      // to the YTD rollup lookup below.
+      // (fall through — tiers will be set at step 1 below)
+    }
+
     // ── 0b. Team agent with team_default mode — check if team plan is fixed ────
-    // If the team plan uses a fixed commission model but the agent profile still
-    // has commissionMode='team_default' (e.g., saved before the auto-populate logic),
-    // fall back to the team plan's fixedSplit and return a flat-rate tier.
-    if (commissionMode === 'team_default' && agentType === 'team' && primaryTeamId) {
+    // Only applies when the agent has NO saved tiers of their own.
+    // If the team plan uses a fixed commission model, return a flat-rate tier.
+    if (agentStoredTiers.length === 0 && commissionMode === 'team_default' && agentType === 'team' && primaryTeamId) {
       try {
         const teamSnap0 = await adminDb.collection('teams').doc(primaryTeamId).get();
         if (teamSnap0.exists) {
@@ -167,8 +177,9 @@ export async function GET(
       }
     }
 
-    // ── 1. Try agent's own stored tiers ──────────────────────────────────────
-    let tiers: ReturnType<typeof normalizeTier>[] = (data.tiers || []).map(normalizeTier);
+    // ── 1. Agent's own stored tiers — source of truth ──────────────────────────
+    // agentStoredTiers was computed above. Use it directly.
+    let tiers: ReturnType<typeof normalizeTier>[] = agentStoredTiers;
     let tiersSource = 'agent_custom';
 
     // ── 2. If tiers are empty, try team plan bands ────────────────────────────
@@ -205,6 +216,7 @@ export async function GET(
     } | null = null;
 
     if (tiers.length === 0 && agentType === 'team' && primaryTeamId) {
+      // Only fall back to team plan when agent has no saved tiers of their own
       try {
         const teamSnap = await adminDb.collection('teams').doc(primaryTeamId).get();
         if (teamSnap.exists) {
