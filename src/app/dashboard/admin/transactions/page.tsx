@@ -461,15 +461,22 @@ export default function AdminTransactionLedgerPage() {
     setQuickStatusSaving(true);
     try {
       const token = await user.getIdToken();
+      // When changing to cancelled or expired, also clear the closedDate so the
+      // transaction is no longer counted as closed in the wrong year
+      const isCancelOrExpire = quickStatusValue === 'canceled' || quickStatusValue === 'cancelled' || quickStatusValue === 'expired';
+      const patchBody: Record<string, any> = { id: quickStatusTx.id, status: quickStatusValue };
+      if (isCancelOrExpire && quickStatusTx.closedDate) {
+        patchBody.closedDate = '';
+      }
       const res = await fetch('/api/admin/transactions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: quickStatusTx.id, status: quickStatusValue }),
+        body: JSON.stringify(patchBody),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to update status');
       setTransactions(prev =>
-        prev.map(t => t.id === quickStatusTx.id ? { ...t, status: quickStatusValue as Transaction['status'] } : t)
+        prev.map(t => t.id === quickStatusTx.id ? { ...t, status: quickStatusValue as Transaction['status'], closedDate: isCancelOrExpire ? undefined : t.closedDate } : t)
       );
       setQuickStatusOpen(false);
       setQuickStatusTx(null);

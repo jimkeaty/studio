@@ -1939,6 +1939,10 @@ export default function EditTransactionPage() {
                 <span className="text-sm text-muted-foreground hidden sm:block">
                   Step {wizardStep} of 4
                 </span>
+                <Button type="submit" size="lg" disabled={saving} variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? 'Saving...' : 'Save'}
+                </Button>
                 {wizardStep < 4 ? (
                   <Button type="button" size="lg" onClick={() => setWizardStep(s => s + 1)}>
                     Next <ChevronRight className="ml-1 h-4 w-4" />

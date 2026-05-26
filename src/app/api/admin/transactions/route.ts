@@ -193,11 +193,27 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // If closedDate is explicitly cleared (empty string), null it out and recalculate year from contractDate
+    if (updates.closedDate === '') {
+      updates.closedDate = null;
+    }
+
     // Recalculate year if dates changed
     if (updates.closedDate || updates.contractDate) {
       const raw = updates.closedDate || updates.contractDate;
       if (raw) {
         const d = new Date(raw);
+        if (!isNaN(d.getTime())) {
+          updates.year = d.getFullYear();
+        }
+      }
+    } else if (updates.closedDate === null) {
+      // closedDate was cleared — recalculate year from contractDate if available
+      const existingForYear = await adminDb.collection('transactions').doc(id).get();
+      const existingYearData = existingForYear.data() as any;
+      const fallbackDate = updates.contractDate || existingYearData?.contractDate;
+      if (fallbackDate) {
+        const d = new Date(fallbackDate);
         if (!isNaN(d.getTime())) {
           updates.year = d.getFullYear();
         }
