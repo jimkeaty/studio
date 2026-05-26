@@ -26,7 +26,7 @@ import {
 import {
   AlertTriangle, CalendarDays, DollarSign, Target, TrendingUp,
   ArrowUpRight, ArrowDownRight, MapPin, FileCheck2, Clock,
-  BarChart3, Users, Percent, Save, ChevronDown, ChevronUp,
+  BarChart3, BarChart2, Users, Percent, Save, ChevronDown, ChevronUp, ChevronsDown,
   Phone, MessageSquare, CalendarCheck, CalendarCheck2, FileSignature, CheckCircle2,
   Zap, Bell, PlusCircle, ClipboardList, LayoutList, Settings2, Flame,
   TrendingDown, Award, Star,
@@ -44,6 +44,53 @@ import { cn } from '@/lib/utils';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
+
+// ── Collapsible Dashboard Section ──────────────────────────────────────────
+
+function DashboardSection({
+  storageKey,
+  defaultOpen,
+  title,
+  icon: Icon,
+  children,
+}: {
+  storageKey: string;
+  defaultOpen: boolean;
+  title: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return defaultOpen;
+    const stored = localStorage.getItem(storageKey);
+    return stored !== null ? stored === 'true' : defaultOpen;
+  });
+
+  const toggle = (val: boolean) => {
+    setOpen(val);
+    if (typeof window !== 'undefined') localStorage.setItem(storageKey, String(val));
+  };
+
+  return (
+    <Collapsible open={open} onOpenChange={toggle}>
+      <div className="flex items-center justify-between px-1 mb-2">
+        <h2 className="text-base font-semibold flex items-center gap-2 text-foreground">
+          <Icon className="h-4 w-4 text-primary" />
+          {title}
+        </h2>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-muted">
+            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            <span className="sr-only">{open ? 'Collapse' : 'Expand'} {title}</span>
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent>
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -814,29 +861,37 @@ function AgentDashboardPage() {
           {/* ════════════════════════════════════════════════════════════════
               4. KPIs — All 6 with uniform activity-tracker style
              ════════════════════════════════════════════════════════════════ */}
-          <KpiSection dashboard={dashboard} plan={plan} />
+          <DashboardSection storageKey="dash-kpi-open" defaultOpen={true} title="KPI Tracker" icon={Target}>
+            <KpiSection dashboard={dashboard} plan={plan} />
+          </DashboardSection>
 
           {/* ════════════════════════════════════════════════════════════════
               5. CHARTS — Monthly Net Income, Volume, Sales
              ════════════════════════════════════════════════════════════════ */}
-          <ChartsSection
-            perfData={perfData}
-            perfLoading={perfLoading}
-            perfError={perfError}
-            year={perfYear}
-            compareYear={compareYear}
-            setCompareYear={setCompareYear}
-          />
+          <DashboardSection storageKey="dash-charts-open" defaultOpen={true} title="Monthly Performance Charts" icon={BarChart3}>
+            <ChartsSection
+              perfData={perfData}
+              perfLoading={perfLoading}
+              perfError={perfError}
+              year={perfYear}
+              compareYear={compareYear}
+              setCompareYear={setCompareYear}
+            />
+          </DashboardSection>
 
           {/* ════════════════════════════════════════════════════════════════
               5b. MULTI-YEAR PRODUCTION COMPARISON
              ════════════════════════════════════════════════════════════════ */}
-          <AgentMultiYearComparison view={perfView} viewAs={viewAs} />
+          <DashboardSection storageKey="dash-multiyear-open" defaultOpen={false} title="Multi-Year Production Comparison" icon={TrendingUp}>
+            <AgentMultiYearComparison view={perfView} viewAs={viewAs} />
+          </DashboardSection>
 
           {/* ════════════════════════════════════════════════════════════════
               6. CATEGORY & SOURCE BREAKDOWN
              ════════════════════════════════════════════════════════════════ */}
-          {perfLoading ? <Skeleton className="h-64 w-full" /> : perfData ? <CategoryBreakdownSection perfData={perfData} year={perfYear} /> : null}
+          <DashboardSection storageKey="dash-category-open" defaultOpen={false} title="Category & Source Breakdown" icon={BarChart2}>
+            {perfLoading ? <Skeleton className="h-64 w-full" /> : perfData ? <CategoryBreakdownSection perfData={perfData} year={perfYear} /> : null}
+          </DashboardSection>
 
           {/* ════════════════════════════════════════════════════════════════
               7. SET MONTHLY GOALS
@@ -858,10 +913,12 @@ function AgentDashboardPage() {
             initialYear={year}
           />
           {/* ═══ MY TRANSACTIONS ════════════════════════════════════════ */}
-          <AgentTransactionsSection
-            agentId={user?.uid ?? ''}
-            viewAs={viewAs ?? undefined}
-          />
+          <div id="my-transactions">
+            <AgentTransactionsSection
+              agentId={user?.uid ?? ''}
+              viewAs={viewAs ?? undefined}
+            />
+          </div>
           {/* ════════════════════════════════════════════════════════════════
               9. RECRUITING INCENTIVE TRACKER
              ════════════════════════════════════════════════════════════════ */}
@@ -3390,9 +3447,10 @@ function QuickActionBar() {
     { label: 'Log Activity', icon: ClipboardList, href: '/dashboard/tracker', primary: false },
     { label: 'My Pipeline', icon: LayoutList, href: '#pipeline', primary: false },
     { label: 'Set Goals', icon: Target, href: '#goals', primary: false },
+    { label: 'My Transactions', icon: ChevronsDown, href: '#my-transactions', primary: false },
   ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
       {actions.map(({ label, icon: Icon, href, primary }) => (
         <a key={label} href={href}>
           <div className={cn(
