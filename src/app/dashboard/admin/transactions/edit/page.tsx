@@ -26,7 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, AlertTriangle, ChevronLeft, ChevronRight, Check, PlusCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, ChevronLeft, ChevronRight, Check, PlusCircle, Trash2, GitMerge } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -281,6 +281,7 @@ export default function EditTransactionPage() {
   const [primarySplit, setPrimarySplit] = useState(50);
   const [coAgentSplit, setCoAgentSplit] = useState(50);
   const [txStatus, setTxStatus] = useState<string>('');
+  const [triggeringSplit, setTriggeringSplit] = useState(false);
 
   const [txCommissionOverridden, setTxCommissionOverridden] = useState(false);
   const [txCommissionOverriddenBy, setTxCommissionOverriddenBy] = useState<string | null>(null);
@@ -647,6 +648,31 @@ export default function EditTransactionPage() {
       form.setValue('inspectionTypes', current.filter((t: string) => t !== type));
     } else {
       form.setValue('inspectionTypes', [...current, type]);
+    }
+  };
+
+  // ── Manual retroactive split trigger ────────────────────────────────────────
+  const handleTriggerSplit = async () => {
+    if (!user || !txId) return;
+    if (!window.confirm('This will split this transaction into two separate ledger entries — one for each agent. The original transaction will be deleted. This cannot be undone. Continue?')) return;
+    setTriggeringSplit(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/transactions/${txId}/trigger-split`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Split failed');
+      toast({
+        title: 'Transaction split successfully',
+        description: `Created two ledger entries: primary (${data.primaryTransactionId}) and co-agent (${data.coAgentTransactionId}).`,
+      });
+      router.push('/dashboard/admin/transactions');
+    } catch (err: any) {
+      toast({ title: 'Split failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setTriggeringSplit(false);
     }
   };
 
@@ -1884,8 +1910,25 @@ export default function EditTransactionPage() {
                   </p>
                 </div>
                 {txStatus === 'closed' && (
-                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-                    <strong>Note:</strong> This transaction is already closed. Saving with a co-agent will immediately split it into two separate ledger entries — one for each agent. This action cannot be undone.
+                  <div className="space-y-3">
+                    <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                      <strong>Note:</strong> This transaction is already closed. Saving with a co-agent will immediately split it into two separate ledger entries — one for each agent. This action cannot be undone.
+                    </div>
+                    <div className="rounded-md bg-blue-50 border border-blue-200 p-3 space-y-2">
+                      <p className="text-xs text-blue-800 font-medium">Retroactive Split</p>
+                      <p className="text-xs text-blue-700">If this transaction already has co-agent data saved but was never split (e.g. the split failed silently), click below to manually trigger the split now without re-saving the form.</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-blue-400 text-blue-700 hover:bg-blue-100"
+                        onClick={handleTriggerSplit}
+                        disabled={triggeringSplit || !coAgentId}
+                      >
+                        <GitMerge className="mr-2 h-4 w-4" />
+                        {triggeringSplit ? 'Splitting...' : 'Split Transaction Now'}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

@@ -41,15 +41,29 @@ export async function splitCoAgentTransaction(
   const hasCoAgent = !!tx.hasCoAgent;
   const coAgentData = tx.coAgent as Record<string, any> | undefined;
   const coAgentId = String(coAgentData?.agentId || '').trim();
-  const coAgentDisplayName = String(coAgentData?.agentDisplayName || '').trim();
-  if (!hasCoAgent || !coAgentId || !coAgentDisplayName) return null;
+  // agentDisplayName may not be stored when added via admin edit form — fall back to agentId slug
+  const coAgentDisplayName = String(coAgentData?.agentDisplayName || coAgentData?.agentId || '').trim();
+  if (!hasCoAgent || !coAgentId) return null;
 
   // Guard: do not re-split a transaction that was already created by a split
   if (tx.source === 'co_agent_split') return null;
 
   // ── Split percentages ────────────────────────────────────────────────────────
-  const primarySplitPct: number = Number(tx.primaryAgentSplitPercent ?? coAgentData?.splitPercent != null ? (100 - Number(coAgentData?.splitPercent ?? 50)) : 50);
-  const coSplitPct: number = Number(coAgentData?.splitPercent ?? 50);
+  // Support multiple field name conventions used by different form paths:
+  //   coAgentData.coAgentSplitPct  — admin edit form (PATCH via admin transactions route)
+  //   coAgentData.splitPercent     — agent new transaction form
+  //   tx.coAgentSplitPercent       — top-level legacy field
+  const coSplitPct: number = Number(
+    coAgentData?.coAgentSplitPct ??
+    coAgentData?.splitPercent ??
+    tx.coAgentSplitPercent ??
+    50
+  );
+  const primarySplitPct: number = Number(
+    coAgentData?.primarySplitPct ??
+    tx.primaryAgentSplitPercent ??
+    (100 - coSplitPct)
+  );
 
   // ── Proportional values ──────────────────────────────────────────────────────
   const totalSalePrice = Number(tx.salePrice ?? 0);
