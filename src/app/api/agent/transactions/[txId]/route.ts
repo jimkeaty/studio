@@ -105,7 +105,7 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { resubmitToTc, ...rawUpdates } = body;
+    const { resubmitToTc, notifyPendingContract, ...rawUpdates } = body;
 
     // Validate status
     if (rawUpdates.status && !AGENT_ALLOWED_STATUSES.has(rawUpdates.status)) {
@@ -306,6 +306,41 @@ export async function PATCH(
               recipientUids: tcUids,
               title: 'Transaction Resubmitted to TC',
               body: `${agentName} resubmitted ${txAddress} for TC review (status: pending).`,
+              url: '/dashboard/admin/tc',
+            });
+          }
+        }
+        // Active → Pending listing with contract details: notify agent + all staff + assigned TC
+        if (notifyPendingContract && newStatus === 'pending' && previousStatus !== 'pending') {
+          // Notify the agent themselves
+          const agentUid = txData.agentId || uid;
+          await sendNotification(adminDb, {
+            type: 'tx_status_change',
+            recipientUids: [agentUid],
+            title: 'Listing Under Contract',
+            body: `${txAddress} has been marked as Pending. Contract details have been submitted for staff review.`,
+            url: '/dashboard',
+          });
+          // Notify all staff
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: 'Listing Under Contract — Action Required',
+              body: `${agentName}'s listing at ${txAddress} is now Pending. Contract details submitted. Please update MLS.`,
+              url: '/dashboard/admin/staff-queue',
+            });
+          }
+          // Notify TC only if assigned to this specific agent
+          const agentProfileDoc = await adminDb.collection('agentProfiles').doc(txData.agentId || uid).get().catch(() => null);
+          const assignedTcUid = agentProfileDoc?.data()?.assignedTcUid as string | undefined;
+          if (assignedTcUid) {
+            await sendNotification(adminDb, {
+              type: 'tc_new_intake',
+              recipientUids: [assignedTcUid],
+              title: 'Listing Under Contract — TC Review',
+              body: `${agentName}'s listing at ${txAddress} is now Pending. Contract details submitted for your review.`,
               url: '/dashboard/admin/tc',
             });
           }

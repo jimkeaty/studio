@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { PendingContractModal, type ContractFields } from '@/components/dashboard/PendingContractModal';
 import { useUser } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -658,6 +659,11 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
   // Edit drawer
   const [editTx, setEditTx] = useState<AgentTx | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  // Pending contract modal
+  const [pendingModalOpen, setPendingModalOpen] = useState(false);
+  const [pendingModalTx, setPendingModalTx] = useState<AgentTx | null>(null);
+  const [pendingModalToken, setPendingModalToken] = useState('');
+
   // Drafts
   type DraftSummary = { draftId: string; label: string | null; address: string | null; clientName: string | null; salePrice: number | null; savedAt: string | null };
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
@@ -781,6 +787,16 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
 
   const handleInlineStatusChange = async (tx: AgentTx, newStatus: string) => {
     if (!user) return;
+    // Listings going to Pending → show contract details modal first
+    const isSeller = tx.closingType === 'listing' || tx.closingType === 'dual';
+    const isListingGoingPending = newStatus === 'pending' && tx.status !== 'pending' && isSeller;
+    if (isListingGoingPending) {
+      const token = await user.getIdToken();
+      setPendingModalToken(token);
+      setPendingModalTx(tx);
+      setPendingModalOpen(true);
+      return;
+    }
     try {
       const token = await user.getIdToken();
       const resubmitToTc = newStatus === 'pending' && tx.status !== 'pending';
@@ -795,6 +811,38 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
     } catch (err: any) {
       setError(err.message);
     }
+  };
+
+  const handlePendingContractSave = async (fields: ContractFields) => {
+    if (!pendingModalTx) return;
+    const res = await fetch(`/api/agent/transactions/${pendingModalTx.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pendingModalToken}` },
+      body: JSON.stringify({
+        status: 'pending',
+        resubmitToTc: true,
+        notifyStaffQueue: true,
+        notifyPendingContract: true,
+        ...fields,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+    setTransactions(prev => prev.map(t => t.id === pendingModalTx.id ? { ...t, status: 'pending', contractDate: fields.contractDate ?? undefined, salePrice: fields.salePrice ?? undefined, listPrice: fields.listPrice ?? undefined, projectedCloseDate: fields.projectedCloseDate ?? undefined, inspectionDeadline: fields.inspectionDeadline ?? undefined, buyerName: fields.buyerName ?? undefined, buyerEmail: fields.buyerEmail ?? undefined, buyerPhone: fields.buyerPhone ?? undefined, buyer2Name: fields.buyer2Name ?? undefined, buyer2Email: fields.buyer2Email ?? undefined, buyer2Phone: fields.buyer2Phone ?? undefined, otherAgentName: fields.otherAgentName ?? undefined, otherAgentEmail: fields.otherAgentEmail ?? undefined, otherAgentPhone: fields.otherAgentPhone ?? undefined, otherAgentBrokerage: fields.otherAgentBrokerage ?? undefined, mortgageCompany: fields.mortgageCompany ?? undefined, loanOfficer: fields.loanOfficer ?? undefined, loanOfficerEmail: fields.loanOfficerEmail ?? undefined, loanOfficerPhone: fields.loanOfficerPhone ?? undefined, titleCompany: fields.titleCompany ?? undefined, titleOfficer: fields.titleOfficer ?? undefined, titleOfficerEmail: fields.titleOfficerEmail ?? undefined, titleOfficerPhone: fields.titleOfficerPhone ?? undefined, notes: fields.notes ?? undefined } : t));
+    setPendingModalTx(null);
+  };
+
+  const handlePendingContractSkip = async () => {
+    if (!pendingModalTx) return;
+    const res = await fetch(`/api/agent/transactions/${pendingModalTx.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pendingModalToken}` },
+      body: JSON.stringify({ status: 'pending', resubmitToTc: true, notifyStaffQueue: true, notifyPendingContract: true }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+    setTransactions(prev => prev.map(t => t.id === pendingModalTx.id ? { ...t, status: 'pending' } : t));
+    setPendingModalTx(null);
   };
 
   /* ─── Open edit drawer ───────────────────────────────────────────────── */
@@ -1230,6 +1278,18 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
           open={editOpen}
           onClose={() => setEditOpen(false)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {/* Active → Pending contract details modal */}
+      {pendingModalTx && (
+        <PendingContractModal
+          open={pendingModalOpen}
+          onOpenChange={(v) => { if (!v) { setPendingModalOpen(false); setPendingModalTx(null); } }}
+          transactionAddress={pendingModalTx.address || pendingModalTx.propertyAddress || 'Transaction'}
+          idToken={pendingModalToken}
+          onSave={handlePendingContractSave}
+          onSkip={handlePendingContractSkip}
         />
       )}
     </div>
