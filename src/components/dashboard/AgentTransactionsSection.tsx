@@ -650,7 +650,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Filters
-  const [yearFilter, setYearFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
   const [statusFilter, setStatusFilter] = useState('all');
   const [addressSearch, setAddressSearch] = useState('');
   // Sort
@@ -749,7 +749,10 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
     let list = [...transactions];
 
     if (yearFilter !== 'all') {
+      const ALWAYS_SHOW = new Set(['active', 'temp_off_market', 'pending']);
       list = list.filter(t => {
+        // Always show active listings and pending transactions regardless of year
+        if (ALWAYS_SHOW.has(t.status)) return true;
         const year = t.year || (t.closedDate ? new Date(t.closedDate).getFullYear() : null) || (t.contractDate ? new Date(t.contractDate).getFullYear() : null);
         return String(year) === yearFilter;
       });
