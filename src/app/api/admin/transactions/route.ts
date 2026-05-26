@@ -142,6 +142,8 @@ const UPDATABLE_FIELDS = new Set([
   'seller4Name', 'seller4Email', 'seller4Phone',
   // Uploaded documents (Purchase Agreement, Listing Paperwork, etc.)
   'documents',
+  // Co-agent fields — allow adding/editing co-agent on any transaction including closed
+  'hasCoAgent', 'coAgent',
 ]);
 
 export async function PATCH(req: NextRequest) {
@@ -342,9 +344,11 @@ export async function PATCH(req: NextRequest) {
       console.warn('[api/admin/transactions] Notification trigger failed (non-fatal):', notifErr?.message);
     }
     // ── Co-agent split on close ─────────────────────────────────────────────
-    // If this transaction has a co-agent and is now being marked closed,
-    // split it into two individual transactions (one per agent) and delete the original.
-    if (updates.status === 'closed' && existingData?.status !== 'closed') {
+    // Case 1: Transaction is being marked closed NOW and has a co-agent → split
+    // Case 2: Transaction is ALREADY closed and co-agent is being added retroactively → split
+    const isClosingNow = updates.status === 'closed' && existingData?.status !== 'closed';
+    const isRetroCoAgent = updates.hasCoAgent === true && existingData?.status === 'closed' && !existingData?.hasCoAgent;
+    if (isClosingNow || isRetroCoAgent) {
       const txData = updatedSnap.data() as any;
       if (txData?.hasCoAgent && txData?.coAgent?.agentId && txData?.source !== 'co_agent_split') {
         try {

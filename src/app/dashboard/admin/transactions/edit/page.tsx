@@ -274,6 +274,13 @@ export default function EditTransactionPage() {
   const [showBuyer4, setShowBuyer4] = useState(false);
   const [showSeller3, setShowSeller3] = useState(false);
   const [showSeller4, setShowSeller4] = useState(false);
+  // Co-agent state — managed outside the form schema so it can hold the nested coAgent object
+  const [hasCoAgent, setHasCoAgent] = useState(false);
+  const [coAgentId, setCoAgentId] = useState('');
+  const [coAgentRole, setCoAgentRole] = useState<'co_listing' | 'co_buyer'>('co_listing');
+  const [primarySplit, setPrimarySplit] = useState(50);
+  const [coAgentSplit, setCoAgentSplit] = useState(50);
+  const [txStatus, setTxStatus] = useState<string>('');
 
   const [txCommissionOverridden, setTxCommissionOverridden] = useState(false);
   const [txCommissionOverriddenBy, setTxCommissionOverriddenBy] = useState<string | null>(null);
@@ -615,6 +622,15 @@ export default function EditTransactionPage() {
         if (tx.buyer4Name || tx.buyer4Email || tx.buyer4Phone) { setShowBuyer3(true); setShowBuyer4(true); }
         if (tx.seller3Name || tx.seller3Email || tx.seller3Phone) setShowSeller3(true);
         if (tx.seller4Name || tx.seller4Email || tx.seller4Phone) { setShowSeller3(true); setShowSeller4(true); }
+        // Load co-agent data from the transaction
+        setTxStatus(tx.status || '');
+        if (tx.hasCoAgent && tx.coAgent?.agentId) {
+          setHasCoAgent(true);
+          setCoAgentId(tx.coAgent.agentId || '');
+          setCoAgentRole((tx.coAgent.role as 'co_listing' | 'co_buyer') || 'co_listing');
+          setPrimarySplit(tx.coAgent.primarySplitPct ?? 50);
+          setCoAgentSplit(tx.coAgent.coAgentSplitPct ?? 50);
+        }
       } catch (err: any) {
         setLoadError(err.message);
       } finally {
@@ -681,6 +697,19 @@ export default function EditTransactionPage() {
         payload.commissionOverriddenAt = null;
       }
 
+      // Add co-agent data to the payload
+      payload.hasCoAgent = hasCoAgent;
+      if (hasCoAgent && coAgentId) {
+        payload.coAgent = {
+          agentId: coAgentId,
+          role: coAgentRole,
+          primarySplitPct: primarySplit,
+          coAgentSplitPct: coAgentSplit,
+        };
+      } else {
+        payload.coAgent = null;
+      }
+
       const res = await fetch('/api/admin/transactions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -689,7 +718,11 @@ export default function EditTransactionPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Save failed');
 
-      toast({ title: 'Transaction saved', description: 'All changes have been saved to the ledger.' });
+      if (data.split) {
+        toast({ title: 'Transaction split into two', description: 'The co-agent transaction has been created and both agents\u2019 commissions have been calculated separately.' });
+      } else {
+        toast({ title: 'Transaction saved', description: 'All changes have been saved to the ledger.' });
+      }
       router.push('/dashboard/admin/transactions');
     } catch (err: any) {
       setSaveError(err.message);
@@ -1758,6 +1791,104 @@ export default function EditTransactionPage() {
                   )} />
                 </Grid2>
               </>
+            )}
+          </Section>
+
+          {/* ── Agent Participation (Co-Agent) ────────────────────────────────────────── */}
+          <Section title="Agent Participation" description="Is another internal agent co-representing on this transaction?">
+            <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+              <div>
+                <p className="font-medium text-sm">Co-Agent on This Transaction</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Enable if another Keaty agent is sharing this side. Their commission will be calculated separately.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={hasCoAgent}
+                onClick={() => setHasCoAgent(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  hasCoAgent ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  hasCoAgent ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+            </div>
+
+            {hasCoAgent && (
+              <div className="border rounded-lg p-4 bg-blue-50/50 space-y-4">
+                <p className="text-sm font-semibold text-blue-800">Co-Agent Details</p>
+                <Grid2>
+                  <div>
+                    <label className="text-sm font-medium">Co-Agent *</label>
+                    <select
+                      className="mt-1 w-full border rounded-md px-3 py-2 text-sm bg-white"
+                      value={coAgentId}
+                      onChange={e => setCoAgentId(e.target.value)}
+                    >
+                      <option value="">Select co-agent...</option>
+                      {agents.map(a => (
+                        <option key={a.agentId} value={a.agentId}>{a.agentName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Co-Agent Role</label>
+                    <select
+                      className="mt-1 w-full border rounded-md px-3 py-2 text-sm bg-white"
+                      value={coAgentRole}
+                      onChange={e => setCoAgentRole(e.target.value as 'co_listing' | 'co_buyer')}
+                    >
+                      <option value="co_listing">Co-Listing Agent</option>
+                      <option value="co_buyer">Co-Buyer Agent</option>
+                    </select>
+                  </div>
+                </Grid2>
+                <div>
+                  <p className="text-sm font-medium mb-1">Commission Split</p>
+                  <p className="text-xs text-muted-foreground mb-3">The side gross commission will be divided by these percentages first. Each agent&apos;s own commission structure is then applied to their respective share.</p>
+                  <Grid2>
+                    <div>
+                      <label className="text-sm font-medium">Primary Agent Split %</label>
+                      <input
+                        type="number" min={0} max={100} step={1}
+                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                        value={primarySplit}
+                        onChange={e => {
+                          const v = Math.min(100, Math.max(0, Number(e.target.value)));
+                          setPrimarySplit(v);
+                          setCoAgentSplit(100 - v);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Co-Agent Split %</label>
+                      <input
+                        type="number" min={0} max={100} step={1}
+                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                        value={coAgentSplit}
+                        onChange={e => {
+                          const v = Math.min(100, Math.max(0, Number(e.target.value)));
+                          setCoAgentSplit(v);
+                          setPrimarySplit(100 - v);
+                        }}
+                      />
+                    </div>
+                  </Grid2>
+                  <p className={`text-xs mt-2 font-medium ${
+                    primarySplit + coAgentSplit === 100 ? 'text-green-600' : 'text-red-500'
+                  }`}>
+                    Total: {primarySplit + coAgentSplit}%
+                    {primarySplit + coAgentSplit === 100 ? ' ✓ Splits are balanced' : ' ⚠ Splits must total 100%'}
+                  </p>
+                </div>
+                {txStatus === 'closed' && (
+                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                    <strong>Note:</strong> This transaction is already closed. Saving with a co-agent will immediately split it into two separate ledger entries — one for each agent. This action cannot be undone.
+                  </div>
+                )}
+              </div>
             )}
           </Section>
           </div>{/* end Step 3 */}
