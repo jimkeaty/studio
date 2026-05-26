@@ -4,6 +4,7 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup'
 import { isAdminLike } from '@/lib/auth/staffAccess'
 import { normalizeDealSource } from '@/lib/normalizeDealSource'
+import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -331,6 +332,26 @@ export async function POST(req: NextRequest) {
     }
 
      const ref = await adminDb.collection('transactions').add(payload)
+
+    // ── Co-agent split: if this is a closed transaction with a co-agent, split it now
+    // into two separate ledger entries (one per agent) with independent commission calc.
+    // splitCoAgentTransaction() handles rollups and notifications internally.
+    if (status === 'closed' && hasCoAgent && coAgentData?.agentId) {
+      try {
+        const splitResult = await splitCoAgentTransaction(ref.id)
+        if (splitResult) {
+          return NextResponse.json({
+            ok: true,
+            split: true,
+            id: splitResult.primaryTransactionId,
+            primaryTransactionId: splitResult.primaryTransactionId,
+            coAgentTransactionId: splitResult.coAgentTransactionId,
+          })
+        }
+      } catch (splitErr: any) {
+        console.warn('[API/transactions] Co-agent split failed (non-fatal):', splitErr?.message)
+      }
+    }
 
     // Rebuild the agent's year rollup so leaderboards stay in sync
     try {

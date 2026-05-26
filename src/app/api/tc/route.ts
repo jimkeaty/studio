@@ -296,6 +296,20 @@ export async function POST(req: NextRequest) {
         ? body.documents.filter((d: any) => d?.url && d?.name)
         : [],
       workingWithTc: !!body.workingWithTc,
+      // Co-agent fields — mirrored from intake so the split can fire on TC approval
+      hasCoAgent: !!body.hasCoAgent,
+      ...(body.hasCoAgent && toStr(body.coAgentId) ? {
+        coAgent: {
+          agentId: toStr(body.coAgentId),
+          agentDisplayName: toStr(body.coAgentDisplayName) || toStr(body.coAgentId),
+          role: toStr(body.coAgentRole) || 'other',
+          splitPercent: toNum(body.coAgentSplitPercent) ?? 50,
+          coAgentSplitPct: toNum(body.coAgentSplitPercent) ?? 50,
+          primarySplitPct: toNum(body.primaryAgentSplitPercent) ?? 50,
+        },
+        primaryAgentSplitPercent: toNum(body.primaryAgentSplitPercent) ?? 50,
+        coAgentSplitPercent: toNum(body.coAgentSplitPercent) ?? 50,
+      } : {}),
       // Review status flags — cleared when TC approves
       reviewStatus: 'pending_review',
       tcIntakeId: ref.id,
