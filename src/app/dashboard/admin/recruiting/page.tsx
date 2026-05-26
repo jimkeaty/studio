@@ -8,6 +8,8 @@ import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ComposedChart } from 
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/firebase';
+import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsChart';
+import { RecruitingPipelinePanel } from '@/components/dashboard/broker/RecruitingPipelinePanel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -1193,6 +1195,12 @@ export default function RecruitingDashboardPage() {
       {/* ── Plan & Tracking Forms ────────────────────────────────────────── */}
       <PlanForm plan={plan} year={year} onSaved={fetchData} />
       <TrackingForm months={months} year={year} onSaved={fetchData} />
+
+      {/* ── Active Agents Chart (computed from Firestore) ──────────────── */}
+      <ActiveAgentsChart showGoalEdit={true} initialYear={year} />
+
+      {/* ── Recruiting Pipeline ─────────────────────────────────────────────── */}
+      <RecruitingPipelinePanel />
 
         </TabsContent>
       </Tabs>

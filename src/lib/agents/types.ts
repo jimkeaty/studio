@@ -54,6 +54,7 @@ export type AgentProfile = {
   office: string | null;
   status: AgentProfileStatus;
   startDate: string;
+  endDate: string | null;
   anniversaryMonth: number;
   anniversaryDay: number;
 
@@ -96,6 +97,7 @@ export type AgentProfileInput = {
   office?: string | null;
   status: AgentProfileStatus;
   startDate: string;
+  endDate?: string | null;
 
   agentType: AgentType;
   progressionMetric?: ProgressionMetric;

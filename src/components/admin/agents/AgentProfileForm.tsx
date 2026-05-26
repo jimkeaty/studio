@@ -65,6 +65,7 @@ export type AgentProfileFormValues = {
   defaultTransactionFee: number | string;
   gracePeriodEnabled: boolean;
   notes: string;
+  endDate: string;
 };
 
 type AgentProfileFormProps = {
@@ -182,6 +183,7 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   defaultTransactionFee: 395,
   gracePeriodEnabled: false,
   notes: '',
+  endDate: '',
 };
 
 function cloneTiers(tiers: AgentTierFormValue[]) {
@@ -1045,6 +1047,7 @@ export default function AgentProfileForm({
             : Number(values.defaultTransactionFee),
         gracePeriodEnabled: values.gracePeriodEnabled ?? false,
         notes: values.notes || null,
+        endDate: values.endDate || null,
       };
 
       const isEditMode = Boolean(agentId);
@@ -1291,6 +1294,17 @@ export default function AgentProfileForm({
             <div className="rounded-md border bg-gray-50 px-3 py-2 text-sm">
               {anniversaryDisplay}
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">Termination / End Date</label>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={values.endDate}
+              onChange={(e) => updateField('endDate', e.target.value)}
+              type="date"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Leave blank for active agents. Set when an agent leaves the brokerage.</p>
           </div>
         </div>
 

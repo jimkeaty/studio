@@ -213,6 +213,7 @@ function normalizeInput(body: AgentProfileInput) {
         : null,
     gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
+    endDate: body.endDate?.trim() || null,
   };
 }
 
@@ -431,6 +432,7 @@ export async function POST(req: NextRequest) {
       office: normalized.office,
       status: normalized.status,
       startDate: normalized.startDate,
+      endDate: normalized.endDate ?? null,
       anniversaryMonth,
       anniversaryDay,
       agentType: normalized.agentType,

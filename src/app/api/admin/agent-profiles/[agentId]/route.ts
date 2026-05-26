@@ -208,6 +208,7 @@ function normalizeInput(body: AgentProfileInput) {
         : null,
     gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
+    endDate: body.endDate?.trim() || null,
   };
 }
 
@@ -413,6 +414,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       defaultTransactionFee: normalized.defaultTransactionFee,
       gracePeriodEnabled: normalized.gracePeriodEnabled,
       notes: normalized.notes,
+      endDate: normalized.endDate,
       updatedAt: new Date().toISOString(),
     };
 

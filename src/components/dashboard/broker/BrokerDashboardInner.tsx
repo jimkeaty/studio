@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import type { BrokerCommandMetrics, MonthlyData, PrevYearStats, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
+import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsChart';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -2030,6 +2031,9 @@ export function BrokerDashboardInner() {
 
       {/* ── Goals Editor ───────────────────────────────────────────────────── */}
       <GoalsEditor months={months} year={year} prevYearStats={data.prevYearStats} onSaved={fetchData} segment={selectedTeam || 'TOTAL'} />
+
+      {/* ── Active Agents Chart ────────────────────────────────────────────── */}
+      <ActiveAgentsChart showGoalEdit={true} initialYear={year} />
     </div>
   );
 }
