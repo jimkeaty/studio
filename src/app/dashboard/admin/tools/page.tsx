@@ -46,6 +46,37 @@ export default function AdminToolsPage() {
   const [yearFixRunning, setYearFixRunning] = useState(false);
   const [yearFixResult, setYearFixResult] = useState<MigrationResult | null>(null);
 
+  // Fix All Commission Modes
+  const [commFixRunning, setCommFixRunning] = useState(false);
+  const [commFixResult, setCommFixResult] = useState<{
+    ok: boolean;
+    scanned?: number;
+    fixed?: number;
+    skipped?: number;
+    fixedAgents?: { id: string; displayName: string; from: string; to: string }[];
+    message?: string;
+    error?: string;
+  } | null>(null);
+
+  async function runCommissionModeFix() {
+    if (!user) return;
+    setCommFixRunning(true);
+    setCommFixResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/agent-profiles/fix-commission-modes', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setCommFixResult(data);
+    } catch (err: any) {
+      setCommFixResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setCommFixRunning(false);
+    }
+  }
+
   // Commission % Diagnostics
   const [diagYear, setDiagYear] = useState(String(new Date().getFullYear()));
   const [diagRunning, setDiagRunning] = useState(false);
@@ -965,6 +996,67 @@ export default function AdminToolsPage() {
           )}
           <Button onClick={runMigration} disabled={running} variant={result?.ok && result?.migrated === 0 ? 'outline' : 'default'}>
             {running ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Running…</> : result?.ok ? <><CheckCircle2 className="mr-2 h-4 w-4" />Run Again</> : 'Run Migration'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Fix All Commission Modes */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+              <div>
+                <CardTitle className="text-base">Fix All Commission Modes</CardTitle>
+                <CardDescription className="mt-1 text-sm">
+                  Scans every agent profile and ensures any agent with saved custom tiers has
+                  <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">commissionMode = &apos;custom&apos;</code>
+                  so their tiers are always used as the source of truth.
+                  Safe to run multiple times &mdash; only updates profiles that need it.
+                  Run this once to fix all agents without opening each profile manually.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs">Commission</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {commFixResult && (
+            <Alert variant={commFixResult.ok ? 'default' : 'destructive'}>
+              {commFixResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle>{commFixResult.ok ? 'Complete' : 'Failed'}</AlertTitle>
+              <AlertDescription>
+                <p>{commFixResult.message || commFixResult.error}</p>
+                {commFixResult.ok && commFixResult.scanned !== undefined && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Scanned {commFixResult.scanned} profiles &middot; Fixed {commFixResult.fixed} &middot; Already correct {commFixResult.skipped}
+                  </p>
+                )}
+                {commFixResult.ok && commFixResult.fixedAgents && commFixResult.fixedAgents.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-muted-foreground hover:underline">
+                      View fixed agents ({commFixResult.fixedAgents.length})
+                    </summary>
+                    <ul className="mt-1 space-y-0.5 text-xs font-mono text-muted-foreground">
+                      {commFixResult.fixedAgents.map(a => (
+                        <li key={a.id}>{a.displayName} &mdash; {a.from} &rarr; {a.to}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+          <Button
+            onClick={runCommissionModeFix}
+            disabled={commFixRunning}
+            variant={commFixResult?.ok && commFixResult?.fixed === 0 ? 'outline' : 'default'}
+          >
+            {commFixRunning
+              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scanning…</>
+              : commFixResult?.ok
+                ? <><CheckCircle2 className="mr-2 h-4 w-4" />Run Again</>
+                : <><ShieldCheck className="mr-2 h-4 w-4" />Fix All Commission Modes</>}
           </Button>
         </CardContent>
       </Card>
