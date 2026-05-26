@@ -913,12 +913,13 @@ function AgentDashboardPage() {
         setYear={setPerfYear}
         view={perfView}
         setView={setPerfView}
+        isAdmin={isAdmin}
       />
 
       {/* ════════════════════════════════════════════════════════════════════
           2. TIER / CAP PROGRESS
          ════════════════════════════════════════════════════════════════════ */}
-      {!loading && dashboard && <TierProgressCard dashboard={dashboard} />}
+      {!loading && dashboard && <TierProgressCard dashboard={dashboard} isAdmin={isAdmin} />}
       {/* ════════════════════════════════════════════════════════════════════
           THIS WEEK SUMMARY
          ════════════════════════════════════════════════════════════════════ */}
@@ -1014,11 +1015,12 @@ function AgentDashboardPage() {
 // 1. MY PERFORMANCE SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, year, setYear, view, setView }: {
+function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, year, setYear, view, setView, isAdmin }: {
   perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   dashboard: AgentDashboardData | null;
   year: number; setYear: (y: number) => void;
   view: 'personal' | 'team'; setView: (v: 'personal' | 'team') => void;
+  isAdmin?: boolean;
 }) {
   if (perfLoading) return <div className="space-y-4"><Skeleton className="h-10 w-1/3" /><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24" />)}</div></div>;
   if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Performance data unavailable</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
@@ -1158,8 +1160,8 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
           );
         })()}
 
-        {/* ── Team Leader Earnings Breakdown ────────────────────────────────────────────── */}
-        {view === 'team' && perfData?.teamLeaderEarnings && (() => {
+        {/* ── Team Leader Earnings Breakdown (admin/staff/TC only) ──────────────────────── */}
+        {isAdmin && view === 'team' && perfData?.teamLeaderEarnings && (() => {
           const tle = perfData.teamLeaderEarnings!;
           const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
           return (
@@ -1427,7 +1429,7 @@ const TIER_PALETTE = [
   { hex: '#e11d48', light: '#fff1f2', text: '#881337', ring: 'ring-rose-400/40',    label: 'rose'    },
 ];
 
-function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
+function TierProgressCard({ dashboard, isAdmin }: { dashboard: AgentDashboardData; isAdmin?: boolean }) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const tp = dashboard.tierProgress;
 
@@ -1706,10 +1708,13 @@ function TierProgressCard({ dashboard }: { dashboard: AgentDashboardData }) {
 
         {/* ── FOOTER META ROW ──────────────────────────────────────────── */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-1 border-t text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="font-semibold text-foreground">Gross GCI</span>
-            {fmtCurrency(grossGCIYTD)}
-          </span>
+          {/* Gross GCI — admin/staff/TC only */}
+          {isAdmin && (
+            <span className="flex items-center gap-1.5">
+              <span className="font-semibold text-foreground">Gross GCI</span>
+              {fmtCurrency(grossGCIYTD)}
+            </span>
+          )}
           {effectiveStartDate && (
             <span className="flex items-center gap-1">
               <CalendarDays className="h-3 w-3" />
