@@ -144,7 +144,21 @@ export async function GET(req: NextRequest) {
 
     const isTeamLeader = profile?.teamRole === 'leader' && !!profile?.primaryTeamId;
     const teamId = profile?.primaryTeamId || null;
-    const teamName = profile?.teamName || null;
+
+    // teamName is stored on the teams collection, not on the agent profile doc.
+    // Fetch it from the teams collection when the agent is a team leader.
+    let teamName: string | null = profile?.teamName || null;
+    if (!teamName && teamId) {
+      const teamDoc = await adminDb.collection('teams').doc(teamId).get();
+      if (teamDoc.exists) {
+        teamName = teamDoc.data()?.teamName || teamDoc.data()?.name || null;
+      }
+      if (!teamName) {
+        // Fallback: query by teamId field
+        const teamSnap = await adminDb.collection('teams').where('teamId', '==', teamId).limit(1).get();
+        if (!teamSnap.empty) teamName = teamSnap.docs[0].data()?.teamName || teamSnap.docs[0].data()?.name || null;
+      }
+    }
 
     // Determine which agent IDs to include
     let agentIds: Set<string>;
