@@ -79,7 +79,7 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
     case 'contractDate': return tx.contractDate || '';
     case 'projectedCloseDate': return (tx as any).projectedCloseDate || '';
     case 'closedDate': return tx.closedDate || (tx as any).closingDate || '';
-    case 'dealValue': return tx.dealValue || 0;
+    case 'dealValue': return (tx as any).salePrice || tx.dealValue || 0;
     case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
     case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.netCommission ?? 0;
     case 'companyRetained': return tx.splitSnapshot?.companyRetained ?? 0;
@@ -857,7 +857,7 @@ export default function AdminTransactionLedgerPage() {
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div>
                           <p className="text-xs text-muted-foreground">Sale Price</p>
-                          <p className="text-sm font-semibold">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</p>
+                          <p className="text-sm font-semibold">{((t as any).salePrice || t.dealValue) ? formatCurrency((t as any).salePrice || t.dealValue) : '—'}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Gross GCI</p>
@@ -1061,7 +1061,7 @@ export default function AdminTransactionLedgerPage() {
                         <TableCell className="min-w-[120px] whitespace-nowrap">{formatDate(t.contractDate)}</TableCell>
                         <TableCell className="min-w-[130px] whitespace-nowrap">{formatDate((t as any).projectedCloseDate) || '—'}</TableCell>
                         <TableCell className="min-w-[110px] whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
-                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{t.dealValue ? formatCurrency(t.dealValue) : '—'}</TableCell>
+                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{((t as any).salePrice || t.dealValue) ? formatCurrency((t as any).salePrice || t.dealValue) : '—'}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">{gross ? formatCurrency(gross) : '—'}</TableCell>
                         <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">{net ? formatCurrency(net) : '—'}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">{broker ? formatCurrency(broker) : '—'}</TableCell>
