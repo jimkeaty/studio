@@ -14,7 +14,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
@@ -24,12 +24,15 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   AlertTriangle, CalendarDays, DollarSign, Target, TrendingUp,
   ArrowUpRight, ArrowDownRight, MapPin, FileCheck2, Clock,
   BarChart3, BarChart2, Users, Percent, Save, ChevronDown, ChevronUp, ChevronsDown,
   Phone, MessageSquare, CalendarCheck, CalendarCheck2, FileSignature, CheckCircle2,
   Zap, Bell, PlusCircle, ClipboardList, LayoutList, Settings2, Flame,
-  TrendingDown, Award, Star,
+  TrendingDown, Award, Star, Info, User, Building2,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { AppointmentsPipeline } from '@/components/dashboard/AppointmentsPipeline';
@@ -179,6 +182,7 @@ type AgentMetricsResponse = {
     sourceBreakdown?: SourceBreakdown;
   };
   prevYearStats?: { year: number; totalVolume: number; totalSales: number; avgSalePrice: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number }[]; totalGCI?: number; totalGrossMargin?: number; avgGCI?: number; avgGrossMargin?: number; avgMarginPct?: number; avgCommissionPct?: number; };
+  brokerageSeasonality?: { month: number; label: string; volumePct: number; salesPct: number }[];
   availableYears?: number[];
   comparisonData?: { year: number; months: { closedVolume: number; closedCount: number; netIncome: number; grossMargin?: number; totalGCI?: number }[] } | null;
   agentView: { view: string; viewLabel: string; isTeamLeader: boolean; availableTeams: { teamId: string; teamName: string }[]; monthlyNetIncome: number[]; monthlyPendingNetIncome: number[]; netIncome: number; pendingNetIncome: number; goalSegment: string; };
@@ -219,12 +223,13 @@ type AgentPrevYearStats = {
   avgCommissionPct?: number;
 };
 
-function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
+function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats, brokerageSeasonality }: {
   months: MonthlyData[];
   year: number;
   goalSegment: string;
   onSaved: () => void;
   prevYearStats?: AgentPrevYearStats;
+  brokerageSeasonality?: { month: number; label: string; volumePct: number; salesPct: number }[];
 }) {
   const { user } = useUser();
   const [goals, setGoals] = useState<Record<number, { margin: string; volume: string; sales: string }>>({});
@@ -234,8 +239,12 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
   const [seasonWeights, setSeasonWeights] = useState<Record<number, { salesPct: string; volumePct: string }>>({});
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
-
-  const hasPrevData = prevYearStats && prevYearStats.totalSales > 0;
+  // 'personal' = agent's own prev year | 'brokerage' = Keaty Real Estate brokerage-wide
+  // Auto-default to 'brokerage' if agent has no personal prev-year data
+  const hasPrevData = !!(prevYearStats && prevYearStats.totalSales > 0);
+  const [seasonalitySource, setSeasonalitySource] = useState<'personal' | 'brokerage'>(
+    hasPrevData ? 'personal' : 'brokerage'
+  );
   const avgSalePrice = prevYearStats?.avgSalePrice ?? 0;
   const avgCommPct = prevYearStats?.avgCommissionPct ?? 0;
   const avgMarginPct = prevYearStats?.avgMarginPct ?? 0;
@@ -260,12 +269,16 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
     if (totalMargin > 0) setYearlyIncome(String(Math.round(totalMargin)));
 
     const sw: typeof seasonWeights = {};
+    // Use the active seasonality source to initialize weights
+    const activeSeasonality = seasonalitySource === 'brokerage' && brokerageSeasonality
+      ? brokerageSeasonality
+      : prevYearStats?.seasonality;
     for (let m = 1; m <= 12; m++) {
-      const s = prevYearStats?.seasonality?.[m - 1];
+      const s = activeSeasonality?.[m - 1];
       sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
     }
     setSeasonWeights(sw);
-  }, [months, prevYearStats]);
+  }, [months, prevYearStats, brokerageSeasonality, seasonalitySource]);
 
   // Volume → auto-calc sales + income
   const handleVolumeChange = (val: string) => {
@@ -332,6 +345,16 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
     const sw: typeof seasonWeights = {};
     for (let m = 1; m <= 12; m++) {
       const s = prevYearStats?.seasonality?.[m - 1];
+      sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
+    }
+    setSeasonWeights(sw);
+  };
+
+  const resetSeasonalityToBrokerage = () => {
+    if (!brokerageSeasonality) return;
+    const sw: typeof seasonWeights = {};
+    for (let m = 1; m <= 12; m++) {
+      const s = brokerageSeasonality[m - 1];
       sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
     }
     setSeasonWeights(sw);
@@ -486,15 +509,58 @@ function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats }: {
                   <Input id="agent-yearly-sales" type="number" value={yearlySales} onChange={e => handleSalesChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${prevYearStats.totalSales}` : 'e.g. 20'} />
                 </div>
               </div>
+              {/* Seasonality Source Selector */}
+              <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Seasonality Source</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="font-semibold mb-1">What is Seasonality?</p>
+                        <p className="text-xs mb-2">Seasonality distributes your annual goal across months based on historical close patterns — so busier months get a larger share of your goal.</p>
+                        <p className="font-semibold text-xs mb-1">My Previous Year</p>
+                        <p className="text-xs mb-2">Uses your own personal closing history from last year. Best for established agents with a consistent pattern.</p>
+                        <p className="font-semibold text-xs mb-1">Keaty Real Estate Brokerage</p>
+                        <p className="text-xs">Uses the brokerage-wide closing pattern from all agents last year. Best for new agents or those who want to align with overall market trends.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={seasonalitySource === 'personal' ? 'default' : 'outline'}
+                    disabled={!hasPrevData}
+                    onClick={() => { setSeasonalitySource('personal'); resetSeasonalityToPrev(); }}
+                    className="gap-1.5"
+                  >
+                    <User className="h-3.5 w-3.5" />
+                    My Previous Year
+                    {!hasPrevData && <span className="text-xs opacity-60">(no data)</span>}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={seasonalitySource === 'brokerage' ? 'default' : 'outline'}
+                    disabled={!brokerageSeasonality}
+                    onClick={() => { setSeasonalitySource('brokerage'); resetSeasonalityToBrokerage(); }}
+                    className="gap-1.5"
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    Keaty Real Estate Brokerage
+                  </Button>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="default" onClick={distribute} disabled={!yearlyIncome && !yearlyVolume && !yearlySales}>
                   <Target className="mr-2 h-4 w-4" /> Distribute Across Months
                 </Button>
-                {hasPrevData && (
-                  <Button variant="outline" onClick={() => { resetSeasonalityToPrev(); setTimeout(distribute, 50); }} className="gap-2">
-                    <BarChart3 className="h-4 w-4" /> Use {prevYearStats.year} Seasonality
-                  </Button>
-                )}
               </div>
             </div>
 
@@ -903,6 +969,7 @@ function AgentDashboardPage() {
               goalSegment={perfData.agentView.goalSegment}
               onSaved={fetchPerf}
               prevYearStats={perfData.prevYearStats}
+              brokerageSeasonality={perfData.brokerageSeasonality}
             />
           )}
 
@@ -2734,7 +2801,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" />
               <YAxis tickFormatter={fmt} />
-              <Tooltip formatter={(val: number) => [fmt(val), metricLabel]} />
+              <RechartsTooltip formatter={(val: number) => [fmt(val), metricLabel]} />
               <Bar dataKey="value" radius={[6, 6, 0, 0]} name={metricLabel}>
                 {chartData.map((entry: any, idx: number) => {
                   const yrIdx = allYears.findIndex(y => String(y.year) === entry.label);
@@ -2747,7 +2814,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" />
               <YAxis tickFormatter={fmt} />
-              <Tooltip formatter={(val: number, name: string) => [fmt(val), name]} />
+              <RechartsTooltip formatter={(val: number, name: string) => [fmt(val), name]} />
               <Legend />
               {allYears.filter(yr => selectedYears.includes(yr.year)).map((yr) => {
                 const colorIdx = allYears.findIndex(y => y.year === yr.year);
@@ -2897,7 +2964,7 @@ function CategoryBreakdownSection({ perfData, year }: {
             label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
             {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
           </Pie>
-          <Tooltip formatter={(val: any) => formatter(Number(val))} />
+          <RechartsTooltip formatter={(val: any) => formatter(Number(val))} />
         </PieChart>
       </ResponsiveContainer>
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1">

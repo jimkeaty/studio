@@ -197,11 +197,38 @@ export async function GET(req: NextRequest) {
     };
 
     const prevYear = year - 1;
+    // Fetch brokerage-wide closed transactions for prevYear to compute brokerage seasonality
+    const brokeragePrevSnap = await adminDb.collection('transactions')
+      .where('year', '==', prevYear)
+      .where('status', '==', 'closed')
+      .get();
+    const brokeragePrevTx: Transaction[] = brokeragePrevSnap.docs.map(d => d.data() as Transaction);
     // In all-years mode, include ALL closed transactions; for single year, filter normally
     const transactions = isAllYears
       ? allAgentTx.filter(t => t.status === 'closed' || t.status === 'pending' || t.status === 'under_contract')
       : allAgentTx.filter(t => getTxYear(t) === year);
     const prevTransactions = allAgentTx.filter(t => getTxYear(t) === prevYear);
+
+    // ── Brokerage seasonality (all agents, prevYear) ──────────────────────
+    const brokerageMonthly = Array.from({ length: 12 }, () => ({ closedVolume: 0, closedCount: 0 }));
+    let brokerageTotalVolume = 0;
+    let brokerageTotalCount = 0;
+    for (const t of brokeragePrevTx) {
+      const closedDate = parseDate(t.closedDate);
+      if (!closedDate || closedDate.getFullYear() !== prevYear) continue;
+      const m = closedDate.getMonth();
+      const vol = t.dealValue ?? 0;
+      brokerageMonthly[m].closedVolume += vol;
+      brokerageMonthly[m].closedCount += 1;
+      brokerageTotalVolume += vol;
+      brokerageTotalCount += 1;
+    }
+    const brokerageSeasonality = brokerageMonthly.map((bm, i) => ({
+      month: i + 1,
+      label: format(new Date(2000, i), 'MMM'),
+      volumePct: brokerageTotalVolume > 0 ? Math.round((bm.closedVolume / brokerageTotalVolume) * 10000) / 100 : 8.33,
+      salesPct: brokerageTotalCount > 0 ? Math.round((bm.closedCount / brokerageTotalCount) * 10000) / 100 : 8.33,
+    }));
     const compareTransactions = compareYear
       ? allAgentTx.filter(t => getTxYear(t) === compareYear)
       : [];
@@ -534,6 +561,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       overview: agentSafeOverview,
       prevYearStats: isAdminCaller ? prevYearStats : stripCommissionFromPrevYearStats(prevYearStats),
+      brokerageSeasonality,
       availableYears,
       comparisonData: isAdminCaller ? comparisonData : stripCommissionFromComparisonData(comparisonData),
       // Aggregated stats (available to all callers)
