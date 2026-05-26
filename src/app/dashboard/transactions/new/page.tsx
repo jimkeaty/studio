@@ -474,8 +474,8 @@ export default function AddTransactionPage() {
   const { user, loading: userLoading } = useUser();
   const { effectiveUid, effectiveName, isImpersonating } = useEffectiveUser();
   const { toast } = useToast();
-  const searchParams = useSearchParams();
-  const urlDraftId = searchParams?.get('draft') ?? null;
+  const urlSearchParams = useSearchParams();
+  const urlDraftId = urlSearchParams?.get('draft') ?? null;
   const [submitted, setSubmitted] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -719,8 +719,7 @@ export default function AddTransactionPage() {
   const { isAdmin: isAdminUser } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
 
-  const searchParams = useSearchParams();
-  const typeParam = searchParams?.get('type');
+  const typeParam = urlSearchParams?.get('type');
   const initialClosingType = typeParam === 'listing' ? 'listing' : 'buyer';
 
   const form = useForm<FormValues>({
