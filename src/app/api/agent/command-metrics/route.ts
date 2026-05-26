@@ -500,6 +500,86 @@ export async function GET(req: NextRequest) {
       comparisonData = { year: compareYear, months: compMonths };
     }
 
+    // ── Team Leader Earnings Breakdown ──────────────────────────────────────
+    // Only computed when view=team AND the caller is a team leader.
+    // Aggregates per-member production and leader-retained commission from splitSnapshot.
+    type MemberEarnings = {
+      agentId: string;
+      agentName: string;
+      closedCount: number;
+      closedVolume: number;
+      totalGCI: number;
+      memberPaid: number;         // what the member agent received
+      leaderRetained: number;     // what the leader kept from this member's deals
+    };
+    let teamLeaderEarnings: {
+      totalLeaderRetained: number;
+      totalMemberPaid: number;
+      totalGCI: number;
+      memberBreakdown: MemberEarnings[];
+    } | null = null;
+
+    if (view === 'team' && isTeamLeader && teamId) {
+      // Load member profiles so we can map agentId → display name
+      const membersSnap2 = await adminDb.collection('agentProfiles')
+        .where('primaryTeamId', '==', teamId).get();
+      const memberNameMap = new Map<string, string>();
+      for (const d of membersSnap2.docs) {
+        const pd = d.data();
+        if (pd.agentId) memberNameMap.set(pd.agentId as string, pd.agentName ?? pd.agentId);
+        // Also map by Firebase UID (doc id) in case transactions are stored under UID
+        memberNameMap.set(d.id, pd.agentName ?? pd.agentId ?? d.id);
+      }
+
+      const memberMap = new Map<string, MemberEarnings>();
+
+      for (const t of transactions) {
+        if (t.status !== 'closed') continue;
+        const closedDate = parseDate(t.closedDate);
+        if (!isAllYears && (!closedDate || closedDate.getFullYear() !== year)) continue;
+        if (isAllYears && !closedDate) continue;
+
+        const snap = t.splitSnapshot as any;
+        const gci = snap?.grossCommission ?? t.commission ?? 0;
+        // leaderRetainedAfterMember is stored by the resolver for team-member transactions
+        const leaderRetained = snap?.leaderRetainedAfterMember ?? 0;
+        const memberPaid = snap?.agentNetCommission ?? snap?.memberPaid ?? (gci - leaderRetained);
+        const dealValue = t.dealValue ?? 0;
+        const agentKey = (t.agentId as string) || 'unknown';
+        const agentName = memberNameMap.get(agentKey) ?? agentKey;
+
+        if (!memberMap.has(agentKey)) {
+          memberMap.set(agentKey, {
+            agentId: agentKey,
+            agentName,
+            closedCount: 0,
+            closedVolume: 0,
+            totalGCI: 0,
+            memberPaid: 0,
+            leaderRetained: 0,
+          });
+        }
+        const entry = memberMap.get(agentKey)!;
+        entry.closedCount += 1;
+        entry.closedVolume += dealValue;
+        entry.totalGCI += gci;
+        entry.memberPaid += memberPaid;
+        entry.leaderRetained += leaderRetained;
+      }
+
+      const memberBreakdown = [...memberMap.values()].sort((a, b) => b.leaderRetained - a.leaderRetained);
+      const totalLeaderRetained = memberBreakdown.reduce((s, m) => s + m.leaderRetained, 0);
+      const totalMemberPaid = memberBreakdown.reduce((s, m) => s + m.memberPaid, 0);
+      const totalGCITeam = memberBreakdown.reduce((s, m) => s + m.totalGCI, 0);
+
+      teamLeaderEarnings = {
+        totalLeaderRetained,
+        totalMemberPaid,
+        totalGCI: totalGCITeam,
+        memberBreakdown,
+      };
+    }
+
     // ── Response ──────────────────────────────────────────────────────────
     const isAdminCaller = await isAdminLike(decoded.uid);
     const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown, sideBreakdown };
@@ -585,6 +665,8 @@ export async function GET(req: NextRequest) {
         pendingNetIncome: totals.pendingNetIncome,
         goalSegment,
       },
+      // Team leader earnings breakdown (only present when view=team and caller is team leader)
+      teamLeaderEarnings,
     });
   } catch (error: any) {
     console.error('[api/agent/command-metrics]', error);

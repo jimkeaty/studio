@@ -1858,6 +1858,60 @@ export default function EditTransactionPage() {
             )}
           </Section>
 
+          {/* ── Team Leader Commission Breakdown ────────────────────────────────────── */}
+          {/* Only shown when the selected agent is a team member on a team WITH a leader */}
+          {agentCommission?.teamMemberLeaderSplit && (() => {
+            const gci = Number(form.watch('gci')) || 0;
+            const agentDollar = Number(form.watch('agentDollar')) || 0;
+            const bands = agentCommission.teamMemberLeaderSplit!.leaderStructureBands || [];
+            // Find the active leader band based on current GCI
+            const activeBand = bands.find(b => {
+              const from = Number(b.fromCompanyDollar || 0);
+              const to = b.toCompanyDollar === null || b.toCompanyDollar === undefined ? null : Number(b.toCompanyDollar);
+              return gci >= from && (to === null || gci < to);
+            }) || bands[0];
+            if (!activeBand) return null;
+            const leaderPct = Number(activeBand.leaderPercent || 0);
+            const companyPct = Number(activeBand.companyPercent || 0);
+            const leaderStructureGross = gci > 0 ? Number((gci * (leaderPct / 100)).toFixed(2)) : 0;
+            const companyRetained = gci > 0 ? Number((gci * (companyPct / 100)).toFixed(2)) : 0;
+            const leaderRetained = leaderStructureGross > 0 ? Number((leaderStructureGross - agentDollar).toFixed(2)) : 0;
+            const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+            return (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-amber-900">Team Leader Commission Breakdown</span>
+                  <span className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-0.5">Read-only · auto-calculated</span>
+                </div>
+                <p className="text-xs text-amber-700">This agent is a team member. The GCI is split between the team structure and the brokerage before the agent receives their portion.</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-md bg-white border border-amber-200 p-3">
+                    <p className="text-xs text-muted-foreground">Gross GCI</p>
+                    <p className="text-sm font-bold">{fmt(gci)}</p>
+                  </div>
+                  <div className="rounded-md bg-white border border-amber-200 p-3">
+                    <p className="text-xs text-muted-foreground">Leader Side ({leaderPct}%)</p>
+                    <p className="text-sm font-bold text-amber-700">{fmt(leaderStructureGross)}</p>
+                  </div>
+                  <div className="rounded-md bg-white border border-amber-200 p-3">
+                    <p className="text-xs text-muted-foreground">Agent Net (Scott&apos;s Pay)</p>
+                    <p className="text-sm font-bold text-green-700">{fmt(agentDollar)}</p>
+                  </div>
+                  <div className="rounded-md bg-amber-100 border border-amber-300 p-3">
+                    <p className="text-xs text-amber-800 font-medium">Leader Retains</p>
+                    <p className="text-sm font-bold text-amber-900">{fmt(leaderRetained)}</p>
+                    <p className="text-xs text-amber-600">= Leader Side − Agent Net</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-amber-700 pt-1 border-t border-amber-200">
+                  <span>Company Retained: <strong>{fmt(companyRetained)}</strong> ({companyPct}%)</span>
+                  <span className="text-amber-400">|</span>
+                  <span>Check: {fmt(agentDollar)} + {fmt(leaderRetained)} + {fmt(companyRetained)} = {fmt(agentDollar + leaderRetained + companyRetained)}</span>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ── Agent Participation (Co-Agent) ────────────────────────────────────────── */}
           <Section title="Agent Participation" description="Is another internal agent co-representing on this transaction?">
             <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">

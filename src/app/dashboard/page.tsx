@@ -187,6 +187,20 @@ type AgentMetricsResponse = {
   comparisonData?: { year: number; months: { closedVolume: number; closedCount: number; netIncome: number; grossMargin?: number; totalGCI?: number }[] } | null;
   agentView: { view: string; viewLabel: string; isTeamLeader: boolean; availableTeams: { teamId: string; teamName: string }[]; monthlyNetIncome: number[]; monthlyPendingNetIncome: number[]; netIncome: number; pendingNetIncome: number; goalSegment: string; };
   aggregateStats?: { isAllYears: boolean; avgCommissionPct: number | null; avgNetCommissionPct: number; totalClosedVolume: number; totalClosedCount: number; totalNetIncome: number; };
+  teamLeaderEarnings?: {
+    totalLeaderRetained: number;
+    totalMemberPaid: number;
+    totalGCI: number;
+    memberBreakdown: {
+      agentId: string;
+      agentName: string;
+      closedCount: number;
+      closedVolume: number;
+      totalGCI: number;
+      memberPaid: number;
+      leaderRetained: number;
+    }[];
+  } | null;
 };
 
 // ── Compare Selector ────────────────────────────────────────────────────────
@@ -1140,6 +1154,83 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
                   style={{ width: `${Math.min(100, Math.round(paceRatio * 100))}%` }}
                 />
               </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Team Leader Earnings Breakdown ────────────────────────────────────────────── */}
+        {view === 'team' && perfData?.teamLeaderEarnings && (() => {
+          const tle = perfData.teamLeaderEarnings!;
+          const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+          return (
+            <div className="mt-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-900">My Team Leader Earnings</span>
+                <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Leader-retained commission from team member deals</span>
+              </div>
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <p className="text-xs text-amber-700 font-medium">Total Leader Retained</p>
+                  <p className="text-xl font-bold text-amber-900">{fmt(tle.totalLeaderRetained)}</p>
+                  <p className="text-xs text-amber-600">My earnings from team deals</p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground font-medium">Total Team GCI</p>
+                  <p className="text-xl font-bold">{fmt(tle.totalGCI)}</p>
+                  <p className="text-xs text-muted-foreground">Gross commission, all members</p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground font-medium">Total Member Pay</p>
+                  <p className="text-xl font-bold">{fmt(tle.totalMemberPaid)}</p>
+                  <p className="text-xs text-muted-foreground">Paid out to team members</p>
+                </div>
+              </div>
+              {/* Per-member breakdown table */}
+              {tle.memberBreakdown.length > 0 && (
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="bg-muted/40 px-4 py-2 border-b">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Member Breakdown</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/20">
+                          <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Agent</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted-foreground">Deals</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted-foreground">Volume</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted-foreground">GCI</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted-foreground">Member Paid</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-amber-700 font-semibold">Leader Retained</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tle.memberBreakdown.map((m, idx) => (
+                          <tr key={m.agentId} className={idx % 2 === 0 ? 'bg-white' : 'bg-muted/10'}>
+                            <td className="px-4 py-2 font-medium">{m.agentName}</td>
+                            <td className="px-4 py-2 text-right">{m.closedCount}</td>
+                            <td className="px-4 py-2 text-right">{fmt(m.closedVolume)}</td>
+                            <td className="px-4 py-2 text-right">{fmt(m.totalGCI)}</td>
+                            <td className="px-4 py-2 text-right">{fmt(m.memberPaid)}</td>
+                            <td className="px-4 py-2 text-right font-semibold text-amber-700">{fmt(m.leaderRetained)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 font-semibold bg-amber-50/40">
+                          <td className="px-4 py-2">Total</td>
+                          <td className="px-4 py-2 text-right">{tle.memberBreakdown.reduce((s, m) => s + m.closedCount, 0)}</td>
+                          <td className="px-4 py-2 text-right">{fmt(tle.memberBreakdown.reduce((s, m) => s + m.closedVolume, 0))}</td>
+                          <td className="px-4 py-2 text-right">{fmt(tle.totalGCI)}</td>
+                          <td className="px-4 py-2 text-right">{fmt(tle.totalMemberPaid)}</td>
+                          <td className="px-4 py-2 text-right text-amber-700">{fmt(tle.totalLeaderRetained)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
