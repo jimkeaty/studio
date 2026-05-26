@@ -7,6 +7,7 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
+import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 
@@ -144,6 +145,8 @@ const UPDATABLE_FIELDS = new Set([
   'documents',
   // Co-agent fields — allow adding/editing co-agent on any transaction including closed
   'hasCoAgent', 'coAgent',
+  // Outbound referral fee — paid to outside broker/relocation company off the top of GCI
+  'outboundReferralFee',
 ]);
 
 export async function PATCH(req: NextRequest) {
@@ -364,6 +367,48 @@ export async function PATCH(req: NextRequest) {
         } catch (splitErr: any) {
           console.warn('[api/admin/transactions] Co-agent split failed (non-fatal):', splitErr?.message);
         }
+      }
+    }
+
+    // ── Retroactive referral fee recalculation ─────────────────────────────────────────
+    // When a referral fee is added/changed on a closed transaction, recalculate the
+    // agent's commission using the net-after-referral GCI and update the splitSnapshot.
+    // Rollup is already rebuilt above so it will pick up the new splitSnapshot values.
+    const referralChanged = updates.outboundReferralFee !== undefined;
+    if (referralChanged) {
+      try {
+        const txData = updatedSnap.data() as any;
+        const agentId = String(txData?.agentId || '').trim();
+        const agentDisplayName = String(txData?.agentDisplayName || '').trim();
+        const txStatus = String(txData?.status || '').trim();
+        const referralFee = txData?.outboundReferralFee as Record<string, any> | null;
+        const referralPct = referralFee ? Number(referralFee.referralPercent ?? 0) : 0;
+        const grossGci = Number(txData?.gci ?? txData?.commission ?? txData?.splitSnapshot?.grossCommission ?? 0);
+
+        if (agentId && grossGci > 0 && txStatus === 'closed') {
+          const calc = await resolveTransactionCalculation({
+            agentId,
+            agentDisplayName,
+            commission: grossGci,
+            referralFeePercent: referralPct > 0 ? referralPct : null,
+            transactionDate: txData?.closedDate || txData?.contractDate || null,
+          });
+          const newSplitSnapshot = {
+            ...(txData?.splitSnapshot || {}),
+            ...calc.splitSnapshot,
+          };
+          await adminDb.collection('transactions').doc(id).update({
+            splitSnapshot: newSplitSnapshot,
+            commission: grossGci,
+            updatedAt: new Date(),
+          });
+          // Rebuild rollup with updated splitSnapshot
+          const txYear = Number(txData?.year || new Date().getFullYear());
+          await rebuildAgentRollup(adminDb, agentId, txYear);
+          console.log(`[api/admin/transactions] Referral fee recalculation complete for ${id}`);
+        }
+      } catch (referralErr: any) {
+        console.warn('[api/admin/transactions] Referral fee recalculation failed (non-fatal):', referralErr?.message);
       }
     }
 

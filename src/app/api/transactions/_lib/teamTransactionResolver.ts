@@ -228,7 +228,27 @@ async function getAgentYtdCompanyDollar(
 export async function resolveTransactionCalculation(
   input: ResolveTransactionInput
 ): Promise<ResolvedTransactionCalculation> {
-  const commission = asMoney(input.commission);
+  const grossCommission = asMoney(input.commission);
+
+  // ── Outbound referral fee: deducted from the top of GCI before agent/broker split ────────────────
+  // referralFeeDollar takes precedence over referralFeePercent when both are supplied.
+  const referralFeePercent: number | null =
+    input.referralFeePercent != null && Number.isFinite(Number(input.referralFeePercent))
+      ? Number(input.referralFeePercent)
+      : null;
+  const referralFeeDollar: number | null =
+    input.referralFeeDollar != null && Number.isFinite(Number(input.referralFeeDollar))
+      ? asMoney(Number(input.referralFeeDollar))
+      : referralFeePercent != null
+        ? asMoney(grossCommission * (referralFeePercent / 100))
+        : null;
+  const netAfterReferral: number | null =
+    referralFeeDollar != null ? asMoney(grossCommission - referralFeeDollar) : null;
+
+  // The commission used for agent/broker split is the net-after-referral amount
+  // (or the full gross when no referral is present).
+  const commission = netAfterReferral ?? grossCommission;
+
   const profile = await getAgentProfile(input.agentId);
 
   // ─── Independent agent path ──────────────────────────────────────────────────
@@ -246,7 +266,10 @@ export async function resolveTransactionCalculation(
           primaryTeamId: null,
           teamPlanId: null,
           memberPlanId: null,
-          grossCommission: commission,
+          grossCommission,
+          referralFeePercent: referralFeePercent ?? null,
+          referralFeeDollar: referralFeeDollar ?? null,
+          netAfterReferral: netAfterReferral ?? null,
           agentSplitPercent: flatAgentPct,
           companySplitPercent: flatCompanyPct,
           agentNetCommission,
@@ -294,7 +317,10 @@ export async function resolveTransactionCalculation(
         primaryTeamId: null,
         teamPlanId: null,
         memberPlanId: null,
-        grossCommission: commission,
+        grossCommission,
+        referralFeePercent: referralFeePercent ?? null,
+        referralFeeDollar: referralFeeDollar ?? null,
+        netAfterReferral: netAfterReferral ?? null,
         agentSplitPercent,
         companySplitPercent,
         agentNetCommission,
@@ -376,7 +402,10 @@ export async function resolveTransactionCalculation(
         primaryTeamId: team.teamId,
         teamPlanId: teamPlan?.teamPlanId ?? null,
         memberPlanId: null,
-        grossCommission: commission,
+        grossCommission,
+        referralFeePercent: referralFeePercent ?? null,
+        referralFeeDollar: referralFeeDollar ?? null,
+        netAfterReferral: netAfterReferral ?? null,
         agentSplitPercent,
         companySplitPercent,
         agentNetCommission,
@@ -466,7 +495,10 @@ export async function resolveTransactionCalculation(
         primaryTeamId: team.teamId,
         teamPlanId: teamPlan?.teamPlanId ?? null,
         memberPlanId: null,
-        grossCommission: commission,
+        grossCommission,
+        referralFeePercent: referralFeePercent ?? null,
+        referralFeeDollar: referralFeeDollar ?? null,
+        netAfterReferral: netAfterReferral ?? null,
         agentSplitPercent,
         companySplitPercent,
         agentNetCommission,
@@ -514,7 +546,10 @@ export async function resolveTransactionCalculation(
         primaryTeamId: team.teamId,
         teamPlanId: teamPlan!.teamPlanId,
         memberPlanId: profile.defaultPlanId || null,
-        grossCommission: commission,
+        grossCommission,
+        referralFeePercent: referralFeePercent ?? null,
+        referralFeeDollar: referralFeeDollar ?? null,
+        netAfterReferral: netAfterReferral ?? null,
         agentSplitPercent: null,
         companySplitPercent: null,
         agentNetCommission: leaderStructureGross,
@@ -595,7 +630,10 @@ export async function resolveTransactionCalculation(
       primaryTeamId: team.teamId,
       teamPlanId: teamPlan!.teamPlanId,
       memberPlanId: resolvedMemberPlanId,
-      grossCommission: commission,
+      grossCommission,
+      referralFeePercent: referralFeePercent ?? null,
+      referralFeeDollar: referralFeeDollar ?? null,
+      netAfterReferral: netAfterReferral ?? null,
       agentSplitPercent: null,
       companySplitPercent: null,
       agentNetCommission: memberPaid,

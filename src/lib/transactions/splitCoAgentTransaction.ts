@@ -87,11 +87,16 @@ export async function splitCoAgentTransaction(
   let primaryCalc: Awaited<ReturnType<typeof resolveTransactionCalculation>> | null = null;
   let coCalc: Awaited<ReturnType<typeof resolveTransactionCalculation>> | null = null;
 
+  // Referral fee is proportional to each agent's share of the GCI
+  const referralFee = tx.outboundReferralFee as Record<string, any> | undefined;
+  const referralPct = referralFee ? Number(referralFee.referralPercent ?? 0) : 0;
+
   try {
     primaryCalc = await resolveTransactionCalculation({
       agentId: primaryAgentId,
       agentDisplayName: primaryAgentDisplayName,
       commission: primaryGci,
+      referralFeePercent: referralPct > 0 ? referralPct : null,
     });
   } catch (err) {
     console.warn('[splitCoAgentTransaction] Primary agent tier lookup failed:', err);
@@ -102,6 +107,7 @@ export async function splitCoAgentTransaction(
       agentId: coAgentId,
       agentDisplayName: coAgentDisplayName,
       commission: coGci,
+      referralFeePercent: referralPct > 0 ? referralPct : null,
     });
   } catch (err) {
     console.warn('[splitCoAgentTransaction] Co-agent tier lookup failed:', err);
@@ -210,6 +216,9 @@ export async function splitCoAgentTransaction(
     year,
     createdAt: now,
     updatedAt: now,
+
+    // Outbound referral fee — carried through to both split transactions
+    outboundReferralFee: tx.outboundReferralFee ?? null,
 
     // No co-agent on split transactions
     hasCoAgent: false,

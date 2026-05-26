@@ -200,6 +200,12 @@ const schema = z.object({
   buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
   additionalComments: z.string().optional(),
   notes: z.string().optional(),
+  // Outbound referral fee fields
+  hasOutboundReferral: z.boolean().optional(),
+  outboundReferralPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  outboundReferralDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+  outboundReferralBrokerName: z.string().optional(),
+  outboundReferralContactName: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -282,6 +288,8 @@ export default function EditTransactionPage() {
   const [coAgentSplit, setCoAgentSplit] = useState(50);
   const [txStatus, setTxStatus] = useState<string>('');
   const [triggeringSplit, setTriggeringSplit] = useState(false);
+  // Outbound referral fee state
+  const [hasOutboundReferral, setHasOutboundReferral] = useState(false);
 
   const [txCommissionOverridden, setTxCommissionOverridden] = useState(false);
   const [txCommissionOverriddenBy, setTxCommissionOverriddenBy] = useState<string | null>(null);
@@ -632,6 +640,15 @@ export default function EditTransactionPage() {
           setPrimarySplit(tx.coAgent.primarySplitPct ?? 50);
           setCoAgentSplit(tx.coAgent.coAgentSplitPct ?? 50);
         }
+        // Load outbound referral fee data
+        if (tx.outboundReferralFee?.referralPercent) {
+          setHasOutboundReferral(true);
+          form.setValue('hasOutboundReferral', true);
+          form.setValue('outboundReferralPercent', tx.outboundReferralFee.referralPercent ?? '');
+          form.setValue('outboundReferralDollar', tx.outboundReferralFee.referralDollar ?? '');
+          form.setValue('outboundReferralBrokerName', tx.outboundReferralFee.brokerName ?? '');
+          form.setValue('outboundReferralContactName', tx.outboundReferralFee.contactName ?? '');
+        }
       } catch (err: any) {
         setLoadError(err.message);
       } finally {
@@ -735,6 +752,27 @@ export default function EditTransactionPage() {
       } else {
         payload.coAgent = null;
       }
+
+      // Add outbound referral fee to the payload
+      const referralPct = Number(values.outboundReferralPercent) || 0;
+      if (hasOutboundReferral && referralPct > 0) {
+        const referralGci = Number(values.gci) || 0;
+        const calculatedReferralDollar = Number(values.outboundReferralDollar) || Math.round(referralGci * (referralPct / 100) * 100) / 100;
+        payload.outboundReferralFee = {
+          referralPercent: referralPct,
+          referralDollar: calculatedReferralDollar,
+          brokerName: values.outboundReferralBrokerName || '',
+          contactName: values.outboundReferralContactName || '',
+        };
+      } else {
+        payload.outboundReferralFee = null;
+      }
+      // Remove individual referral form fields from the payload (they live in outboundReferralFee)
+      delete payload.hasOutboundReferral;
+      delete payload.outboundReferralPercent;
+      delete payload.outboundReferralDollar;
+      delete payload.outboundReferralBrokerName;
+      delete payload.outboundReferralContactName;
 
       const res = await fetch('/api/admin/transactions', {
         method: 'PATCH',
@@ -1840,6 +1878,98 @@ export default function EditTransactionPage() {
                   hasCoAgent ? 'translate-x-6' : 'translate-x-1'
                 }`} />
               </button>
+            </div>
+
+            {/* ── Outbound Referral Fee ───────────────────────────────────────── */}
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Outbound Referral Fee</p>
+                  <p className="text-xs text-muted-foreground">Paid to an outside broker or relocation company. This % is deducted from the top of GCI before the agent/broker split.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setHasOutboundReferral(!hasOutboundReferral)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    hasOutboundReferral ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    hasOutboundReferral ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              {hasOutboundReferral && (
+                <div className="space-y-4">
+                  <Grid2>
+                    <div>
+                      <label className="text-sm font-medium">Referral % <span className="text-red-500">*</span></label>
+                      <p className="text-xs text-muted-foreground mb-1">Percentage of GCI paid to the outside broker (e.g. 25 for 25%)</p>
+                      <input
+                        type="number" min={0} max={100} step={0.5}
+                        placeholder="e.g. 25"
+                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                        {...form.register('outboundReferralPercent')}
+                        onChange={e => {
+                          form.setValue('outboundReferralPercent', e.target.value as any);
+                          const pct = Number(e.target.value) || 0;
+                          const gci = Number(form.getValues('gci')) || 0;
+                          if (pct > 0 && gci > 0) {
+                            form.setValue('outboundReferralDollar', Math.round(gci * (pct / 100) * 100) / 100 as any);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Referral Dollar Amount</label>
+                      <p className="text-xs text-muted-foreground mb-1">Auto-calculated from % above. Override if needed.</p>
+                      <input
+                        type="number" min={0} step={0.01}
+                        placeholder="Auto-calculated"
+                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                        {...form.register('outboundReferralDollar')}
+                      />
+                    </div>
+                  </Grid2>
+                  <Grid2>
+                    <div>
+                      <label className="text-sm font-medium">Outside Broker / Company Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Keller Williams Dallas or Cartus Relocation"
+                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                        {...form.register('outboundReferralBrokerName')}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Referring Agent / Contact Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. John Smith"
+                        className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                        {...form.register('outboundReferralContactName')}
+                      />
+                    </div>
+                  </Grid2>
+                  {(() => {
+                    const pct = Number(form.watch('outboundReferralPercent')) || 0;
+                    const gci = Number(form.watch('gci')) || 0;
+                    const dollar = Number(form.watch('outboundReferralDollar')) || (pct > 0 && gci > 0 ? Math.round(gci * (pct / 100) * 100) / 100 : 0);
+                    const net = gci - dollar;
+                    if (pct > 0 && gci > 0) {
+                      return (
+                        <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-1">
+                          <p className="font-semibold">Referral Fee Summary</p>
+                          <p>Gross GCI: <strong>${gci.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
+                          <p>Referral Fee ({pct}%): <strong>-${dollar.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
+                          <p>Net to Agent/Broker Split: <strong>${net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
             </div>
 
             {hasCoAgent && (

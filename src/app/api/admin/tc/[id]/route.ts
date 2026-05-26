@@ -332,6 +332,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // Co-agent
         'hasCoAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
         'primaryAgentSplitPercent', 'coAgentSplitPercent',
+        // Outbound referral fee
+        'outboundReferralFee',
       ];
       for (const field of editableFields) {
         if (field in body) {
@@ -534,7 +536,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const coShare = hasCoAgent && coAgentId ? commission * (coSplitPct / 100) : 0;
 
         const txDate = intake.closedDate || intake.contractDate || null;
-        const calc = await resolveTransactionCalculation({ agentId, agentDisplayName, commission: primaryShare, transactionDate: txDate });
+        // Outbound referral fee — deducted from each agent's share before broker/agent split
+        const referralFeeData = intake.outboundReferralFee as Record<string, any> | null | undefined;
+        const referralPct = referralFeeData ? Number(referralFeeData.referralPercent ?? 0) : 0;
+        const calc = await resolveTransactionCalculation({
+          agentId, agentDisplayName, commission: primaryShare, transactionDate: txDate,
+          referralFeePercent: referralPct > 0 ? referralPct : null,
+        });
         splitSnapshot = calc.splitSnapshot as any;
         creditSnapshot = calc.creditSnapshot as any;
         agentType = calc.agentType;
@@ -550,6 +558,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               agentDisplayName: coAgentDisplayName,
               commission: coShare,
               transactionDate: txDate,
+              referralFeePercent: referralPct > 0 ? referralPct : null,
             });
             coSplitSnapshot = coCalc.splitSnapshot;
             coCreditSnapshot = coCalc.creditSnapshot;
@@ -700,6 +709,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         commissionOverride: !!intake.commissionOverride,
         commissionOverrideBy: intake.commissionOverride ? toOptStr(intake.commissionOverrideBy) : null,
         commissionOverrideAt: intake.commissionOverride ? intake.commissionOverrideAt : null,
+
+        // Outbound referral fee
+        outboundReferralFee: intake.outboundReferralFee ?? null,
 
         notes: toOptStr(intake.notes),
         additionalComments: toOptStr(intake.additionalComments),

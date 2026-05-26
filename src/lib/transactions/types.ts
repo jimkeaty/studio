@@ -12,6 +12,16 @@ export type TransactionSplitSnapshot = {
 
   grossCommission: number;
 
+  /**
+   * Outbound referral fee deducted from the top of GCI before agent/broker split.
+   * referralFeePercent: the % applied to grossCommission (e.g. 25)
+   * referralFeeDollar: the calculated dollar amount paid to the outside broker
+   * netAfterReferral: grossCommission - referralFeeDollar (the base for agent/broker split)
+   */
+  referralFeePercent: number | null;
+  referralFeeDollar: number | null;
+  netAfterReferral: number | null;
+
   agentSplitPercent: number | null;
   companySplitPercent: number | null;
   agentNetCommission: number | null;
@@ -54,6 +64,14 @@ export type ResolveTransactionInput = {
    * rather than today, ensuring correct tier lookup for past-dated transactions.
    */
   transactionDate?: string | Date | null;
+  /**
+   * Optional outbound referral fee taken off the top of GCI before agent/broker split.
+   * When provided, the agent/broker split is calculated on (commission - referralFeeDollar).
+   * referralFeePercent: e.g. 25 (for 25%)
+   * referralFeeDollar: explicit dollar override (takes precedence over percent if both provided)
+   */
+  referralFeePercent?: number | null;
+  referralFeeDollar?: number | null;
 };
 
 // ── Co-Agent Support ──────────────────────────────────────────────────────────
