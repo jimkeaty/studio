@@ -125,21 +125,21 @@ export async function GET(
     }
 
     // ── 0a-MEMBER. Team member with custom override bands — HIGHEST PRIORITY ───
-    // Only applies to teams WITH a leader (not SGL/CGL/leaderless groups).
-    // For leaderless groups, the member's payout is agent vs. company only —
-    // their custom tiers are stored in data.tiers with agentSplitPercent and
-    // companySplitPercent already set correctly, so we fall through to 0a below.
+    // Applies to ALL team members (both teams with a leader AND leaderless groups
+    // like SGL/CGL). When a team member has teamMemberCompMode === 'custom' and
+    // saved teamMemberOverrideBands, those bands are the source of truth for their
+    // payout — exactly as the runtime resolver (teamTransactionResolver) uses them.
     //
-    // When a team member has teamMemberCompMode === 'custom' and saved
-    // teamMemberOverrideBands, those bands define their actual payout — exactly
-    // as the runtime resolver (teamTransactionResolver) uses them.
+    // For leaderless groups: companySplitPercent = 100 - memberPercent (no leader cut)
+    //                        teamMemberLeaderSplit = null (no leader panel shown)
+    // For teams with a leader: companySplitPercent = companyPercent from leader band
+    //                          teamMemberLeaderSplit = populated (leader panel shown)
     if (
       agentType === 'team' &&
       teamRole === 'member' &&
       teamMemberCompMode === 'custom' &&
       teamMemberOverrideBands.length > 0 &&
-      primaryTeamId &&
-      !isLeaderlessGroup  // ← leaderless groups (SGL/CGL) use data.tiers directly
+      primaryTeamId
     ) {
       try {
         // Fetch the team plan to get the leader structure (for company split %)
@@ -164,20 +164,30 @@ export async function GET(
             }
           }
         }
-        // Build tiers from the member's custom override bands
-        const customMemberTiers = teamMemberOverrideBands.map((b: any, i: number) => ({
-          tierName: b.tierName || `Band ${i + 1}`,
-          fromCompanyDollar: Number(b.fromCompanyDollar || 0),
-          toCompanyDollar:
-            b.toCompanyDollar === null || b.toCompanyDollar === undefined
-              ? null
-              : Number(b.toCompanyDollar),
-          agentSplitPercent: Number(b.memberPercent || 0),
-          companySplitPercent: companyPctForMember,
-          transactionFee: null,
-          capAmount: null,
-          notes: b.notes || '',
-        }));
+        // Build tiers from the member's custom override bands.
+        // For leaderless groups (SGL/CGL): companySplitPercent = 100 - memberPercent
+        //   (no leader cut — the broker keeps everything the agent doesn't)
+        // For teams with a leader: companySplitPercent = companyPercent from leader band
+        //   (the leader takes the spread between leaderPercent and memberPercent)
+        const customMemberTiers = teamMemberOverrideBands.map((b: any, i: number) => {
+          const memberPct = Number(b.memberPercent || 0);
+          const companyPct = isLeaderlessGroup
+            ? Math.max(0, 100 - memberPct)   // leaderless: broker gets the rest
+            : companyPctForMember;            // with-leader: from leader band
+          return {
+            tierName: b.tierName || `Band ${i + 1}`,
+            fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+            toCompanyDollar:
+              b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                ? null
+                : Number(b.toCompanyDollar),
+            agentSplitPercent: memberPct,
+            companySplitPercent: companyPct,
+            transactionFee: null,
+            capAmount: null,
+            notes: b.notes || '',
+          };
+        });
         // Build teamMemberLeaderSplit for the breakdown panel — only for teams WITH a leader
         const teamMemberLeaderSplitCustom =
           teamIsWithLeader && leaderBandsForMember.length > 0
