@@ -17,6 +17,31 @@ export default function AgentDetailPage({ params }: AgentPageProps) {
   const { user, loading: userLoading } = useUser();
   const { isAdmin, loading: adminLoading } = useIsAdminLike();
 
+  // ── Hooks MUST be called before any conditional returns ───────────────────
+  const [rebuildStatus, setRebuildStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [rebuildMsg, setRebuildMsg] = useState('');
+
+  async function handleRebuildRollup() {
+    if (!user) return;
+    setRebuildStatus('loading');
+    setRebuildMsg('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/agent-profiles/${agentId}/rebuild-rollup`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Rebuild failed');
+      setRebuildStatus('done');
+      setRebuildMsg(`Rollup rebuilt for years: ${data.rebuilt.join(', ')}`);
+    } catch (err: any) {
+      setRebuildStatus('error');
+      setRebuildMsg(err.message || 'Rebuild failed');
+    }
+  }
+
+  // ── Early returns (after all hooks) ──────────────────────────────────────
   if (userLoading || adminLoading) {
     return (
       <main className="p-6">
@@ -48,28 +73,6 @@ export default function AgentDetailPage({ params }: AgentPageProps) {
         </Card>
       </div>
     );
-  }
-
-  const [rebuildStatus, setRebuildStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [rebuildMsg, setRebuildMsg] = useState('');
-
-  async function handleRebuildRollup() {
-    setRebuildStatus('loading');
-    setRebuildMsg('');
-    try {
-      const token = await user!.getIdToken();
-      const res = await fetch(`/api/admin/agent-profiles/${agentId}/rebuild-rollup`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Rebuild failed');
-      setRebuildStatus('done');
-      setRebuildMsg(`Rollup rebuilt for years: ${data.rebuilt.join(', ')}`);
-    } catch (err: any) {
-      setRebuildStatus('error');
-      setRebuildMsg(err.message || 'Rebuild failed');
-    }
   }
 
   return (
