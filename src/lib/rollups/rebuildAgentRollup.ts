@@ -102,19 +102,31 @@ export async function rebuildAgentRollup(
     // Non-fatal: proceed without profile data
   }
 
-  // ── 0b. Compute the anniversary cycle that is "active" for this year ───────
-  // We use the LATER of (today) or (Jul 1 of the target year) as the reference
-  // point so that the rollup document key always matches the cycle that is
-  // actually active during that year — not the cycle that happened to contain
-  // Jan 1 of that year (which can be the PREVIOUS cycle for agents whose
-  // anniversary falls after Jan 1, e.g. January 18).
+  // ── 0b. Compute the anniversary cycle that STARTS in the target year ────────
+  // The rollup document key is "{agentId}_{year}" where year is the calendar
+  // year. We want the cycle whose cycleStart falls in that calendar year —
+  // i.e. anniversaryDate(year) → anniversaryDate(year+1) - 1 day.
   //
-  // Using Jul 1 as the mid-year anchor guarantees we land in the cycle that
-  // spans the majority of the target calendar year, regardless of anniversary.
-  const today = new Date();
-  const midYear = new Date(Date.UTC(year, 6, 1)); // Jul 1 of target year
-  const cycleRef = today.getUTCFullYear() === year && today > midYear ? today : midYear;
-  const cycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, cycleRef);
+  // We do NOT use a reference-date approach (Jan 1, Jul 1, etc.) because any
+  // fixed anchor will land in the WRONG cycle for agents whose anniversary
+  // falls after that anchor date.
+  //
+  // For agents with no anniversary data, fall back to the calendar year.
+  let cycle: import('@/lib/agents/anniversaryCycle').AnniversaryCycle;
+  if (anniversaryMonth >= 1 && anniversaryMonth <= 12 && anniversaryDay >= 1 && anniversaryDay <= 31) {
+    // Directly construct the cycle that starts on the agent's anniversary in the target year.
+    const cycleStart = new Date(Date.UTC(year, anniversaryMonth - 1, anniversaryDay));
+    const nextAnniv = new Date(Date.UTC(year + 1, anniversaryMonth - 1, anniversaryDay));
+    const cycleEnd = new Date(nextAnniv.getTime() - 1); // 1 ms before next anniversary
+    cycle = { cycleStart, cycleEnd, cycleYear: year };
+  } else {
+    // No anniversary data — fall back to calendar year
+    cycle = {
+      cycleStart: new Date(Date.UTC(year, 0, 1)),
+      cycleEnd: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)),
+      cycleYear: year,
+    };
+  }
 
   // ── 1. Fetch all transactions for this agent (personal production) ────────
   const snap = await db
