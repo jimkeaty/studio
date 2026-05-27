@@ -404,6 +404,55 @@ export async function GET(
       tiersSource = 'standard_fallback';
     }
 
+    // ── Always fetch teamMemberLeaderSplit for team members with a leader ────────
+    // Even when the agent has custom tiers (agentStoredTiers.length > 0), we still
+    // need to populate teamMemberLeaderSplit so the admin edit form can show the
+    // Team Leader Commission Breakdown panel. Without this, the panel is hidden
+    // for any team member who has custom tiers on their profile.
+    if (!teamMemberLeaderSplit && agentType === 'team' && teamRole === 'member' && primaryTeamId) {
+      try {
+        const teamSnapExtra = await adminDb.collection('teams').doc(primaryTeamId).get();
+        if (teamSnapExtra.exists) {
+          const teamDataExtra = teamSnapExtra.data() || {};
+          const teamPlanIdExtra: string | null = teamDataExtra.teamPlanId || null;
+          const teamStructureTypeExtra: string = teamDataExtra.structureType || 'with_leader';
+          if (teamPlanIdExtra) {
+            const planSnapExtra = await adminDb.collection('teamPlans').doc(teamPlanIdExtra).get();
+            if (planSnapExtra.exists) {
+              const planDataExtra = planSnapExtra.data() || {};
+              const planStructureTypeExtra: string = planDataExtra.structureType || teamStructureTypeExtra;
+              const isWithLeaderExtra = planStructureTypeExtra === 'with_leader';
+              if (isWithLeaderExtra) {
+                const leaderBandsExtra: any[] = planDataExtra.leaderStructureBands || [];
+                const memberBandsExtra: any[] = planDataExtra.memberDefaultBands || [];
+                if (leaderBandsExtra.length > 0 && memberBandsExtra.length > 0) {
+                  teamMemberLeaderSplit = {
+                    leaderStructureBands: leaderBandsExtra.map((b: any) => ({
+                      fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                      toCompanyDollar:
+                        b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                          ? null
+                          : Number(b.toCompanyDollar),
+                      leaderPercent: Number(b.leaderPercent || 0),
+                      companyPercent: Number(b.companyPercent || 0),
+                    })),
+                    memberDefaultBands: memberBandsExtra.map((b: any) => ({
+                      fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                      toCompanyDollar:
+                        b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                          ? null
+                          : Number(b.toCompanyDollar),
+                      memberPercent: Number(b.memberPercent || 0),
+                    })),
+                  };
+                }
+              }
+            }
+          }
+        }
+      } catch { /* non-fatal — panel simply won't show */ }
+    }
+
     // ── Default transaction fee ───────────────────────────────────────────────
     const defaultTransactionFee =
       data.defaultTransactionFee != null
