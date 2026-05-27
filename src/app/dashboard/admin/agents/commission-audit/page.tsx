@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getFirebaseAuth } from '@/lib/firebase';
 
@@ -21,14 +21,6 @@ interface AuditResult {
   flagged: FlaggedAgent[];
 }
 
-interface RebuildProgress {
-  done: number;
-  total: number;
-  currentName: string;
-  errors: { agentId: string; name: string; error: string }[];
-  finished: boolean;
-}
-
 function agentTypeLabel(agent: FlaggedAgent): string {
   if (agent.agentType === 'independent') return 'Independent';
   if (agent.teamRole === 'leader') return 'Team Leader';
@@ -46,14 +38,7 @@ export default function CommissionAuditPage() {
 
   // Rebuild state
   const [rebuildState, setRebuildState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
-  const [rebuildProgress, setRebuildProgress] = useState<RebuildProgress>({
-    done: 0,
-    total: 0,
-    currentName: '',
-    errors: [],
-    finished: false,
-  });
-  const abortRef = useRef<AbortController | null>(null);
+  const [rebuildMsg, setRebuildMsg] = useState('');
 
   useEffect(() => {
     runAudit();
@@ -89,11 +74,7 @@ export default function CommissionAuditPage() {
 
   async function handleRebuildAll() {
     setRebuildState('running');
-    setRebuildProgress({ done: 0, total: 0, currentName: '', errors: [], finished: false });
-
-    const abort = new AbortController();
-    abortRef.current = abort;
-
+    setRebuildMsg('Rebuilding YTD rollups for all active agents — this may take up to a minute…');
     try {
       const auth = getFirebaseAuth();
       const user = auth.currentUser;
@@ -103,67 +84,20 @@ export default function CommissionAuditPage() {
       const res = await fetch('/api/admin/agent-profiles/rebuild-all-rollups', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        signal: abort.signal,
       });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || `HTTP ${res.status}`);
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('No response body');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const msg = JSON.parse(line);
-            if (msg.type === 'start') {
-              setRebuildProgress((p) => ({ ...p, total: msg.total }));
-            } else if (msg.type === 'progress') {
-              setRebuildProgress((p) => ({
-                ...p,
-                done: msg.done,
-                total: msg.total,
-                currentName: msg.name,
-                errors: msg.status === 'error'
-                  ? [...p.errors, { agentId: msg.agentId, name: msg.name, error: msg.error }]
-                  : p.errors,
-              }));
-            } else if (msg.type === 'done') {
-              setRebuildProgress((p) => ({
-                ...p,
-                done: msg.total,
-                total: msg.total,
-                finished: true,
-                errors: msg.errorList || p.errors,
-              }));
-              setRebuildState('done');
-            }
-          } catch { /* ignore malformed lines */ }
-        }
-      }
+      setRebuildState('done');
+      setRebuildMsg(
+        `✓ Rebuilt rollups for ${data.rebuilt} of ${data.total} active agents.` +
+        (data.errorCount > 0 ? ` (${data.errorCount} errors — see console)` : '')
+      );
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        setRebuildState('error');
-        setRebuildProgress((p) => ({ ...p, finished: true }));
-      }
+      setRebuildState('error');
+      setRebuildMsg(err.message || 'Rebuild failed — please try again.');
     }
   }
-
-  const pct = rebuildProgress.total > 0
-    ? Math.round((rebuildProgress.done / rebuildProgress.total) * 100)
-    : 0;
 
   return (
     <main className="p-6 max-w-5xl mx-auto">
@@ -209,41 +143,22 @@ export default function CommissionAuditPage() {
         </div>
       </div>
 
-      {/* Rebuild progress */}
-      {rebuildState !== 'idle' && (
-        <div className="mb-6 rounded-lg border border-purple-200 bg-purple-50 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-purple-800">
-              {rebuildState === 'done' ? 'Rebuild complete' : `Rebuilding rollups… ${rebuildProgress.done} / ${rebuildProgress.total}`}
-            </span>
-            <span className="text-sm text-purple-600">{pct}%</span>
-          </div>
-          {/* Progress bar */}
-          <div className="w-full bg-purple-200 rounded-full h-2 mb-2">
-            <div
-              className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          {rebuildState === 'running' && rebuildProgress.currentName && (
-            <p className="text-xs text-purple-600">Processing: {rebuildProgress.currentName}</p>
+      {/* Rebuild status message */}
+      {rebuildState !== 'idle' && rebuildMsg && (
+        <div className={`mb-5 rounded-lg border px-4 py-3 text-sm font-medium
+          ${rebuildState === 'error'
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : rebuildState === 'done'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-purple-50 border-purple-200 text-purple-700'
+          }`}>
+          {rebuildState === 'running' && (
+            <svg className="animate-spin h-4 w-4 inline mr-2" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
           )}
-          {rebuildState === 'done' && (
-            <p className="text-xs text-green-700 font-medium mt-1">
-              ✓ {rebuildProgress.total} agents rebuilt successfully
-              {rebuildProgress.errors.length > 0 && ` (${rebuildProgress.errors.length} errors)`}
-            </p>
-          )}
-          {rebuildProgress.errors.length > 0 && (
-            <div className="mt-2">
-              <p className="text-xs font-semibold text-red-700 mb-1">Errors:</p>
-              {rebuildProgress.errors.map((e) => (
-                <p key={e.agentId} className="text-xs text-red-600">
-                  {e.name}: {e.error}
-                </p>
-              ))}
-            </div>
-          )}
+          {rebuildMsg}
         </div>
       )}
 

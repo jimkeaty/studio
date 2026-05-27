@@ -4,15 +4,14 @@
  * Rebuilds agentYearRollups for every active agent for their current
  * anniversary cycle year and the prior year.
  *
- * Returns a stream of progress updates as newline-delimited JSON so the
- * UI can show a live progress bar.
+ * Returns a standard JSON response with results after all agents are processed.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
 
-export const maxDuration = 300; // 5 minutes — allow time for large rosters
+export const maxDuration = 300; // 5 minutes
 
 export async function POST(req: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -45,59 +44,38 @@ export async function POST(req: NextRequest) {
   }));
 
   const total = agents.length;
-  let done = 0;
-  let errors = 0;
-  const errorList: { agentId: string; name: string; error: string }[] = [];
+  let rebuilt = 0;
+  const errors: { agentId: string; name: string; error: string }[] = [];
 
-  // ── Stream progress as newline-delimited JSON ─────────────────────────────
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (obj: object) => {
-        controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n'));
-      };
+  // ── Rebuild each agent ────────────────────────────────────────────────────
+  for (const agent of agents) {
+    const { id, data } = agent;
+    const displayName =
+      data.displayName ||
+      `${data.firstName || ''} ${data.lastName || ''}`.trim() ||
+      id;
 
-      send({ type: 'start', total });
+    try {
+      const anniversaryMonth = Number(data.anniversaryMonth ?? 0);
+      const anniversaryDay = Number(data.anniversaryDay ?? 0);
+      const today = new Date();
+      const currentCycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+      const currentYear = currentCycle.cycleStart.getUTCFullYear();
+      const priorYear = currentYear - 1;
 
-      for (const agent of agents) {
-        const { id, data } = agent;
-        const displayName =
-          data.displayName ||
-          `${data.firstName || ''} ${data.lastName || ''}`.trim() ||
-          id;
+      await rebuildAgentRollup(adminDb, id, currentYear);
+      await rebuildAgentRollup(adminDb, id, priorYear);
+      rebuilt++;
+    } catch (err: any) {
+      errors.push({ agentId: id, name: displayName, error: err?.message || 'Unknown error' });
+    }
+  }
 
-        try {
-          const anniversaryMonth = Number(data.anniversaryMonth ?? 0);
-          const anniversaryDay = Number(data.anniversaryDay ?? 0);
-          const today = new Date();
-          const currentCycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
-          const currentYear = currentCycle.cycleStart.getUTCFullYear();
-          const priorYear = currentYear - 1;
-
-          await rebuildAgentRollup(adminDb, id, currentYear);
-          await rebuildAgentRollup(adminDb, id, priorYear);
-
-          done++;
-          send({ type: 'progress', done, total, agentId: id, name: displayName, status: 'ok' });
-        } catch (err: any) {
-          errors++;
-          done++;
-          const errMsg = err?.message || 'Unknown error';
-          errorList.push({ agentId: id, name: displayName, error: errMsg });
-          send({ type: 'progress', done, total, agentId: id, name: displayName, status: 'error', error: errMsg });
-        }
-      }
-
-      send({ type: 'done', total, done: total, errors, errorList });
-      controller.close();
-    },
-  });
-
-  return new NextResponse(stream, {
-    headers: {
-      'Content-Type': 'application/x-ndjson',
-      'Cache-Control': 'no-cache',
-      'X-Accel-Buffering': 'no',
-    },
+  return NextResponse.json({
+    ok: true,
+    total,
+    rebuilt,
+    errorCount: errors.length,
+    errors,
   });
 }
