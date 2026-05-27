@@ -152,6 +152,21 @@ This is a Louisiana LREC Residential Agreement to Buy and Sell. Dates are NOT wr
    - If the counter offer is attached but has no acceptance signature date visible, leave contractDate as "" and set confidence to 0.0.
    - If you are uncertain which signature is the acceptance signature on the counter offer, leave contractDate as "" rather than guessing.
 
+   COUNTER OFFER — SALE PRICE ADJUSTMENT:
+   - Counter offers frequently modify the sale price. Look for a revised purchase price or sale price stated anywhere in the counter offer document.
+   - Common phrasings: "Purchase Price shall be", "Sale Price is amended to", "Buyer agrees to pay", or a dollar amount written next to a price field.
+   - If a new sale price is clearly stated in the counter offer, use that value for salePrice — it supersedes the price on the main purchase agreement.
+   - If the counter offer is silent on price (does not mention it), keep the sale price from the main purchase agreement.
+   - If there is ANY ambiguity about whether the counter offer changes the price, keep the main purchase agreement price and set salePrice confidence to 0.5.
+
+   COUNTER OFFER — COMMISSION ADJUSTMENT:
+   - Counter offers may also modify the buyer broker compensation (commissionPaidBySeller).
+   - Look for any language in the counter offer that changes the commission, buyer broker fee, or compensation to the buyer's agent/broker.
+   - Common phrasings: "Buyer Broker Compensation shall be", "Commission is amended to", or a new percentage written next to a commission field.
+   - If a new commission percentage is clearly stated in the counter offer, use that value for commissionPaidBySeller — it supersedes line 338 of the main purchase agreement.
+   - If the counter offer does not mention commission, use the value from line 338 of the main purchase agreement.
+   - If there is ANY ambiguity about the commission change, return null for commissionPaidBySeller rather than guessing.
+
 2. LOAN APPLICATION DEADLINE (= loanApplicationDeadline):
    - Found in the Financing section: "written authorization to lender to proceed with the loan approval process within __ calendar days after the date of acceptance."
    - The blank is typically filled with 5.
