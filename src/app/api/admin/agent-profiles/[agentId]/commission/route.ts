@@ -169,15 +169,19 @@ export async function GET(
           }
         }
         // Build tiers from the member's custom override bands.
-        // For leaderless groups (SGL/CGL): companySplitPercent = 100 - memberPercent
-        //   (no leader cut — the broker keeps everything the agent doesn't)
-        // For teams with a leader: companySplitPercent = companyPercent from leader band
-        //   (the leader takes the spread between leaderPercent and memberPercent)
+        // companySplitPercent = 100 - memberPercent for ALL agent types.
+        //
+        // For leaderless groups (SGL/CGL): broker keeps 100 - memberPct. Simple.
+        //
+        // For teams with a leader: memberPercent in teamMemberOverrideBands is the
+        // member's effective payout as a % of full GCI (already net of the leader cut).
+        // So companySplitPercent = 100 - memberPct correctly represents what the company
+        // retains after paying the agent. The leader's share comes out of that company
+        // portion and is tracked separately in teamMemberLeaderSplit — it does NOT affect
+        // the agent/company split shown in the transaction form.
         const customMemberTiers = teamMemberOverrideBands.map((b: any, i: number) => {
           const memberPct = Number(b.memberPercent || 0);
-          const companyPct = isLeaderlessGroup
-            ? Math.max(0, 100 - memberPct)   // leaderless: broker gets the rest
-            : companyPctForMember;            // with-leader: from leader band
+          const companyPct = Math.max(0, 100 - memberPct); // always 100 - agent%
           return {
             tierName: b.tierName || `Band ${i + 1}`,
             fromCompanyDollar: Number(b.fromCompanyDollar || 0),
