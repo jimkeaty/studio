@@ -329,6 +329,8 @@ export default function EditTransactionPage() {
   const watchedDealType = form.watch('dealType');
   const watchedSellerPayingListing = form.watch('sellerPayingListingAgent');
   const watchedSellerPayingBuyer = form.watch('sellerPayingBuyerAgent');
+  const watchedReferralPct = form.watch('outboundReferralPercent');
+  const watchedReferralDollar = form.watch('outboundReferralDollar');
 
   // Reset CBP + commPct locks when deal type or closing type changes
   useEffect(() => {
@@ -372,13 +374,19 @@ export default function EditTransactionPage() {
   // Auto-calculate commission split when GCI or agent commission profile changes.
   // NOTE: For team members on a team WITH a leader, tier.agentSplitPercent is already
   // the EFFECTIVE % of full GCI (leaderPercent × memberPercent / 100), so the formula
-  // agentNet = GCI × agentSplitPercent is correct for ALL agent types.
+  // agentNet = netGci × agentSplitPercent is correct for ALL agent types.
   // The leaderStructurePercent and memberPercentOfLeaderSide fields on the tier are
   // only used for the preview card display breakdown.
+  // IMPORTANT: All splits are calculated on netGci (after referral fee deduction).
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(watchedGCI) || 0;
     if (gci <= 0) { setActiveTier(null); return; }
+    // Deduct outbound referral fee before computing any splits
+    const referralDollar = hasOutboundReferral
+      ? (Number(watchedReferralDollar) || (Number(watchedReferralPct) > 0 ? Math.round(gci * (Number(watchedReferralPct) / 100) * 100) / 100 : 0))
+      : 0;
+    const netGci = Math.max(0, gci - referralDollar);
     // Use cumulative YTD companyDollar for tier band lookup so team leaders
     // progress through bands based on total team production, not per-transaction GCI.
     const ytd1 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
@@ -388,8 +396,8 @@ export default function EditTransactionPage() {
     if (tier) {
       form.setValue('agentPct', tier.agentSplitPercent as any);
       form.setValue('brokerPct', tier.companySplitPercent as any);
-      form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-      form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+      form.setValue('agentDollar', Number((netGci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+      form.setValue('brokerGci', Number((netGci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
       if (txFee > 0) {
         form.setValue('txComplianceFee', 'yes');
@@ -399,7 +407,7 @@ export default function EditTransactionPage() {
         }
       }
     }
-  }, [watchedGCI, agentCommission]);
+  }, [watchedGCI, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, agentCommission]);
 
   // When agent changes and commission profile loads, re-run split calc with current GCI
   // (agentCommission change above handles this, but we also need to re-trigger CBP→GCI
@@ -408,6 +416,12 @@ export default function EditTransactionPage() {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(form.getValues('gci')) || 0;
     if (gci <= 0) return;
+    // Deduct outbound referral fee before computing any splits
+    const refPct = Number(form.getValues('outboundReferralPercent')) || 0;
+    const refDollar = hasOutboundReferral
+      ? (Number(form.getValues('outboundReferralDollar')) || (refPct > 0 ? Math.round(gci * (refPct / 100) * 100) / 100 : 0))
+      : 0;
+    const netGci2 = Math.max(0, gci - refDollar);
     const ytd2 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
     const tierLookupAmount2 = ytd2 > 0 ? ytd2 : gci;
     const tier = findActiveTier(agentCommission.tiers, tierLookupAmount2);
@@ -415,8 +429,8 @@ export default function EditTransactionPage() {
     if (tier) {
       form.setValue('agentPct', tier.agentSplitPercent as any);
       form.setValue('brokerPct', tier.companySplitPercent as any);
-      form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-      form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+      form.setValue('agentDollar', Number((netGci2 * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+      form.setValue('brokerGci', Number((netGci2 * (tier.companySplitPercent / 100)).toFixed(2)) as any);
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
       if (txFee > 0) {
         form.setValue('txComplianceFee', 'yes');
@@ -1719,6 +1733,12 @@ export default function EditTransactionPage() {
                           // Trigger recalculation from agent profile
                           const gci = Number(form.getValues('gci')) || 0;
                           if (gci > 0 && agentCommission) {
+                            // Deduct referral fee before splits
+                            const refPctBtn = Number(form.getValues('outboundReferralPercent')) || 0;
+                            const refDollarBtn = hasOutboundReferral
+                              ? (Number(form.getValues('outboundReferralDollar')) || (refPctBtn > 0 ? Math.round(gci * (refPctBtn / 100) * 100) / 100 : 0))
+                              : 0;
+                            const netGciBtn = Math.max(0, gci - refDollarBtn);
                             const ytd = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
                             const tierLookup = ytd > 0 ? ytd : gci;
                             const tier = findActiveTier(agentCommission.tiers, tierLookup);
@@ -1726,8 +1746,8 @@ export default function EditTransactionPage() {
                             if (tier) {
                               form.setValue('agentPct', tier.agentSplitPercent as any);
                               form.setValue('brokerPct', tier.companySplitPercent as any);
-                              form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-                              form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+                              form.setValue('agentDollar', Number((netGciBtn * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+                              form.setValue('brokerGci', Number((netGciBtn * (tier.companySplitPercent / 100)).toFixed(2)) as any);
                               const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
                               if (txFee > 0) {
                                 form.setValue('txComplianceFee', 'yes');
@@ -1786,6 +1806,12 @@ export default function EditTransactionPage() {
                         commissionManualOverride.current = false;
                         const gci = Number(form.getValues('gci')) || 0;
                         if (gci > 0 && agentCommission) {
+                          // Deduct referral fee before splits
+                          const refPctLink = Number(form.getValues('outboundReferralPercent')) || 0;
+                          const refDollarLink = hasOutboundReferral
+                            ? (Number(form.getValues('outboundReferralDollar')) || (refPctLink > 0 ? Math.round(gci * (refPctLink / 100) * 100) / 100 : 0))
+                            : 0;
+                          const netGciLink = Math.max(0, gci - refDollarLink);
                           const ytd3 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
                           const tierLookupAmount3 = ytd3 > 0 ? ytd3 : gci;
                           const tier = findActiveTier(agentCommission.tiers, tierLookupAmount3);
@@ -1793,8 +1819,8 @@ export default function EditTransactionPage() {
                           if (tier) {
                             form.setValue('agentPct', tier.agentSplitPercent as any);
                             form.setValue('brokerPct', tier.companySplitPercent as any);
-                            form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-                            form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+                            form.setValue('agentDollar', Number((netGciLink * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+                            form.setValue('brokerGci', Number((netGciLink * (tier.companySplitPercent / 100)).toFixed(2)) as any);
                             const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
                             if (txFee > 0) {
                               form.setValue('txComplianceFee', 'yes');
@@ -1863,18 +1889,23 @@ export default function EditTransactionPage() {
           {agentCommission?.teamMemberLeaderSplit && (() => {
             const gci = Number(form.watch('gci')) || 0;
             const agentDollar = Number(form.watch('agentDollar')) || 0;
+            // Deduct outbound referral fee before all leader/broker split display math
+            const dispRefDollar = hasOutboundReferral
+              ? (Number(form.watch('outboundReferralDollar')) || (Number(form.watch('outboundReferralPercent')) > 0 ? Math.round(gci * (Number(form.watch('outboundReferralPercent')) / 100) * 100) / 100 : 0))
+              : 0;
+            const netGciDisplay = Math.max(0, gci - dispRefDollar);
             const bands = agentCommission.teamMemberLeaderSplit!.leaderStructureBands || [];
-            // Find the active leader band based on current GCI
+            // Find the active leader band based on net GCI
             const activeBand = bands.find(b => {
               const from = Number(b.fromCompanyDollar || 0);
               const to = b.toCompanyDollar === null || b.toCompanyDollar === undefined ? null : Number(b.toCompanyDollar);
-              return gci >= from && (to === null || gci < to);
+              return netGciDisplay >= from && (to === null || netGciDisplay < to);
             }) || bands[0];
             if (!activeBand) return null;
             const leaderPct = Number(activeBand.leaderPercent || 0);
             const companyPct = Number(activeBand.companyPercent || 0);
-            const leaderStructureGross = gci > 0 ? Number((gci * (leaderPct / 100)).toFixed(2)) : 0;
-            const companyRetained = gci > 0 ? Number((gci * (companyPct / 100)).toFixed(2)) : 0;
+            const leaderStructureGross = netGciDisplay > 0 ? Number((netGciDisplay * (leaderPct / 100)).toFixed(2)) : 0;
+            const companyRetained = netGciDisplay > 0 ? Number((netGciDisplay * (companyPct / 100)).toFixed(2)) : 0;
             const leaderRetained = leaderStructureGross > 0 ? Number((leaderStructureGross - agentDollar).toFixed(2)) : 0;
             const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
             return (
@@ -1883,11 +1914,12 @@ export default function EditTransactionPage() {
                   <span className="text-sm font-semibold text-amber-900">Team Leader Commission Breakdown</span>
                   <span className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-0.5">Read-only · auto-calculated</span>
                 </div>
-                <p className="text-xs text-amber-700">This agent is a team member. The GCI is split between the team structure and the brokerage before the agent receives their portion.</p>
+                <p className="text-xs text-amber-700">This agent is a team member. The GCI is split between the team structure and the brokerage before the agent receives their portion.{dispRefDollar > 0 ? ` Referral fee of ${fmt(dispRefDollar)} has been deducted from gross GCI before these splits.` : ''}</p>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-md bg-white border border-amber-200 p-3">
-                    <p className="text-xs text-muted-foreground">Gross GCI</p>
-                    <p className="text-sm font-bold">{fmt(gci)}</p>
+                    <p className="text-xs text-muted-foreground">{dispRefDollar > 0 ? 'Net GCI (after referral)' : 'Gross GCI'}</p>
+                    <p className="text-sm font-bold">{fmt(netGciDisplay)}</p>
+                    {dispRefDollar > 0 && <p className="text-xs text-muted-foreground">Gross: {fmt(gci)}</p>}
                   </div>
                   <div className="rounded-md bg-white border border-amber-200 p-3">
                     <p className="text-xs text-muted-foreground">Leader Side ({leaderPct}%)</p>
