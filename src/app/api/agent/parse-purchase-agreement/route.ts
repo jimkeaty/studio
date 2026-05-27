@@ -129,8 +129,14 @@ This is a Louisiana LREC Residential Agreement to Buy and Sell. Dates are NOT wr
 
 1. UNDER CONTRACT DATE (= contractDate):
    - This is the date of the LAST signature on the purchase agreement OR the counter offer (whichever is most recent).
-   - Look for the most recent signature date among all parties (buyer and seller).
-   - This is the "date of acceptance" and the "commencement" date.
+   - In the LREC form, the signature blocks are on pages 10–11 of the agreement (contract lines 426–457).
+   - The FIRST signature block (lines 426–431) is the OFFER block — the buyer signs here first with a date/time.
+   - The SECOND signature block (lines 447–457, labeled "This offer is: Accepted / Rejected / Countered") is the ACCEPTANCE block — the seller (or buyer on a counter) signs here with a date/time.
+   - The contractDate is the date/time written next to the LAST signature in the ACCEPTANCE block (lines 447–457).
+   - If a COUNTER OFFER document is attached, look for the most recent signature date on the counter offer — that supersedes the main agreement signature date.
+   - DO NOT use the date printed at the top of page 1 (the "DATE" field next to the property address) — that is the offer preparation date, not the acceptance date.
+   - DO NOT use today's date or the upload date. Only use dates actually written next to signatures.
+   - If no acceptance signature date is found, leave contractDate as "" and set confidence to 0.0.
 
 2. LOAN APPLICATION DEADLINE (= loanApplicationDeadline):
    - Found in the Financing section: "written authorization to lender to proceed with the loan approval process within __ calendar days after the date of acceptance."
@@ -169,15 +175,33 @@ IMPORTANT: If the contractDate is not yet known (e.g., the contract has not been
 
 === PEOPLE AND CONTACT FIELDS ===
 
-- buyerName / buyer2Name: Found in the Buyers section of the contract (typically near the bottom, in the signature/party identification area).
-  - If two buyers are listed, put the first in buyerName and the second in buyer2Name.
+- buyerName / buyer2Name / buyerEmail / buyerPhone / buyer2Email / buyer2Phone:
+  - Found in the OFFER signature block on pages 10–11 of the LREC form (contract lines 426–436).
+  - Look for printed names on lines labeled "Print Buyer's/Seller's Full Name (First, Middle, Last)" where the checkbox ☐ Buyer's is checked.
+  - Contract line 429 (left side) = buyerName. Contract line 429 (right side) = buyer2Name (if a second buyer).
+  - Email and phone for buyers may appear in the Electronic Notice Authorization section at the top of the contract (page 1) next to the buyer's agent email block, or may not be present — if not clearly stated, leave blank.
+  - IMPORTANT: Only extract names where the ☐ Buyer's checkbox is checked, NOT where ☐ Seller's is checked.
 
-- sellerName / seller2Name: Found in the Sellers section of the contract.
-  - If two sellers are listed, put the first in sellerName and the second in seller2Name.
+- sellerName / seller2Name / sellerEmail / sellerPhone / seller2Email / seller2Phone:
+  - Found in the ACCEPTANCE signature block on pages 10–11 of the LREC form (contract lines 447–457).
+  - Look for printed names on lines labeled "Print Buyer's/Seller's Full Name (First, Middle, Last)" where the checkbox ☐ Seller's is checked.
+  - Contract line 456 (left side) = sellerName. Contract line 456 (right side) = seller2Name (if a second seller).
+  - Email and phone for sellers may appear in the Electronic Notice Authorization section at the top of the contract (page 1), or may not be present — if not clearly stated, leave blank.
+  - IMPORTANT: Only extract names where the ☐ Seller's checkbox is checked, NOT where ☐ Buyer's is checked.
 
-- otherAgentName: This is the COOPERATING AGENT — specifically the "Seller's Designated Agent" listed at the TOP of the purchase agreement.
-  - Their brokerage name goes in otherBrokerage.
-  - Their phone/email goes in otherAgentPhone / otherAgentEmail.
+- otherAgentName / otherAgentEmail / otherAgentPhone / otherBrokerage:
+  - This is the COOPERATING AGENT — the agent on the OPPOSITE side from our agent.
+  - At the very top of the LREC form (page 1, immediately below the property address), there are TWO agent blocks side by side:
+    LEFT side: "Seller's Designated Agent Name & License Number" ("Seller's agent")
+    RIGHT side: "Buyer's Designated Agent Name & License Number" ("Buyer's agent")
+  - Each block has: Agent Name & License Number, Brokerage Name & License Number, Agent Phone, Brokerage Phone, Email Address.
+  - To determine which block is the COOPERATING agent, look at which side our agent (the submitting agent) is on:
+    * If our agent is the BUYER's agent → the cooperating agent is on the LEFT (Seller's Designated Agent block).
+    * If our agent is the SELLER's agent → the cooperating agent is on the RIGHT (Buyer's Designated Agent block).
+  - If you cannot determine which side our agent is on, default to extracting the Seller's Designated Agent block as otherAgentName.
+  - otherBrokerage = the brokerage name from the cooperating agent's block.
+  - otherAgentPhone = the agent phone number from the cooperating agent's block.
+  - otherAgentEmail = the email address from the cooperating agent's block.
 
 - depositHeldBy: Look for who is holding the earnest money deposit.
   - If it says "Listing Broker" or "Listing Agent's Broker", return "listing_broker".
@@ -185,11 +209,13 @@ IMPORTANT: If the contractDate is not yet known (e.g., the contract has not been
   - If it says a specific company name, return that company name.
   - If not found, return "".
 
-- commissionPaidBySeller: Look for the buyer broker compensation clause (typically labeled "Buyer Broker Compensation at Closing" or similar).
-  - The seller agrees to pay the buyer's broker/agent a commission at closing.
-  - Extract the percentage as a number only (e.g., if it says "3%", return 3).
-  - If a COUNTER OFFER modifies this amount, use the counter offer value.
-  - If there is ANY ambiguity about who is paying or what the percentage is, return null.
+- commissionPaidBySeller: Found at contract line 338, in the section titled "BUYER BROKER COMPENSATION".
+  - The exact text reads: "BUYER BROKER COMPENSATION: At closing, SELLER shall pay __________________________ ($0 / 0% of Sale Price if left blank) toward the BUYER's Broker's compensation."
+  - The blank is filled in with either a dollar amount OR a percentage. Extract the PERCENTAGE only as a number (e.g., "2.5%" → return 2.5, "3%" → return 3).
+  - If only a dollar amount is filled in (no percentage), return null — do not calculate or guess the percentage.
+  - If the blank is left empty or shows "$0 / 0%", return null.
+  - If a COUNTER OFFER modifies this amount, use the counter offer value — it supersedes.
+  - If there is ANY ambiguity about the percentage, return null. NEVER default to 3 — only return a value if clearly stated.
   - If not found or not applicable, return null.
 
 - homeWarranty: Look for a home service/warranty plan clause (typically labeled "Home Service/Warranty" or similar).
