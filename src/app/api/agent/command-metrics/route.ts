@@ -136,6 +136,26 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Strategy 4: look up by firebaseUid field — handles agents whose profile doc ID is a slug
+    // and whose email may differ from the auth token (e.g. profile email not yet synced).
+    // The pipeline API stamps firebaseUid onto the profile when it first resolves it.
+    if (!profileDocId) {
+      const profileByFirebaseUidSnap = await adminDb.collection('agentProfiles')
+        .where('firebaseUid', '==', uid).limit(1).get();
+      if (!profileByFirebaseUidSnap.empty) {
+        profileDocId = profileByFirebaseUidSnap.docs[0].id;
+        profileData = profileByFirebaseUidSnap.docs[0].data();
+      }
+    }
+
+    // Write-back: if we found the profile via slug/email/firebaseUid but firebaseUid is not
+    // yet stamped on the doc, stamp it now so future lookups hit Strategy 1 or 4 directly.
+    if (profileDocId && profileData && !profileData.firebaseUid && uid) {
+      try {
+        await adminDb.collection('agentProfiles').doc(profileDocId).update({ firebaseUid: uid });
+      } catch { /* non-fatal */ }
+    }
+
     const profile = profileData ?? null;
     // The canonical Firebase UID for this agent — used as the goal segment key.
     // This ensures goals saved by the agent (keyed by their UID) are always found
