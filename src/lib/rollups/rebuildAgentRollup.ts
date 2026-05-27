@@ -103,9 +103,17 @@ export async function rebuildAgentRollup(
   }
 
   // ── 0b. Compute the anniversary cycle that is "active" for this year ───────
-  // We use Jan 1 of the target year as the reference point to find which
-  // anniversary cycle was active at the start of that year.
-  const cycleRef = new Date(Date.UTC(year, 0, 1)); // Jan 1 of target year
+  // We use the LATER of (today) or (Jul 1 of the target year) as the reference
+  // point so that the rollup document key always matches the cycle that is
+  // actually active during that year — not the cycle that happened to contain
+  // Jan 1 of that year (which can be the PREVIOUS cycle for agents whose
+  // anniversary falls after Jan 1, e.g. January 18).
+  //
+  // Using Jul 1 as the mid-year anchor guarantees we land in the cycle that
+  // spans the majority of the target calendar year, regardless of anniversary.
+  const today = new Date();
+  const midYear = new Date(Date.UTC(year, 6, 1)); // Jul 1 of target year
+  const cycleRef = today.getUTCFullYear() === year && today > midYear ? today : midYear;
   const cycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, cycleRef);
 
   // ── 1. Fetch all transactions for this agent (personal production) ────────
