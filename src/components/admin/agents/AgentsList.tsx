@@ -246,6 +246,12 @@ export default function AgentsList() {
             {loadingDuplicates ? 'Scanning...' : 'Find Duplicates'}
           </button>
           <Link
+            href="/dashboard/admin/agents/commission-audit"
+            className="rounded-md border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-800 hover:bg-purple-100"
+          >
+            Commission Audit
+          </Link>
+          <Link
             href="/dashboard/admin/agents/new"
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
           >
