@@ -770,6 +770,13 @@ export default function AgentProfileForm({
       // Auto-detect team group from the selected team's teamId
       const mappedGroup = TEAM_NAME_TO_GROUP[nextTeamId] || prev.teamGroup;
 
+      // Only reset commission tiers when the admin is actively switching to a DIFFERENT team
+      // AND the agent does not already have custom tiers saved.
+      // When editing an existing agent, prev.primaryTeamId === nextTeamId on initial render,
+      // so this guard prevents overwriting saved custom tiers on load.
+      const isTeamChange = prev.primaryTeamId !== nextTeamId;
+      const hasCustomTiers = prev.commissionMode === 'custom' && prev.tiers.length > 0;
+
       // Resolve the team plan for the newly selected team
       const selectedTeamObj = teams.find((t) => t.teamId === nextTeamId);
       const resolvedPlan = selectedTeamObj?.teamPlanId
@@ -791,27 +798,47 @@ export default function AgentProfileForm({
           commissionMode: 'flat' as CommissionMode,
           flatAgentPercent: agentPct,
           flatCompanyPercent: companyPct,
-          tiers: prev.tiers,
+          tiers: prev.tiers,  // preserve existing tiers
           defaultTransactionFee: getTeamDefaultTransactionFee(mappedGroup),
         };
       }
 
-      // Tiered team — always populate teamMemberOverrideBands from the team plan as the starting template
-      const memberBands = resolvedPlan?.memberDefaultBands && resolvedPlan.memberDefaultBands.length > 0
-        ? teamPlanMemberBandsToFormTiers(resolvedPlan.memberDefaultBands)
-        : prev.teamMemberOverrideBands.length > 0
-          ? prev.teamMemberOverrideBands
-          : [createEmptyTeamMemberTier(1)];
+      // Tiered team — only reset tiers to team defaults when:
+      //   1. The admin is actively switching to a different team, AND
+      //   2. The agent does not already have custom tiers saved
+      // Otherwise preserve the agent's existing custom tiers.
+      const nextTiers = (isTeamChange && !hasCustomTiers)
+        ? resolveTeamDefaultTiers(nextTeamId, mappedGroup)
+        : prev.tiers;
+
+      // Only reset teamMemberOverrideBands when switching to a different team
+      // and the agent has no existing custom override bands.
+      const memberBands = isTeamChange
+        ? (resolvedPlan?.memberDefaultBands && resolvedPlan.memberDefaultBands.length > 0
+            ? teamPlanMemberBandsToFormTiers(resolvedPlan.memberDefaultBands)
+            : prev.teamMemberOverrideBands.length > 0
+              ? prev.teamMemberOverrideBands
+              : [createEmptyTeamMemberTier(1)])
+        : prev.teamMemberOverrideBands;
+
+      // Only reset commissionMode to team_default when switching to a different team
+      // and the agent does not already have a custom commission mode.
+      const nextCommissionMode = (isTeamChange && !hasCustomTiers)
+        ? 'team_default' as CommissionMode
+        : prev.commissionMode;
+
       return {
         ...prev,
         primaryTeamId: nextTeamId,
         defaultPlanId: '',
         teamGroup: mappedGroup,
-        commissionMode: 'team_default' as CommissionMode,
-        tiers: resolveTeamDefaultTiers(nextTeamId, mappedGroup),
+        commissionMode: nextCommissionMode,
+        tiers: nextTiers,
         teamMemberCompMode: 'custom' as TeamMemberCompMode,
         teamMemberOverrideBands: memberBands,
-        defaultTransactionFee: getTeamDefaultTransactionFee(mappedGroup),
+        defaultTransactionFee: isTeamChange
+          ? getTeamDefaultTransactionFee(mappedGroup)
+          : prev.defaultTransactionFee,
       };
     });
   }

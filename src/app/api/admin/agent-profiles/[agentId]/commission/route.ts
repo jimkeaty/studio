@@ -248,17 +248,125 @@ export async function GET(
       }
     }
 
-    // ── 0a. Agent's own stored tiers — source of truth for non-team-member agents ──
-    // Also used for leaderless-group team members (SGL/CGL) whose custom plan is
+    // ── 0a. Agent's own stored tiers — ABSOLUTE SOURCE OF TRUTH ─────────────────
+    // If the agent profile has tiers saved with valid splits, use them immediately
+    // and return — regardless of commissionMode, agentType, or teamGroup.
+    // This ensures custom tiers set by admin are NEVER overridden by team plan
+    // defaults or template fallbacks.
+    // Also handles leaderless-group team members (SGL/CGL) whose custom plan is
     // stored directly in data.tiers with correct agentSplitPercent/companySplitPercent.
-    // If the agent profile has tiers saved, use them unconditionally regardless
-    // of commissionMode. This ensures custom tiers set by admin are never
-    // overridden by team plan defaults or template fallbacks.
-    const agentStoredTiers = (data.tiers || []).map(normalizeTier);
+    const agentStoredTiers = (data.tiers || [])
+      .map(normalizeTier)
+      .filter((t: ReturnType<typeof normalizeTier>) => t.agentSplitPercent > 0 || t.companySplitPercent > 0);
+
     if (agentStoredTiers.length > 0) {
-      // Agent has saved tiers — skip all fallback logic and proceed directly
-      // to the YTD rollup lookup below.
-      // (fall through — tiers will be set at step 1 below)
+      // Agent has saved tiers with valid splits — use them as the source of truth.
+      // Fetch YTD rollup for tier progression before returning.
+      let ytdStored = 0;
+      let cycleStartStored: string | null = null;
+      let cycleEndStored: string | null = null;
+      try {
+        const today = new Date();
+        const anniversaryMonth = Number(data.anniversaryMonth ?? 0);
+        const anniversaryDay = Number(data.anniversaryDay ?? 0);
+        const currentCycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+        const rollupYear = currentCycle.cycleStart.getUTCFullYear();
+        const rollupSnapStored = await adminDb
+          .collection('agentYearRollups')
+          .doc(`${agentId}_${rollupYear}`)
+          .get();
+        if (rollupSnapStored.exists) {
+          const r = rollupSnapStored.data() || {};
+          ytdStored = Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
+          cycleStartStored = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
+          cycleEndStored = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
+        } else {
+          const prevRollupYear = rollupYear - 1;
+          const prevRollupSnapStored = await adminDb
+            .collection('agentYearRollups')
+            .doc(`${agentId}_${prevRollupYear}`)
+            .get();
+          if (prevRollupSnapStored.exists) {
+            const rp = prevRollupSnapStored.data() || {};
+            const prevCycleEnd = rp.cycleEnd ? new Date(rp.cycleEnd) : null;
+            if (prevCycleEnd && today <= prevCycleEnd) {
+              ytdStored = Number(rp.tierProgressionCompanyDollar ?? rp.companyDollar ?? 0);
+              cycleStartStored = String(rp.cycleStart || '');
+              cycleEndStored = String(rp.cycleEnd || '');
+            }
+          }
+          if (!cycleStartStored) {
+            cycleStartStored = currentCycle.cycleStart.toISOString().slice(0, 10);
+            cycleEndStored = currentCycle.cycleEnd.toISOString().slice(0, 10);
+          }
+        }
+      } catch { /* non-fatal */ }
+
+      const defaultTransactionFeeStored =
+        data.defaultTransactionFee != null
+          ? Number(data.defaultTransactionFee)
+          : getTeamDefaultTransactionFee(teamGroup);
+
+      // For team members on a team WITH a leader, fetch the leader split data
+      // so the admin edit form can show the Team Leader Commission Breakdown panel.
+      // For leaderless groups (SGL/CGL) and independent agents, this is null.
+      let teamMemberLeaderSplitStored: typeof teamMemberLeaderSplit = null;
+      if (
+        agentType === 'team' &&
+        teamRole === 'member' &&
+        primaryTeamId &&
+        !isLeaderlessGroup
+      ) {
+        try {
+          const teamSnapStored = await adminDb.collection('teams').doc(primaryTeamId).get();
+          if (teamSnapStored.exists) {
+            const teamDataStored = teamSnapStored.data() || {};
+            const teamPlanIdStored: string | null = teamDataStored.teamPlanId || null;
+            const teamStructureTypeStored: string = teamDataStored.structureType || 'with_leader';
+            if (teamPlanIdStored) {
+              const planSnapStored2 = await adminDb.collection('teamPlans').doc(teamPlanIdStored).get();
+              if (planSnapStored2.exists) {
+                const planDataStored = planSnapStored2.data() || {};
+                const planStructureTypeStored: string = planDataStored.structureType || teamStructureTypeStored;
+                if (planStructureTypeStored === 'with_leader') {
+                  const leaderBandsStored: any[] = planDataStored.leaderStructureBands || [];
+                  const memberBandsStored: any[] = planDataStored.memberDefaultBands || [];
+                  if (leaderBandsStored.length > 0 && memberBandsStored.length > 0) {
+                    teamMemberLeaderSplitStored = {
+                      leaderStructureBands: leaderBandsStored.map((b: any) => ({
+                        fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                        toCompanyDollar: b.toCompanyDollar === null || b.toCompanyDollar === undefined ? null : Number(b.toCompanyDollar),
+                        leaderPercent: Number(b.leaderPercent || 0),
+                        companyPercent: Number(b.companyPercent || 0),
+                      })),
+                      memberDefaultBands: memberBandsStored.map((b: any) => ({
+                        fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                        toCompanyDollar: b.toCompanyDollar === null || b.toCompanyDollar === undefined ? null : Number(b.toCompanyDollar),
+                        memberPercent: Number(b.memberPercent || 0),
+                      })),
+                    };
+                  }
+                }
+              }
+            }
+          }
+        } catch { /* non-fatal */ }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        agentId,
+        agentType,
+        teamGroup,
+        commissionMode: commissionMode === 'flat' ? 'flat' : 'custom',
+        tiersSource: 'agent_profile',
+        defaultTransactionFee: defaultTransactionFeeStored,
+        tiers: agentStoredTiers,
+        teamMemberLeaderSplit: teamMemberLeaderSplitStored,
+        ytdTierProgressionCompanyDollar: ytdStored,
+        cycleStart: cycleStartStored,
+        cycleEnd: cycleEndStored,
+      });
     }
 
     // ── 0b. Team agent with team_default mode — check if team plan is fixed ────
