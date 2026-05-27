@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
-import { getTeamDefaultTiers, getTeamDefaultTransactionFee } from '@/lib/commissions/teamTemplates';
+import { getTeamDefaultTiers, getTeamDefaultTransactionFee, LEADERLESS_TEAM_GROUPS } from '@/lib/commissions/teamTemplates';
 import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
 
 function extractBearer(req: NextRequest) {
@@ -42,10 +42,15 @@ function normalizeTier(t: any) {
  * so the Add Transaction / Edit Transaction form can auto-calculate splits.
  *
  * Fallback chain for tiers:
- *   1. Agent's own custom tiers (commissionMode = 'custom')
- *   2. Team plan bands (agentType = 'team', fetched from teamPlans collection)
- *   3. Team default template tiers (getTeamDefaultTiers by teamGroup)
- *   4. Standard independent tiers (final fallback via getTeamDefaultTiers)
+ *   0a-MEMBER. Team member with custom override bands (teamMemberCompMode === 'custom')
+ *              — but ONLY for teams WITH a leader (not SGL/CGL/leaderless groups).
+ *              For leaderless groups, fall through to the agent's own stored tiers.
+ *   0a. Agent's own stored tiers (commissionMode = 'custom')
+ *   0b. Team plan fixed split (commissionMode = 'team_default', fixed model)
+ *   1.  Agent's own stored tiers (same as 0a, used as the live tiers variable)
+ *   2.  Team plan bands (agentType = 'team', fetched from teamPlans collection)
+ *   3.  Team default template tiers (getTeamDefaultTiers by teamGroup)
+ *   4.  Standard independent tiers (final fallback)
  */
 export async function GET(
   req: NextRequest,
@@ -81,6 +86,10 @@ export async function GET(
     const teamMemberCompMode: string = data.teamMemberCompMode || 'teamDefault';
     const teamMemberOverrideBands: any[] = data.teamMemberOverrideBands || [];
 
+    // Whether this agent is on a leaderless group (SGL, CGL, referral_group, etc.)
+    // Leaderless agents never get the team leader breakdown panel.
+    const isLeaderlessGroup = LEADERLESS_TEAM_GROUPS.has(teamGroup);
+
     // ── 0. Flat commission plan — synthetic single-tier, no progression ────────
     // Applies to both independent agents with commissionMode='flat' AND team agents
     // whose team uses a fixed commission model (commissionMode auto-set to 'flat' on save).
@@ -115,30 +124,39 @@ export async function GET(
       });
     }
 
-    // ── 0a-MEMBER. Team member with custom override bands — HIGHEST PRIORITY ───────
+    // ── 0a-MEMBER. Team member with custom override bands — HIGHEST PRIORITY ───
+    // Only applies to teams WITH a leader (not SGL/CGL/leaderless groups).
+    // For leaderless groups, the member's payout is agent vs. company only —
+    // their custom tiers are stored in data.tiers with agentSplitPercent and
+    // companySplitPercent already set correctly, so we fall through to 0a below.
+    //
     // When a team member has teamMemberCompMode === 'custom' and saved
     // teamMemberOverrideBands, those bands define their actual payout — exactly
     // as the runtime resolver (teamTransactionResolver) uses them.
-    // We must use the same source here so the add/edit form preview matches.
     if (
       agentType === 'team' &&
       teamRole === 'member' &&
       teamMemberCompMode === 'custom' &&
       teamMemberOverrideBands.length > 0 &&
-      primaryTeamId
+      primaryTeamId &&
+      !isLeaderlessGroup  // ← leaderless groups (SGL/CGL) use data.tiers directly
     ) {
       try {
         // Fetch the team plan to get the leader structure (for company split %)
         let companyPctForMember = 25; // safe fallback
         let leaderBandsForMember: any[] = [];
+        let teamIsWithLeader = false;
         const teamSnapMember = await adminDb.collection('teams').doc(primaryTeamId).get();
         if (teamSnapMember.exists) {
           const teamDataMember = teamSnapMember.data() || {};
           const teamPlanIdMember: string | null = teamDataMember.teamPlanId || null;
+          const teamStructureTypeMember: string = teamDataMember.structureType || 'with_leader';
           if (teamPlanIdMember) {
             const planSnapMember = await adminDb.collection('teamPlans').doc(teamPlanIdMember).get();
             if (planSnapMember.exists) {
               const planDataMember = planSnapMember.data() || {};
+              const planStructureTypeMember: string = planDataMember.structureType || teamStructureTypeMember;
+              teamIsWithLeader = planStructureTypeMember === 'with_leader';
               leaderBandsForMember = planDataMember.leaderStructureBands || [];
               if (leaderBandsForMember.length > 0) {
                 companyPctForMember = Number(leaderBandsForMember[0].companyPercent || 25);
@@ -160,9 +178,9 @@ export async function GET(
           capAmount: null,
           notes: b.notes || '',
         }));
-        // Build teamMemberLeaderSplit for the breakdown panel
+        // Build teamMemberLeaderSplit for the breakdown panel — only for teams WITH a leader
         const teamMemberLeaderSplitCustom =
-          leaderBandsForMember.length > 0
+          teamIsWithLeader && leaderBandsForMember.length > 0
             ? {
                 leaderStructureBands: leaderBandsForMember.map((b: any) => ({
                   fromCompanyDollar: Number(b.fromCompanyDollar || 0),
@@ -230,7 +248,9 @@ export async function GET(
       }
     }
 
-    // ── 0a. Agent's own stored tiers — ALWAYS the source of truth ─────────────
+    // ── 0a. Agent's own stored tiers — source of truth for non-team-member agents ──
+    // Also used for leaderless-group team members (SGL/CGL) whose custom plan is
+    // stored directly in data.tiers with correct agentSplitPercent/companySplitPercent.
     // If the agent profile has tiers saved, use them unconditionally regardless
     // of commissionMode. This ensures custom tiers set by admin are never
     // overridden by team plan defaults or template fallbacks.
@@ -345,7 +365,7 @@ export async function GET(
             if (planSnap.exists) {
               const planData = planSnap.data() || {};
               const planStructureType: string = planData.structureType || teamStructureType;
-              const isWithLeader = planStructureType === 'with_leader';
+              const isWithLeader = planStructureType === 'with_leader' && !isLeaderlessGroup;
 
               if (teamRole === 'leader') {
                 // Leader: agentSplitPercent = leaderPercent (their cut of GCI)
@@ -385,17 +405,12 @@ export async function GET(
                     // Find the member band whose threshold contains this leader band's from value
                     const matchingMemberBand = memberBands.find((mb: any) => {
                       const mbFrom = Number(mb.fromCompanyDollar || 0);
-                      const mbTo =
-                        mb.toCompanyDollar === null || mb.toCompanyDollar === undefined
-                          ? null
-                          : Number(mb.toCompanyDollar);
+                      const mbTo = mb.toCompanyDollar === null || mb.toCompanyDollar === undefined
+                        ? null
+                        : Number(mb.toCompanyDollar);
                       const lbFrom = Number(lb.fromCompanyDollar || 0);
                       return lbFrom >= mbFrom && (mbTo === null || lbFrom < mbTo);
-                    }) || memberBands[memberBands.length - 1];
-
-                    const leaderPct = Number(lb.leaderPercent || 0);
-                    const memberPct = Number(matchingMemberBand?.memberPercent || 0);
-                    const companyPct = Number(lb.companyPercent || 0);
+                    }) || memberBands[Math.min(i, memberBands.length - 1)];
 
                     return {
                       tierName: lb.tierName || `Band ${i + 1}`,
@@ -404,13 +419,13 @@ export async function GET(
                         lb.toCompanyDollar === null || lb.toCompanyDollar === undefined
                           ? null
                           : Number(lb.toCompanyDollar),
-                      // Member's direct % of full GCI (NOT leaderPercent × memberPercent)
-                      agentSplitPercent: memberPct,
-                      // Company retains companyPercent of full GCI (= 100 - leaderPercent)
-                      companySplitPercent: companyPct,
-                      // Store raw percents for display breakdown in the preview card
-                      leaderStructurePercent: leaderPct,
-                      memberPercentOfLeaderSide: memberPct, // kept for type compat; now = direct GCI %
+                      // agentSplitPercent = memberPercent (member's direct % of full GCI)
+                      agentSplitPercent: Number(matchingMemberBand?.memberPercent || 0),
+                      // companySplitPercent = companyPercent from the leader band
+                      companySplitPercent: Number(lb.companyPercent || 0),
+                      // Extra fields for the preview breakdown panel
+                      leaderStructurePercent: Number(lb.leaderPercent || 0),
+                      memberPercentOfLeaderSide: Number(matchingMemberBand?.memberPercent || 0),
                       transactionFee: null,
                       capAmount: null,
                       notes: '',
@@ -418,7 +433,7 @@ export async function GET(
                   });
                   tiersSource = 'team_plan';
 
-                  // Expose the raw leader/member bands so the form can render the two-step breakdown
+                  // Populate teamMemberLeaderSplit for the breakdown panel
                   teamMemberLeaderSplit = {
                     leaderStructureBands: leaderBands.map((b: any) => ({
                       fromCompanyDollar: Number(b.fromCompanyDollar || 0),
@@ -438,8 +453,27 @@ export async function GET(
                       memberPercent: Number(b.memberPercent || 0),
                     })),
                   };
-                } else if (memberBands.length > 0) {
-                  // Only member bands present — treat memberPercent as % of GCI (leaderless-style fallback)
+                } else if (leaderBands.length > 0) {
+                  // Only leader bands available — use member as if they get the leader's cut
+                  tiers = leaderBands.map((b: any, i: number) => ({
+                    tierName: b.tierName || `Band ${i + 1}`,
+                    fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                    toCompanyDollar:
+                      b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                        ? null
+                        : Number(b.toCompanyDollar),
+                    agentSplitPercent: Number(b.leaderPercent || 0),
+                    companySplitPercent: Number(b.companyPercent || 0),
+                    transactionFee: null,
+                    capAmount: null,
+                    notes: '',
+                  }));
+                  tiersSource = 'team_plan';
+                }
+              } else {
+                // Leaderless team member — use member default bands directly
+                const memberBands: any[] = planData.memberDefaultBands || [];
+                if (memberBands.length > 0) {
                   tiers = memberBands.map((b: any, i: number) => ({
                     tierName: b.tierName || `Band ${i + 1}`,
                     fromCompanyDollar: Number(b.fromCompanyDollar || 0),
@@ -448,26 +482,7 @@ export async function GET(
                         ? null
                         : Number(b.toCompanyDollar),
                     agentSplitPercent: Number(b.memberPercent || 0),
-                    companySplitPercent: Math.max(0, 100 - Number(b.memberPercent || 0)),
-                    transactionFee: null,
-                    capAmount: null,
-                    notes: '',
-                  }));
-                  tiersSource = 'team_plan';
-                }
-              } else {
-                // Leaderless team member: memberPercent is % of full GCI
-                const bands = planData.memberDefaultBands || [];
-                if (bands.length > 0) {
-                  tiers = bands.map((b: any, i: number) => ({
-                    tierName: b.tierName || `Band ${i + 1}`,
-                    fromCompanyDollar: Number(b.fromCompanyDollar || 0),
-                    toCompanyDollar:
-                      b.toCompanyDollar === null || b.toCompanyDollar === undefined
-                        ? null
-                        : Number(b.toCompanyDollar),
-                    agentSplitPercent: Number(b.memberPercent || 0),
-                    companySplitPercent: Math.max(0, 100 - Number(b.memberPercent || 0)),
+                    companySplitPercent: 100 - Number(b.memberPercent || 0),
                     transactionFee: null,
                     capAmount: null,
                     notes: '',
@@ -479,11 +494,11 @@ export async function GET(
           }
         }
       } catch {
-        // Silently fall through to next fallback
+        // Silently fall through to template fallback
       }
     }
 
-    // ── 3. Fall back to team default template tiers ───────────────────────────
+    // ── 3. If still empty, fall back to team group template ───────────────────
     if (tiers.length === 0) {
       const templateTiers = getTeamDefaultTiers(teamGroup);
       tiers = templateTiers.map((t) => ({
@@ -521,12 +536,13 @@ export async function GET(
       tiersSource = 'standard_fallback';
     }
 
-    // ── Always fetch teamMemberLeaderSplit for team members with a leader ────────
+    // ── Always fetch teamMemberLeaderSplit for team members WITH a leader ─────
+    // Only for teams that are NOT leaderless (not SGL/CGL/referral_group).
     // Even when the agent has custom tiers (agentStoredTiers.length > 0), we still
     // need to populate teamMemberLeaderSplit so the admin edit form can show the
     // Team Leader Commission Breakdown panel. Without this, the panel is hidden
     // for any team member who has custom tiers on their profile.
-    if (!teamMemberLeaderSplit && agentType === 'team' && teamRole === 'member' && primaryTeamId) {
+    if (!teamMemberLeaderSplit && agentType === 'team' && teamRole === 'member' && primaryTeamId && !isLeaderlessGroup) {
       try {
         const teamSnapExtra = await adminDb.collection('teams').doc(primaryTeamId).get();
         if (teamSnapExtra.exists) {
@@ -602,20 +618,35 @@ export async function GET(
         .get();
       if (rollupSnap.exists) {
         const r = rollupSnap.data() || {};
-        // Prefer tierProgressionCompanyDollar (includes team member credits for leaders)
-        // Fall back to companyDollar for agents whose rollup predates this field
-        ytdTierProgressionCompanyDollar = Number(
-          r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0
-        );
+        // Use tierProgressionCompanyDollar if available (anniversary-cycle filtered),
+        // otherwise fall back to companyDollar (calendar-year total)
+        ytdTierProgressionCompanyDollar = Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
         cycleStart = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
         cycleEnd = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
       } else {
-        // Rollup not yet built — return cycle boundaries from utility
-        cycleStart = currentCycle.cycleStart.toISOString().slice(0, 10);
-        cycleEnd = currentCycle.cycleEnd.toISOString().slice(0, 10);
+        // No rollup yet — check the previous year's rollup (agent may be mid-cycle)
+        const prevRollupYear = rollupYear - 1;
+        const prevRollupSnap = await adminDb
+          .collection('agentYearRollups')
+          .doc(`${agentId}_${prevRollupYear}`)
+          .get();
+        if (prevRollupSnap.exists) {
+          const rp = prevRollupSnap.data() || {};
+          // Only use the previous year's rollup if today falls within its cycle window
+          const prevCycleEnd = rp.cycleEnd ? new Date(rp.cycleEnd) : null;
+          if (prevCycleEnd && today <= prevCycleEnd) {
+            ytdTierProgressionCompanyDollar = Number(rp.tierProgressionCompanyDollar ?? rp.companyDollar ?? 0);
+            cycleStart = String(rp.cycleStart || '');
+            cycleEnd = String(rp.cycleEnd || '');
+          }
+        }
+        if (!cycleStart) {
+          cycleStart = currentCycle.cycleStart.toISOString().slice(0, 10);
+          cycleEnd = currentCycle.cycleEnd.toISOString().slice(0, 10);
+        }
       }
     } catch {
-      // Non-fatal: form will fall back to per-transaction GCI for tier lookup
+      // Non-fatal — YTD defaults to 0
     }
 
     return NextResponse.json({
@@ -627,20 +658,13 @@ export async function GET(
       tiersSource,
       defaultTransactionFee,
       tiers,
-      // Present for team members on a team WITH a leader — null for all other agent types.
-      // When present, the form should display the two-step commission breakdown:
-      //   Step 1: leaderStructureGross = GCI × leaderStructureBand.leaderPercent
-      //   Step 2: memberPaid = leaderStructureGross × memberDefaultBand.memberPercent
-      // The tiers[].agentSplitPercent already contains the EFFECTIVE % of full GCI
-      // (leaderPercent × memberPercent / 100) so auto-calc is always correct.
       teamMemberLeaderSplit,
       ytdTierProgressionCompanyDollar,
-      // Anniversary cycle boundaries for display in progress bars / dashboard
       cycleStart,
       cycleEnd,
     });
   } catch (err: any) {
-    console.error('[API/agent-profiles/commission] Error:', err?.message || err);
-    return jsonError(500, 'Internal Server Error');
+    console.error('[commission API] Unexpected error:', err?.message || err);
+    return jsonError(500, 'Internal server error');
   }
 }
