@@ -313,11 +313,23 @@ export default function AgentProfileForm({
       flatCompanyPercent: initialValues?.flatCompanyPercent ?? 30,
       defaultTransactionFee:
         initialValues?.defaultTransactionFee ?? getTeamDefaultTransactionFee(teamGroup),
+      // Always ensure teamMemberOverrideBands is populated for team members.
+      // If the profile has saved bands, use them. Otherwise, seed from the
+      // agent's own tiers (converting agentSplitPercent → memberPercent) so
+      // the form always shows a populated commission structure on load.
       teamMemberOverrideBands:
         initialValues?.teamMemberOverrideBands &&
         initialValues.teamMemberOverrideBands.length > 0
           ? cloneTeamMemberTiers(initialValues.teamMemberOverrideBands)
-          : [],
+          : initialValues?.tiers && initialValues.tiers.length > 0
+            ? initialValues.tiers.map((t, i) => ({
+                tierName: t.tierName || `Tier ${i + 1}`,
+                fromCompanyDollar: Number(t.fromCompanyDollar || 0),
+                toCompanyDollar: t.toCompanyDollar ?? null,
+                memberPercent: Number(t.agentSplitPercent || 0),
+                notes: t.notes || '',
+              }))
+            : [],
     };
   });
 

@@ -5,7 +5,7 @@ import { findFuzzyMatches } from '@/lib/agents/fuzzyMatch';
 import type { AgentProfile, AgentProfileInput, AgentTier, TeamMemberCompMode, TeamMemberOverrideBand } from '@/lib/agents/types';
 import type { MemberPlan, MemberPlanBand, TeamMembership, TeamPlan } from '@/lib/teams/types';
 import { isAdminLike } from '@/lib/auth/staffAccess';
-
+import { getTeamDefaultTiers } from '@/lib/commissions/teamTemplates';
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
@@ -157,13 +157,31 @@ function normalizeInput(body: AgentProfileInput) {
         : 'teamDefault'
       : 'teamDefault';
 
-  const teamMemberOverrideBands =
-    isTeamAgent && body.teamRole === 'member' && teamMemberCompMode === 'custom'
+  // Build teamMemberOverrideBands for team members.
+  // Always force teamMemberCompMode = 'custom' so the commission API reads
+  // from teamMemberOverrideBands (the source of truth) on every transaction.
+  // If the submitted bands are empty, seed from the agent's own tiers or
+  // the team group template so no profile is ever saved without a structure.
+  let teamMemberOverrideBands: TeamMemberOverrideBand[] =
+    isTeamAgent && body.teamRole === 'member'
       ? (body.teamMemberOverrideBands || []).map(normalizeTeamMemberOverrideBand)
       : [];
 
-  if (isTeamAgent && body.teamRole === 'member' && teamMemberCompMode === 'custom' && teamMemberOverrideBands.length === 0) {
-    throw new Error('At least one custom team member tier is required');
+  if (isTeamAgent && body.teamRole === 'member' && teamMemberOverrideBands.length === 0) {
+    const sourceTiers =
+      (body.tiers || []).length > 0
+        ? (body.tiers as AgentTier[])
+        : getTeamDefaultTiers(body.teamGroup?.trim() || 'sgl');
+    teamMemberOverrideBands = sourceTiers.map((t, i) => ({
+      tierName: String(t.tierName || `Tier ${i + 1}`).trim(),
+      fromCompanyDollar: Number(t.fromCompanyDollar || 0),
+      toCompanyDollar:
+        (t as any).toCompanyDollar === null || (t as any).toCompanyDollar === undefined
+          ? null
+          : Number((t as any).toCompanyDollar),
+      memberPercent: Number((t as any).agentSplitPercent || 0),
+      notes: t.notes?.trim() || null,
+    }));
   }
 
   const referringAgentId = body.referringAgentId?.trim() || null;
