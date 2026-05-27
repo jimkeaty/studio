@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 export const maxDuration = 300; // 5 minutes
 
@@ -26,9 +27,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const allowedRoles = ['admin', 'broker', 'staff'];
-  const role = decoded.role || decoded.userRole || '';
-  if (!allowedRoles.includes(role)) {
+  const allowed = await isAdminLike(decoded.uid);
+  if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
