@@ -137,10 +137,14 @@ export async function GET(
     if (
       agentType === 'team' &&
       teamRole === 'member' &&
-      teamMemberCompMode === 'custom' &&
       teamMemberOverrideBands.length > 0 &&
       primaryTeamId
     ) {
+      // NOTE: teamMemberCompMode is intentionally NOT checked here.
+      // Any team member with saved override bands uses those bands as the source
+      // of truth — regardless of whether teamMemberCompMode is 'custom' or
+      // 'teamDefault'. This handles profiles saved before the fix that may have
+      // stale teamMemberCompMode values in Firestore.
       try {
         // Fetch the team plan to get the leader structure (for company split %)
         let companyPctForMember = 25; // safe fallback
