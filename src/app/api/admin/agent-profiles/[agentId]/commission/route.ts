@@ -78,6 +78,8 @@ export async function GET(
     const commissionMode: string = data.commissionMode || 'team_default';
     const primaryTeamId: string | null = data.primaryTeamId || null;
     const teamRole: string | null = data.teamRole || null;
+    const teamMemberCompMode: string = data.teamMemberCompMode || 'teamDefault';
+    const teamMemberOverrideBands: any[] = data.teamMemberOverrideBands || [];
 
     // ── 0. Flat commission plan — synthetic single-tier, no progression ────────
     // Applies to both independent agents with commissionMode='flat' AND team agents
@@ -111,6 +113,121 @@ export async function GET(
         cycleStart: null,
         cycleEnd: null,
       });
+    }
+
+    // ── 0a-MEMBER. Team member with custom override bands — HIGHEST PRIORITY ───────
+    // When a team member has teamMemberCompMode === 'custom' and saved
+    // teamMemberOverrideBands, those bands define their actual payout — exactly
+    // as the runtime resolver (teamTransactionResolver) uses them.
+    // We must use the same source here so the add/edit form preview matches.
+    if (
+      agentType === 'team' &&
+      teamRole === 'member' &&
+      teamMemberCompMode === 'custom' &&
+      teamMemberOverrideBands.length > 0 &&
+      primaryTeamId
+    ) {
+      try {
+        // Fetch the team plan to get the leader structure (for company split %)
+        let companyPctForMember = 25; // safe fallback
+        let leaderBandsForMember: any[] = [];
+        const teamSnapMember = await adminDb.collection('teams').doc(primaryTeamId).get();
+        if (teamSnapMember.exists) {
+          const teamDataMember = teamSnapMember.data() || {};
+          const teamPlanIdMember: string | null = teamDataMember.teamPlanId || null;
+          if (teamPlanIdMember) {
+            const planSnapMember = await adminDb.collection('teamPlans').doc(teamPlanIdMember).get();
+            if (planSnapMember.exists) {
+              const planDataMember = planSnapMember.data() || {};
+              leaderBandsForMember = planDataMember.leaderStructureBands || [];
+              if (leaderBandsForMember.length > 0) {
+                companyPctForMember = Number(leaderBandsForMember[0].companyPercent || 25);
+              }
+            }
+          }
+        }
+        // Build tiers from the member's custom override bands
+        const customMemberTiers = teamMemberOverrideBands.map((b: any, i: number) => ({
+          tierName: b.tierName || `Band ${i + 1}`,
+          fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+          toCompanyDollar:
+            b.toCompanyDollar === null || b.toCompanyDollar === undefined
+              ? null
+              : Number(b.toCompanyDollar),
+          agentSplitPercent: Number(b.memberPercent || 0),
+          companySplitPercent: companyPctForMember,
+          transactionFee: null,
+          capAmount: null,
+          notes: b.notes || '',
+        }));
+        // Build teamMemberLeaderSplit for the breakdown panel
+        const teamMemberLeaderSplitCustom =
+          leaderBandsForMember.length > 0
+            ? {
+                leaderStructureBands: leaderBandsForMember.map((b: any) => ({
+                  fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                  toCompanyDollar:
+                    b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                      ? null
+                      : Number(b.toCompanyDollar),
+                  leaderPercent: Number(b.leaderPercent || 0),
+                  companyPercent: Number(b.companyPercent || 0),
+                })),
+                memberDefaultBands: teamMemberOverrideBands.map((b: any) => ({
+                  fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                  toCompanyDollar:
+                    b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                      ? null
+                      : Number(b.toCompanyDollar),
+                  memberPercent: Number(b.memberPercent || 0),
+                })),
+              }
+            : null;
+        // Fetch YTD rollup for tier progression
+        let ytdCustom = 0;
+        let cycleStartCustom: string | null = null;
+        let cycleEndCustom: string | null = null;
+        try {
+          const today = new Date();
+          const anniversaryMonth = Number(data.anniversaryMonth ?? 0);
+          const anniversaryDay = Number(data.anniversaryDay ?? 0);
+          const currentCycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+          const rollupYear = currentCycle.cycleStart.getUTCFullYear();
+          const rollupSnapCustom = await adminDb
+            .collection('agentYearRollups')
+            .doc(`${agentId}_${rollupYear}`)
+            .get();
+          if (rollupSnapCustom.exists) {
+            const r = rollupSnapCustom.data() || {};
+            ytdCustom = Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
+            cycleStartCustom = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
+            cycleEndCustom = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
+          } else {
+            cycleStartCustom = currentCycle.cycleStart.toISOString().slice(0, 10);
+            cycleEndCustom = currentCycle.cycleEnd.toISOString().slice(0, 10);
+          }
+        } catch { /* non-fatal */ }
+        const defaultTransactionFeeMember =
+          data.defaultTransactionFee != null
+            ? Number(data.defaultTransactionFee)
+            : getTeamDefaultTransactionFee(teamGroup);
+        return NextResponse.json({
+          ok: true,
+          agentId,
+          agentType,
+          teamGroup,
+          commissionMode: 'custom',
+          tiersSource: 'team_member_override',
+          defaultTransactionFee: defaultTransactionFeeMember,
+          tiers: customMemberTiers,
+          teamMemberLeaderSplit: teamMemberLeaderSplitCustom,
+          ytdTierProgressionCompanyDollar: ytdCustom,
+          cycleStart: cycleStartCustom,
+          cycleEnd: cycleEndCustom,
+        });
+      } catch {
+        // Silently fall through to standard tier resolution
+      }
     }
 
     // ── 0a. Agent's own stored tiers — ALWAYS the source of truth ─────────────
