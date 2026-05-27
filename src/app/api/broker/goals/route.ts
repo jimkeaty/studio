@@ -38,14 +38,28 @@ async function canWriteSegment(uid: string, segment: string): Promise<boolean> {
     if (segment === `agent_${profileUid}`) return true;
   }
 
-  // Team leaders can write their team's segment
+  // Team leaders can write their team's segment AND agent_* goals for their own team members
   const profileSnap = profileBySlug.empty
-    ? await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get()
+    ? await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get()
     : profileBySlug;
   if (!profileSnap.empty) {
     const profile = profileSnap.docs[0].data();
+    // Write own team segment
     if (profile.teamRole === 'leader' && profile.primaryTeamId === segment) {
       return true;
+    }
+    // Write agent_* goals for team members on the same team
+    if (profile.teamRole === 'leader' && profile.primaryTeamId && segment.startsWith('agent_')) {
+      const targetUid = segment.replace('agent_', '');
+      // Check if target belongs to the same team (by firebaseUid or agentId)
+      const memberSnap = await adminDb.collection('agentProfiles')
+        .where('primaryTeamId', '==', profile.primaryTeamId)
+        .where('firebaseUid', '==', targetUid).limit(1).get();
+      if (!memberSnap.empty) return true;
+      const memberBySlug = await adminDb.collection('agentProfiles')
+        .where('primaryTeamId', '==', profile.primaryTeamId)
+        .where('agentId', '==', targetUid).limit(1).get();
+      if (!memberBySlug.empty) return true;
     }
   }
 

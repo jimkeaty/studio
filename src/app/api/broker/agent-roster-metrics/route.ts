@@ -129,13 +129,27 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    if (!(await isAdminLike(decoded.uid))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const isAdmin = await isAdminLike(decoded.uid);
+
+    // Allow team leaders to access their own team's data
+    let callerTeamId: string | null = null;
+    if (!isAdmin) {
+      // Check if caller is a team leader
+      const callerProfileSnap = await adminDb.collection('agentProfiles')
+        .where('firebaseUid', '==', decoded.uid).limit(1).get();
+      const callerProfile = callerProfileSnap.empty
+        ? (await adminDb.collection('agentProfiles').where('agentId', '==', decoded.uid).limit(1).get()).docs[0]?.data()
+        : callerProfileSnap.docs[0]?.data();
+      if (!callerProfile || callerProfile.teamRole !== 'leader' || !callerProfile.primaryTeamId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      callerTeamId = callerProfile.primaryTeamId as string;
     }
 
     const { searchParams } = new URL(req.url);
     const yearNum = Number(searchParams.get('year')) || new Date().getFullYear();
-    const teamFilter = searchParams.get('teamId') || null;
+    // Team leaders can only see their own team; admins can filter by any teamId
+    const teamFilter = callerTeamId ?? (searchParams.get('teamId') || null);
 
     // ── 1. Get all active agent profiles ──────────────────────────────────
     let profileQuery: FirebaseFirestore.Query = adminDb.collection('agentProfiles')

@@ -652,6 +652,125 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    // ── Team transactions list (team view only) ───────────────────────────
+    let teamTransactions: {
+      id: string;
+      agentId: string;
+      agentName: string;
+      address: string;
+      status: string;
+      dealValue: number;
+      agentNetCommission: number;
+      grossCommission: number;
+      closedDate: string | null;
+      contractDate: string | null;
+      transactionType: string | null;
+    }[] = [];
+
+    // ── Inactive member alerts (team view only) ───────────────────────────
+    let inactiveMemberAlerts: {
+      agentId: string;
+      agentName: string;
+      daysSinceLastActivity: number | null;
+      lastClosedDate: string | null;
+      closedCountThisYear: number;
+    }[] = [];
+
+    if (view === 'team' && isTeamLeader && teamId) {
+      // Build team transactions list from allAgentTx
+      const memberProfilesSnap3 = await adminDb.collection('agentProfiles')
+        .where('primaryTeamId', '==', teamId).get();
+      const memberNameMap3 = new Map<string, string>();
+      for (const d of memberProfilesSnap3.docs) {
+        const pd = d.data();
+        const name = pd.displayName ?? (pd.firstName ? `${pd.firstName} ${pd.lastName ?? ''}`.trim() : pd.agentId ?? d.id);
+        if (pd.agentId) memberNameMap3.set(pd.agentId as string, name);
+        memberNameMap3.set(d.id, name);
+        if (pd.firebaseUid) memberNameMap3.set(pd.firebaseUid as string, name);
+      }
+
+      // Filter to selected year (or all years)
+      const txForList = isAllYears
+        ? allAgentTx
+        : allAgentTx.filter(t => getTxYear(t) === year);
+
+      teamTransactions = txForList
+        .sort((a, b) => {
+          const da = parseDate(a.closedDate ?? a.contractDate);
+          const db2 = parseDate(b.closedDate ?? b.contractDate);
+          return (db2?.getTime() ?? 0) - (da?.getTime() ?? 0);
+        })
+        .map(t => {
+          const snap = t.splitSnapshot as any;
+          const raw = t as any;
+          const toStr = (v: any): string | null => {
+            if (!v) return null;
+            if (typeof v === 'string') return v;
+            if (v?.toDate) return v.toDate().toISOString();
+            return String(v);
+          };
+          return {
+            id: (raw.id ?? raw.docId ?? '') as string,
+            agentId: (t.agentId as string) ?? '',
+            agentName: memberNameMap3.get((t.agentId as string) ?? '') ?? (t.agentId as string) ?? '',
+            address: (raw.address ?? raw.propertyAddress ?? '') as string,
+            status: (t.status ?? '') as string,
+            dealValue: (t.dealValue ?? 0) as number,
+            agentNetCommission: (snap?.agentNetCommission ?? snap?.agentDollar ?? 0) as number,
+            grossCommission: (snap?.grossCommission ?? raw.commission ?? 0) as number,
+            closedDate: toStr(t.closedDate),
+            contractDate: toStr(t.contractDate),
+            transactionType: (raw.transactionType ?? null) as string | null,
+          };
+        });
+
+      // Inactive member alerts: members with no activity in the past 7 days
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      for (const d of memberProfilesSnap3.docs) {
+        const pd = d.data();
+        if (pd.teamRole === 'leader') continue; // skip the leader themselves
+        const agentKey = (pd.agentId as string) ?? d.id;
+        const agentName = memberNameMap3.get(agentKey) ?? agentKey;
+
+        // Find most recent closed/pending transaction for this member
+        const memberTx = allAgentTx.filter(t => t.agentId === agentKey || t.agentId === d.id);
+        const closedTxThisYear = memberTx.filter(t => t.status === 'closed' && getTxYear(t) === year);
+        const lastTx = memberTx
+          .filter(t => t.closedDate || t.contractDate)
+          .sort((a, b) => {
+            const da = parseDate(a.closedDate ?? a.contractDate);
+            const db2 = parseDate(b.closedDate ?? b.contractDate);
+            return (db2?.getTime() ?? 0) - (da?.getTime() ?? 0);
+          })[0];
+
+        const lastDate = lastTx ? parseDate(lastTx.closedDate ?? lastTx.contractDate) : null;
+        const daysSinceLastActivity = lastDate
+          ? Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
+          : null;
+
+        // Flag as inactive if no activity in 7+ days OR no transactions this year
+        const isInactive = !lastDate || lastDate < sevenDaysAgo;
+        if (isInactive) {
+          inactiveMemberAlerts.push({
+            agentId: agentKey,
+            agentName,
+            daysSinceLastActivity,
+            lastClosedDate: (() => { const v = lastTx?.closedDate ?? lastTx?.contractDate ?? null; if (!v) return null; if (typeof v === 'string') return v; if ((v as any)?.toDate) return (v as any).toDate().toISOString(); return String(v); })(),
+            closedCountThisYear: closedTxThisYear.length,
+          });
+        }
+      }
+
+      // Sort: no activity at all first, then by days since last activity descending
+      inactiveMemberAlerts.sort((a, b) => {
+        if (a.daysSinceLastActivity === null) return -1;
+        if (b.daysSinceLastActivity === null) return 1;
+        return b.daysSinceLastActivity - a.daysSinceLastActivity;
+      });
+    }
+
     // ── Response ──────────────────────────────────────────────────────────
     const isAdminCaller = await isAdminLike(decoded.uid);
     const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown, sideBreakdown };
@@ -739,6 +858,10 @@ export async function GET(req: NextRequest) {
       },
       // Team leader earnings breakdown (only present when view=team and caller is team leader)
       teamLeaderEarnings,
+      // Team transactions list (only present when view=team and caller is team leader)
+      teamTransactions: (view === 'team' && isTeamLeader) ? teamTransactions : undefined,
+      // Inactive member alerts (only present when view=team and caller is team leader)
+      inactiveMemberAlerts: (view === 'team' && isTeamLeader) ? inactiveMemberAlerts : undefined,
     });
   } catch (error: any) {
     console.error('[api/agent/command-metrics]', error);

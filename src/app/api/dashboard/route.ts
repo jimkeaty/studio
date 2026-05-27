@@ -155,11 +155,35 @@ export async function GET(req: NextRequest) {
 
     const decoded = await adminAuth.verifyIdToken(token);
 
-    // Allow admin to view any agent's dashboard via ?viewAs=agentId
+    // Allow admin (or team leader viewing own team members) to view another agent's dashboard via ?viewAs=agentId
     const reqParams = new URL(req.url).searchParams;
     const viewAs = reqParams.get('viewAs');
     const callerIsAdmin = await isAdminLike(decoded.uid);
-    const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
+
+    let uid = decoded.uid;
+    if (viewAs) {
+      if (callerIsAdmin) {
+        uid = viewAs;
+      } else {
+        // Check if caller is a team leader and viewAs target is on their team
+        try {
+          const callerProfileSnap = await adminDb.collection('agentProfiles')
+            .where('firebaseUid', '==', decoded.uid).limit(1).get();
+          const callerProfile = callerProfileSnap.empty ? null : callerProfileSnap.docs[0].data();
+          if (callerProfile?.teamRole === 'leader' && callerProfile?.primaryTeamId) {
+            const targetProfileSnap = await adminDb.collection('agentProfiles')
+              .where('primaryTeamId', '==', callerProfile.primaryTeamId)
+              .where('agentId', '==', viewAs).limit(1).get();
+            const targetByUid = targetProfileSnap.empty
+              ? await adminDb.collection('agentProfiles').where('primaryTeamId', '==', callerProfile.primaryTeamId).where('firebaseUid', '==', viewAs).limit(1).get()
+              : null;
+            if (!targetProfileSnap.empty || (targetByUid && !targetByUid.empty)) {
+              uid = viewAs; // team leader can view this team member
+            }
+          }
+        } catch { /* non-fatal — fall back to own uid */ }
+      }
+    }
 
     const year = parseYear(req);
     const yearNum = Number(year);

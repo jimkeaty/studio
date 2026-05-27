@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import type { ReactNode } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Header } from '@/components/dashboard/header';
@@ -63,9 +64,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { user } = useUser();
   const { isAdmin } = useIsAdminLike();
   const getToken = user ? () => user.getIdToken() : undefined;
+  // Detect team leader role so ImpersonationProvider can allow viewAs for team members
+  const [isTeamLeader, setIsTeamLeader] = React.useState(false);
+  React.useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then(token =>
+      fetch('/api/agent/command-metrics?view=personal&year=2025', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.agentView?.isTeamLeader) setIsTeamLeader(true); })
+        .catch(() => {})
+    ).catch(() => {});
+  }, [user]);
 
   return (
-    <ImpersonationProvider isAdmin={isAdmin} getToken={getToken}>
+    <ImpersonationProvider isAdmin={isAdmin} isTeamLeader={isTeamLeader} getToken={getToken}>
       <DashboardShell>{children}</DashboardShell>
     </ImpersonationProvider>
   );

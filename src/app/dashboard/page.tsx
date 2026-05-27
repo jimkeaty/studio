@@ -35,6 +35,7 @@ import {
   TrendingDown, Award, Star, Info, User, Building2,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
+import { TeamLeaderDashboard } from '@/components/dashboard/TeamLeaderDashboard';
 import { AppointmentsPipeline } from '@/components/dashboard/AppointmentsPipeline';
 import { AgentTransactionsSection } from '@/components/dashboard/AgentTransactionsSection';
 import { Badge } from '@/components/ui/badge';
@@ -788,6 +789,12 @@ function AgentDashboardPage() {
   const [perfLoading, setPerfLoading] = useState(true);
   const [perfError, setPerfError] = useState<string | null>(null);
 
+  // Team leader dashboard data (separate fetch for team view)
+  const [teamDashData, setTeamDashData] = useState<any | null>(null);
+  const [teamDashLoading, setTeamDashLoading] = useState(false);
+  const [teamDashError, setTeamDashError] = useState<string | null>(null);
+  const [teamDashYear, setTeamDashYear] = useState<number>(new Date().getFullYear());
+
   const year = new Date().getFullYear();
 
   // Load overview dashboard
@@ -858,6 +865,27 @@ function AgentDashboardPage() {
 
   useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
+  // Load team dashboard data (only when team view is active and user is a team leader)
+  const isTeamLeader = perfData?.agentView?.isTeamLeader ?? false;
+  useEffect(() => {
+    const load = async () => {
+      if (!user || !isTeamLeader || perfView !== 'team') return;
+      setTeamDashLoading(true);
+      setTeamDashError(null);
+      try {
+        const token = await user.getIdToken(true);
+        const params = new URLSearchParams({ year: String(teamDashYear), view: 'team' });
+        if (viewAs) params.set('viewAs', viewAs);
+        const res = await fetch(`/api/agent/command-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || `Request failed (${res.status})`); }
+        setTeamDashData(await res.json());
+      } catch (e: any) { setTeamDashError(e.message); }
+      finally { setTeamDashLoading(false); }
+    };
+    if (!userLoading && user && impersonationReady && !bootstrapPending) load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userLoading, impersonationReady, bootstrapPending, isTeamLeader, perfView, teamDashYear, viewAs]);
+
   if (userLoading) return <DashboardSkeleton />;
   if (!user) return <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Sign In Required</AlertTitle><AlertDescription>Please sign in.</AlertDescription></Alert>;
 
@@ -917,25 +945,42 @@ function AgentDashboardPage() {
       />
 
       {/* ════════════════════════════════════════════════════════════════════
+          TEAM LEADER DASHBOARD — shown instead of personal sections when
+          the agent is a team leader and has switched to Team view
+         ════════════════════════════════════════════════════════════════════ */}
+      {isTeamLeader && perfView === 'team' && (
+        <TeamLeaderDashboard
+          teamData={teamDashData}
+          teamLoading={teamDashLoading}
+          teamError={teamDashError}
+          year={teamDashYear}
+          setYear={setTeamDashYear}
+        />
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════
           2. TIER / CAP PROGRESS
          ════════════════════════════════════════════════════════════════════ */}
-      {!loading && dashboard && <TierProgressCard dashboard={dashboard} isAdmin={isAdmin} />}
+      {(!isTeamLeader || perfView !== 'team') && !loading && dashboard && <TierProgressCard dashboard={dashboard} isAdmin={isAdmin} />}
       {/* ════════════════════════════════════════════════════════════════════
           THIS WEEK SUMMARY
          ════════════════════════════════════════════════════════════════════ */}
-      {!loading && dashboard && <ThisWeekCard transactions={transactions} dashboard={dashboard} />}
+      {(!isTeamLeader || perfView !== 'team') && !loading && dashboard && <ThisWeekCard transactions={transactions} dashboard={dashboard} />}
 
       {/* ════════════════════════════════════════════════════════════════════
           3. REPORT CARD — Hero Grade Cards
          ════════════════════════════════════════════════════════════════════ */}
       {/* ═══ TODAY'S FOCUS CARD (Improvement #2) ═══════════════════ */}
-      {!loading && dashboard && <TodaysFocusCard dashboard={dashboard} />}
+      {(!isTeamLeader || perfView !== 'team') && !loading && dashboard && <TodaysFocusCard dashboard={dashboard} />}
 
-      {loading ? <DashboardSkeleton /> : error ? (
+      {(!isTeamLeader || perfView !== 'team') && loading && <DashboardSkeleton />}
+      {(!isTeamLeader || perfView !== 'team') && !loading && error && (
         <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>
-      ) : !dashboard ? (
+      )}
+      {(!isTeamLeader || perfView !== 'team') && !loading && !error && !dashboard && (
         <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>No Data</AlertTitle><AlertDescription>Dashboard data for {year} not found.</AlertDescription></Alert>
-      ) : (
+      )}
+      {(!isTeamLeader || perfView !== 'team') && !loading && !error && dashboard && (
         <>
           <ReportCardSection dashboard={dashboard} perfData={perfData} perfYear={perfYear} perfLoading={perfLoading} />
 

@@ -23,10 +23,12 @@ const ImpersonationContext = createContext<ImpersonationState>({
 export function ImpersonationProvider({
   children,
   isAdmin,
+  isTeamLeader,
   getToken,
 }: {
   children: ReactNode;
   isAdmin: boolean;
+  isTeamLeader?: boolean;
   getToken?: () => Promise<string>;
 }) {
   // Synchronously restore impersonation session from sessionStorage at mount time.
@@ -66,7 +68,7 @@ export function ImpersonationProvider({
   }, []);
   const startImpersonation = useCallback(
     (next: ImpersonatedAgent) => {
-      if (!isAdmin) return;
+      if (!isAdmin && !isTeamLeader) return;
       setAgent(next);
       try {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -86,7 +88,7 @@ export function ImpersonationProvider({
           .catch(() => {});
       }
     },
-    [isAdmin, getToken]
+    [isAdmin, isTeamLeader, getToken]
   );
   const stopImpersonation = useCallback(() => {
     const prev = agent;
