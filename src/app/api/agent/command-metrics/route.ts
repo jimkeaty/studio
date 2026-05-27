@@ -558,11 +558,37 @@ export async function GET(req: NextRequest) {
       const membersSnap2 = await adminDb.collection('agentProfiles')
         .where('primaryTeamId', '==', teamId).get();
       const memberNameMap = new Map<string, string>();
+      // Also build a map from agentId slug → leaderPercent from the team plan
+      // so we can compute leaderRetained when splitSnapshot.leaderRetainedAfterMember is missing.
+      let teamLeaderPct = 0;
+      let teamMemberPct = 0;
+      if (teamId) {
+        try {
+          const teamDocForPct = await adminDb.collection('teams').doc(teamId).get();
+          const teamPlanIdForPct = teamDocForPct.data()?.teamPlanId;
+          if (teamPlanIdForPct) {
+            const planDocForPct = await adminDb.collection('teamPlans').doc(teamPlanIdForPct).get();
+            const planDataForPct = planDocForPct.data() || {};
+            const leaderBandsForPct: any[] = planDataForPct.leaderStructureBands || [];
+            const memberBandsForPct: any[] = planDataForPct.memberDefaultBands || [];
+            // Use the first (lowest) band as the default fallback
+            if (leaderBandsForPct.length > 0) teamLeaderPct = Number(leaderBandsForPct[0].leaderPercent || 0);
+            if (memberBandsForPct.length > 0) teamMemberPct = Number(memberBandsForPct[0].memberPercent || 0);
+          }
+        } catch { /* non-fatal */ }
+      }
+
       for (const d of membersSnap2.docs) {
         const pd = d.data();
-        if (pd.agentId) memberNameMap.set(pd.agentId as string, pd.agentName ?? pd.agentId);
+        // displayName is the canonical name field on agentProfiles
+        const name = pd.displayName ?? pd.firstName
+          ? `${pd.firstName ?? ''} ${pd.lastName ?? ''}`.trim()
+          : pd.agentId ?? d.id;
+        if (pd.agentId) memberNameMap.set(pd.agentId as string, name);
         // Also map by Firebase UID (doc id) in case transactions are stored under UID
-        memberNameMap.set(d.id, pd.agentName ?? pd.agentId ?? d.id);
+        memberNameMap.set(d.id, name);
+        // Also map by firebaseUid field if present
+        if (pd.firebaseUid) memberNameMap.set(pd.firebaseUid as string, name);
       }
 
       const memberMap = new Map<string, MemberEarnings>();
@@ -575,9 +601,21 @@ export async function GET(req: NextRequest) {
 
         const snap = t.splitSnapshot as any;
         const gci = snap?.grossCommission ?? t.commission ?? 0;
-        // leaderRetainedAfterMember is stored by the resolver for team-member transactions
-        const leaderRetained = snap?.leaderRetainedAfterMember ?? 0;
-        const memberPaid = snap?.agentNetCommission ?? snap?.memberPaid ?? (gci - leaderRetained);
+        // leaderRetainedAfterMember is stored by the resolver for team-member transactions.
+        // If missing (e.g. older/imported transactions), fall back to calculating it from
+        // the team plan percentages: leaderSide = GCI × leaderPct; leaderRetained = leaderSide - memberPaid
+        const memberPaid = snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? 0;
+        let leaderRetained: number;
+        if (snap?.leaderRetainedAfterMember != null) {
+          leaderRetained = snap.leaderRetainedAfterMember;
+        } else if (gci > 0 && teamLeaderPct > 0 && teamMemberPct > 0) {
+          // Fallback: estimate from team plan bands
+          const leaderSide = gci * (teamLeaderPct / 100);
+          const estimatedMemberPaid = memberPaid > 0 ? memberPaid : gci * (teamMemberPct / 100);
+          leaderRetained = Math.max(0, leaderSide - estimatedMemberPaid);
+        } else {
+          leaderRetained = 0;
+        }
         const dealValue = t.dealValue ?? 0;
         const agentKey = (t.agentId as string) || 'unknown';
         const agentName = memberNameMap.get(agentKey) ?? agentKey;
