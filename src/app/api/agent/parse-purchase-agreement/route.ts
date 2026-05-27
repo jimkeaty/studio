@@ -128,15 +128,29 @@ Return this exact JSON shape:
 This is a Louisiana LREC Residential Agreement to Buy and Sell. Dates are NOT written explicitly in the contract — they are CALCULATED from the Under Contract Date using the rules below.
 
 1. UNDER CONTRACT DATE (= contractDate):
-   - This is the date of the LAST signature on the purchase agreement OR the counter offer (whichever is most recent).
-   - In the LREC form, the signature blocks are on pages 10–11 of the agreement (contract lines 426–457).
-   - The FIRST signature block (lines 426–431) is the OFFER block — the buyer signs here first with a date/time.
-   - The SECOND signature block (lines 447–457, labeled "This offer is: Accepted / Rejected / Countered") is the ACCEPTANCE block — the seller (or buyer on a counter) signs here with a date/time.
+
+   STEP 1 — Check the disposition checkbox at contract line 445 (labeled "This offer is:").
+   This checkbox will show one of three states:
+     ☑ Accepted  → proceed to STEP 2A (use purchase agreement acceptance date)
+     ☑ Rejected  → the contract was not accepted; leave contractDate as "" and set confidence to 0.0
+     ☑ Countered → proceed to STEP 2B (ignore purchase agreement signature dates; use counter offer instead)
+   If the checkbox is illegible or unclear, proceed to STEP 2A but set confidence to 0.3.
+
+   STEP 2A — "Accepted" path (no counter offer):
    - The contractDate is the date/time written next to the LAST signature in the ACCEPTANCE block (lines 447–457).
-   - If a COUNTER OFFER document is attached, look for the most recent signature date on the counter offer — that supersedes the main agreement signature date.
+   - Look for the seller's (or accepting party's) signature date on lines 447–457.
    - DO NOT use the date printed at the top of page 1 (the "DATE" field next to the property address) — that is the offer preparation date, not the acceptance date.
-   - DO NOT use today's date or the upload date. Only use dates actually written next to signatures.
-   - If no acceptance signature date is found, leave contractDate as "" and set confidence to 0.0.
+   - DO NOT use today's date or the upload date. Only use dates actually written next to signatures in this block.
+   - If no acceptance signature date is found in this block, leave contractDate as "" and set confidence to 0.0.
+
+   STEP 2B — "Countered" path (counter offer is attached):
+   - IGNORE all signature dates on the main purchase agreement entirely.
+   - Look for a separate COUNTER OFFER document attached to this upload (it may be labeled "Counter Offer", "Counter Proposal", or similar).
+   - The counter offer will have its own signature blocks — typically one block for the party making the counter and one block for the party accepting it.
+   - The contractDate is the date written next to the LAST acceptance signature on the counter offer (the signature of the party who accepted the counter, not the party who issued it).
+   - If there are MULTIPLE counter offers (Counter #1, Counter #2, etc.), use the most recent accepted counter offer's last signature date.
+   - If the counter offer is attached but has no acceptance signature date visible, leave contractDate as "" and set confidence to 0.0.
+   - If you are uncertain which signature is the acceptance signature on the counter offer, leave contractDate as "" rather than guessing.
 
 2. LOAN APPLICATION DEADLINE (= loanApplicationDeadline):
    - Found in the Financing section: "written authorization to lender to proceed with the loan approval process within __ calendar days after the date of acceptance."
