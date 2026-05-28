@@ -33,7 +33,7 @@ function serializeFirestore(val: any): any {
  * This function tries both the raw uid AND the slug from the agentProfile so we
  * always find the right transactions regardless of which path created them.
  */
-async function resolveQueryIds(uid: string): Promise<string[]> {
+async function resolveQueryIds(uid: string, email?: string): Promise<string[]> {
   const ids = new Set<string>([uid]);
   try {
     // Strategy 1: uid IS the agentProfile doc ID
@@ -99,8 +99,33 @@ async function resolveQueryIds(uid: string): Promise<string[]> {
         ids.add(profileDoc.id); // slug
         const data = profileDoc.data() || {};
         if (data.agentId) ids.add(String(data.agentId));
+        // Stamp firebaseUid if missing
+        if (!data.firebaseUid) {
+          try { await adminDb.collection('agentProfiles').doc(profileDoc.id).update({ firebaseUid: uid }); } catch { /* non-fatal */ }
+        }
       }
     } catch { /* non-fatal */ }
+    // Strategy 5: look up agentProfile by email — the most reliable cross-reference
+    // when the Firebase Auth UID doesn't match the agentProfiles doc ID.
+    if (email) {
+      try {
+        const byEmail = await adminDb.collection('agentProfiles')
+          .where('email', '==', email)
+          .limit(1)
+          .get();
+        if (!byEmail.empty) {
+          const profileDoc = byEmail.docs[0];
+          ids.add(profileDoc.id); // profile doc ID (may be old UID or slug)
+          const data = profileDoc.data() || {};
+          if (data.agentId) ids.add(String(data.agentId));
+          // Stamp firebaseUid on the profile so future logins use Strategy 4 (faster)
+          if (!data.firebaseUid || data.firebaseUid !== uid) {
+            try { await adminDb.collection('agentProfiles').doc(profileDoc.id).update({ firebaseUid: uid }); } catch { /* non-fatal */ }
+          }
+          console.log(`[api/agent/pipeline] Strategy 5 matched profile ${profileDoc.id} via email ${email}`);
+        }
+      } catch { /* non-fatal */ }
+    }
   } catch (err: any) {
     console.warn('[api/agent/pipeline] resolveQueryIds failed:', err.message);
   }
@@ -122,8 +147,8 @@ export async function GET(req: NextRequest) {
     const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
 
-    // Resolve all possible agentId values for this agent (slug + Firebase UID)
-    const agentIds = await resolveQueryIds(uid);
+    // Resolve all possible agentId values for this agent (slug + Firebase UID + email)
+    const agentIds = await resolveQueryIds(uid, decoded.email);
 
     // Strip commission split fields for non-admin callers.
     // Agents only see their net income; all gross commission, broker retained,
