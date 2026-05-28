@@ -133,6 +133,7 @@ type AgentCommissionData = {
     leaderStructureBands: TeamMemberLeaderSplitBand[];
     memberDefaultBands: TeamMemberBand[];
   } | null;
+  ytdTierProgressionGci?: number;
   ytdTierProgressionCompanyDollar?: number;
   cycleStart?: string | null;
   cycleEnd?: string | null;
@@ -888,7 +889,7 @@ export default function AddTransactionPage() {
     if (!agentCommission || commissionManualOverride.current) return;
     const gci = Number(watchedGCI) || 0;
     if (gci <= 0) { setActiveTier(null); return; }
-    const ytd = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+    const ytd = agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0;
     const tierLookupAmount = ytd > 0 ? ytd : gci;
     const tier = findActiveTier(agentCommission.tiers, tierLookupAmount);
     setActiveTier(tier);
@@ -3044,7 +3045,7 @@ export default function AddTransactionPage() {
                         commissionManualOverride.current = false;
                         const gci = Number(form.getValues('gci')) || 0;
                         if (gci > 0 && agentCommission) {
-                          const ytd2 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+                          const ytd2 = agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0;
                           const tierLookup2 = ytd2 > 0 ? ytd2 : gci;
                           const tier = findActiveTier(agentCommission.tiers, tierLookup2);
                           setActiveTier(tier);

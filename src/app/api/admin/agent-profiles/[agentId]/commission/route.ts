@@ -727,6 +727,7 @@ export async function GET(
     // Strategy: the rollup for year Y stores the cycle that started in year Y.
     // Today's cycle starts in either this calendar year or last calendar year.
     // We check both rollups and pick the one whose cycleStart/cycleEnd contains today.
+    let ytdTierProgressionGci = 0;
     let ytdTierProgressionCompanyDollar = 0;
     let cycleStart: string | null = null;
     let cycleEnd: string | null = null;
@@ -744,8 +745,7 @@ export async function GET(
         .get();
       if (rollupSnap.exists) {
         const r = rollupSnap.data() || {};
-        // Use tierProgressionCompanyDollar if available (anniversary-cycle filtered),
-        // otherwise fall back to companyDollar (calendar-year total)
+        ytdTierProgressionGci = Number(r.tierProgressionGci ?? r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
         ytdTierProgressionCompanyDollar = Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
         cycleStart = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
         cycleEnd = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
@@ -758,9 +758,9 @@ export async function GET(
           .get();
         if (prevRollupSnap.exists) {
           const rp = prevRollupSnap.data() || {};
-          // Only use the previous year's rollup if today falls within its cycle window
           const prevCycleEnd = rp.cycleEnd ? new Date(rp.cycleEnd) : null;
           if (prevCycleEnd && today <= prevCycleEnd) {
+            ytdTierProgressionGci = Number(rp.tierProgressionGci ?? rp.tierProgressionCompanyDollar ?? rp.companyDollar ?? 0);
             ytdTierProgressionCompanyDollar = Number(rp.tierProgressionCompanyDollar ?? rp.companyDollar ?? 0);
             cycleStart = String(rp.cycleStart || '');
             cycleEnd = String(rp.cycleEnd || '');
@@ -785,6 +785,7 @@ export async function GET(
       defaultTransactionFee,
       tiers,
       teamMemberLeaderSplit,
+      ytdTierProgressionGci,
       ytdTierProgressionCompanyDollar,
       cycleStart,
       cycleEnd,

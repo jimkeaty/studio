@@ -151,7 +151,11 @@ export async function rebuildAgentRollup(
   let companyDollar = 0;
 
   // Anniversary-cycle stats (tier progression)
-  let tierProgressionCompanyDollar = 0;
+  // tierProgressionGci = total GCI earned within the anniversary cycle.
+  // This is compared against the GCI-based tier thresholds (fromCompanyDollar
+  // field, which despite its name stores GCI thresholds as entered by admin).
+  let tierProgressionGci = 0;
+  let tierProgressionCompanyDollar = 0; // kept for backward compat
 
   for (const doc of snap.docs) {
     const t = doc.data() as any;
@@ -227,7 +231,9 @@ export async function rebuildAgentRollup(
     if (status === 'closed') {
       const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
       if (txDateUtc && isInCycle(txDateUtc, cycle)) {
+        const personalGci = num(activeSplitSnapshot?.grossCommission ?? t.commission ?? 0);
         const personalCompanyDollar = num(activeSplitSnapshot?.companyRetained ?? 0);
+        tierProgressionGci += personalGci;
         tierProgressionCompanyDollar += personalCompanyDollar;
       }
     }
@@ -274,6 +280,7 @@ export async function rebuildAgentRollup(
       if (status === 'closed') {
         const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
         if (txDateUtc && isInCycle(txDateUtc, cycle)) {
+          tierProgressionGci += num(coSplitSnapshot?.grossCommission ?? 0);
           tierProgressionCompanyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
         }
       }
@@ -303,11 +310,20 @@ export async function rebuildAgentRollup(
       const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
       if (!txDateUtc || !isInCycle(txDateUtc, cycle)) continue;
 
-      // Use progressionCompanyDollarCredit if available; fall back to commission
-      const credit = num(
-        t.creditSnapshot?.progressionCompanyDollarCredit ?? t.commission
+      // Use GCI credit for tier progression (gross commission the member generated).
+      // progressionGciCredit is the preferred field; fall back to grossCommission
+      // from the member's splitSnapshot, then to the raw commission field.
+      const gciCredit = num(
+        t.creditSnapshot?.progressionGciCredit ??
+        t.splitSnapshot?.grossCommission ??
+        t.commission ?? 0
       );
-      tierProgressionCompanyDollar += credit;
+      const companyCredit = num(
+        t.creditSnapshot?.progressionCompanyDollarCredit ??
+        t.splitSnapshot?.companyRetained ?? 0
+      );
+      tierProgressionGci += gciCredit;
+      tierProgressionCompanyDollar += companyCredit;
     }
   } catch {
     // Non-fatal: Firestore composite index may not exist yet.
@@ -345,8 +361,9 @@ export async function rebuildAgentRollup(
     companyDollar,
 
     // Anniversary-cycle tier progression stats
-    // For non-team-leader agents: equals personal companyDollar within the cycle.
-    // For team leaders: includes team member production credits within the cycle.
+    // tierProgressionGci = total GCI within the cycle (used for tier threshold comparison).
+    // tierProgressionCompanyDollar = broker's retained dollar within the cycle (kept for compat).
+    tierProgressionGci,
     tierProgressionCompanyDollar,
     // Store the cycle boundaries so the commission API and dashboard can display them
     cycleStart: cycle.cycleStart.toISOString().slice(0, 10),
