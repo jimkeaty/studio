@@ -219,7 +219,10 @@ async function getAgentYtdCompanyDollar(
       .get();
     if (!rollupSnap.exists) return 0;
     const r = rollupSnap.data() || {};
-    return Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
+    // Use tierProgressionGci (total GCI within the anniversary cycle) for tier lookup.
+    // Tier thresholds (fromCompanyDollar field) store GCI-based values as entered by admin.
+    // Fall back to tierProgressionCompanyDollar then companyDollar for old rollup docs.
+    return Number(r.tierProgressionGci ?? r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
   } catch {
     return 0; // non-fatal — fall back to 0 (first-tier behaviour)
   }
