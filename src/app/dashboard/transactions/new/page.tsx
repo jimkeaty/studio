@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
+import { useIsStaff } from '@/hooks/useIsStaff';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -233,7 +234,7 @@ const schema = z.object({
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5, 'Full property address is required'),
-  clientName: z.string().min(1, 'Client name is required'),
+  clientName: z.string().optional(),  // Populated from Buyer/Seller section; not shown in Property Details
   dealSource: z.string().optional(),
 
   // Financial
@@ -721,6 +722,10 @@ export default function AddTransactionPage() {
 
   const { isAdmin: isAdminUser } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
+  // TC users (role === 'tc') get the same full commission view as admins
+  const { role: staffRole } = useIsStaff();
+  const isTC = !isAdmin && staffRole === 'tc';
+  const isAdminOrTC = isAdmin || isTC;
 
   const typeParam = urlSearchParams?.get('type');
   const initialClosingType = typeParam === 'listing' ? 'listing' : 'buyer';
@@ -1480,27 +1485,7 @@ export default function AddTransactionPage() {
             )} />
 
             <Grid2>
-              <FormField control={form.control} name="clientName" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client Name <span className="text-destructive">*</span></FormLabel>
-                  <FormControl>
-                    <ContactAutocomplete
-                      type="client"
-                      placeholder="Start typing to search saved contacts…"
-                      value={field.value || ''}
-                      onChange={field.onChange}
-                      onSelect={(c: SavedContact) => {
-                        form.setValue('clientName', c.name || '');
-                        if (c.email) form.setValue('clientEmail', c.email);
-                        if (c.phone) form.setValue('clientPhone', c.phone);
-                        if (c.newAddress) form.setValue('clientNewAddress', c.newAddress);
-                      }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
+              {/* Client Name removed — use Buyer/Seller Information section below */}
               <FormField control={form.control} name="dealSource" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Lead Source</FormLabel>
@@ -1514,22 +1499,7 @@ export default function AddTransactionPage() {
                 </FormItem>
               )} />
             </Grid2>
-            {/* Client contact details */}
-            <Grid2>
-              <FormField control={form.control} name="clientEmail" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client Email</FormLabel>
-                  <FormControl><Input type="email" placeholder="client@email.com" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="clientPhone" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client Phone</FormLabel>
-                  <FormControl><Input type="tel" placeholder="(337) 555-1234" {...field} /></FormControl>
-                </FormItem>
-              )} />
-            </Grid2>
+            {/* Client email/phone removed — captured in Buyer/Seller Information section below */}
             {/* TC Working File */}
             <FormField control={form.control} name="tcWorking" render={({ field }) => (
               <FormItem>
@@ -2921,32 +2891,66 @@ export default function AddTransactionPage() {
               </div>
             </div>
 
-            {/* Agent view: Agent Net $ only (read-only) — GCI, Broker %, Broker GCI, Agent % are hidden from agents */}
-            {!isAdmin && (
+            {/* Agent view: Estimated earnings bar — shows split % and take-home; hides GCI and broker details */}
+            {!isAdminOrTC && (
               <>
                 <Separator />
-                <div className="max-w-xs">
-                  <FormField control={form.control} name="agentDollar" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Agent Net $</FormLabel>
-                      <FormControl>
-                        <CurrencyInput
-                          value={field.value as any}
-                          onChange={(val) => field.onChange(val)}
-                          placeholder="Auto-calculated"
-                          readOnly
-                          className="bg-background cursor-default"
-                        />
-                      </FormControl>
-                      <FormDescription>Calculated from your commission profile and tier.</FormDescription>
-                    </FormItem>
-                  )} />
-                </div>
+                {(() => {
+                  const agentDollar = Number(form.watch('agentDollar')) || 0;
+                  const gci = Number(form.watch('gci')) || 0;
+                  const watchedTxCompFee = form.watch('txComplianceFee');
+                  const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
+                  const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
+                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
+                  const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
+                  const agentNet = agentDollar - feeDeduction;
+                  const splitPct = gci > 0 ? Math.round((agentDollar / gci) * 100) : (activeTier?.agentSplitPercent ?? 0);
+                  const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
+                  const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+                  if (agentDollar <= 0 && !activeTier) return (
+                    <div className="max-w-xs">
+                      <FormField control={form.control} name="agentDollar" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Agent Net $</FormLabel>
+                          <FormControl>
+                            <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="Auto-calculated" readOnly className="bg-background cursor-default" />
+                          </FormControl>
+                          <FormDescription>Calculated from your commission profile and tier.</FormDescription>
+                        </FormItem>
+                      )} />
+                    </div>
+                  );
+                  return (
+                    <div className="mt-2 rounded-xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 dark:border-green-700 p-4">
+                      <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-3">💰 Your Estimated Earnings on This Deal</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground mb-0.5">Your Split ({splitPct}%)</p>
+                          <p className="text-lg font-black text-foreground">{fmt(agentDollar)}</p>
+                        </div>
+                        <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
+                          <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
+                          <p className="text-xl font-black text-green-700 dark:text-green-300">{fmtExact(agentNet)}</p>
+                        </div>
+                      </div>
+                      {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
+                        <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
+                          <p className="text-xs text-muted-foreground">Transaction Fee</p>
+                          {agentPaysFee ? (
+                            <p className="text-sm font-bold text-red-600">-{fmt(watchedTxCompFeeAmt)} deducted from your commission</p>
+                          ) : (
+                            <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)} — not deducted from your commission</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </>
             )}
 
-            {/* Admin: GCI & Commission % */}
-            {isAdmin && (
+            {/* Admin + TC: GCI & Commission % */}
+            {isAdminOrTC && (
               <>
                 <Separator />
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
@@ -2984,8 +2988,8 @@ export default function AddTransactionPage() {
               </>
             )}
 
-            {/* Commission Split (Admin) */}
-            {isAdmin && (
+            {/* Commission Split (Admin + TC) */}
+            {isAdminOrTC && (
               <>
                 <Separator />
                 {agentCommission && (
@@ -3162,8 +3166,8 @@ export default function AddTransactionPage() {
                       {isTeamMemberWithLeader ? (
                         // ── Two-step team member breakdown ────────────────────────────────────
                         <>
-                          {isAdmin ? (
-                            // Admin sees full breakdown: GCI, broker cut, leader split, agent net
+                          {isAdminOrTC ? (
+                            // Admin/TC sees full breakdown: GCI, broker cut, leader split, agent net
                             <>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <div className="text-center">
@@ -3238,8 +3242,8 @@ export default function AddTransactionPage() {
                         // ── Standard single-step breakdown ──────────────────────────────────
                         <>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {/* Gross Commission — admin only */}
-                            {isAdmin && (
+                            {/* Gross Commission — admin and TC only */}
+                            {isAdminOrTC && (
                               <div className="text-center">
                                 <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
                                 <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
