@@ -734,7 +734,11 @@ export async function GET(req: NextRequest) {
     let resolvedPlanName: string | null = null;
 
     // 1) Try individual tiers from profile (defaultPlanType === 'individual')
-    if (Array.isArray(agentProfile?.tiers) && agentProfile.tiers.length > 0) {
+    // IMPORTANT: Skip this step for team members/leaders — their tiers come from the
+    // team plan (Step 3). Legacy profiles may have a stale `tiers` array left over
+    // from before the agent was added to a team; that array must NOT override the team plan.
+    const isTeamAgent = !!(agentProfile?.primaryTeamId && agentProfile?.teamRole);
+    if (!isTeamAgent && Array.isArray(agentProfile?.tiers) && agentProfile.tiers.length > 0) {
       resolvedTiers = agentProfile.tiers.map((t: any, i: number) => ({
         tierName: t.tierName || `Tier ${i + 1}`,
         fromCompanyDollar: asNumber(t.fromCompanyDollar),
