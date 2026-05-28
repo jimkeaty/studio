@@ -59,6 +59,42 @@ async function resolveQueryIds(uid: string): Promise<string[]> {
         } catch { /* non-fatal */ }
       }
     }
+    // Strategy 3: users/{uid} has an agentId field (set by the admin link-agent route)
+    // This is the primary link for agents who log in with their own Firebase account.
+    try {
+      const userDoc = await adminDb.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data() || {};
+        const linkedAgentId = userData.agentId ? String(userData.agentId) : null;
+        if (linkedAgentId) {
+          ids.add(linkedAgentId);
+          // Also add the agentProfile doc ID (slug) if it differs from linkedAgentId
+          const profileSnap = await adminDb.collection('agentProfiles').doc(linkedAgentId).get();
+          if (profileSnap.exists) {
+            ids.add(linkedAgentId); // already added, but also stamp firebaseUid
+            const existingUid = profileSnap.data()?.firebaseUid;
+            if (!existingUid) {
+              try {
+                await adminDb.collection('agentProfiles').doc(linkedAgentId).update({ firebaseUid: uid });
+              } catch { /* non-fatal */ }
+            }
+          }
+        }
+      }
+    } catch { /* non-fatal */ }
+    // Strategy 4: agentProfile has firebaseUid field matching uid
+    try {
+      const byFirebaseUid = await adminDb.collection('agentProfiles')
+        .where('firebaseUid', '==', uid)
+        .limit(1)
+        .get();
+      if (!byFirebaseUid.empty) {
+        const profileDoc = byFirebaseUid.docs[0];
+        ids.add(profileDoc.id); // slug
+        const data = profileDoc.data() || {};
+        if (data.agentId) ids.add(String(data.agentId));
+      }
+    } catch { /* non-fatal */ }
   } catch (err: any) {
     console.warn('[api/agent/pipeline] resolveQueryIds failed:', err.message);
   }
