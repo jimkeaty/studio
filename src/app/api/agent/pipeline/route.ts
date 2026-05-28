@@ -36,11 +36,17 @@ function serializeFirestore(val: any): any {
 async function resolveQueryIds(uid: string): Promise<string[]> {
   const ids = new Set<string>([uid]);
   try {
-    // Strategy 1: uid IS the agentProfile doc ID (slug)
+    // Strategy 1: uid IS the agentProfile doc ID
+    // Always add both the doc ID AND the agentId field value.
     const byDocId = await adminDb.collection('agentProfiles').doc(uid).get();
     if (byDocId.exists) {
       const data = byDocId.data() || {};
+      ids.add(uid); // doc ID itself (already in set, but explicit)
       if (data.agentId) ids.add(String(data.agentId));
+      // Also stamp firebaseUid if missing so Strategy 4 works on next call
+      if (!data.firebaseUid) {
+        try { await adminDb.collection('agentProfiles').doc(uid).update({ firebaseUid: uid }); } catch { /* non-fatal */ }
+      }
     }
     // Strategy 2: agentProfile has a field agentId matching uid
     const byField = await adminDb.collection('agentProfiles')
