@@ -316,3 +316,45 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     });
   }
 }
+
+export async function DELETE(req: NextRequest, context: RouteContext) {
+  try {
+    await requireAdmin(req);
+    const { teamPlanId } = await context.params;
+
+    const ref = adminDb.collection('teamPlans').doc(teamPlanId);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      return jsonError(404, 'Team plan not found', { teamPlanId });
+    }
+
+    // Safety check: block deletion if any active team is currently using this plan
+    const teamsUsing = await adminDb
+      .collection('teams')
+      .where('teamPlanId', '==', teamPlanId)
+      .limit(5)
+      .get();
+
+    if (!teamsUsing.empty) {
+      const teamNames = teamsUsing.docs.map((d) => d.data().teamName || d.id).join(', ');
+      return jsonError(409, `Cannot delete: this plan is currently used by team(s): ${teamNames}. Reassign the team to a different plan first.`);
+    }
+
+    await ref.delete();
+
+    return NextResponse.json({ ok: true, deleted: teamPlanId });
+  } catch (err: any) {
+    if (err?.message === 'UNAUTHORIZED') {
+      return jsonError(401, 'Unauthorized: Missing token');
+    }
+    if (err?.message === 'FORBIDDEN') {
+      return jsonError(403, 'Forbidden: This action is restricted to administrators.');
+    }
+
+    console.error('[API/admin/team-plans/[teamPlanId]][DELETE] Error:', err?.message || err);
+    return jsonError(500, 'Internal Server Error', {
+      message: err?.message || String(err),
+    });
+  }
+}

@@ -73,6 +73,10 @@ export default function TeamPlansList() {
   const [teamPlans, setTeamPlans] = useState<TeamPlanRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -107,6 +111,7 @@ export default function TeamPlansList() {
 
         if (!isMounted) return;
         setTeamPlans(Array.isArray(result.teamPlans) ? result.teamPlans : []);
+        setAuthToken(token);
       } catch (err: any) {
         if (!isMounted) return;
         setErrorMessage(err?.message || 'Failed to load team plans.');
@@ -122,6 +127,28 @@ export default function TeamPlansList() {
       unsubscribe();
     };
   }, []);
+
+  async function handleDelete(teamPlanId: string) {
+    if (!authToken) return;
+    setDeletingId(teamPlanId);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/admin/team-plans/${teamPlanId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Failed to delete team plan.');
+      }
+      setTeamPlans((prev) => prev.filter((p) => p.teamPlanId !== teamPlanId));
+      setConfirmDeleteId(null);
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete team plan.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const leaderlessCount = teamPlans.filter((p) => p.structureType === 'no_leader').length;
   const notSetCount = teamPlans.filter((p) => !p.structureType).length;
@@ -281,12 +308,44 @@ export default function TeamPlansList() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <Link
-                            href={`/dashboard/admin/team-plans/${teamPlan.teamPlanId}`}
-                            className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-                          >
-                            Edit
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/dashboard/admin/team-plans/${teamPlan.teamPlanId}`}
+                              className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                            >
+                              Edit
+                            </Link>
+                            {confirmDeleteId === teamPlan.teamPlanId ? (
+                              <span className="flex items-center gap-1">
+                                <span className="text-xs text-gray-600">Delete?</span>
+                                <button
+                                  onClick={() => handleDelete(teamPlan.teamPlanId)}
+                                  disabled={deletingId === teamPlan.teamPlanId}
+                                  className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                >
+                                  {deletingId === teamPlan.teamPlanId ? 'Deleting...' : 'Yes, Delete'}
+                                </button>
+                                <button
+                                  onClick={() => { setConfirmDeleteId(null); setDeleteError(null); }}
+                                  className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                                >
+                                  Cancel
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => { setConfirmDeleteId(teamPlan.teamPlanId); setDeleteError(null); }}
+                                disabled={!!(teamPlan._usedByTeams && teamPlan._usedByTeams.length > 0)}
+                                title={teamPlan._usedByTeams && teamPlan._usedByTeams.length > 0 ? 'Cannot delete: plan is in use by a team' : 'Delete this plan'}
+                                className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                          {confirmDeleteId === teamPlan.teamPlanId && deleteError && (
+                            <p className="mt-1 text-xs text-red-600">{deleteError}</p>
+                          )}
                         </td>
                       </tr>
                     );
