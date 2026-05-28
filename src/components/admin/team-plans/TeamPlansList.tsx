@@ -16,6 +16,9 @@ type TeamPlanRow = {
   thresholdMetric?: string;
   memberDefaultBands?: unknown[];
   leaderStructureBands?: unknown[];
+  _usedByTeams?: { teamId: string; teamName: string; teamStatus: string }[];
+  _totalAgents?: number;
+  _isDuplicate?: boolean;
 };
 
 function StatusBadge({ status }: { status?: string }) {
@@ -194,6 +197,8 @@ export default function TeamPlansList() {
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Plan Name</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Team ID</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700">Used By Team</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700">Agents</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Team Structure</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Commission Model</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Bands</th>
@@ -222,15 +227,43 @@ export default function TeamPlansList() {
                     const isLeaderless = teamPlan.structureType === 'no_leader';
 
                     return (
-                      <tr key={teamPlan.teamPlanId} className="border-t hover:bg-gray-50">
+                      <tr key={teamPlan.teamPlanId} className={`border-t hover:bg-gray-50 ${teamPlan._isDuplicate ? 'bg-amber-50' : ''}`}>
                         <td className="px-4 py-3 font-medium">
-                          {teamPlan.planName || teamPlan.teamPlanId}
+                          <div className="flex items-center gap-2">
+                            {teamPlan.planName || teamPlan.teamPlanId}
+                            {teamPlan._isDuplicate && (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                ⚠ Duplicate
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs font-mono">
                           {teamPlan.teamId || '—'}
                         </td>
                         <td className="px-4 py-3">
                           <StatusBadge status={teamPlan.status} />
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {teamPlan._usedByTeams && teamPlan._usedByTeams.length > 0 ? (
+                            <div className="space-y-1">
+                              {teamPlan._usedByTeams.map((t) => (
+                                <div key={t.teamId} className="flex items-center gap-1">
+                                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${t.teamStatus === 'active' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                  <span className="font-medium text-gray-800">{t.teamName}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 italic">Not used by any team</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-700">
+                          {teamPlan._usedByTeams && teamPlan._usedByTeams.length > 0 ? (
+                            <span className="font-semibold">{teamPlan._totalAgents ?? 0}</span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <StructureBadge structureType={teamPlan.structureType} />

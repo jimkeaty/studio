@@ -232,18 +232,61 @@ export async function GET(req: NextRequest) {
   try {
     await requireAdmin(req);
 
-    const snap = await adminDb
-      .collection('teamPlans')
-      .orderBy('planName', 'asc')
-      .limit(500)
-      .get();
+    const [plansSnap, teamsSnap, membershipsSnap] = await Promise.all([
+      adminDb.collection('teamPlans').orderBy('planName', 'asc').limit(500).get(),
+      adminDb.collection('teams').limit(500).get(),
+      adminDb.collection('teamMemberships').where('activeFlag', '==', true).limit(2000).get(),
+    ]);
 
-    const teamPlans = snap.docs.map((doc) => doc.data());
+    const teamPlans = plansSnap.docs.map((doc) => doc.data());
+
+    // Build lookup: teamPlanId → team(s) that reference it
+    const teamsByPlanId: Record<string, { teamId: string; teamName: string; teamStatus: string }[]> = {};
+    for (const doc of teamsSnap.docs) {
+      const t = doc.data();
+      if (t.teamPlanId) {
+        if (!teamsByPlanId[t.teamPlanId]) teamsByPlanId[t.teamPlanId] = [];
+        teamsByPlanId[t.teamPlanId].push({ teamId: t.teamId, teamName: t.teamName, teamStatus: t.status || 'active' });
+      }
+    }
+
+    // Build lookup: teamId → active member count
+    const memberCountByTeamId: Record<string, number> = {};
+    for (const doc of membershipsSnap.docs) {
+      const m = doc.data();
+      if (m.teamId) {
+        memberCountByTeamId[m.teamId] = (memberCountByTeamId[m.teamId] || 0) + 1;
+      }
+    }
+
+    // Build lookup: teamId → all planIds referencing it (to detect duplicates)
+    const planIdsByTeamId: Record<string, string[]> = {};
+    for (const plan of teamPlans) {
+      const tid = (plan as any).teamId;
+      if (tid) {
+        if (!planIdsByTeamId[tid]) planIdsByTeamId[tid] = [];
+        planIdsByTeamId[tid].push((plan as any).teamPlanId);
+      }
+    }
+
+    // Annotate each plan with usage info
+    const annotatedPlans = teamPlans.map((plan) => {
+      const p = plan as any;
+      const usedByTeams = teamsByPlanId[p.teamPlanId] || [];
+      const totalAgents = usedByTeams.reduce((sum, t) => sum + (memberCountByTeamId[t.teamId] || 0), 0);
+      const isDuplicate = (planIdsByTeamId[p.teamId] || []).length > 1;
+      return {
+        ...p,
+        _usedByTeams: usedByTeams,
+        _totalAgents: totalAgents,
+        _isDuplicate: isDuplicate,
+      };
+    });
 
     return NextResponse.json({
       ok: true,
-      count: teamPlans.length,
-      teamPlans,
+      count: annotatedPlans.length,
+      teamPlans: annotatedPlans,
     });
   } catch (err: any) {
     if (err?.message === 'UNAUTHORIZED') {
