@@ -3012,11 +3012,11 @@ export default function AddTransactionPage() {
                         </div>
                         {agentCommission && (
                           <span className="text-xs text-green-700 opacity-80">
-                            YTD company-dollar: <strong>${(agentCommission.ytdTierProgressionCompanyDollar ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong>
+                            YTD GCI: <strong>${(agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong>
                             {agentCommission.cycleStart && agentCommission.cycleEnd && (
                               <> &nbsp;&mdash;&nbsp; Cycle: {agentCommission.cycleStart} &ndash; {agentCommission.cycleEnd}</>
                             )}
-                            {(agentCommission.ytdTierProgressionCompanyDollar ?? 0) === 0 && (
+                            {(agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0) === 0 && (
                               <span className="ml-2 font-semibold text-amber-700">(YTD is $0 — tier based on current GCI. Rebuild rollup if incorrect.)</span>
                             )}
                           </span>
