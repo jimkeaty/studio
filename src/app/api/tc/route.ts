@@ -50,16 +50,25 @@ export async function POST(req: NextRequest) {
     const address = toStr(body.address);
     if (!address) return jsonError(400, 'address is required');
 
-    const clientName = toStr(body.clientName);
-    if (!clientName) return jsonError(400, 'clientName is required');
-
-    const contractDate = toStr(body.contractDate);
-    // contractDate is optional — listings may not yet be under contract
-
     const closingType = toStr(body.closingType);
     if (!closingType || !VALID_CLOSING_TYPES.has(closingType)) {
       return jsonError(400, 'closingType must be: buyer, listing, dual, or referral');
     }
+
+    // clientName is required for buyer/dual/referral, but for listings the seller
+    // name is often not yet known at the time of initial submission.
+    // Fall back to sellerName or buyerName so listings can always be saved.
+    const clientName =
+      toStr(body.clientName) ||
+      toStr(body.sellerName) ||
+      toStr(body.buyerName) ||
+      '';
+    if (!clientName && closingType !== 'listing') {
+      return jsonError(400, 'clientName is required');
+    }
+
+    const contractDate = toStr(body.contractDate);
+    // contractDate is optional — listings may not yet be under contract
 
     const dealType = toStr(body.dealType) || 'residential_sale';
     if (!VALID_DEAL_TYPES.has(dealType)) {

@@ -1248,10 +1248,18 @@ export default function AddTransactionPage() {
       }
       // ── End auto-save ─────────────────────────────────────────────────────
 
+      // Ensure clientName is never blank — fall back to seller/buyer name so
+      // the API never rejects a listing that has no top-level clientName field.
+      const resolvedClientName =
+        values.clientName ||
+        values.sellerName ||
+        values.buyerName ||
+        '';
+
       const res = await fetch('/api/tc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...values, documents: uploadedDocs }),
+        body: JSON.stringify({ ...values, clientName: resolvedClientName, documents: uploadedDocs }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Submission failed');
