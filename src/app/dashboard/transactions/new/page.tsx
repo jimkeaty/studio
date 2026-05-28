@@ -2044,8 +2044,8 @@ export default function AddTransactionPage() {
 
           </Section>}
 
-          {/* ── Cooperating Agent (hidden for dual and referral) ────────────────────── */}
-          {(watchedClosingType !== 'dual' && watchedClosingType !== 'referral') && (
+          {/* ── Cooperating Agent (buyer/dual only — not needed until under contract for listings) */}
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
             <Section title="Cooperating Agent">
               <Grid2>
                 <FormField control={form.control} name="otherAgentName" render={({ field }) => (
@@ -2256,12 +2256,12 @@ export default function AddTransactionPage() {
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════
-              SECTION 4 — FINANCIAL DETAILS
+              SECTION 4 — FINANCIAL DETAILS (buyer/dual only — listing fills these at pending)
           ═══════════════════════════════════════════════════════════════════ */}
-          {watchedClosingType !== 'referral' && <Section title="Financial Details">
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Financial Details">
             <Grid2>
-              {/* List price — listing and dual only */}
-              {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+              {/* List price — dual only (listing is hidden at this level) */}
+              {((watchedClosingType as string) === 'listing' || watchedClosingType === 'dual') && (
                 <FormField control={form.control} name="listPrice" render={({ field }) => (
                   <FormItem>
                     <FormLabel>List Price ($)</FormLabel>
@@ -2853,8 +2853,8 @@ export default function AddTransactionPage() {
             </Section>
           )}
 
-          {/* ── Inspections ───────────────────────────────────────────────── */}
-          <Section title={watchedClosingType === 'listing' || watchedClosingType === 'dual' ? 'Buyer Inspections' : 'Inspections'}>
+          {/* ── Inspections (buyer/dual only — listing adds these when going under contract) */}
+          {(watchedClosingType === "buyer" || watchedClosingType === "dual") && <Section title={watchedClosingType === "dual" ? "Buyer Inspections" : "Inspections"}>
             <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
               <FormItem>
                 <FormLabel>Has Inspection Been Ordered?</FormLabel>
@@ -2924,7 +2924,7 @@ export default function AddTransactionPage() {
                 </FormControl></FormItem>
               )} />
             </div>
-          </Section>
+          </Section>}
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 5 — COMMISSION & FEES (buyer/dual only)
