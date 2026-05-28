@@ -20,10 +20,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, Home, List, Users, ArrowRightLeft } from 'lucide-react';
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
 import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
@@ -427,6 +428,18 @@ const schema = z.object({
   additionalComments: z.string().optional(),
   notes: z.string().optional(),
 
+  // Outbound Referral fields (closingType === 'referral')
+  outboundReferralAgentName: z.string().optional(),
+  outboundReferralBrokerage: z.string().optional(),
+  outboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  outboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Inbound referral fee (we received a referred client and owe a referral fee)
+  hasInboundReferral: z.boolean().optional(),
+  inboundReferralAgentName: z.string().optional(),
+  inboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  inboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+
   // Co-agent fields
   hasCoAgent: z.boolean().optional(),
   coAgentId: z.string().optional(),
@@ -486,9 +499,14 @@ export default function AddTransactionPage() {
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
 
+  // ── URL params — must be read before any state that depends on them ────────
+  const typeParamEarly = urlSearchParams?.get('type');
+
   // ── PDF extraction state ──────────────────────────────────────────────────
-  type PdfStep = 'upload' | 'extracting' | 'review' | 'form';
-  const [pdfStep, setPdfStep] = useState<PdfStep>('upload');
+  // 'type' is the new first step — select Buyer / Listing / Dual / Referral
+  // Skip 'type' step when closingType is pre-set from URL params (e.g. listing→pending flow)
+  type PdfStep = 'type' | 'upload' | 'extracting' | 'review' | 'form';
+  const [pdfStep, setPdfStep] = useState<PdfStep>(typeParamEarly ? 'upload' : 'type');
   const [pdfName, setPdfName] = useState<string>('');
   const [pdfConfidence, setPdfConfidence] = useState<Record<string, number>>({});
   const [pdfHighlightFields, setPdfHighlightFields] = useState<Set<string>>(new Set());
@@ -775,9 +793,21 @@ export default function AddTransactionPage() {
   const occupancyAgreement = form.watch('occupancyAgreement');
   const inspectionTypes = form.watch('inspectionTypes') || [];
 
-  // Seller info is only relevant when NOT purely buyer-side
-  // closingType: 'buyer' → hide seller; 'listing' | 'dual' | 'referral' → show seller
-  const showSellerInfo = watchedClosingType !== 'buyer';
+  // Auto-sync clientType from closingType so the Buyer/Seller section shows the right contacts
+  useEffect(() => {
+    const map: Record<string, 'buyer' | 'seller' | 'dual'> = {
+      buyer: 'buyer',
+      listing: 'seller',
+      dual: 'dual',
+    };
+    const derived = map[watchedClosingType];
+    if (derived) form.setValue('clientType', derived);
+    // For referral, leave clientType blank — buyer/seller section is hidden
+  }, [watchedClosingType]);
+
+  // Seller info is only relevant when NOT purely buyer-side and NOT referral
+  // closingType: 'buyer' → hide seller; 'listing' | 'dual' → show seller; 'referral' → hide all
+  const showSellerInfo = watchedClosingType === 'listing' || watchedClosingType === 'dual';
 
   // Co-agent watched values
   const hasCoAgent = form.watch('hasCoAgent');
@@ -1266,6 +1296,86 @@ export default function AddTransactionPage() {
         </Badge>
       </div>
 
+      {/* ── Transaction Type Selection ─────────────────────────────────────── */}
+      {pdfStep === 'type' && (
+        <div className="space-y-6">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-bold">What type of transaction is this?</h2>
+            <p className="text-muted-foreground">Select the transaction type to load the right form fields.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+            {/* Buyer */}
+            <button
+              type="button"
+              onClick={() => {
+                form.setValue('closingType', 'buyer');
+                setPdfStep('upload');
+              }}
+              className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-blue-200 bg-blue-50 hover:border-blue-500 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:hover:border-blue-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
+            >
+              <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                <Home className="h-7 w-7 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-blue-900 dark:text-blue-100">Buyer Transaction</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">You are representing the buyer</p>
+              </div>
+            </button>
+            {/* New Listing */}
+            <button
+              type="button"
+              onClick={() => {
+                form.setValue('closingType', 'listing');
+                setPdfStep('upload');
+              }}
+              className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-green-200 bg-green-50 hover:border-green-500 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:hover:border-green-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
+            >
+              <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                <List className="h-7 w-7 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-green-900 dark:text-green-100">New Listing</p>
+                <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">You are the listing (seller) agent</p>
+              </div>
+            </button>
+            {/* Dual Agency */}
+            <button
+              type="button"
+              onClick={() => {
+                form.setValue('closingType', 'dual');
+                setPdfStep('upload');
+              }}
+              className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-purple-200 bg-purple-50 hover:border-purple-500 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/30 dark:hover:border-purple-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
+            >
+              <div className="w-14 h-14 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                <Users className="h-7 w-7 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-purple-900 dark:text-purple-100">Dual Agency</p>
+                <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">You represent both buyer and seller</p>
+              </div>
+            </button>
+            {/* Outbound Referral */}
+            <button
+              type="button"
+              onClick={() => {
+                form.setValue('closingType', 'referral');
+                setPdfStep('form');
+              }}
+              className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-amber-200 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:hover:border-amber-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
+            >
+              <div className="w-14 h-14 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center group-hover:bg-amber-200 transition-colors">
+                <ArrowRightLeft className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-amber-900 dark:text-amber-100">Outbound Referral</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Referring out — receiving a referral check only</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── PDF Upload Landing ──────────────────────────────────────────────── */}
       {pdfStep === 'upload' && (
         <Card className="border-2 border-dashed border-primary/30 bg-primary/5 hover:border-primary/60 transition-colors">
@@ -1420,21 +1530,32 @@ export default function AddTransactionPage() {
             )}
 
             <Grid2>
-              <FormField control={form.control} name="closingType" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Type of Closing <span className="text-destructive">*</span></FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="buyer">Buyer Representation</SelectItem>
-                      <SelectItem value="listing">Listing / Seller Side</SelectItem>
-                      <SelectItem value="dual">Dual Agent</SelectItem>
-                      <SelectItem value="referral">Referral</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              {/* Transaction type — read-only badge (set on type selection screen); change button goes back */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Transaction Type</label>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${
+                    watchedClosingType === 'buyer' ? 'bg-blue-100 text-blue-800' :
+                    watchedClosingType === 'listing' ? 'bg-green-100 text-green-800' :
+                    watchedClosingType === 'dual' ? 'bg-purple-100 text-purple-800' :
+                    'bg-amber-100 text-amber-800'
+                  }`}>
+                    {watchedClosingType === 'buyer' ? '🏠 Buyer Transaction' :
+                     watchedClosingType === 'listing' ? '📋 New Listing' :
+                     watchedClosingType === 'dual' ? '🤝 Dual Agency' :
+                     '➡️ Outbound Referral'}
+                  </span>
+                  {!typeParam && (
+                    <button
+                      type="button"
+                      onClick={() => setPdfStep('type')}
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Change
+                    </button>
+                  )}
+                </div>
+              </div>
 
               <FormField control={form.control} name="dealType" render={({ field }) => (
                 <FormItem>
@@ -1681,84 +1802,88 @@ export default function AddTransactionPage() {
               SECTION 2 — KEY DATES
           ═══════════════════════════════════════════════════════════════════ */}
           <Section title="Key Dates">
-            <Grid3>
-              <FormField control={form.control} name="listingDate" render={({ field }) => (
-                <FormItem><FormLabel>Listing Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-              {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+            {/* Listing dates — shown for listing and dual only */}
+            {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+              <Grid3>
+                <FormField control={form.control} name="listingDate" render={({ field }) => (
+                  <FormItem><FormLabel>Listing Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                )} />
                 <FormField control={form.control} name="listingExpirationDate" render={({ field }) => (
                   <FormItem><FormLabel>Listing Expiration Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
                 )} />
-              )}
-              {/* Under Contract Date — OPTIONAL */}
-              <FormField control={form.control} name="contractDate" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Under Contract Date</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <FormDescription>Leave blank if not yet under contract.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="optionExpiration" render={({ field }) => (
-                <FormItem><FormLabel>Listing Expiration Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid3>
-            <Grid3>
-              <FormField control={form.control} name="inspectionDeadline" render={({ field }) => (
-                <FormItem><FormLabel>Inspection Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="surveyDeadline" render={({ field }) => (
-                <FormItem><FormLabel>Survey Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="projectedCloseDate" render={({ field }) => (
-                <FormItem><FormLabel>Projected Close Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid3>
-            <Grid3>
-              <FormField control={form.control} name="loanApplicationDeadline" render={({ field }) => (
-                <FormItem><FormLabel>Loan Application Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="appraisalDeadline" render={({ field }) => (
-                <FormItem><FormLabel>Appraisal Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="titleDeadline" render={({ field }) => (
-                <FormItem><FormLabel>Title Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-            </Grid3>
-            <Grid3>
-              <FormField control={form.control} name="finalLoanCommitmentDeadline" render={({ field }) => (
-                <FormItem><FormLabel>Final Loan Commitment Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="closedDate" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Actual Close Date</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <FormDescription>
-                    {isAdmin ? 'Sets status to Closed automatically.' : 'Leave blank if not yet closed.'}
-                  </FormDescription>
-                </FormItem>
-              )} />
-
-            </Grid3>
+                <FormField control={form.control} name="optionExpiration" render={({ field }) => (
+                  <FormItem><FormLabel>Option Expiration Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid3>
+            )}
+            {/* Contract / closing dates — shown for buyer and dual only */}
+            {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+              <>
+                <Grid3>
+                  <FormField control={form.control} name="contractDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Under Contract Date</FormLabel>
+                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormDescription>Leave blank if not yet under contract.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="inspectionDeadline" render={({ field }) => (
+                    <FormItem><FormLabel>Inspection Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="surveyDeadline" render={({ field }) => (
+                    <FormItem><FormLabel>Survey Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+                <Grid3>
+                  <FormField control={form.control} name="projectedCloseDate" render={({ field }) => (
+                    <FormItem><FormLabel>Projected Close Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="loanApplicationDeadline" render={({ field }) => (
+                    <FormItem><FormLabel>Loan Application Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="appraisalDeadline" render={({ field }) => (
+                    <FormItem><FormLabel>Appraisal Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+                <Grid3>
+                  <FormField control={form.control} name="titleDeadline" render={({ field }) => (
+                    <FormItem><FormLabel>Title Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="finalLoanCommitmentDeadline" render={({ field }) => (
+                    <FormItem><FormLabel>Final Loan Commitment Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="closedDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Actual Close Date</FormLabel>
+                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormDescription>
+                        {isAdmin ? 'Sets status to Closed automatically.' : 'Leave blank if not yet closed.'}
+                      </FormDescription>
+                    </FormItem>
+                  )} />
+                </Grid3>
+              </>
+            )}
+            {/* For listing-only: still show close date (for when it goes pending) */}
+            {watchedClosingType === 'listing' && (
+              <Grid3>
+                <FormField control={form.control} name="closedDate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Actual Close Date</FormLabel>
+                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormDescription>Leave blank if not yet closed.</FormDescription>
+                  </FormItem>
+                )} />
+              </Grid3>
+            )}
           </Section>
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 3 — BUYER / SELLER INFORMATION
           ═══════════════════════════════════════════════════════════════════ */}
-          <Section title="Buyer / Seller Information" description="Select client type to show the appropriate contact fields.">
-            <FormField control={form.control} name="clientType" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Type</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select client type..." /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="buyer">Buyer</SelectItem>
-                    <SelectItem value="seller">Seller</SelectItem>
-                    <SelectItem value="dual">Dual Agent (I&apos;m working both sides)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )} />
+          {/* Buyer/Seller section — hidden for outbound referral */}
+          {watchedClosingType !== 'referral' && <Section title="Buyer / Seller Information">
 
             {/* Buyer section */}
             {(clientType === 'buyer' || clientType === 'dual') && (
@@ -1917,28 +2042,10 @@ export default function AddTransactionPage() {
               </>
             )}
 
-            {/* Legacy second contact (shown when no clientType selected) */}
-            {!clientType && (
-              <>
-                <Separator className="my-2" />
-                <p className="text-sm font-medium text-muted-foreground">Second Contact (co-buyer, spouse, etc.)</p>
-                <Grid3>
-                  <FormField control={form.control} name="client2Name" render={({ field }) => (
-                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl></FormItem>
-                  )} />
-                  <FormField control={form.control} name="client2Email" render={({ field }) => (
-                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={form.control} name="client2Phone" render={({ field }) => (
-                    <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="Optional" {...field} /></FormControl></FormItem>
-                  )} />
-                </Grid3>
-              </>
-            )}
-          </Section>
+          </Section>}
 
-          {/* ── Cooperating Agent (hidden for dual) ──────────────────────────── */}
-          {watchedClosingType !== 'dual' && (
+          {/* ── Cooperating Agent (hidden for dual and referral) ────────────────────── */}
+          {(watchedClosingType !== 'dual' && watchedClosingType !== 'referral') && (
             <Section title="Cooperating Agent">
               <Grid2>
                 <FormField control={form.control} name="otherAgentName" render={({ field }) => (
@@ -1967,11 +2074,65 @@ export default function AddTransactionPage() {
                   <FormItem><FormLabel>Phone</FormLabel><FormControl><Input type="tel" placeholder="(337) 555-5678" {...field} /></FormControl></FormItem>
                 )} />
               </Grid2>
+
+              {/* Inbound referral fee — did we receive this client from a referring agent? */}
+              <Separator className="my-2" />
+              <FormField control={form.control} name="hasInboundReferral" render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-sm font-medium">Inbound Referral Fee</FormLabel>
+                    <FormDescription className="text-xs">Did you receive this client from a referring agent? (Reduces GCI before broker/agent split)</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )} />
+              {form.watch('hasInboundReferral') && (
+                <Grid3>
+                  <FormField control={form.control} name="inboundReferralAgentName" render={({ field }) => (
+                    <FormItem><FormLabel>Referring Agent Name</FormLabel><FormControl><Input placeholder="Agent / Company name" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="inboundReferralFeePercent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Referral Fee %</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number" step="0.01" min="0" max="100"
+                          placeholder="25"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            const pct = parseFloat(e.target.value) || 0;
+                            const gci = Number(form.getValues('gci')) || 0;
+                            if (gci > 0 && pct > 0) {
+                              form.setValue('inboundReferralFeeDollar', Math.round(gci * pct / 100) as any);
+                            }
+                          }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="inboundReferralFeeDollar" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Referral Fee $ (auto-calc)</FormLabel>
+                      <FormControl>
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => field.onChange(val)}
+                          placeholder="0"
+                        />
+                      </FormControl>
+                      <FormDescription className="text-xs">Auto-calculated from GCI × %. Edit to override.</FormDescription>
+                    </FormItem>
+                  )} />
+                </Grid3>
+              )}
             </Section>
           )}
 
-          {/* ── Mortgage / Lender ─────────────────────────────────────────── */}
-          <Section title="Mortgage / Lender">
+          {/* ── Mortgage / Lender (buyer/dual only) ────────────────────── */}
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Mortgage / Lender">
             <Grid2>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
                 <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl>
@@ -2005,10 +2166,10 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Office #</FormLabel><FormControl><Input placeholder="Office number" {...field} /></FormControl></FormItem>
               )} />
             </div>
-          </Section>
+          </Section>}
 
-          {/* ── Title Company ─────────────────────────────────────────────── */}
-          <Section title="Title Company">
+          {/* ── Title Company (buyer/dual only) ───────────────────────────── */}
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Title Company">
             <Grid2>
               <FormField control={form.control} name="titleCompany" render={({ field }) => (
                 <FormItem><FormLabel>Title Company</FormLabel><FormControl>
@@ -2046,39 +2207,91 @@ export default function AddTransactionPage() {
                 <FormItem><FormLabel>Office #</FormLabel><FormControl><Input placeholder="Office number" {...field} /></FormControl></FormItem>
               )} />
             </Grid2>
-          </Section>
+          </Section>}
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              OUTBOUND REFERRAL — minimal form (referral type only)
+          ═══════════════════════════════════════════════════════════════════ */}
+          {watchedClosingType === 'referral' && (
+            <Section title="Outbound Referral Details" description="You are referring this client out. Fill in the receiving agent and your referral fee.">
+              <Grid2>
+                <FormField control={form.control} name="outboundReferralAgentName" render={({ field }) => (
+                  <FormItem><FormLabel>Referred-To Agent Name</FormLabel><FormControl><Input placeholder="Agent receiving the referral" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="outboundReferralBrokerage" render={({ field }) => (
+                  <FormItem><FormLabel>Their Brokerage</FormLabel><FormControl><Input placeholder="Receiving brokerage" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid2>
+              <Grid2>
+                <FormField control={form.control} name="outboundReferralFeePercent" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Referral Fee % (optional)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" min="0" max="100" placeholder="25" {...field} />
+                    </FormControl>
+                    <FormDescription className="text-xs">Typical range: 25–40%</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="outboundReferralFeeDollar" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Referral Fee $ (optional)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput
+                        value={field.value as any}
+                        onChange={(val) => field.onChange(val)}
+                        placeholder="0"
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">Enter the estimated referral check amount.</FormDescription>
+                  </FormItem>
+                )} />
+              </Grid2>
+              <FormField control={form.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl><Textarea placeholder="Any notes about this referral..." rows={3} {...field} /></FormControl>
+                </FormItem>
+              )} />
+            </Section>
+          )}
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 4 — FINANCIAL DETAILS
           ═══════════════════════════════════════════════════════════════════ */}
-          <Section title="Financial Details">
+          {watchedClosingType !== 'referral' && <Section title="Financial Details">
             <Grid2>
-              <FormField control={form.control} name="listPrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>List Price / Buyer Rep Price ($)</FormLabel>
-                  <FormControl>
-                    <CurrencyInput
-                      value={field.value as any}
-                      onChange={(val) => field.onChange(val)}
-                      placeholder="0"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="salePrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Sale Price ($)</FormLabel>
-                  <FormControl>
-                    <CurrencyInput
-                      value={field.value as any}
-                      onChange={(val) => field.onChange(val)}
-                      placeholder="0"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              {/* List price — listing and dual only */}
+              {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+                <FormField control={form.control} name="listPrice" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>List Price ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput
+                        value={field.value as any}
+                        onChange={(val) => field.onChange(val)}
+                        placeholder="0"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
+              {/* Sale price — buyer and dual only */}
+              {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+                <FormField control={form.control} name="salePrice" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sale Price ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput
+                        value={field.value as any}
+                        onChange={(val) => field.onChange(val)}
+                        placeholder="0"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
             </Grid2>
             <Grid2>
               <FormField control={form.control} name="earnestMoney" render={({ field }) => (
@@ -2118,9 +2331,9 @@ export default function AddTransactionPage() {
                 )} />
               </div>
             )}
-          </Section>
+          </Section>}
 
-          {/* ── Pre-Listing Inspections (listing/dual only) ─────────────── */}
+          {/* ── Pre-Listing Inspections (listing/dual only) ───────────────── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
             <Section title="Pre-Listing Inspections" description="Optional: Order inspections before the listing goes live. Leave blank if not applicable.">
               <Grid2>
@@ -2714,9 +2927,9 @@ export default function AddTransactionPage() {
           </Section>
 
           {/* ═══════════════════════════════════════════════════════════════════
-              SECTION 5 — COMMISSION & FEES
+              SECTION 5 — COMMISSION & FEES (buyer/dual only)
           ═══════════════════════════════════════════════════════════════════ */}
-          <Section title="Buyer Closing Cost Paid by Seller">
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Buyer Closing Cost Paid by Seller">
             {/* Buyer closing cost paid by seller */}
             {/* Buyer closing cost breakdown header */}
             <div className="max-w-xs">
@@ -2824,7 +3037,7 @@ export default function AddTransactionPage() {
               </p>
             )}
             <div className="space-y-4">
-              {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+              {((watchedClosingType as string) === 'listing' || watchedClosingType === 'dual') && (
               <div className="flex items-end gap-4">
                 <div className="flex-1 max-w-xs">
                   <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
@@ -3281,12 +3494,12 @@ export default function AddTransactionPage() {
                 })()}
               </>
             )}
-          </Section>
+          </Section>}
 
           {/* ═══════════════════════════════════════════════════════════════════
-              SECTION 6 — ADDITIONAL INFO / COMMENTS
+              SECTION 6 — ADDITIONAL INFO / COMMENTS (hidden for referral)
           ═══════════════════════════════════════════════════════════════════ */}
-          <Section title="Additional Info">
+          {watchedClosingType !== 'referral' && <Section title="Additional Info">
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
               <FormItem>
@@ -3435,9 +3648,9 @@ export default function AddTransactionPage() {
                 )} />
               </Grid2>
             )}
-          </Section>
+          </Section>}
 
-          {/* ── Documents ────────────────────────────────────────────────────── */}
+          {/* ── Documents ────────────────────────────────────────────────────────────────── */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
