@@ -24,7 +24,8 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, Home, List, Users, ArrowRightLeft } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
 import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
@@ -737,6 +738,11 @@ export default function AddTransactionPage() {
   const [showBuyer4, setShowBuyer4] = useState(false);
   const [showSeller3, setShowSeller3] = useState(false);
   const [showSeller4, setShowSeller4] = useState(false);
+
+  // Collapsible listing-only sections (collapsed by default)
+  const [mediaOrderOpen, setMediaOrderOpen] = useState(false);
+  const [signOrderOpen, setSignOrderOpen] = useState(false);
+  const [showingTimeOpen, setShowingTimeOpen] = useState(false);
 
   const { isAdmin: isAdminUser } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
@@ -1629,6 +1635,35 @@ export default function AddTransactionPage() {
               )} />
             </Grid2>
             {/* Client email/phone removed — captured in Buyer/Seller Information section below */}
+
+            {/* ── Pricing fields (listing/dual: list price; buyer/dual: sale price) ── */}
+            <Grid2>
+              {/* List Price — listing and dual only */}
+              {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+                <FormField control={form.control} name="listPrice" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>List Price ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
+              {/* Sale Price — buyer and dual only (listing shows this when going pending) */}
+              {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+                <FormField control={form.control} name="salePrice" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sale / Contract Price ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
+            </Grid2>
+
             {/* TC Working File */}
             <FormField control={form.control} name="tcWorking" render={({ field }) => (
               <FormItem>
@@ -2411,113 +2446,164 @@ export default function AddTransactionPage() {
             </Section>
           )}
 
-          {/* ── Media Order (listing/dual only) ────────────────────────────── */}
+          {/* ── Media Order (listing/dual only, collapsed by default) ─────────── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
-            <Section title="Media Order" description="Select the media you want ordered for this listing. Leave blank and staff will coordinate for you.">
-              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4 flex items-start gap-3">
-                <span className="text-blue-600 dark:text-blue-400 text-xl mt-0.5">📸</span>
-                <div className="text-sm text-blue-800 dark:text-blue-300">
-                  <p className="font-semibold mb-1">Need help scheduling media?</p>
-                  <p>You can order directly through <a href="https://mediaengagellc.com/order/" target="_blank" rel="noopener noreferrer" className="underline font-medium hover:text-blue-600">Media Engage</a>, or leave this section blank and staff will coordinate scheduling for you.</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-3">Select media to order (check all that apply):</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  {MEDIA_TYPE_OPTIONS.map((type) => (
-                    <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input
-                        type="checkbox"
-                        checked={mediaTypes.includes(type)}
-                        onChange={() => toggleMediaType(type)}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      {type}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <Grid2>
-                <FormField control={form.control} name="mediaRequestedDate" render={({ field }) => (
-                  <FormItem><FormLabel>Requested Media Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormDescription>When would you like media scheduled?</FormDescription></FormItem>
-                )} />
-              </Grid2>
-              <FormField control={form.control} name="mediaNotes" render={({ field }) => (
-                <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea placeholder="Any special instructions for the media team..." {...field} /></FormControl></FormItem>
-              )} />
-            </Section>
+            <Collapsible open={mediaOrderOpen} onOpenChange={setMediaOrderOpen}>
+              <Card>
+                <CardHeader
+                  className="cursor-pointer select-none py-4"
+                  onClick={() => setMediaOrderOpen(!mediaOrderOpen)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Media Order</CardTitle>
+                      <CardDescription>Select the media you want ordered for this listing. Leave blank and staff will coordinate for you.</CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${mediaOrderOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-5 pt-0">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4 flex items-start gap-3">
+                      <span className="text-blue-600 dark:text-blue-400 text-xl mt-0.5">📸</span>
+                      <div className="text-sm text-blue-800 dark:text-blue-300">
+                        <p className="font-semibold mb-1">Need help scheduling media?</p>
+                        <p>You can order directly through <a href="https://mediaengagellc.com/order/" target="_blank" rel="noopener noreferrer" className="underline font-medium hover:text-blue-600">Media Engage</a>, or leave this section blank and staff will coordinate scheduling for you.</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-3">Select media to order (check all that apply):</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {MEDIA_TYPE_OPTIONS.map((type) => (
+                          <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
+                            <input
+                              type="checkbox"
+                              checked={mediaTypes.includes(type)}
+                              onChange={() => toggleMediaType(type)}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            {type}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <Grid2>
+                      <FormField control={form.control} name="mediaRequestedDate" render={({ field }) => (
+                        <FormItem><FormLabel>Requested Media Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormDescription>When would you like media scheduled?</FormDescription></FormItem>
+                      )} />
+                    </Grid2>
+                    <FormField control={form.control} name="mediaNotes" render={({ field }) => (
+                      <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea placeholder="Any special instructions for the media team..." {...field} /></FormControl></FormItem>
+                    )} />
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           )}
 
-          {/* ── Sign Order (listing/dual only) ─────────────────────────────── */}
+          {/* ── Sign Order (listing/dual only, collapsed by default) ───────────── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
-            <Section title="Sign Order" description="Order a sign post for this listing. Leave blank and staff will handle the order.">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 p-4 text-sm text-amber-800 dark:text-amber-300">
-                <p className="font-semibold mb-1">Sign orders are sent to staff for review.</p>
-                <p>Staff will add your personalized QR code or text rider number before forwarding to J Allen / PostMan337. You can also order directly at <a href="https://www.PostMan337.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">PostMan337.com</a>.</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-2">Type of Service:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  {SIGN_SERVICE_OPTIONS.map((opt) => (
-                    <label key={opt} className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input
-                        type="radio"
-                        name="signServiceType"
-                        value={opt}
-                        checked={signServiceType === opt}
-                        onChange={() => form.setValue('signServiceType', opt)}
-                        className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
-                      />
-                      {opt}
-                    </label>
-                  ))}
-                </div>
-                {signServiceType === 'Other' && (
-                  <div className="mt-3 max-w-xs">
-                    <Input placeholder="Describe the service needed..." onChange={(e) => form.setValue('signServiceType', e.target.value)} />
+            <Collapsible open={signOrderOpen} onOpenChange={setSignOrderOpen}>
+              <Card>
+                <CardHeader
+                  className="cursor-pointer select-none py-4"
+                  onClick={() => setSignOrderOpen(!signOrderOpen)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Sign Order</CardTitle>
+                      <CardDescription>Order a sign post for this listing. Leave blank and staff will handle the order.</CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${signOrderOpen ? 'rotate-180' : ''}`} />
                   </div>
-                )}
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-2">Additional Sign Post Options:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {SIGN_ADDITIONAL_OPTIONS.map((opt) => (
-                    <label key={opt} className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input
-                        type="checkbox"
-                        checked={signAdditionalOptions.includes(opt)}
-                        onChange={() => toggleSignAdditionalOption(opt)}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      {opt}
-                    </label>
-                  ))}
-                </div>
-                {(signAdditionalOptions.includes('Text2 Rider') || signAdditionalOptions.includes('Phone# Rider EXT')) && (
-                  <div className="mt-3 max-w-xs">
-                    <FormField control={form.control} name="signRiderExt" render={({ field }) => (
-                      <FormItem><FormLabel>Phone# Rider EXT</FormLabel><FormControl><Input placeholder="Extension number..." {...field} /></FormControl></FormItem>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-5 pt-0">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 p-4 text-sm text-amber-800 dark:text-amber-300">
+                      <p className="font-semibold mb-1">Sign orders are sent to staff for review.</p>
+                      <p>Staff will add your personalized QR code or text rider number before forwarding to J Allen / PostMan337. You can also order directly at <a href="https://www.PostMan337.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">PostMan337.com</a>.</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-2">Type of Service:</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {SIGN_SERVICE_OPTIONS.map((opt) => (
+                          <label key={opt} className="flex items-center gap-2 cursor-pointer text-sm">
+                            <input
+                              type="radio"
+                              name="signServiceType"
+                              value={opt}
+                              checked={signServiceType === opt}
+                              onChange={() => form.setValue('signServiceType', opt)}
+                              className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
+                            />
+                            {opt}
+                          </label>
+                        ))}
+                      </div>
+                      {signServiceType === 'Other' && (
+                        <div className="mt-3 max-w-xs">
+                          <Input placeholder="Describe the service needed..." onChange={(e) => form.setValue('signServiceType', e.target.value)} />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-2">Additional Sign Post Options:</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {SIGN_ADDITIONAL_OPTIONS.map((opt) => (
+                          <label key={opt} className="flex items-center gap-2 cursor-pointer text-sm">
+                            <input
+                              type="checkbox"
+                              checked={signAdditionalOptions.includes(opt)}
+                              onChange={() => toggleSignAdditionalOption(opt)}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            {opt}
+                          </label>
+                        ))}
+                      </div>
+                      {(signAdditionalOptions.includes('Text2 Rider') || signAdditionalOptions.includes('Phone# Rider EXT')) && (
+                        <div className="mt-3 max-w-xs">
+                          <FormField control={form.control} name="signRiderExt" render={({ field }) => (
+                            <FormItem><FormLabel>Phone# Rider EXT</FormLabel><FormControl><Input placeholder="Extension number..." {...field} /></FormControl></FormItem>
+                          )} />
+                        </div>
+                      )}
+                    </div>
+                    <Grid2>
+                      <FormField control={form.control} name="signOwnerName" render={({ field }) => (
+                        <FormItem><FormLabel>Owner Name</FormLabel><FormControl><Input placeholder="Property owner name" {...field} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
+                        <FormItem><FormLabel>Requested Date of Service</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                      )} />
+                    </Grid2>
+                    <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
+                      <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea placeholder="Any special instructions for the sign company..." {...field} /></FormControl></FormItem>
                     )} />
-                  </div>
-                )}
-              </div>
-              <Grid2>
-                <FormField control={form.control} name="signOwnerName" render={({ field }) => (
-                  <FormItem><FormLabel>Owner Name</FormLabel><FormControl><Input placeholder="Property owner name" {...field} /></FormControl></FormItem>
-                )} />
-                <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
-                  <FormItem><FormLabel>Requested Date of Service</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-                )} />
-              </Grid2>
-              <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
-                <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea placeholder="Any special instructions for the sign company..." {...field} /></FormControl></FormItem>
-              )} />
-            </Section>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           )}
 
           {/* ── ShowingTime Setup (listing/dual only) ──────────────────────── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
-            <Section title="ShowingTime Setup" description="Set up showing instructions. Leave blank and staff will set up ShowingTime for you.">
+            <Collapsible open={showingTimeOpen} onOpenChange={setShowingTimeOpen}>
+              <Card>
+                <CardHeader
+                  className="cursor-pointer select-none py-4"
+                  onClick={() => setShowingTimeOpen(!showingTimeOpen)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">ShowingTime Setup</CardTitle>
+                      <CardDescription>Set up showing instructions. Leave blank and staff will set up ShowingTime for you.</CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${showingTimeOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-5 pt-0">
               <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-700 p-4 text-sm text-green-800 dark:text-green-300">
                 <p className="font-semibold mb-1">ShowingTime instructions are sent to staff for setup.</p>
                 <p>Staff will enter this information into the ShowingTime portal. Your agent info (Call Order #1) is pre-filled from your profile.</p>
@@ -2858,7 +2944,10 @@ export default function AddTransactionPage() {
                   )} />
                 </div>
               </div>
-            </Section>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           )}
 
           {/* ── Inspections (buyer/dual only — listing adds these when going under contract) */}
