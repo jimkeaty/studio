@@ -649,6 +649,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
   const [transactions, setTransactions] = useState<AgentTx[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   // Filters
   const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
   const [statusFilter, setStatusFilter] = useState('all');
@@ -697,6 +698,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
       const seen = new Set<string>();
       const deduped = all.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true; });
       setTransactions(deduped);
+      setDebugInfo(`API returned: active=${data.activeTransactions?.length ?? 0}, pending=${data.pendingTransactions?.length ?? 0}, allClosed=${data.allClosedTransactions?.length ?? 0}, total=${deduped.length}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -871,6 +873,12 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Temporary debug banner — remove after diagnosis */}
+      {debugInfo && (
+        <div className="rounded-md bg-yellow-50 border border-yellow-300 px-4 py-2 text-xs text-yellow-800 font-mono">
+          🔍 DEBUG: {debugInfo}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

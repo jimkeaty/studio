@@ -1039,19 +1039,23 @@ function AgentDashboardPage() {
             viewAs={viewAs ?? undefined}
             initialYear={year}
           />
-          {/* ═══ MY TRANSACTIONS ════════════════════════════════════════ */}
-          <div id="my-transactions">
-            <AgentTransactionsSection
-              agentId={user?.uid ?? ''}
-              viewAs={viewAs ?? undefined}
-            />
-          </div>
-          {/* ════════════════════════════════════════════════════════════════
-              9. RECRUITING INCENTIVE TRACKER
-             ════════════════════════════════════════════════════════════════ */}
-          <RecruitingIncentiveTracker />
         </>
       )}
+
+      {/* ═══ MY TRANSACTIONS — always rendered, independent of dashboard data ═══ */}
+      {(!isTeamLeader || perfView !== 'team') && (
+        <div id="my-transactions">
+          <AgentTransactionsSection
+            agentId={user?.uid ?? ''}
+            viewAs={viewAs ?? undefined}
+          />
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          9. RECRUITING INCENTIVE TRACKER
+         ════════════════════════════════════════════════════════════════ */}
+      {(!isTeamLeader || perfView !== 'team') && <RecruitingIncentiveTracker />}
     </div>
   );
 }
