@@ -84,6 +84,46 @@ export async function GET(req: NextRequest) {
       transactions = transactions.filter((t: any) => !demoAgentIds.has(String(t.agentId || '')));
     }
 
+    // ── Resolve missing agentDisplayName from agentProfiles ──────────────
+    // Some legacy transactions have agentId set to the agentProfile doc ID but
+    // no agentDisplayName. Look up the profile and fill in the display name so
+    // the ledger shows a name instead of a raw doc ID.
+    try {
+      const missingNameIds = Array.from(
+        new Set(
+          transactions
+            .filter((t: any) => !t.agentDisplayName && t.agentId)
+            .map((t: any) => String(t.agentId))
+        )
+      );
+      if (missingNameIds.length > 0) {
+        // Batch-fetch profiles for all unique agentIds with missing display names
+        const profileMap = new Map<string, string>(); // agentId → displayName
+        await Promise.all(
+          missingNameIds.map(async (agentId) => {
+            try {
+              const profileSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
+              if (profileSnap.exists) {
+                const pd = profileSnap.data() || {};
+                const name = pd.displayName || pd.name || [pd.firstName, pd.lastName].filter(Boolean).join(' ') || '';
+                if (name) profileMap.set(agentId, name);
+              }
+            } catch { /* non-fatal */ }
+          })
+        );
+        // Patch display names in-memory and write back to Firestore so future loads are fast
+        transactions = transactions.map((t: any) => {
+          if (!t.agentDisplayName && t.agentId && profileMap.has(String(t.agentId))) {
+            const resolvedName = profileMap.get(String(t.agentId))!;
+            // Write-back so the transaction doc has the name going forward (non-blocking)
+            adminDb.collection('transactions').doc(t.id).update({ agentDisplayName: resolvedName }).catch(() => {});
+            return { ...t, agentDisplayName: resolvedName };
+          }
+          return t;
+        });
+      }
+    } catch { /* non-fatal — display name resolution is best-effort */ }
+
     transactions.sort((a: any, b: any) => {
       const da = a.createdAt ?? '';
       const db = b.createdAt ?? '';
