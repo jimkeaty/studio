@@ -235,7 +235,7 @@ export async function GET(
             .get();
           if (rollupSnapCustom.exists) {
             const r = rollupSnapCustom.data() || {};
-            ytdCustom = Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
+            ytdCustom = Number(r.tierProgressionGci ?? r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
             cycleStartCustom = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
             cycleEndCustom = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
           } else {
@@ -257,6 +257,7 @@ export async function GET(
           defaultTransactionFee: defaultTransactionFeeMember,
           tiers: customMemberTiers,
           teamMemberLeaderSplit: teamMemberLeaderSplitCustom,
+          ytdTierProgressionGci: ytdCustom,
           ytdTierProgressionCompanyDollar: ytdCustom,
           cycleStart: cycleStartCustom,
           cycleEnd: cycleEndCustom,
@@ -295,7 +296,7 @@ export async function GET(
           .get();
         if (rollupSnapStored.exists) {
           const r = rollupSnapStored.data() || {};
-          ytdStored = Number(r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
+          ytdStored = Number(r.tierProgressionGci ?? r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
           cycleStartStored = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
           cycleEndStored = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
         } else {
@@ -308,7 +309,7 @@ export async function GET(
             const rp = prevRollupSnapStored.data() || {};
             const prevCycleEnd = rp.cycleEnd ? new Date(rp.cycleEnd) : null;
             if (prevCycleEnd && today <= prevCycleEnd) {
-              ytdStored = Number(rp.tierProgressionCompanyDollar ?? rp.companyDollar ?? 0);
+              ytdStored = Number(rp.tierProgressionGci ?? rp.tierProgressionCompanyDollar ?? rp.companyDollar ?? 0);
               cycleStartStored = String(rp.cycleStart || '');
               cycleEndStored = String(rp.cycleEnd || '');
             }
@@ -381,6 +382,7 @@ export async function GET(
         defaultTransactionFee: defaultTransactionFeeStored,
         tiers: agentStoredTiers,
         teamMemberLeaderSplit: teamMemberLeaderSplitStored,
+        ytdTierProgressionGci: ytdStored,
         ytdTierProgressionCompanyDollar: ytdStored,
         cycleStart: cycleStartStored,
         cycleEnd: cycleEndStored,
