@@ -48,20 +48,20 @@ export async function GET(req: NextRequest) {
         }
       : { found: false };
 
-    // Check transactions for this agent
+    // Check transactions for this agent (all years, all statuses)
     const txSnap = await adminDb.collection('transactions')
       .where('agentId', '==', agentId)
-      .where('year', '==', 2026)
-      .limit(5)
       .get();
 
     debug.transactions = {
-      count: txSnap.size,
+      total: txSnap.size,
       samples: txSnap.docs.map(d => {
         const t = d.data();
         return {
           id: d.id,
           status: t.status,
+          year: t.year,
+          closedDate: t.closedDate,
           commission: t.commission,
           dealValue: t.dealValue,
           hasSplitSnapshot: !!t.splitSnapshot,
@@ -71,6 +71,26 @@ export async function GET(req: NextRequest) {
           progressionCredit: t.creditSnapshot?.progressionCompanyDollarCredit ?? null,
         };
       }),
+    };
+
+    // Check the rollup documents for this agent
+    const rollupSnap2025 = await adminDb.collection('agentYearRollups').doc(`${agentId}_2025`).get();
+    const rollupSnap2026 = await adminDb.collection('agentYearRollups').doc(`${agentId}_2026`).get();
+    debug.rollups = {
+      _2025: rollupSnap2025.exists ? {
+        tierProgressionGci: rollupSnap2025.data()?.tierProgressionGci ?? 'MISSING',
+        tierProgressionCompanyDollar: rollupSnap2025.data()?.tierProgressionCompanyDollar ?? 'MISSING',
+        cycleStart: rollupSnap2025.data()?.cycleStart,
+        cycleEnd: rollupSnap2025.data()?.cycleEnd,
+        rebuiltAt: rollupSnap2025.data()?.rebuiltAt,
+      } : 'NOT FOUND',
+      _2026: rollupSnap2026.exists ? {
+        tierProgressionGci: rollupSnap2026.data()?.tierProgressionGci ?? 'MISSING',
+        tierProgressionCompanyDollar: rollupSnap2026.data()?.tierProgressionCompanyDollar ?? 'MISSING',
+        cycleStart: rollupSnap2026.data()?.cycleStart,
+        cycleEnd: rollupSnap2026.data()?.cycleEnd,
+        rebuiltAt: rollupSnap2026.data()?.rebuiltAt,
+      } : 'NOT FOUND',
     };
 
     // List first 5 agent profiles to see what doc IDs look like
