@@ -412,8 +412,7 @@ export async function GET(req: NextRequest) {
           pendingUnits += sideCount;
           pendingVolume += dealValue;
           pendingGrossGCI += asNumber(
-            t.creditSnapshot?.progressionCompanyDollarCredit
-            || t.splitSnapshot?.grossCommission
+            t.splitSnapshot?.grossCommission
             || t.commission
           );
         }
@@ -843,9 +842,11 @@ export async function GET(req: NextRequest) {
       if (!d) continue;
       const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
       if (isInCycle(dUtc, currentCycle)) {
+        // Use splitSnapshot.grossCommission (total GCI before splits) as primary source.
+        // This is the full gross commission income on the transaction, which is what
+        // the tier thresholds (fromCompanyDollar field) are based on.
         const tierGCI = asNumber(
-          t.creditSnapshot?.progressionCompanyDollarCredit
-          || t.splitSnapshot?.grossCommission
+          t.splitSnapshot?.grossCommission
           || t.commission
         );
         grossGCIYTD += tierGCI;
