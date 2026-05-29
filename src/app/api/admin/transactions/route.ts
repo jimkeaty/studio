@@ -89,10 +89,15 @@ export async function GET(req: NextRequest) {
     // no agentDisplayName. Look up the profile and fill in the display name so
     // the ledger shows a name instead of a raw doc ID.
     try {
+      // A display name looks like a raw Firestore doc ID if it's 20 chars, no spaces, mixed case
+      const looksLikeDocId = (s: string) => /^[A-Za-z0-9]{15,30}$/.test(s) && !/\s/.test(s);
       const missingNameIds = Array.from(
         new Set(
           transactions
-            .filter((t: any) => !t.agentDisplayName && t.agentId)
+            .filter((t: any) => {
+              const name = String(t.agentDisplayName || '').trim();
+              return (!name || looksLikeDocId(name)) && t.agentId;
+            })
             .map((t: any) => String(t.agentId))
         )
       );
@@ -113,7 +118,8 @@ export async function GET(req: NextRequest) {
         );
         // Patch display names in-memory and write back to Firestore so future loads are fast
         transactions = transactions.map((t: any) => {
-          if (!t.agentDisplayName && t.agentId && profileMap.has(String(t.agentId))) {
+          const existingName = String(t.agentDisplayName || '').trim();
+          if ((!existingName || looksLikeDocId(existingName)) && t.agentId && profileMap.has(String(t.agentId))) {
             const resolvedName = profileMap.get(String(t.agentId))!;
             // Write-back so the transaction doc has the name going forward (non-blocking)
             adminDb.collection('transactions').doc(t.id).update({ agentDisplayName: resolvedName }).catch(() => {});
