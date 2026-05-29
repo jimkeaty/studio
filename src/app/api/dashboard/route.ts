@@ -767,11 +767,41 @@ export async function GET(req: NextRequest) {
         companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
       }));
       resolvedPlanName = 'Member Commission Plan';
+    } else if (agentProfile?.teamRole === 'leader' && agentProfile?.defaultPlanId) {
+      // Team leader: look up leaderStructureBands from the teamPlans collection
+      try {
+        const leaderPlanSnap = await adminDb.collection('teamPlans').doc(agentProfile.defaultPlanId).get();
+        if (leaderPlanSnap.exists) {
+          const planData = leaderPlanSnap.data() || {};
+          const bands: any[] = Array.isArray(planData.leaderStructureBands) ? planData.leaderStructureBands : [];
+          if (bands.length > 0) {
+            resolvedTiers = bands.map((b: any, i: number) => ({
+              tierName: b.tierName || `Tier ${i + 1}`,
+              fromCompanyDollar: asNumber(b.fromCompanyDollar),
+              toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
+              agentSplitPercent: asNumber(b.leaderPercent),
+              companySplitPercent: asNumber(b.companyPercent),
+            }));
+            resolvedPlanName = planData.planName || 'Team Leader Commission Plan';
+          }
+        }
+      } catch { /* non-fatal — fall through to tiers array below */ }
+      // Fallback to profile tiers if plan lookup failed or returned empty
+      if (resolvedTiers.length === 0 && Array.isArray(agentProfile?.tiers) && agentProfile.tiers.length > 0) {
+        resolvedTiers = agentProfile.tiers.map((t: any, i: number) => ({
+          tierName: t.tierName || `Tier ${i + 1}`,
+          fromCompanyDollar: asNumber(t.fromCompanyDollar),
+          toCompanyDollar: t.toCompanyDollar != null ? asNumber(t.toCompanyDollar) : null,
+          agentSplitPercent: asNumber(t.agentSplitPercent),
+          companySplitPercent: asNumber(t.companySplitPercent),
+        }));
+        resolvedPlanName = 'Team Leader Commission Plan';
+      }
     } else if (
       Array.isArray(agentProfile?.tiers) &&
       agentProfile.tiers.length > 0
     ) {
-      // Independent agent or team leader: use the tiers array on the profile
+      // Independent agent: use the tiers array on the profile
       resolvedTiers = agentProfile.tiers.map((t: any, i: number) => ({
         tierName: t.tierName || `Tier ${i + 1}`,
         fromCompanyDollar: asNumber(t.fromCompanyDollar),
@@ -779,7 +809,7 @@ export async function GET(req: NextRequest) {
         agentSplitPercent: asNumber(t.agentSplitPercent),
         companySplitPercent: asNumber(t.companySplitPercent),
       }));
-      resolvedPlanName = agentProfile?.teamRole === 'leader' ? 'Team Leader Commission Plan' : 'Individual Commission Plan';
+      resolvedPlanName = 'Individual Commission Plan';
     }
      // ── Anniversary cycle — compute GCI within the agent's commission cycle ────
     const agentStartDate = agentProfile?.startDate || null;
