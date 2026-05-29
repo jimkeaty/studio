@@ -1757,14 +1757,24 @@ export default function AgentProfileForm({
 
                         <div>
                           <label className="mb-1 block text-xs font-medium text-gray-600">From GCI $</label>
-                          <input
-                            type="number"
-                            className="w-full rounded-md border px-3 py-2 text-sm"
-                            value={tier.fromCompanyDollar}
-                            onChange={(e) =>
-                              updateTeamMemberTier(index, 'fromCompanyDollar', Number(e.target.value || 0))
-                            }
-                          />
+                          {index === 0 ? (
+                            <input
+                              type="number"
+                              className="w-full rounded-md border px-3 py-2 text-sm bg-muted text-muted-foreground cursor-not-allowed"
+                              value={0}
+                              readOnly
+                              title="First tier always starts at $0"
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              className="w-full rounded-md border px-3 py-2 text-sm"
+                              value={tier.fromCompanyDollar}
+                              onChange={(e) =>
+                                updateTeamMemberTier(index, 'fromCompanyDollar', Number(e.target.value || 0))
+                              }
+                            />
+                          )}
                         </div>
 
                         <div>
@@ -1986,14 +1996,24 @@ export default function AgentProfileForm({
                       />
                     </td>
                     <td className="border px-3 py-2">
-                      <input
-                        className="w-full rounded-md border px-2 py-1"
-                        type="number"
-                        value={tier.fromCompanyDollar}
-                        onChange={(e) =>
-                          handleTierEdit(index, 'fromCompanyDollar', Number(e.target.value))
-                        }
-                      />
+                      {index === 0 ? (
+                        <input
+                          className="w-full rounded-md border px-2 py-1 bg-muted text-muted-foreground cursor-not-allowed"
+                          type="number"
+                          value={0}
+                          readOnly
+                          title="First tier always starts at $0"
+                        />
+                      ) : (
+                        <input
+                          className="w-full rounded-md border px-2 py-1"
+                          type="number"
+                          value={tier.fromCompanyDollar}
+                          onChange={(e) =>
+                            handleTierEdit(index, 'fromCompanyDollar', Number(e.target.value))
+                          }
+                        />
+                      )}
                     </td>
                     <td className="border px-3 py-2">
                       <input

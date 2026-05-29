@@ -81,14 +81,16 @@ type AgentCommissionData = {
 
 function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | null {
   if (!tiers || tiers.length === 0) return null;
-  for (const tier of tiers) {
+  // Sort tiers by threshold ascending to ensure correct matching order
+  const sorted = [...tiers].sort((a, b) => a.fromCompanyDollar - b.fromCompanyDollar);
+  for (const tier of sorted) {
     const from = tier.fromCompanyDollar;
     const to = tier.toCompanyDollar;
     if (gci >= from && (to === null || gci < to)) return tier;
   }
-  // No exact match — agent has exceeded all defined band ceilings.
-  // Return the last tier (highest band) as the safe fallback.
-  return tiers[tiers.length - 1];
+  // GCI is below the first tier's threshold (legacy data gap) — use the first tier.
+  // Tiers must always cover $0 upward; this is a safety net for misconfigured profiles.
+  return sorted[0];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -291,9 +293,7 @@ export default function EditTransactionPage() {
   // Outbound referral fee state
   const [hasOutboundReferral, setHasOutboundReferral] = useState(false);
 
-  const [txCommissionOverridden, setTxCommissionOverridden] = useState(false);
-  const [txCommissionOverriddenBy, setTxCommissionOverriddenBy] = useState<string | null>(null);
-  const [txCommissionOverriddenAt, setTxCommissionOverriddenAt] = useState<string | null>(null);
+  // Commission override state removed — agent profile is always the source of truth
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -520,16 +520,11 @@ export default function EditTransactionPage() {
         const split = tx.splitSnapshot || {};
         cbpManuallyEdited.current = !!(tx.commissionBasePrice && tx.commissionBasePrice !== tx.salePrice);
 
-        // Lock auto-recalculation for ALL existing transactions that have commission values.
-        // The saved commission is the source of truth — it must never be overwritten by the
-        // agent's default profile when editing non-commission fields.
+        // When loading an existing transaction, preserve the saved commission values.
+        // The fields will be pre-populated from Firestore; the agent profile fetch
+        // will NOT overwrite them (txLoadedWithCommission guards this).
         const hasSavedCommission = !!(tx.gci || split.grossCommission || tx.agentPct || tx.agentDollar);
-        const hasOverride = !!tx.commissionOverridden || hasSavedCommission;
-        setTxCommissionOverridden(!!tx.commissionOverridden);
-        setTxCommissionOverriddenBy(tx.commissionOverriddenBy || null);
-        setTxCommissionOverriddenAt(tx.commissionOverriddenAt || null);
-        if (hasOverride) {
-          commissionManualOverride.current = true;
+        if (hasSavedCommission) {
           txLoadedWithCommission.current = true;
         }
 
@@ -735,24 +730,11 @@ export default function EditTransactionPage() {
         payload.brokerProfit = brokerGci;
       }
 
-      // Mark the transaction as having locked commission values whenever any commission
-      // data is present. This prevents future edits from auto-recalculating the split.
-      // The flag is set on every save so that transactions imported without it are
-      // retroactively protected the first time they are edited.
-      const hasCommissionValues = gci > 0 || agentDollar > 0 || brokerGci > 0;
-      if (hasCommissionValues || commissionManualOverride.current || txCommissionOverridden) {
-        payload.commissionOverridden = true;
-        // Only update the override metadata if this is a new manual change
-        if (!txCommissionOverridden || commissionManualOverride.current) {
-          payload.commissionOverriddenBy = user.email || user.uid;
-          payload.commissionOverriddenAt = new Date().toISOString();
-        }
-        setTxCommissionOverridden(true);
-      } else {
-        payload.commissionOverridden = false;
-        payload.commissionOverriddenBy = null;
-        payload.commissionOverriddenAt = null;
-      }
+      // Commission override concept removed — whatever is in the fields is what saves.
+      // Clear any legacy override flags so old transactions are cleaned up on next save.
+      payload.commissionOverridden = false;
+      payload.commissionOverriddenBy = null;
+      payload.commissionOverriddenAt = null;
 
       // Add co-agent data to the payload
       payload.hasCoAgent = hasCoAgent;
@@ -1702,149 +1684,28 @@ export default function EditTransactionPage() {
                 {/* Commission Split */}
                 <Separator />
 
-                {/* Per-transaction commission override banner */}
-                {txCommissionOverridden && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <p className="font-semibold text-amber-900">Commission Override Active</p>
-                        <p className="mt-0.5 text-amber-800">
-                          The split values below are locked to the manually saved amounts and will not
-                          be recalculated from the agent&apos;s commission profile.
-                        </p>
-                        {txCommissionOverriddenBy && (
-                          <p className="mt-1 text-xs text-amber-700">
-                            Set by {txCommissionOverriddenBy}
-                            {txCommissionOverriddenAt && (
-                              <> on {new Date(txCommissionOverriddenAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
-                            )}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="shrink-0 rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
-                        onClick={() => {
-                          // Clear the override — allow auto-recalculation from agent profile
-                          setTxCommissionOverridden(false);
-                          setTxCommissionOverriddenBy(null);
-                          setTxCommissionOverriddenAt(null);
-                          commissionManualOverride.current = false;
-                          // Trigger recalculation from agent profile
-                          const gci = Number(form.getValues('gci')) || 0;
-                          if (gci > 0 && agentCommission) {
-                            // Deduct referral fee before splits
-                            const refPctBtn = Number(form.getValues('outboundReferralPercent')) || 0;
-                            const refDollarBtn = hasOutboundReferral
-                              ? (Number(form.getValues('outboundReferralDollar')) || (refPctBtn > 0 ? Math.round(gci * (refPctBtn / 100) * 100) / 100 : 0))
-                              : 0;
-                            const netGciBtn = Math.max(0, gci - refDollarBtn);
-                            const ytd = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
-                            const tierLookup = ytd > 0 ? ytd : gci;
-                            const tier = findActiveTier(agentCommission.tiers, tierLookup);
-                            setActiveTier(tier);
-                            if (tier) {
-                              form.setValue('agentPct', tier.agentSplitPercent as any);
-                              form.setValue('brokerPct', tier.companySplitPercent as any);
-                              form.setValue('agentDollar', Number((netGciBtn * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-                              form.setValue('brokerGci', Number((netGciBtn * (tier.companySplitPercent / 100)).toFixed(2)) as any);
-                              const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-                              if (txFee > 0) {
-                                form.setValue('txComplianceFee', 'yes');
-                                form.setValue('txComplianceFeeAmount', txFee as any);
-                                if (!form.getValues('txComplianceFeePaidBy')) {
-                                  form.setValue('txComplianceFeePaidBy', 'agent');
-                                }
-                              }
-                            }
-                          }
-                        }}
-                      >
-                        Recalculate from Profile
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Auto-calculation status banner */}
-                {agentCommission && (
-                  <div className={`rounded-md border px-4 py-3 text-sm ${
-                    activeTier
-                      ? 'border-green-200 bg-green-50 text-green-800'
-                      : commissionLoading
-                        ? 'border-blue-200 bg-blue-50 text-blue-800'
-                        : 'border-amber-200 bg-amber-50 text-amber-800'
-                  }`}>
+                {/* Commission tier info banner — shows which tier is active */}
+                {agentCommission && activeTier && (
+                  <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
                     {commissionLoading ? (
                       <span>Loading commission structure...</span>
-                    ) : activeTier ? (
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <span>
-                          <strong>Auto-calculated</strong> using tier &quot;{activeTier.tierName}&quot; &mdash;
-                          Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
-                          {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee}`}
-                        </span>
-                        {commissionManualOverride.current && (
-                          <Badge variant="outline" className="text-amber-700 border-amber-300">Manual Override</Badge>
-                        )}
-                      </div>
                     ) : (
                       <span>
-                        Commission structure loaded ({agentCommission.tiers.length} tier{agentCommission.tiers.length !== 1 ? 's' : ''}).
-                        {Number(watchedGCI) > 0 ? ' No matching tier for this GCI amount.' : ' Enter GCI to auto-calculate split.'}
+                        <strong>Commission tier:</strong> {activeTier.tierName} — Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
+                        {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee}`}
                       </span>
                     )}
                   </div>
                 )}
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Broker / Agent Split</p>
-                  {agentCommission && commissionManualOverride.current && (
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-blue-600 hover:underline"
-                      onClick={() => {
-                        commissionManualOverride.current = false;
-                        const gci = Number(form.getValues('gci')) || 0;
-                        if (gci > 0 && agentCommission) {
-                          // Deduct referral fee before splits
-                          const refPctLink = Number(form.getValues('outboundReferralPercent')) || 0;
-                          const refDollarLink = hasOutboundReferral
-                            ? (Number(form.getValues('outboundReferralDollar')) || (refPctLink > 0 ? Math.round(gci * (refPctLink / 100) * 100) / 100 : 0))
-                            : 0;
-                          const netGciLink = Math.max(0, gci - refDollarLink);
-                          const ytd3 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
-                          const tierLookupAmount3 = ytd3 > 0 ? ytd3 : gci;
-                          const tier = findActiveTier(agentCommission.tiers, tierLookupAmount3);
-                          setActiveTier(tier);
-                          if (tier) {
-                            form.setValue('agentPct', tier.agentSplitPercent as any);
-                            form.setValue('brokerPct', tier.companySplitPercent as any);
-                            form.setValue('agentDollar', Number((netGciLink * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-                            form.setValue('brokerGci', Number((netGciLink * (tier.companySplitPercent / 100)).toFixed(2)) as any);
-                            const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-                            if (txFee > 0) {
-                              form.setValue('txComplianceFee', 'yes');
-                              form.setValue('txComplianceFeeAmount', txFee as any);
-                              if (!form.getValues('txComplianceFeePaidBy')) {
-                                form.setValue('txComplianceFeePaidBy', 'agent');
-                              }
-                            }
-                          }
-                        }
-                      }}
-                    >
-                      Re-calculate from agent profile
-                    </button>
-                  )}
                 </div>
                 <Grid2>
                   <FormField control={form.control} name="brokerPct" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Broker %</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="30" {...field}
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                        />
+                        <Input type="number" step="0.01" placeholder="30" {...field} />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -1852,9 +1713,7 @@ export default function EditTransactionPage() {
                     <FormItem>
                       <FormLabel>Broker GCI ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="0" {...field}
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                        />
+                        <Input type="number" step="0.01" placeholder="0" {...field} />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -1862,9 +1721,7 @@ export default function EditTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent %</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="70" {...field}
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                        />
+                        <Input type="number" step="0.01" placeholder="70" {...field} />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -1872,11 +1729,9 @@ export default function EditTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent Net $</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="0" {...field}
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
-                        />
+                        <Input type="number" step="0.01" placeholder="0" {...field} />
                       </FormControl>
-                      <FormDescription>Auto-calculated from agent profile. Edit to override.</FormDescription>
+                      <FormDescription>Auto-calculated from agent profile. Editable.</FormDescription>
                     </FormItem>
                   )} />
                 </Grid2>
