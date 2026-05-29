@@ -1,7 +1,6 @@
-// One-time fix: correct agentId on Angel Ables' 6235 Woodlawn transaction
-// The transaction has agentId = "psqbGa6gzKh2fqzzIve1" (uppercase I)
-// but Angel Ables' profile doc ID is "psqbGa6gzKh2fqzzlve1" (lowercase l)
-// This endpoint finds all transactions with the wrong ID and fixes them.
+// One-time fix: set agentDisplayName = "Angel Ables" on the 6235 Woodlawn transaction
+// Transaction doc ID: asPqyRU62dql1rHbxXgL
+// Also scans for any remaining transactions with the old uppercase-I agentId and fixes those too.
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
@@ -18,33 +17,62 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Forbidden: Admin only' }, { status: 403 });
     }
 
-    const wrongId = 'psqbGa6gzKh2fqzzIve1'; // uppercase I
     const correctId = 'psqbGa6gzKh2fqzzlve1'; // lowercase l
     const correctName = 'Angel Ables';
+    const knownTxId = 'asPqyRU62dql1rHbxXgL'; // the specific 6235 Woodlawn tx
 
-    // Find all transactions with the wrong agentId
+    const fixed: string[] = [];
+
+    // 1. Directly patch the known transaction by doc ID
+    const txRef = adminDb.collection('transactions').doc(knownTxId);
+    const txSnap = await txRef.get();
+    if (txSnap.exists) {
+      await txRef.update({
+        agentId: correctId,
+        agentDisplayName: correctName,
+      });
+      fixed.push(`Direct patch: ${knownTxId} (${txSnap.data()?.address || 'unknown address'})`);
+    }
+
+    // 2. Also scan for any remaining transactions with the old uppercase-I agentId
+    const wrongId = 'psqbGa6gzKh2fqzzIve1'; // uppercase I
     const snap = await adminDb.collection('transactions')
       .where('agentId', '==', wrongId)
       .get();
 
-    if (snap.empty) {
-      return NextResponse.json({ ok: true, message: 'No transactions found with the wrong agentId — may already be fixed.', fixed: 0 });
+    if (!snap.empty) {
+      const batch = adminDb.batch();
+      snap.docs.forEach(doc => {
+        batch.update(doc.ref, {
+          agentId: correctId,
+          agentDisplayName: correctName,
+        });
+        fixed.push(`Scan fix: ${doc.id} (${doc.data().address || 'unknown address'})`);
+      });
+      await batch.commit();
     }
 
-    const batch = adminDb.batch();
-    snap.docs.forEach(doc => {
-      batch.update(doc.ref, {
-        agentId: correctId,
-        agentDisplayName: correctName,
-      });
+    // 3. Also fix any transaction where agentId is correct but agentDisplayName is still blank or the raw ID
+    const blankNameSnap = await adminDb.collection('transactions')
+      .where('agentId', '==', correctId)
+      .get();
+
+    const blankBatch = adminDb.batch();
+    let blankCount = 0;
+    blankNameSnap.docs.forEach(doc => {
+      const d = doc.data();
+      if (!d.agentDisplayName || d.agentDisplayName === correctId) {
+        blankBatch.update(doc.ref, { agentDisplayName: correctName });
+        fixed.push(`Name fix: ${doc.id} (${d.address || 'unknown address'})`);
+        blankCount++;
+      }
     });
-    await batch.commit();
+    if (blankCount > 0) await blankBatch.commit();
 
     return NextResponse.json({
       ok: true,
-      message: `Fixed ${snap.docs.length} transaction(s): agentId corrected from "${wrongId}" to "${correctId}" and agentDisplayName set to "${correctName}".`,
-      fixed: snap.docs.length,
-      transactions: snap.docs.map(d => ({ id: d.id, address: d.data().address })),
+      message: `Fixed ${fixed.length} item(s).`,
+      fixed,
     });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
