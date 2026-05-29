@@ -768,10 +768,16 @@ export async function GET(req: NextRequest) {
       }));
       resolvedPlanName = 'Member Commission Plan';
     } else if (agentProfile?.teamRole === 'leader' && agentProfile?.defaultPlanId) {
-      // Team leader: look up leaderStructureBands from the teamPlans collection
+      // Team leader: look up leaderStructureBands from the teamPlans collection.
+      // defaultPlanId stores the teamPlanId field value (not the Firestore doc ID),
+      // so we must query by the teamPlanId field.
       try {
-        const leaderPlanSnap = await adminDb.collection('teamPlans').doc(agentProfile.defaultPlanId).get();
-        if (leaderPlanSnap.exists) {
+        const leaderPlanQuery = await adminDb.collection('teamPlans')
+          .where('teamPlanId', '==', agentProfile.defaultPlanId)
+          .limit(1)
+          .get();
+        const leaderPlanSnap = !leaderPlanQuery.empty ? leaderPlanQuery.docs[0] : null;
+        if (leaderPlanSnap) {
           const planData = leaderPlanSnap.data() || {};
           const bands: any[] = Array.isArray(planData.leaderStructureBands) ? planData.leaderStructureBands : [];
           if (bands.length > 0) {
