@@ -729,37 +729,36 @@ export async function GET(req: NextRequest) {
     };
 
     // ── Tier / Cap progress ──────────────────────────────────────────────
-    // Build tiers from profile (independent agents) OR team plan (team agents)
+    // The agent profile is the SINGLE SOURCE OF TRUTH for commission tiers.
+    // All tier data is always saved directly onto the agentProfile document
+    // when the admin saves the agent profile form. No lookups to teamPlans,
+    // memberPlans, or any other collection are needed or correct.
+    //
+    // Resolution priority (all from agentProfile):
+    //   1. Flat plan  → flatAgentPercent / flatCompanyPercent (commissionMode === 'flat')
+    //   2. Team member → teamMemberOverrideBands[].memberPercent (teamRole === 'member')
+    //   3. Independent / team leader → tiers[].agentSplitPercent
     let resolvedTiers: { tierName: string; fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number; companySplitPercent: number }[] = [];
     let resolvedPlanName: string | null = null;
 
-    // 1) Try individual tiers from profile (defaultPlanType === 'individual')
-    // IMPORTANT: Skip this step for team members/leaders — their tiers come from the
-    // team plan (Step 3). Legacy profiles may have a stale `tiers` array left over
-    // from before the agent was added to a team; that array must NOT override the team plan.
-    const isTeamAgent = !!(agentProfile?.primaryTeamId && agentProfile?.teamRole);
-    if (!isTeamAgent && Array.isArray(agentProfile?.tiers) && agentProfile.tiers.length > 0) {
-      resolvedTiers = agentProfile.tiers.map((t: any, i: number) => ({
-        tierName: t.tierName || `Tier ${i + 1}`,
-        fromCompanyDollar: asNumber(t.fromCompanyDollar),
-        toCompanyDollar: t.toCompanyDollar != null ? asNumber(t.toCompanyDollar) : null,
-        agentSplitPercent: asNumber(t.agentSplitPercent),
-        companySplitPercent: asNumber(t.companySplitPercent),
-      }));
-      resolvedPlanName = 'Individual Commission Plan';
-    }
-
-    // 2) For team members with custom override bands stored directly on the profile
-    //    (teamMemberCompMode === 'custom' && teamMemberOverrideBands.length > 0)
-    //    This takes priority over the memberPlans collection lookup.
-    if (
-      resolvedTiers.length === 0 &&
-      agentProfile?.primaryTeamId &&
+    if (agentProfile?.commissionMode === 'flat' &&
+        agentProfile?.flatAgentPercent != null) {
+      // Flat plan: single tier, no thresholds
+      const agentPct = asNumber(agentProfile.flatAgentPercent);
+      resolvedTiers = [{
+        tierName: 'Flat',
+        fromCompanyDollar: 0,
+        toCompanyDollar: null,
+        agentSplitPercent: agentPct,
+        companySplitPercent: Number((100 - agentPct).toFixed(1)),
+      }];
+      resolvedPlanName = 'Flat Commission Plan';
+    } else if (
       agentProfile?.teamRole === 'member' &&
-      agentProfile?.teamMemberCompMode === 'custom' &&
       Array.isArray(agentProfile?.teamMemberOverrideBands) &&
       agentProfile.teamMemberOverrideBands.length > 0
     ) {
+      // Team member: use the override bands saved on the profile
       resolvedTiers = agentProfile.teamMemberOverrideBands.map((b: any, i: number) => ({
         tierName: b.tierName || `Tier ${i + 1}`,
         fromCompanyDollar: asNumber(b.fromCompanyDollar),
@@ -767,71 +766,20 @@ export async function GET(req: NextRequest) {
         agentSplitPercent: asNumber(b.memberPercent),
         companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
       }));
-      resolvedPlanName = 'Custom Member Plan';
-    }
-
-    // 3) If still no tiers, try team plan bands (for team leaders/members)
-    if (resolvedTiers.length === 0 && agentProfile?.primaryTeamId) {
-      try {
-        const teamId = agentProfile.primaryTeamId;
-        const teamRole = agentProfile.teamRole; // 'leader' | 'member'
-
-        // Find the team to get teamPlanId
-        const teamSnap = await adminDb.collection('teams').doc(teamId).get();
-        const teamData = teamSnap.exists ? teamSnap.data() : null;
-        const teamPlanId = teamData?.teamPlanId;
-
-        if (teamPlanId) {
-          const tpSnap = await adminDb.collection('teamPlans').doc(teamPlanId).get();
-          const tpData = tpSnap.exists ? tpSnap.data() : null;
-
-          if (tpData) {
-            resolvedPlanName = tpData.planName || 'Team Commission Plan';
-
-            if (teamRole === 'leader' && Array.isArray(tpData.leaderStructureBands)) {
-              resolvedTiers = tpData.leaderStructureBands.map((b: any, i: number) => ({
-                tierName: b.tierName || `Tier ${i + 1}`,
-                fromCompanyDollar: asNumber(b.fromCompanyDollar),
-                toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
-                agentSplitPercent: asNumber(b.leaderPercent),
-                companySplitPercent: asNumber(b.companyPercent),
-              }));
-            } else if (teamRole === 'member') {
-              // Check memberPlans collection for a named custom plan
-              const agentIdForMember = agentProfile.agentId || uid;
-              const memberPlanSnap = await adminDb.collection('memberPlans')
-                .where('agentId', '==', agentIdForMember)
-                .where('teamId', '==', teamId)
-                .limit(1)
-                .get();
-
-              if (!memberPlanSnap.empty) {
-                const mp = memberPlanSnap.docs[0].data();
-                if (Array.isArray(mp.payoutBands)) {
-                  resolvedTiers = mp.payoutBands.map((b: any, i: number) => ({
-                    tierName: b.tierName || `Tier ${i + 1}`,
-                    fromCompanyDollar: asNumber(b.fromCompanyDollar),
-                    toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
-                    agentSplitPercent: asNumber(b.memberPercent),
-                    companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
-                  }));
-                  resolvedPlanName = mp.planName || resolvedPlanName;
-                }
-              } else if (Array.isArray(tpData.memberDefaultBands)) {
-                resolvedTiers = tpData.memberDefaultBands.map((b: any, i: number) => ({
-                  tierName: b.tierName || `Tier ${i + 1}`,
-                  fromCompanyDollar: asNumber(b.fromCompanyDollar),
-                  toCompanyDollar: b.toCompanyDollar != null ? asNumber(b.toCompanyDollar) : null,
-                  agentSplitPercent: asNumber(b.memberPercent),
-                  companySplitPercent: Number((100 - asNumber(b.memberPercent)).toFixed(1)),
-                }));
-              }
-            }
-          }
-        }
-      } catch (teamErr) {
-        console.warn('[dashboard] Failed to load team plan tiers:', teamErr);
-      }
+      resolvedPlanName = 'Member Commission Plan';
+    } else if (
+      Array.isArray(agentProfile?.tiers) &&
+      agentProfile.tiers.length > 0
+    ) {
+      // Independent agent or team leader: use the tiers array on the profile
+      resolvedTiers = agentProfile.tiers.map((t: any, i: number) => ({
+        tierName: t.tierName || `Tier ${i + 1}`,
+        fromCompanyDollar: asNumber(t.fromCompanyDollar),
+        toCompanyDollar: t.toCompanyDollar != null ? asNumber(t.toCompanyDollar) : null,
+        agentSplitPercent: asNumber(t.agentSplitPercent),
+        companySplitPercent: asNumber(t.companySplitPercent),
+      }));
+      resolvedPlanName = agentProfile?.teamRole === 'leader' ? 'Team Leader Commission Plan' : 'Individual Commission Plan';
     }
      // ── Anniversary cycle — compute GCI within the agent's commission cycle ────
     const agentStartDate = agentProfile?.startDate || null;
