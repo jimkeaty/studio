@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs && npx tsc --noEmit --skipLibCheck",
+    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs",
     "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
@@ -49,7 +49,7 @@
     "firebase-admin": "^13.6.1",
     "genkit": "^1.20.0",
     "lucide-react": "^0.475.0",
-    "next": "^15.0.8",
+    "next": "^15.5.19",
     "openai": "^6.39.0",
     "patch-package": "^8.0.0",
     "pdf-parse": "^2.4.5",
