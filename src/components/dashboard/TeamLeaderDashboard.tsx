@@ -60,6 +60,7 @@ interface TeamTransaction {
   dealValue: number;
   agentNetCommission: number;
   grossCommission: number;
+  leaderRetained: number;
   closedDate: string | null;
   contractDate: string | null;
   transactionType: string | null;
@@ -341,13 +342,14 @@ function TeamTransactionsList({ transactions }: { transactions: TeamTransaction[
                 <TableHead className="text-xs text-right">Volume</TableHead>
                 <TableHead className="text-xs text-right">GCI</TableHead>
                 <TableHead className="text-xs text-right">Agent Net</TableHead>
+                <TableHead className="text-xs text-right">Leader Retained</TableHead>
                 <TableHead className="text-xs text-right">Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
                     No transactions found
                   </TableCell>
                 </TableRow>
@@ -364,6 +366,9 @@ function TeamTransactionsList({ transactions }: { transactions: TeamTransaction[
                   <TableCell className="text-sm text-right">{fmtCompact(t.dealValue)}</TableCell>
                   <TableCell className="text-sm text-right">{fmtCompact(t.grossCommission)}</TableCell>
                   <TableCell className="text-sm text-right font-medium">{fmtCompact(t.agentNetCommission)}</TableCell>
+                  <TableCell className="text-sm text-right font-medium text-primary">
+                    {t.leaderRetained > 0 ? fmtCompact(t.leaderRetained) : '—'}
+                  </TableCell>
                   <TableCell className="text-xs text-right text-muted-foreground">
                     {fmtDate(t.closedDate ?? t.contractDate)}
                   </TableCell>

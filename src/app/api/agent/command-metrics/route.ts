@@ -552,6 +552,9 @@ export async function GET(req: NextRequest) {
       totalGCI: number;
       memberBreakdown: MemberEarnings[];
     } | null = null;
+    // Hoisted so the teamTransactions block below can also compute per-transaction leaderRetained
+    let teamLeaderPct = 0;
+    let teamMemberPct = 0;
 
     if (view === 'team' && isTeamLeader && teamId) {
       // Load member profiles so we can map agentId → display name
@@ -560,8 +563,6 @@ export async function GET(req: NextRequest) {
       const memberNameMap = new Map<string, string>();
       // Also build a map from agentId slug → leaderPercent from the team plan
       // so we can compute leaderRetained when splitSnapshot.leaderRetainedAfterMember is missing.
-      let teamLeaderPct = 0;
-      let teamMemberPct = 0;
       if (teamId) {
         try {
           const teamDocForPct = await adminDb.collection('teams').doc(teamId).get();
@@ -662,6 +663,7 @@ export async function GET(req: NextRequest) {
       dealValue: number;
       agentNetCommission: number;
       grossCommission: number;
+      leaderRetained: number;
       closedDate: string | null;
       contractDate: string | null;
       transactionType: string | null;
@@ -709,6 +711,19 @@ export async function GET(req: NextRequest) {
             if (v?.toDate) return v.toDate().toISOString();
             return String(v);
           };
+          // Compute per-transaction leaderRetained using the same logic as teamLeaderEarnings
+          const gciTx = (snap?.grossCommission ?? raw.commission ?? 0) as number;
+          const memberPaidTx = (snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? 0) as number;
+          let leaderRetainedTx: number;
+          if (snap?.leaderRetainedAfterMember != null) {
+            leaderRetainedTx = snap.leaderRetainedAfterMember as number;
+          } else if (gciTx > 0 && teamLeaderPct > 0 && teamMemberPct > 0) {
+            const leaderSideTx = gciTx * (teamLeaderPct / 100);
+            const estMemberPaid = memberPaidTx > 0 ? memberPaidTx : gciTx * (teamMemberPct / 100);
+            leaderRetainedTx = Math.max(0, leaderSideTx - estMemberPaid);
+          } else {
+            leaderRetainedTx = 0;
+          }
           return {
             id: (raw.id ?? raw.docId ?? '') as string,
             agentId: (t.agentId as string) ?? '',
@@ -716,8 +731,9 @@ export async function GET(req: NextRequest) {
             address: (raw.address ?? raw.propertyAddress ?? '') as string,
             status: (t.status ?? '') as string,
             dealValue: (t.dealValue ?? 0) as number,
-            agentNetCommission: (snap?.agentNetCommission ?? snap?.agentDollar ?? 0) as number,
-            grossCommission: (snap?.grossCommission ?? raw.commission ?? 0) as number,
+            agentNetCommission: memberPaidTx,
+            grossCommission: gciTx,
+            leaderRetained: leaderRetainedTx,
             closedDate: toStr(t.closedDate),
             contractDate: toStr(t.contractDate),
             transactionType: (raw.transactionType ?? null) as string | null,
