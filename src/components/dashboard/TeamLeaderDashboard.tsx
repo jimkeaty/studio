@@ -632,6 +632,10 @@ export function TeamLeaderDashboard({
   const [rosterData, setRosterData] = useState<AgentRosterRow[]>([]);
   const [rosterLoading, setRosterLoading] = useState(false);
 
+  // Derive the leader's own teamId from teamData so we can scope the roster
+  // fetch and apply a client-side safety filter as a belt-and-suspenders guard.
+  const leaderTeamId = teamData?.agentView?.availableTeams?.[0]?.teamId ?? null;
+
   // Get auth token
   useEffect(() => {
     if (user) {
@@ -639,25 +643,32 @@ export function TeamLeaderDashboard({
     }
   }, [user]);
 
-  // Fetch member report card data
+  // Fetch member report card data — scoped to this leader's team only
   const fetchRoster = useCallback(async () => {
     if (!token) return;
     setRosterLoading(true);
     try {
-      const res = await fetch(`/api/broker/agent-roster-metrics?year=${year}`, {
+      const params = new URLSearchParams({ year: String(year) });
+      if (leaderTeamId) params.set('teamId', leaderTeamId);
+      const res = await fetch(`/api/broker/agent-roster-metrics?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
-        setRosterData(data.agents ?? []);
+        // Belt-and-suspenders: only render agents that belong to this leader's team
+        const agents: AgentRosterRow[] = data.agents ?? [];
+        const scoped = leaderTeamId
+          ? agents.filter(a => a.teamId === leaderTeamId)
+          : agents;
+        setRosterData(scoped);
       }
     } catch { /* non-fatal */ }
     setRosterLoading(false);
-  }, [token, year]);
+  }, [token, year, leaderTeamId]);
 
   useEffect(() => {
     if (token) fetchRoster();
-  }, [token, year, fetchRoster]);
+  }, [token, year, leaderTeamId, fetchRoster]);
 
   // View as agent handler — navigates to agent dashboard with viewAs params
   const handleViewAs = useCallback((agentId: string, name: string) => {
