@@ -147,6 +147,10 @@ interface TeamCommandData {
     monthlyPendingNetIncome: number[];
     netIncome: number;
     pendingNetIncome: number;
+    /** Team view: distinct agents with at least one closed deal in the year */
+    activeAgentCount?: number;
+    /** Team view: total number of agents on the team roster */
+    totalTeamMembers?: number;
   };
   teamLeaderEarnings?: TeamLeaderEarnings | null;
 }
@@ -1103,10 +1107,10 @@ export function TeamCommandDashboard({
   const scores = [gradeVolume, gradeSales].filter(g => g !== null) as number[];
   const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
-  // ── Active agent count from rosterData ────────────────────────────────────
-  const activeAgentCount = rosterData.filter(a =>
-    a.agentStatus === 'active' || a.agentStatus === 'grace_period'
-  ).length;
+  // ── Active agent count: prefer API count (agents with ≥1 closed deal this year)
+  const activeAgentCount = data?.agentView?.activeAgentCount
+    ?? rosterData.filter(a => a.agentStatus === 'active' || a.agentStatus === 'grace_period').length;
+  const totalTeamMembersCount = data?.agentView?.totalTeamMembers ?? rosterData.length;
 
   // ── Category breakdown helpers ─────────────────────────────────────────────
   const CAT_LABELS: Record<string, string> = {
@@ -1460,12 +1464,12 @@ export function TeamCommandDashboard({
             <div className="flex justify-between items-baseline">
               <span className="text-muted-foreground text-sm">Active Agents</span>
               <span className="text-3xl font-black text-teal-700 dark:text-teal-400">
-                {activeAgentCount > 0 ? activeAgentCount : rosterData.length}
+                {activeAgentCount}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {rosterData.length > 0
-                ? `${rosterData.length} total member${rosterData.length !== 1 ? 's' : ''} on team`
+              {totalTeamMembersCount > 0
+                ? `${totalTeamMembersCount} total member${totalTeamMembersCount !== 1 ? 's' : ''} on team`
                 : 'Team member count'}
             </p>
             {data.teamLeaderEarnings && data.teamLeaderEarnings.memberBreakdown.length > 0 && (

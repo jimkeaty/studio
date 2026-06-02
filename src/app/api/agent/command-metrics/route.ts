@@ -185,14 +185,27 @@ export async function GET(req: NextRequest) {
     let viewLabel = 'Personal';
     let availableTeams: { teamId: string; teamName: string }[] = [];
 
+    // For team view: store the member profile docs so we can reuse them below
+    let teamMemberProfileDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+
     if (view === 'team' && isTeamLeader && teamId) {
       // Team leader viewing their team
       const membersSnap = await adminDb.collection('agentProfiles')
         .where('primaryTeamId', '==', teamId).get();
-      agentIds = new Set(membersSnap.docs.map(d => d.data().agentId as string));
+      teamMemberProfileDocs = membersSnap.docs;
+      agentIds = new Set<string>();
+      for (const d of membersSnap.docs) {
+        const pd = d.data();
+        // Include agentId slug, Firestore doc ID, and firebaseUid — transactions may be stored under any
+        if (pd.agentId) agentIds.add(pd.agentId as string);
+        agentIds.add(d.id);
+        if (pd.firebaseUid) agentIds.add(pd.firebaseUid as string);
+      }
       agentIds.add(uid); // Include leader
       // Also include the resolved Firebase UID so transactions stored under either ID are found
       if (agentFirebaseUid && agentFirebaseUid !== uid) agentIds.add(agentFirebaseUid);
+      // Also include the leader's agentId slug from profile
+      if (profile?.agentId && !agentIds.has(String(profile.agentId))) agentIds.add(String(profile.agentId));
       viewLabel = teamName || 'My Team';
     } else {
       // Personal view — include both the passed uid (may be a slug) AND the resolved Firebase UID.
@@ -221,7 +234,27 @@ export async function GET(req: NextRequest) {
           .get()
       )
     );
-    const allAgentTx: Transaction[] = allTxSnaps.flatMap(s => s.docs.map(d => d.data() as Transaction));
+    // For team view: also fetch any transactions that have splitSnapshot.primaryTeamId == teamId
+    // but whose agentId wasn't captured in the agentIds set (e.g. imported with a different ID).
+    let extraTeamTxSnap: FirebaseFirestore.QuerySnapshot | null = null;
+    if (view === 'team' && isTeamLeader && teamId) {
+      extraTeamTxSnap = await adminDb.collection('transactions')
+        .where('splitSnapshot.primaryTeamId', '==', teamId)
+        .get();
+    }
+    const seenDocIds = new Set<string>();
+    const allAgentTxRaw: Transaction[] = allTxSnaps.flatMap(s =>
+      s.docs.map(d => { seenDocIds.add(d.id); return d.data() as Transaction; })
+    );
+    if (extraTeamTxSnap) {
+      for (const d of extraTeamTxSnap.docs) {
+        if (!seenDocIds.has(d.id)) {
+          allAgentTxRaw.push(d.data() as Transaction);
+          seenDocIds.add(d.id);
+        }
+      }
+    }
+    const allAgentTx: Transaction[] = allAgentTxRaw;
 
     // Derive each transaction's year from the year field (if present) or from closedDate/contractDate
     const getTxYear = (t: Transaction): number | null => {
@@ -592,6 +625,11 @@ export async function GET(req: NextRequest) {
         if (pd.firebaseUid) memberNameMap.set(pd.firebaseUid as string, name);
       }
 
+      // Build a set of all identifiers that belong to the leader so we can detect leader's own deals
+      const leaderIdSet = new Set<string>([uid]);
+      if (agentFirebaseUid) leaderIdSet.add(agentFirebaseUid);
+      if (profile?.agentId) leaderIdSet.add(String(profile.agentId));
+
       const memberMap = new Map<string, MemberEarnings>();
 
       for (const t of transactions) {
@@ -602,12 +640,21 @@ export async function GET(req: NextRequest) {
 
         const snap = t.splitSnapshot as any;
         const gci = snap?.grossCommission ?? t.commission ?? 0;
-        // leaderRetainedAfterMember is stored by the resolver for team-member transactions.
-        // If missing (e.g. older/imported transactions), fall back to calculating it from
-        // the team plan percentages: leaderSide = GCI × leaderPct; leaderRetained = leaderSide - memberPaid
-        const memberPaid = snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? 0;
+        const agentKey = (t.agentId as string) || 'unknown';
+        const isLeaderOwnDeal = leaderIdSet.has(agentKey);
+
+        // When the leader sells a deal personally, they keep their full agentNet as leaderRetained
+        // (there is no separate member to pay — the leader IS the agent).
+        // For team member deals, use leaderRetainedAfterMember from the split snapshot,
+        // falling back to an estimate from team plan percentages.
+        const memberPaid = isLeaderOwnDeal
+          ? (snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? Math.max(0, gci - (snap?.companyRetained ?? t.brokerProfit ?? 0)))
+          : (snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? 0);
         let leaderRetained: number;
-        if (snap?.leaderRetainedAfterMember != null) {
+        if (isLeaderOwnDeal) {
+          // Leader's own deal: their full agent net is their retained amount
+          leaderRetained = memberPaid;
+        } else if (snap?.leaderRetainedAfterMember != null) {
           leaderRetained = snap.leaderRetainedAfterMember;
         } else if (gci > 0 && teamLeaderPct > 0 && teamMemberPct > 0) {
           // Fallback: estimate from team plan bands
@@ -618,7 +665,6 @@ export async function GET(req: NextRequest) {
           leaderRetained = 0;
         }
         const dealValue = t.dealValue ?? 0;
-        const agentKey = (t.agentId as string) || 'unknown';
         const agentName = memberNameMap.get(agentKey) ?? agentKey;
 
         if (!memberMap.has(agentKey)) {
@@ -787,6 +833,23 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ── Active agent count (team view) ─────────────────────────────────────
+    // Count distinct agentIds that have at least one closed deal in the selected year.
+    let activeAgentCount = 0;
+    let totalTeamMembers = 0;
+    if (view === 'team' && isTeamLeader) {
+      totalTeamMembers = teamMemberProfileDocs.length;
+      const activeAgentSet = new Set<string>();
+      for (const t of transactions) {
+        if (t.status !== 'closed') continue;
+        const closedDate = parseDate(t.closedDate);
+        if (!isAllYears && (!closedDate || closedDate.getFullYear() !== year)) continue;
+        if (isAllYears && !closedDate) continue;
+        if (t.agentId) activeAgentSet.add(t.agentId as string);
+      }
+      activeAgentCount = activeAgentSet.size;
+    }
+
     // ── Response ──────────────────────────────────────────────────────────
     const isAdminCaller = await isAdminLike(decoded.uid);
     const overview: BrokerCommandOverview = { year, totals, months, categoryBreakdown, sourceBreakdown, sideBreakdown };
@@ -871,6 +934,9 @@ export async function GET(req: NextRequest) {
         netIncome: totals.netIncome,
         pendingNetIncome: totals.pendingNetIncome,
         goalSegment,
+        // Team view extras
+        activeAgentCount: view === 'team' ? activeAgentCount : undefined,
+        totalTeamMembers: view === 'team' ? totalTeamMembers : undefined,
       },
       // Team leader earnings breakdown (only present when view=team and caller is team leader)
       teamLeaderEarnings,
