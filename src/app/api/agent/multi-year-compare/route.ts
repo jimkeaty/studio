@@ -58,14 +58,28 @@ export async function GET(req: NextRequest) {
     let agentIds: string[] = [uid];
 
     if (view === 'team') {
-      const profileSnap = await adminDb.collection('agentProfiles')
+      // Robust profile resolution: try agentId slug first, then firebaseUid
+      let profileSnap = await adminDb.collection('agentProfiles')
         .where('agentId', '==', uid).limit(1).get();
+      if (profileSnap.empty) {
+        profileSnap = await adminDb.collection('agentProfiles')
+          .where('firebaseUid', '==', uid).limit(1).get();
+      }
       const profile = profileSnap.empty ? null : profileSnap.docs[0].data();
 
       if (profile?.teamRole === 'leader' && profile?.primaryTeamId) {
         const membersSnap = await adminDb.collection('agentProfiles')
           .where('primaryTeamId', '==', profile.primaryTeamId).get();
-        const memberIds = membersSnap.docs.map(d => d.data().agentId as string).filter(Boolean);
+        const memberIds = membersSnap.docs
+          .flatMap(d => {
+            const pd = d.data();
+            // Include both agentId slug and firebaseUid so transactions stored under either are found
+            const ids: string[] = [];
+            if (pd.agentId) ids.push(pd.agentId as string);
+            if (pd.firebaseUid) ids.push(pd.firebaseUid as string);
+            return ids;
+          })
+          .filter(Boolean);
         agentIds = [...new Set([uid, ...memberIds])];
       }
     }

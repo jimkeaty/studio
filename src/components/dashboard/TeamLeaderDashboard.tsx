@@ -31,6 +31,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase';
+import { TeamCommandDashboard } from '@/components/dashboard/TeamCommandDashboard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -713,48 +714,16 @@ export function TeamLeaderDashboard({
 
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Users className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-bold">{teamName} Dashboard</h2>
-          <Badge variant="secondary">Team View</Badge>
-        </div>
-        <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-          <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {[...Array(5)].map((_, i) => {
-              const y = new Date().getFullYear() - i;
-              return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
-            })}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* ── KPI Tiles ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard title="Team Net Income" value={fmtCompact(totals.netIncome)} subtitle={`${totals.closedCount} closings`} icon={DollarSign} highlight />
-        <KpiCard title="Team Closed Volume" value={fmtCompact(totals.closedVolume)} subtitle={`Pending: ${fmtCompact(totals.pendingVolume)}`} icon={TrendingUp} />
-        <KpiCard title="Total Sides" value={String(totals.closedCount)} subtitle={`${totals.pendingCount} pending`} icon={BarChart3} />
-        <KpiCard title="Avg Sale Price" value={fmtCompact(avgSalePrice)} subtitle={`Avg net/deal: ${fmtCompact(avgNetPerDeal)}`} icon={Home} />
-      </div>
+      {/* ── Full Team Command Dashboard (charts, KPIs, goals, multi-year) ── */}
+      <TeamCommandDashboard
+        teamId={leaderTeamId ?? ''}
+        teamName={teamName}
+        rosterData={rosterData}
+        useBrokerEndpoint={false}
+      />
 
       {/* ── Today's Focus ── */}
       <TodaysFocusSection teamData={teamData} inactiveAlerts={inactiveMemberAlerts} />
-
-      {/* ── Leader Earnings ── */}
-      {teamLeaderEarnings && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Award className="h-4 w-4 text-amber-600" /> My Leader Earnings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LeaderEarningsPanel tle={teamLeaderEarnings} />
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── Member Report Cards ── */}
       <Card>
