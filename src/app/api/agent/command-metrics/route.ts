@@ -123,8 +123,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Strategy 3: look up by email from the auth token — always works on first login
-    if (!profileDocId) {
+    // Strategy 3: look up by email from the auth token — always works on first login.
+    // IMPORTANT: skip this when viewAs is active — decoded.email belongs to the broker/admin
+    // caller, not the agent being viewed. Using it would match the broker's own profile and
+    // pull the broker's transactions into the viewed agent's dashboard.
+    const isViewingAs = !!(viewAs && callerIsAdmin);
+    if (!profileDocId && !isViewingAs) {
       const email = decoded.email || '';
       if (email) {
         const profileByEmailSnap = await adminDb.collection('agentProfiles')

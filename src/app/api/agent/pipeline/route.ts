@@ -147,8 +147,12 @@ export async function GET(req: NextRequest) {
     const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
 
-    // Resolve all possible agentId values for this agent (slug + Firebase UID + email)
-    const agentIds = await resolveQueryIds(uid, decoded.email);
+    // Resolve all possible agentId values for this agent (slug + Firebase UID + email).
+    // IMPORTANT: when viewAs is active, do NOT pass the caller's email — that would cause
+    // Strategy 5 to match the broker's own agentProfile and add the broker's transactions.
+    // Only pass the email when the caller is viewing their own pipeline.
+    const resolveEmail = (viewAs && callerIsAdmin) ? undefined : decoded.email;
+    const agentIds = await resolveQueryIds(uid, resolveEmail);
 
     // Strip commission split fields for non-admin callers.
     // Agents only see their net income; all gross commission, broker retained,
