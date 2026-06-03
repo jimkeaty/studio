@@ -234,7 +234,7 @@ const schema = z.object({
 
   // Basics
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
-  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
+  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5, 'Full property address is required'),
   clientName: z.string().optional(),  // Populated from Buyer/Seller section; not shown in Property Details
   dealSource: z.string().optional(),
@@ -260,7 +260,22 @@ const schema = z.object({
   listingDate: z.string().optional().or(z.literal('')),
   listingExpirationDate: z.string().optional().or(z.literal('')),
   contractDate: z.string().optional().or(z.literal('')),
+  // optionExpiration removed — not needed at listing stage
   optionExpiration: z.string().optional().or(z.literal('')),
+
+  // Commercial Lease/Sale listing fields
+  commercialForSale: z.boolean().optional(),
+  commercialSalePrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialForLease: z.boolean().optional(),
+  commercialLeaseMonthly: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeasePricePerSqft: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseTerm: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialTotalLeaseValue: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseGci: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseCommissionMode: z.enum(['percent', 'flat']).optional(),
+  commercialLeaseCommissionPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
   inspectionDeadline: z.string().optional().or(z.literal('')),
   surveyDeadline: z.string().optional().or(z.literal('')),
   projectedCloseDate: z.string().optional().or(z.literal('')),
@@ -798,6 +813,19 @@ export default function AddTransactionPage() {
   const tcScheduleInspections = form.watch('tcScheduleInspections');
   const occupancyAgreement = form.watch('occupancyAgreement');
   const inspectionTypes = form.watch('inspectionTypes') || [];
+  const watchedStatus = form.watch('status');
+  const watchedDealType = form.watch('dealType');
+  const isActiveListing = watchedStatus === 'active' && (watchedClosingType === 'listing' || watchedClosingType === 'dual');
+  const isCommercialListing = watchedDealType === 'commercial_listing';
+
+  // Commercial lease state
+  const [commLeaseMode, setCommLeaseMode] = useState<'percent' | 'flat'>('percent');
+  const watchedCommForLease = form.watch('commercialForLease');
+  const watchedCommForSale = form.watch('commercialForSale');
+  const watchedCommLeaseMonthly = form.watch('commercialLeaseMonthly');
+  const watchedCommLeaseTerm = form.watch('commercialLeaseTerm');
+  const watchedCommLeasePct = form.watch('commercialLeaseCommissionPct');
+  const watchedCommLeaseFlat = form.watch('commercialLeaseCommissionFlat');
 
   // Auto-sync clientType from closingType so the Buyer/Seller section shows the right contacts
   useEffect(() => {
@@ -857,6 +885,31 @@ export default function AddTransactionPage() {
       form.setValue('gci', calcGCI as any);
     }
   }, [watchedCBP, watchedCommPct]);
+
+  // Commercial lease auto-calc: monthly × 12 × term = total lease value; then GCI
+  useEffect(() => {
+    const monthly = Number(watchedCommLeaseMonthly) || 0;
+    const term = Number(watchedCommLeaseTerm) || 0;
+    if (monthly > 0 && term > 0) {
+      const totalLease = monthly * 12 * term;
+      form.setValue('commercialTotalLeaseValue', totalLease as any);
+      if (commLeaseMode === 'percent') {
+        const pct = Number(watchedCommLeasePct) || 0;
+        if (pct > 0) {
+          const gci = totalLease * (pct / 100);
+          form.setValue('commercialLeaseGci', gci as any);
+          form.setValue('commercialLeaseEffectivePct', pct as any);
+        }
+      } else {
+        const flat = Number(watchedCommLeaseFlat) || 0;
+        if (flat > 0) {
+          form.setValue('commercialLeaseGci', flat as any);
+          const effPct = totalLease > 0 ? (flat / totalLease) * 100 : 0;
+          form.setValue('commercialLeaseEffectivePct', parseFloat(effPct.toFixed(2)) as any);
+        }
+      }
+    }
+  }, [watchedCommLeaseMonthly, watchedCommLeaseTerm, watchedCommLeasePct, watchedCommLeaseFlat, commLeaseMode]);
 
   // Admin: load agent list
   useEffect(() => {
@@ -1580,8 +1633,7 @@ export default function AddTransactionPage() {
                       <SelectItem value="residential_sale">Residential Sale</SelectItem>
                       <SelectItem value="residential_lease">Residential Lease</SelectItem>
                       <SelectItem value="land">Land</SelectItem>
-                      <SelectItem value="commercial_sale">Commercial Sale</SelectItem>
-                      <SelectItem value="commercial_lease">Commercial Lease</SelectItem>
+                      <SelectItem value="commercial_listing">Commercial Lease/Sale</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -1663,6 +1715,189 @@ export default function AddTransactionPage() {
                 )} />
               )}
             </Grid2>
+
+            {/* ── Commercial Lease/Sale fields ── */}
+            {isCommercialListing && (
+              <div className="space-y-4 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 p-4">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Commercial Property Details</p>
+
+                {/* For Sale toggle */}
+                <FormField control={form.control} name="commercialForSale" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border bg-background p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-sm">Listed for Sale?</FormLabel>
+                      <FormDescription className="text-xs">Is this property available for purchase?</FormDescription>
+                    </div>
+                    <FormControl>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!field.value}
+                        onClick={() => field.onChange(!field.value)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                          field.value ? 'bg-primary' : 'bg-input'
+                        }`}
+                      >
+                        <span className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                          field.value ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </FormControl>
+                  </FormItem>
+                )} />
+
+                {watchedCommForSale && (
+                  <div className="max-w-xs">
+                    <FormField control={form.control} name="commercialSalePrice" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sale Price ($)</FormLabel>
+                        <FormControl>
+                          <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                        </FormControl>
+                      </FormItem>
+                    )} />
+                  </div>
+                )}
+
+                {/* For Lease toggle */}
+                <FormField control={form.control} name="commercialForLease" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border bg-background p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-sm">Listed for Lease?</FormLabel>
+                      <FormDescription className="text-xs">Is this property available to lease?</FormDescription>
+                    </div>
+                    <FormControl>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!field.value}
+                        onClick={() => field.onChange(!field.value)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                          field.value ? 'bg-primary' : 'bg-input'
+                        }`}
+                      >
+                        <span className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                          field.value ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </FormControl>
+                  </FormItem>
+                )} />
+
+                {watchedCommForLease && (
+                  <div className="space-y-4">
+                    <Grid3>
+                      <FormField control={form.control} name="commercialLeaseMonthly" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Lease Price / Month ($)</FormLabel>
+                          <FormControl>
+                            <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                          </FormControl>
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="commercialLeasePricePerSqft" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Lease Price / Sq Ft ($)</FormLabel>
+                          <FormControl>
+                            <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                          </FormControl>
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="commercialLeaseTerm" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Lease Term (years)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.5" min="0" placeholder="e.g. 5" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )} />
+                    </Grid3>
+
+                    {/* Auto-calculated total lease value */}
+                    {Number(form.watch('commercialTotalLeaseValue')) > 0 && (
+                      <div className="rounded-md bg-background border px-4 py-3 text-sm">
+                        <span className="text-muted-foreground">Total Lease Value: </span>
+                        <span className="font-semibold text-primary">
+                          ${Number(form.watch('commercialTotalLeaseValue')).toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                        </span>
+                        <span className="text-muted-foreground text-xs ml-2">
+                          (${Number(form.watch('commercialLeaseMonthly') || 0).toLocaleString()}/mo × 12 × {Number(form.watch('commercialLeaseTerm') || 0)} yrs)
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Commission for lease */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lease Commission</p>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-medium ${commLeaseMode === 'percent' ? 'text-primary' : 'text-muted-foreground'}`}>%</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={commLeaseMode === 'flat'}
+                            onClick={() => {
+                              const next = commLeaseMode === 'percent' ? 'flat' : 'percent';
+                              setCommLeaseMode(next);
+                              form.setValue('commercialLeaseCommissionMode', next);
+                              form.setValue('commercialLeaseCommissionPct', '' as any);
+                              form.setValue('commercialLeaseCommissionFlat', '' as any);
+                              form.setValue('commercialLeaseGci', '' as any);
+                              form.setValue('commercialLeaseEffectivePct', '' as any);
+                            }}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                              commLeaseMode === 'flat' ? 'bg-primary' : 'bg-input'
+                            }`}
+                          >
+                            <span className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                              commLeaseMode === 'flat' ? 'translate-x-4' : 'translate-x-0'
+                            }`} />
+                          </button>
+                          <span className={`text-xs font-medium ${commLeaseMode === 'flat' ? 'text-primary' : 'text-muted-foreground'}`}>Flat $</span>
+                        </div>
+                      </div>
+
+                      <Grid2>
+                        {commLeaseMode === 'percent' ? (
+                          <FormField control={form.control} name="commercialLeaseCommissionPct" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Commission %</FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                                </div>
+                              </FormControl>
+                            </FormItem>
+                          )} />
+                        ) : (
+                          <FormField control={form.control} name="commercialLeaseCommissionFlat" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Flat Commission ($)</FormLabel>
+                              <FormControl>
+                                <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                              </FormControl>
+                            </FormItem>
+                          )} />
+                        )}
+
+                        <FormField control={form.control} name="commercialLeaseGci" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>GCI ($) {commLeaseMode === 'flat' && Number(form.watch('commercialLeaseEffectivePct')) > 0 && (
+                              <span className="text-xs text-muted-foreground font-normal ml-1">({Number(form.watch('commercialLeaseEffectivePct')).toFixed(2)}% effective)</span>
+                            )}</FormLabel>
+                            <FormControl>
+                              <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="Auto-calculated" readOnly className="bg-muted cursor-default" />
+                            </FormControl>
+                            <FormDescription>Auto-calculated from lease value × commission</FormDescription>
+                          </FormItem>
+                        )} />
+                      </Grid2>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* TC Working File */}
             <FormField control={form.control} name="tcWorking" render={({ field }) => (
@@ -1854,9 +2089,6 @@ export default function AddTransactionPage() {
                 <FormField control={form.control} name="listingExpirationDate" render={({ field }) => (
                   <FormItem><FormLabel>Listing Expiration Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
                 )} />
-                <FormField control={form.control} name="optionExpiration" render={({ field }) => (
-                  <FormItem><FormLabel>Option Expiration Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-                )} />
               </Grid3>
             )}
             {/* Contract / closing dates — shown for buyer and dual only */}
@@ -1908,8 +2140,8 @@ export default function AddTransactionPage() {
                 </Grid3>
               </>
             )}
-            {/* For listing-only: still show close date (for when it goes pending) */}
-            {watchedClosingType === 'listing' && (
+            {/* For listing-only: show close date only when NOT active (pending/closed) */}
+            {watchedClosingType === 'listing' && !isActiveListing && (
               <Grid3>
                 <FormField control={form.control} name="closedDate" render={({ field }) => (
                   <FormItem>
@@ -3594,9 +3826,9 @@ export default function AddTransactionPage() {
           </Section>}
 
           {/* ═══════════════════════════════════════════════════════════════════
-              SECTION 6 — ADDITIONAL INFO / COMMENTS (hidden for referral)
+              SECTION 6 — ADDITIONAL INFO / COMMENTS (hidden for referral and active listings)
           ═══════════════════════════════════════════════════════════════════ */}
-          {watchedClosingType !== 'referral' && <Section title="Additional Info">
+          {watchedClosingType !== 'referral' && !isActiveListing && <Section title="Additional Info">
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
               <FormItem>
