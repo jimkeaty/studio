@@ -622,9 +622,10 @@ type Props = {
   teamId?: string;
   teamName?: string;
   viewAs?: string;
+  isAdminViewer?: boolean;
 };
 
-export function TeamTransactionsLedger({ teamId, teamName, viewAs }: Props) {
+export function TeamTransactionsLedger({ teamId, teamName, viewAs, isAdminViewer }: Props) {
   const { user } = useUser();
   const [transactions, setTransactions] = useState<TeamTx[]>([]);
   const [leaderAgentIds, setLeaderAgentIds] = useState<Set<string>>(new Set());
@@ -1035,7 +1036,7 @@ export function TeamTransactionsLedger({ teamId, teamName, viewAs }: Props) {
                       : (t.splitSnapshot?.leaderRetainedAfterMember ?? 0);
                     const sc = statusConfig[t.status] || statusConfig.pending;
                     const addr = t.address || t.propertyAddress || '—';
-                    const canEdit = t.status !== 'closed';
+                    const canEdit = t.status !== 'closed' || !!isAdminViewer;
                     return (
                       <TableRow
                         key={t.id}

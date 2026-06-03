@@ -656,6 +656,7 @@ export function TeamLeaderDashboard({
   year,
   setYear,
   viewAs,
+  isAdminViewer,
 }: {
   teamData: TeamDashboardData | null;
   teamLoading: boolean;
@@ -663,6 +664,7 @@ export function TeamLeaderDashboard({
   year: number;
   setYear: (y: number) => void;
   viewAs?: string;
+  isAdminViewer?: boolean;
 }) {
   const { user } = useUser();
   const router = useRouter();
@@ -793,6 +795,7 @@ export function TeamLeaderDashboard({
         teamId={leaderTeamId ?? undefined}
         teamName={teamName}
         viewAs={viewAs}
+        isAdminViewer={isAdminViewer}
       />
     </div>
   );

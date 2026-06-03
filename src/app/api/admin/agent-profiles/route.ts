@@ -4,7 +4,7 @@ import { deriveAnniversary } from '@/lib/agents/deriveAnniversary';
 import { findFuzzyMatches } from '@/lib/agents/fuzzyMatch';
 import type { AgentProfile, AgentProfileInput, AgentTier, TeamMemberCompMode, TeamMemberOverrideBand } from '@/lib/agents/types';
 import type { MemberPlan, MemberPlanBand, TeamMembership, TeamPlan } from '@/lib/teams/types';
-import { isAdminLike } from '@/lib/auth/staffAccess';
+import { isAdminLike, isStaff } from '@/lib/auth/staffAccess';
 import { getTeamDefaultTiers } from '@/lib/commissions/teamTemplates';
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -26,6 +26,20 @@ async function requireAdmin(req: NextRequest) {
   const decoded = await adminAuth.verifyIdToken(token);
 
   if (!(await isAdminLike(decoded.uid))) {
+    throw new Error('FORBIDDEN');
+  }
+
+  return decoded;
+}
+
+/** Allows any staff user (office_admin, tc_admin, tc) — read-only operations */
+async function requireStaff(req: NextRequest) {
+  const token = extractBearer(req);
+  if (!token) throw new Error('UNAUTHORIZED');
+
+  const decoded = await adminAuth.verifyIdToken(token);
+
+  if (!(await isStaff(decoded.uid))) {
     throw new Error('FORBIDDEN');
   }
 
@@ -360,7 +374,8 @@ async function upsertTeamMembershipAndPlan(
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin(req);
+    // TC-only users need read access to the agent list so they can pick an agent to impersonate
+    await requireStaff(req);
 
     const snap = await adminDb
       .collection('agentProfiles')

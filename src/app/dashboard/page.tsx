@@ -962,6 +962,7 @@ function AgentDashboardPage() {
           year={teamDashYear}
           setYear={setTeamDashYear}
           viewAs={viewAs ?? undefined}
+          isAdminViewer={isAdmin && !!viewAs}
         />
       )}
 
@@ -1055,6 +1056,7 @@ function AgentDashboardPage() {
           <AgentTransactionsSection
             agentId={user?.uid ?? ''}
             viewAs={viewAs ?? undefined}
+            isAdminViewer={isAdmin && !!viewAs}
           />
         </div>
       )}

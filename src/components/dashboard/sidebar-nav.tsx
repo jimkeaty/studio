@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
+import { useIsStaff } from '@/hooks/useIsStaff';
 import {
   Sidebar,
   SidebarContent,
@@ -187,6 +188,8 @@ export function SidebarNav() {
   const pathname = usePathname();
   const { user } = useUser();
   const { isAdmin: showAdminMenu } = useIsAdminLike();
+  const { isStaff } = useIsStaff();
+  const isTcOnly = isStaff && !showAdminMenu; // tc role only — no full admin menu
   const { isImpersonating } = useImpersonation();
   const [branding, setBranding] = useState<BrandingData | null>(null);
 
@@ -311,6 +314,27 @@ export function SidebarNav() {
           </>
         )}
 
+        {/* TC-only: View Agent Dashboard shortcut (TC users don't see the full admin menu) */}
+        {!isImpersonating && isTcOnly && (
+          <>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Agent Access</p>
+              <SidebarMenuItem>
+                <Link href="/dashboard/admin/agents">
+                  <SidebarMenuButton
+                    isActive={pathname.startsWith('/dashboard/admin/agents')}
+                    tooltip="View Agent Dashboard"
+                    className="justify-start"
+                  >
+                    <Users className="h-4 w-4" />
+                    <span>View Agent Dashboard</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </>
+        )}
         {/* Admin sections */}
         {!isImpersonating && showAdminMenu && (
           <>

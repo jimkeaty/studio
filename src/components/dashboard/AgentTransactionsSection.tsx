@@ -643,9 +643,10 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
 type Props = {
   agentId: string;
   viewAs?: string;
+  isAdminViewer?: boolean;
 };
 
-export function AgentTransactionsSection({ agentId, viewAs }: Props) {
+export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Props) {
   const { user } = useUser();
   const [transactions, setTransactions] = useState<AgentTx[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1096,7 +1097,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                   const sc = statusConfig[t.status] || statusConfig.pending;
                   const addr = t.address || t.propertyAddress || '—';
                   const isCoAgentViewMobile = !!(t as any)._isCoAgentView;
-                  const canEditMobile = t.status !== 'closed' && !isCoAgentViewMobile;
+                  const canEditMobile = (t.status !== 'closed' || !!isAdminViewer) && !isCoAgentViewMobile;
                   return (
                     <div
                       key={t.id}
@@ -1198,7 +1199,7 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
                       const sc = statusConfig[t.status] || statusConfig.pending;
                       const addr = t.address || t.propertyAddress || '—';
                       const isCoAgentView = !!(t as any)._isCoAgentView;
-                      const canEdit = t.status !== 'closed' && !isCoAgentView; // closed + co-agent views are read-only
+                      const canEdit = (t.status !== 'closed' || !!isAdminViewer) && !isCoAgentView; // admin viewers can edit closed; co-agent views are always read-only
                       return (
                         <TableRow
                           key={t.id}
