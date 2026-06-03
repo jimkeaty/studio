@@ -98,6 +98,13 @@ export async function GET(req: NextRequest) {
     const snaps = await Promise.all(snapPromises);
     const docs = snaps.flatMap(s => s.docs);
 
+    // Partial-month cap: when comparing across years, only count transactions
+    // in the current calendar month if their day-of-month <= today's day.
+    // This gives an apples-to-apples YTD comparison at any point during the month.
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDayOfMonth = today.getDate(); // 1-31
+
     // ── Group by year → month ─────────────────────────────────────────────────
     const yearMap = new Map<number, Map<number, { netIncome: number; volume: number; sales: number; gci: number }>>();
 
@@ -108,6 +115,11 @@ export async function GET(req: NextRequest) {
 
       const yr = closedDate.getFullYear();
       const mo = closedDate.getMonth() + 1; // 1-12
+
+      // Partial-month cap: for any year, if the transaction falls in the same
+      // calendar month as today, only include it if its day <= today's day.
+      // This ensures June 2025 is only counted through June 3 when today is June 3.
+      if (mo === currentMonth && closedDate.getDate() > currentDayOfMonth) continue;
 
       if (!yearMap.has(yr)) yearMap.set(yr, new Map());
       const monthMap = yearMap.get(yr)!;
