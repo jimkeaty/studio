@@ -32,6 +32,7 @@ import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase';
 import { TeamCommandDashboard } from '@/components/dashboard/TeamCommandDashboard';
+import { TeamTransactionsLedger } from '@/components/dashboard/TeamTransactionsLedger';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -758,22 +759,12 @@ export function TeamLeaderDashboard({
         </CardContent>
       </Card>
 
-      {/* ── Team Transactions ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-primary" /> Team Transactions
-            {teamTransactions.length > 0 && <Badge variant="secondary">{teamTransactions.length}</Badge>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {teamTransactions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No transactions found for this period</p>
-          ) : (
-            <TeamTransactionsList transactions={teamTransactions} />
-          )}
-        </CardContent>
-      </Card>
+      {/* ── Team Transactions Ledger ── */}
+      <TeamTransactionsLedger
+        teamId={leaderTeamId ?? undefined}
+        teamName={teamName}
+        viewAs={viewAs}
+      />
     </div>
   );
 }

@@ -83,24 +83,77 @@ export async function PATCH(
     const txData = txSnap.data() || {};
 
     // Verify ownership — agent can only edit their own transactions
-    // (admins can also use this endpoint)
+    // Team leaders can also edit any transaction belonging to their team.
+    // Admins can edit any transaction.
     const isAdmin = await isAdminLike(uid);
     if (!isAdmin) {
       // Resolve all possible agentId values for this user
       const ownIds = new Set<string>([uid]);
+      let callerTeamId: string | null = null;
       try {
+        // Strategy 1: direct doc lookup
         const byDocId = await adminDb.collection('agentProfiles').doc(uid).get();
         if (byDocId.exists) {
           const d = byDocId.data() || {};
           if (d.agentId) ownIds.add(String(d.agentId));
+          if (d.teamRole === 'leader' && d.primaryTeamId) callerTeamId = String(d.primaryTeamId);
         }
+        // Strategy 2: agentId slug field
         const byField = await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get();
-        if (!byField.empty) ownIds.add(byField.docs[0].id);
+        if (!byField.empty) {
+          ownIds.add(byField.docs[0].id);
+          const fd = byField.docs[0].data() || {};
+          if (!callerTeamId && fd.teamRole === 'leader' && fd.primaryTeamId) callerTeamId = String(fd.primaryTeamId);
+        }
+        // Strategy 3: firebaseUid field
+        if (!callerTeamId) {
+          const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get();
+          if (!byFbUid.empty) {
+            const fd = byFbUid.docs[0].data() || {};
+            if (fd.teamRole === 'leader' && fd.primaryTeamId) callerTeamId = String(fd.primaryTeamId);
+          }
+        }
       } catch (_) {}
 
       const txAgentId = String(txData.agentId || '');
-      if (!ownIds.has(txAgentId)) {
-        return jsonError(403, 'You do not have permission to edit this transaction');
+      const txTeamId = String(txData.splitSnapshot?.primaryTeamId || txData.primaryTeamId || '');
+
+      // Allow if: (a) it's the agent's own transaction, OR
+      //           (b) the caller is a team leader and the transaction belongs to their team
+      const isOwnTx = ownIds.has(txAgentId);
+      const isTeamLeaderEdit = !!(callerTeamId && (txTeamId === callerTeamId || (() => {
+        // Also allow if the transaction's agent is a member of the caller's team
+        return false; // resolved below via async check if needed
+      })()));
+
+      if (!isOwnTx && !isTeamLeaderEdit) {
+        // Last check: is the transaction's agent a member of the caller's team?
+        let isTeamMember = false;
+        if (callerTeamId && txAgentId) {
+          try {
+            const memberSnap = await adminDb.collection('agentProfiles')
+              .where('primaryTeamId', '==', callerTeamId)
+              .where('agentId', '==', txAgentId)
+              .limit(1).get();
+            if (!memberSnap.empty) isTeamMember = true;
+            if (!isTeamMember) {
+              // Also check by doc ID
+              const memberByDocSnap = await adminDb.collection('agentProfiles').doc(txAgentId).get();
+              if (memberByDocSnap.exists && memberByDocSnap.data()?.primaryTeamId === callerTeamId) isTeamMember = true;
+            }
+            if (!isTeamMember) {
+              // Also check by firebaseUid
+              const memberByFbSnap = await adminDb.collection('agentProfiles')
+                .where('primaryTeamId', '==', callerTeamId)
+                .where('firebaseUid', '==', txAgentId)
+                .limit(1).get();
+              if (!memberByFbSnap.empty) isTeamMember = true;
+            }
+          } catch (_) {}
+        }
+        if (!isTeamMember) {
+          return jsonError(403, 'You do not have permission to edit this transaction');
+        }
       }
     }
 

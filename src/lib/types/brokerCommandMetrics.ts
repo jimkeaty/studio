@@ -176,12 +176,30 @@ export type TeamInfo = {
   teamName: string;
 };
 
+export type TeamLeaderEarningsMember = {
+  agentId: string;
+  agentName: string;
+  closedCount: number;
+  closedVolume: number;
+  totalGCI: number;
+  memberPaid: number;
+  leaderRetained: number;
+};
+
+export type TeamLeaderEarnings = {
+  totalLeaderRetained: number;
+  totalMemberPaid: number;
+  totalGCI: number;
+  memberBreakdown: TeamLeaderEarningsMember[];
+};
+
 export type BrokerCommandMetrics = {
   overview: BrokerCommandOverview;
   prevYearStats?: PrevYearStats;
   availableYears?: number[];       // years with transaction data (for comparison dropdown)
   comparisonData?: ComparisonData | null;  // monthly data for the selected comparison year
   teams?: TeamInfo[];              // available teams for team tabs
+  teamLeaderEarnings?: TeamLeaderEarnings | null; // populated when teamId is set and team has a leader
   // Legacy fields (kept for backward compatibility)
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;

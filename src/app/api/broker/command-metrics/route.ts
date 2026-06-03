@@ -10,6 +10,8 @@ import type {
   MonthlyData,
   CategoryMetrics,
   Metric,
+  TeamLeaderEarnings,
+  TeamLeaderEarningsMember,
 } from '@/lib/types/brokerCommandMetrics';
 
 
@@ -432,6 +434,77 @@ export async function GET(req: NextRequest) {
       comparisonData = { year: compareYear, months: compMonths };
     }
 
+    // 9b. Compute Team Leader Earnings when a specific team is selected
+    let teamLeaderEarnings: TeamLeaderEarnings | null = null;
+    if (teamIdParam && agentProfilesSnap) {
+      // Find the team leader's agentId
+      const leaderProfile = agentProfilesSnap.docs.find(d => d.data().teamRole === 'leader');
+      if (leaderProfile) {
+        // Load team plan for percentage fallback
+        let teamLeaderPct = 0;
+        let teamMemberPct = 0;
+        try {
+          const teamDoc = await adminDb.collection('teams').doc(teamIdParam).get();
+          const teamPlanId = teamDoc.data()?.teamPlanId;
+          if (teamPlanId) {
+            const planDoc = await adminDb.collection('teamPlans').doc(teamPlanId).get();
+            const planData = planDoc.data() || {};
+            const leaderBands: any[] = planData.leaderStructureBands || [];
+            const memberBands: any[] = planData.memberDefaultBands || [];
+            if (leaderBands.length > 0) teamLeaderPct = Number(leaderBands[0].leaderPercent || 0);
+            if (memberBands.length > 0) teamMemberPct = Number(memberBands[0].memberPercent || 0);
+          }
+        } catch { /* non-fatal */ }
+
+        // Build member name map
+        const memberNameMap = new Map<string, string>();
+        for (const d of agentProfilesSnap.docs) {
+          const pd = d.data();
+          const name = pd.displayName ?? (pd.firstName ? `${pd.firstName ?? ''} ${pd.lastName ?? ''}`.trim() : pd.agentId ?? d.id);
+          if (pd.agentId) memberNameMap.set(pd.agentId as string, name);
+          memberNameMap.set(d.id, name);
+          if (pd.firebaseUid) memberNameMap.set(pd.firebaseUid as string, name);
+        }
+
+        // Accumulate per-member earnings from closed transactions
+        const memberMap = new Map<string, TeamLeaderEarningsMember>();
+        for (const t of transactions) {
+          if (t.status !== 'closed') continue;
+          const snap = t.splitSnapshot as any;
+          const gci = snap?.grossCommission ?? t.commission ?? 0;
+          const memberPaid = snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? 0;
+          let leaderRetained: number;
+          if (snap?.leaderRetainedAfterMember != null) {
+            leaderRetained = snap.leaderRetainedAfterMember;
+          } else if (gci > 0 && teamLeaderPct > 0 && teamMemberPct > 0) {
+            const leaderSide = gci * (teamLeaderPct / 100);
+            const estimatedMemberPaid = memberPaid > 0 ? memberPaid : gci * (teamMemberPct / 100);
+            leaderRetained = Math.max(0, leaderSide - estimatedMemberPaid);
+          } else {
+            leaderRetained = 0;
+          }
+          const agentKey = String(t.agentId || 'unknown');
+          const agentName = memberNameMap.get(agentKey) ?? agentKey;
+          if (!memberMap.has(agentKey)) {
+            memberMap.set(agentKey, { agentId: agentKey, agentName, closedCount: 0, closedVolume: 0, totalGCI: 0, memberPaid: 0, leaderRetained: 0 });
+          }
+          const entry = memberMap.get(agentKey)!;
+          entry.closedCount += 1;
+          entry.closedVolume += t.dealValue ?? 0;
+          entry.totalGCI += gci;
+          entry.memberPaid += memberPaid;
+          entry.leaderRetained += leaderRetained;
+        }
+        const memberBreakdown = [...memberMap.values()].sort((a, b) => b.leaderRetained - a.leaderRetained);
+        teamLeaderEarnings = {
+          totalLeaderRetained: memberBreakdown.reduce((s, m) => s + m.leaderRetained, 0),
+          totalMemberPaid: memberBreakdown.reduce((s, m) => s + m.memberPaid, 0),
+          totalGCI: memberBreakdown.reduce((s, m) => s + m.totalGCI, 0),
+          memberBreakdown,
+        };
+      }
+    }
+
     // 10. Build response
     const overview: BrokerCommandOverview = {
       year,
@@ -447,6 +520,7 @@ export async function GET(req: NextRequest) {
       availableYears,
       comparisonData,
       teams,
+      ...(teamLeaderEarnings ? { teamLeaderEarnings } : {}),
     };
 
     return NextResponse.json(result);
