@@ -224,6 +224,17 @@ export async function POST(req: NextRequest) {
       depositHolder: toStr(body.depositHolder),
       depositHolderOther: toStr(body.depositHolderOther),
 
+      // Outbound referral fee — paid to an outside broker/relocation company
+      // Deducted from GCI before agent/broker split is calculated on approval
+      ...(body.hasOutboundReferral || body.outboundReferralFeePercent || body.outboundReferralFeeDollar ? {
+        outboundReferralFee: {
+          referralPercent: toNum(body.outboundReferralFeePercent) || toNum(body.outboundReferralPercent) || null,
+          referralDollar: toNum(body.outboundReferralFeeDollar) || toNum(body.outboundReferralDollar) || null,
+          brokerName: toStr(body.outboundReferralBrokerage) || toStr(body.outboundReferralBrokerName) || '',
+          contactName: toStr(body.outboundReferralAgentName) || toStr(body.outboundReferralContactName) || '',
+        },
+      } : {}),
+
       // Co-agent fields — stored for TC review; commission calculated on approval
       hasCoAgent: !!body.hasCoAgent,
       ...(body.hasCoAgent ? {

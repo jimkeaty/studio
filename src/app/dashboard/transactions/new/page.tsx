@@ -444,7 +444,8 @@ const schema = z.object({
   additionalComments: z.string().optional(),
   notes: z.string().optional(),
 
-  // Outbound Referral fields (closingType === 'referral')
+  // Outbound Referral fields — available for all transaction types (buyer, listing, dual, referral)
+  hasOutboundReferral: z.boolean().optional(),
   outboundReferralAgentName: z.string().optional(),
   outboundReferralBrokerage: z.string().optional(),
   outboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
@@ -788,6 +789,7 @@ export default function AddTransactionPage() {
       coAgentRole: 'co_list',
       primaryAgentSplitPercent: 50,
       coAgentSplitPercent: 50,
+      hasOutboundReferral: false,
     },
   });
 
@@ -848,6 +850,11 @@ export default function AddTransactionPage() {
   const watchedPrimaryPct = Number(form.watch('primaryAgentSplitPercent') || 0);
   const watchedCoPct = Number(form.watch('coAgentSplitPercent') || 0);
   const splitTotal = watchedPrimaryPct + watchedCoPct;
+
+  // Outbound referral fee watched values
+  const hasOutboundReferral = form.watch('hasOutboundReferral');
+  const watchedReferralPct = Number(form.watch('outboundReferralFeePercent') || 0);
+  const watchedReferralDollar = Number(form.watch('outboundReferralFeeDollar') || 0);
 
   // Watched values for commission auto-calc
   const watchedSalePrice = form.watch('salePrice');
@@ -2072,6 +2079,105 @@ export default function AddTransactionPage() {
 
                 {/* Hidden field for co-agent display name */}
                 <input type="hidden" {...form.register('coAgentDisplayName')} />
+              </div>
+            )}
+
+            {/* ── Outbound Referral Fee ─────────────────────────────────────── */}
+            {watchedClosingType !== 'referral' && (
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">Outbound Referral Fee</p>
+                    <p className="text-xs text-muted-foreground">Paid to an outside broker or relocation company. This % is deducted from GCI before the agent/broker split.</p>
+                  </div>
+                  <FormField control={form.control} name="hasOutboundReferral" render={({ field }) => (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!!field.value}
+                      onClick={() => field.onChange(!field.value)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                        field.value ? 'bg-primary' : 'bg-input'
+                      }`}
+                    >
+                      <span className={`pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                        field.value ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  )} />
+                </div>
+
+                {hasOutboundReferral && (
+                  <div className="space-y-4">
+                    <Grid2>
+                      <FormField control={form.control} name="outboundReferralFeePercent" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Referral % <span className="text-destructive">*</span></FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number" min={0} max={100} step={0.5} placeholder="e.g. 25"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(e);
+                                const pct = Number(e.target.value) || 0;
+                                const gci = Number(form.getValues('gci')) || 0;
+                                if (pct > 0 && gci > 0) {
+                                  form.setValue('outboundReferralFeeDollar', Math.round(gci * (pct / 100) * 100) / 100 as any);
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          <FormDescription className="text-xs">Percentage of GCI paid to the outside broker (e.g. 25 for 25%)</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="outboundReferralFeeDollar" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Referral Dollar Amount</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} step={0.01} placeholder="Auto-calculated" {...field} />
+                          </FormControl>
+                          <FormDescription className="text-xs">Auto-calculated from % above. Override if needed.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </Grid2>
+                    <Grid2>
+                      <FormField control={form.control} name="outboundReferralBrokerage" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Outside Broker / Company Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. Keller Williams Dallas or Cartus Relocation" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="outboundReferralAgentName" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Referring Agent / Contact Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. John Smith" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </Grid2>
+                    {watchedReferralPct > 0 && (() => {
+                      const gci = Number(form.watch('gci')) || 0;
+                      const dollar = watchedReferralDollar || (gci > 0 ? Math.round(gci * (watchedReferralPct / 100) * 100) / 100 : 0);
+                      const net = gci - dollar;
+                      if (gci > 0) return (
+                        <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-1 dark:bg-amber-950/20 dark:border-amber-700 dark:text-amber-300">
+                          <p className="font-semibold">Referral Fee Summary</p>
+                          <p>Gross GCI: <strong>${gci.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
+                          <p>Referral Fee ({watchedReferralPct}%): <strong>-${dollar.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
+                          <p>Net to Agent/Broker Split: <strong>${net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
+                        </div>
+                      );
+                      return null;
+                    })()}
+                  </div>
+                )}
               </div>
             )}
           </Section>
