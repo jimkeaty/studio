@@ -1771,29 +1771,66 @@ export default function EditTransactionPage() {
               <span className="text-sm font-semibold text-amber-900">Team Split Override</span>
               <span className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-0.5">Optional — leave blank for auto-calculation</span>
             </div>
-            <p className="text-xs text-amber-700">For team member transactions, manually set leader side GCI, member pay (agent net), and leader retained. When any value is filled, auto-calculation is skipped and these exact values are saved to the transaction.</p>
+            <p className="text-xs text-amber-700">For team member transactions, manually set leader side GCI, member pay (agent net), and leader retained. When any value is filled, auto-calculation is skipped and these exact values are saved to the transaction. Auto-calculated values are shown below each field for reference.</p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <FormField control={form.control} name={"leaderSideGci" as any} render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Leader Side GCI ($)</FormLabel>
-                  <FormDescription className="text-xs">Total GCI going to team structure</FormDescription>
-                  <FormControl><Input type="number" step="0.01" placeholder="Auto" {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name={"memberPay" as any} render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Member Pay ($)</FormLabel>
-                  <FormDescription className="text-xs">Agent net — what the member keeps</FormDescription>
-                  <FormControl><Input type="number" step="0.01" placeholder="Auto" {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name={"leaderRetained" as any} render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Leader Retained ($)</FormLabel>
-                  <FormDescription className="text-xs">Leader Side − Member Pay</FormDescription>
-                  <FormControl><Input type="number" step="0.01" placeholder="Auto" {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
-                </FormItem>
-              )} />
+              <FormField control={form.control} name={"leaderSideGci" as any} render={({ field }) => {
+                const gciNum = Number(watchedGCI) || 0;
+                const agentDollarNum = Number(form.watch('agentDollar' as any)) || 0;
+                // Auto leader side = agentDollar (the full agent-side GCI before member split)
+                const autoLeaderSide = agentDollarNum > 0 ? agentDollarNum : (gciNum > 0 ? gciNum : null);
+                return (
+                  <FormItem>
+                    <FormLabel>Leader Side GCI ($)</FormLabel>
+                    <FormDescription className="text-xs">
+                      Total GCI going to team structure
+                      {autoLeaderSide != null && !field.value && (
+                        <span className="ml-1 text-amber-600 font-medium">(auto: ${autoLeaderSide.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                      )}
+                    </FormDescription>
+                    <FormControl><Input type="number" step="0.01" placeholder={autoLeaderSide != null ? String(autoLeaderSide) : 'Auto'} {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
+                  </FormItem>
+                );
+              }} />
+              <FormField control={form.control} name={"memberPay" as any} render={({ field }) => {
+                const agentDollarNum = Number(form.watch('agentDollar' as any)) || 0;
+                // Auto member pay = agentDollar (what the member actually keeps after leader split)
+                const autoMemberPay = agentDollarNum > 0 ? agentDollarNum : null;
+                return (
+                  <FormItem>
+                    <FormLabel>Member Pay ($)</FormLabel>
+                    <FormDescription className="text-xs">
+                      Agent net — what the member keeps
+                      {autoMemberPay != null && !field.value && (
+                        <span className="ml-1 text-amber-600 font-medium">(auto: ${autoMemberPay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                      )}
+                    </FormDescription>
+                    <FormControl><Input type="number" step="0.01" placeholder={autoMemberPay != null ? String(autoMemberPay) : 'Auto'} {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
+                  </FormItem>
+                );
+              }} />
+              <FormField control={form.control} name={"leaderRetained" as any} render={({ field }) => {
+                const leaderSideVal = Number(form.watch('leaderSideGci' as any)) || 0;
+                const memberPayVal = Number(form.watch('memberPay' as any)) || 0;
+                const agentDollarNum = Number(form.watch('agentDollar' as any)) || 0;
+                // Auto retained = leaderSide - memberPay (if both are set or can be inferred)
+                const autoRetained = leaderSideVal > 0 && memberPayVal > 0
+                  ? Math.round((leaderSideVal - memberPayVal) * 100) / 100
+                  : leaderSideVal > 0 && agentDollarNum > 0
+                  ? Math.round((leaderSideVal - agentDollarNum) * 100) / 100
+                  : null;
+                return (
+                  <FormItem>
+                    <FormLabel>Leader Retained ($)</FormLabel>
+                    <FormDescription className="text-xs">
+                      Leader Side − Member Pay
+                      {autoRetained != null && !field.value && (
+                        <span className="ml-1 text-amber-600 font-medium">(auto: ${autoRetained.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                      )}
+                    </FormDescription>
+                    <FormControl><Input type="number" step="0.01" placeholder={autoRetained != null ? String(autoRetained) : 'Auto'} {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
+                  </FormItem>
+                );
+              }} />
             </div>
           </div>
 

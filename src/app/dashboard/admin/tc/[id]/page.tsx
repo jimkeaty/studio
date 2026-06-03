@@ -794,13 +794,26 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  // Compute auto-calc team split values so the dialog shows expected numbers
+                  const _gci = Number(intake.gci) || 0;
+                  const _agentPct = Number(intake.agentPct) || 0;
+                  const _brokerPct = Number(intake.brokerPct) || 0;
+                  const _agentDollar = Number(intake.agentDollar) || (_gci > 0 && _agentPct > 0 ? Math.round(_gci * (_agentPct / 100) * 100) / 100 : 0);
+                  // Leader side = what the team structure receives (same as agentDollar for team members)
+                  const _splitLeaderSide = intake.splitSnapshot?.leaderStructureGross ?? null;
+                  const _splitMemberPay = intake.splitSnapshot?.memberPaid ?? intake.splitSnapshot?.agentNetCommission ?? null;
+                  const _splitLeaderRetained = intake.splitSnapshot?.leaderRetainedAfterMember ?? null;
+                  // Auto-calc fallback: if no split snapshot, estimate from agentDollar
+                  const _autoLeaderSide = _splitLeaderSide ?? (_agentDollar > 0 ? _agentDollar : null);
+                  const _autoMemberPay = _splitMemberPay ?? null;
+                  const _autoLeaderRetained = _splitLeaderRetained ?? (_autoLeaderSide != null && _autoMemberPay != null ? Math.round((_autoLeaderSide - _autoMemberPay) * 100) / 100 : null);
                   setOverrideValues({
-                    brokerPct: String(intake.brokerPct ?? ''),
+                    brokerPct: String(intake.brokerPct ?? (_gci > 0 && _brokerPct > 0 ? _brokerPct : '')),
                     agentPct: String(intake.agentPct ?? ''),
-                    leaderSideGci: String(intake.leaderSideGci ?? intake.splitSnapshot?.leaderStructureGross ?? ''),
-                    memberPay: String(intake.memberPay ?? intake.splitSnapshot?.agentNetCommission ?? ''),
-                    leaderRetained: String(intake.leaderRetained ?? intake.splitSnapshot?.leaderRetainedAfterMember ?? ''),
-                    agentDollar: String(intake.agentDollar ?? ''),
+                    leaderSideGci: String(intake.leaderSideGci ?? (_autoLeaderSide != null ? _autoLeaderSide : '')),
+                    memberPay: String(intake.memberPay ?? (_autoMemberPay != null ? _autoMemberPay : '')),
+                    leaderRetained: String(intake.leaderRetained ?? (_autoLeaderRetained != null ? _autoLeaderRetained : '')),
+                    agentDollar: String(intake.agentDollar ?? (_agentDollar > 0 ? _agentDollar : '')),
                     gci: String(intake.gci ?? ''),
                   });
                   setOverrideOpen(true);

@@ -616,6 +616,10 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
   const isReadOnly = item.status === 'completed' || item.status === 'dismissed' || item.status === 'archived';
   const isActive = item.status === 'pending_review' || item.status === 'in_progress';
   const watchedTxComplianceFee = form.watch('txComplianceFee');
+  const watchedGCI = Number(form.watch('gci')) || 0;
+  const watchedAgentDollar = Number(form.watch('agentDollar')) || 0;
+  const watchedLeaderSideGci = Number(form.watch('leaderSideGci')) || 0;
+  const watchedMemberPay = Number(form.watch('memberPay')) || 0;
   const assignedStaff = staffProfiles.find((p) => p.id === item.assignedStaffId);
   const checklistCompleted = checklist.filter((c) => c.completed).length;
   const checklistTotal = checklist.length;
@@ -1040,29 +1044,51 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <span className="text-sm font-semibold text-amber-900">Team Split Override</span>
                 <span className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-0.5">Optional — leave blank for auto-calculation</span>
               </div>
-              <p className="text-xs text-amber-700">For team member transactions, manually set leader side, member pay, and leader retained. When filled, these values override auto-calculation on approval.</p>
+              <p className="text-xs text-amber-700">For team member transactions, manually set leader side, member pay, and leader retained. When filled, these values override auto-calculation on approval. Pre-filled values below are auto-calculated — edit to override.</p>
               <Grid3>
                 <FormField control={form.control} name="leaderSideGci" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Leader Side GCI ($)</FormLabel>
-                    <FormDescription className="text-xs">Total going to team structure</FormDescription>
+                    <FormDescription className="text-xs">
+                      Total going to team structure
+                      {watchedGCI > 0 && watchedAgentDollar <= 0 && (
+                        <span className="ml-1 text-amber-600">(auto: ${watchedGCI.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                      )}
+                    </FormDescription>
                     <FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="memberPay" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Member Pay ($)</FormLabel>
-                    <FormDescription className="text-xs">Agent net (member&apos;s take)</FormDescription>
+                    <FormDescription className="text-xs">
+                      Agent net (member&apos;s take)
+                      {watchedAgentDollar > 0 && (
+                        <span className="ml-1 text-amber-600">(auto: ${watchedAgentDollar.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                      )}
+                    </FormDescription>
                     <FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl>
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="leaderRetained" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Leader Retained ($)</FormLabel>
-                    <FormDescription className="text-xs">Leader Side − Member Pay</FormDescription>
-                    <FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl>
-                  </FormItem>
-                )} />
+                <FormField control={form.control} name="leaderRetained" render={({ field }) => {
+                  const autoRetained = watchedLeaderSideGci > 0 && watchedMemberPay > 0
+                    ? Math.round((watchedLeaderSideGci - watchedMemberPay) * 100) / 100
+                    : watchedLeaderSideGci > 0 && watchedAgentDollar > 0
+                    ? Math.round((watchedLeaderSideGci - watchedAgentDollar) * 100) / 100
+                    : null;
+                  return (
+                    <FormItem>
+                      <FormLabel>Leader Retained ($)</FormLabel>
+                      <FormDescription className="text-xs">
+                        Leader Side − Member Pay
+                        {autoRetained != null && (
+                          <span className="ml-1 text-amber-600">(auto: ${autoRetained.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                        )}
+                      </FormDescription>
+                      <FormControl><Input type="number" step="0.01" placeholder={autoRetained != null ? String(autoRetained) : ''} {...field} disabled={isReadOnly} /></FormControl>
+                    </FormItem>
+                  );
+                }} />
               </Grid3>
             </div>
             <div className="max-w-xs">
