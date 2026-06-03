@@ -119,6 +119,10 @@ const schema = z.object({
   brokerGci: z.coerce.number().min(0).optional().or(z.literal('')),
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   agentDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+  leaderSideGci: z.coerce.number().min(0).optional().or(z.literal('')),
+  memberPay: z.coerce.number().min(0).optional().or(z.literal('')),
+  leaderRetained: z.coerce.number().min(0).optional().or(z.literal('')),
+  commissionOverridden: z.boolean().optional(),
   listingDate: z.string().optional().or(z.literal('')),
   contractDate: z.string().optional().or(z.literal('')),
   optionExpiration: z.string().optional().or(z.literal('')),
@@ -551,6 +555,10 @@ export default function EditTransactionPage() {
           brokerGci: n(split.companyRetained ?? tx.brokerGci),
           agentPct: n(split.agentSplitPercent ?? tx.agentPct),
           agentDollar: n(split.agentNetCommission ?? tx.agentDollar),
+          leaderSideGci: n(split.leaderStructureGross ?? tx.leaderSideGci),
+          memberPay: n(split.memberPaid ?? tx.memberPay),
+          leaderRetained: n(split.leaderRetainedAfterMember ?? tx.leaderRetained),
+          commissionOverridden: tx.commissionOverridden ?? false,
           listingDate: d(tx.listingDate),
           contractDate: d(tx.contractDate) || '',
           optionExpiration: d(tx.optionExpiration),
@@ -719,23 +727,39 @@ export default function EditTransactionPage() {
       const brokerPct = Number(values.brokerPct) || 0;
       const agentDollar = Number(values.agentDollar) || 0;
       const brokerGci = Number(values.brokerGci) || 0;
+      const leaderSideGci = Number((values as any).leaderSideGci) || 0;
+      const memberPay = Number((values as any).memberPay) || 0;
+      const leaderRetainedVal = Number((values as any).leaderRetained) || 0;
+      const hasTeamOverride = leaderSideGci > 0 || memberPay > 0 || leaderRetainedVal > 0;
       if (gci > 0 || agentDollar > 0 || brokerGci > 0) {
         payload.splitSnapshot = {
           grossCommission: gci,
-          agentNetCommission: agentDollar || null,
+          agentNetCommission: memberPay > 0 ? memberPay : (agentDollar || null),
           companyRetained: brokerGci,
           agentSplitPercent: agentPct || null,
           companySplitPercent: brokerPct || null,
+          ...(hasTeamOverride ? {
+            leaderStructureGross: leaderSideGci || null,
+            memberPaid: memberPay || null,
+            leaderRetainedAfterMember: leaderRetainedVal || null,
+            commissionOverride: true,
+          } : {}),
         };
         payload.commission = gci;
         payload.brokerProfit = brokerGci;
       }
 
-      // Commission override concept removed — whatever is in the fields is what saves.
-      // Clear any legacy override flags so old transactions are cleaned up on next save.
-      payload.commissionOverridden = false;
-      payload.commissionOverriddenBy = null;
-      payload.commissionOverriddenAt = null;
+      // Preserve commission override flag when team split fields are manually set
+      if (hasTeamOverride) {
+        payload.commissionOverridden = true;
+        payload.commissionOverriddenBy = user.email || user.uid;
+        payload.commissionOverriddenAt = new Date().toISOString();
+      } else {
+        // Clear any legacy override flags so old transactions are cleaned up on next save.
+        payload.commissionOverridden = false;
+        payload.commissionOverriddenBy = null;
+        payload.commissionOverriddenAt = null;
+      }
 
       // Add co-agent data to the payload
       payload.hasCoAgent = hasCoAgent;
@@ -1740,65 +1764,38 @@ export default function EditTransactionPage() {
             )}
           </Section>
 
-          {/* ── Team Leader Commission Breakdown ────────────────────────────────────── */}
-          {/* Only shown when the selected agent is a team member on a team WITH a leader */}
-          {agentCommission?.teamMemberLeaderSplit && (() => {
-            const gci = Number(form.watch('gci')) || 0;
-            const agentDollar = Number(form.watch('agentDollar')) || 0;
-            // Deduct outbound referral fee before all leader/broker split display math
-            const dispRefDollar = hasOutboundReferral
-              ? (Number(form.watch('outboundReferralDollar')) || (Number(form.watch('outboundReferralPercent')) > 0 ? Math.round(gci * (Number(form.watch('outboundReferralPercent')) / 100) * 100) / 100 : 0))
-              : 0;
-            const netGciDisplay = Math.max(0, gci - dispRefDollar);
-            const bands = agentCommission.teamMemberLeaderSplit!.leaderStructureBands || [];
-            // Find the active leader band based on net GCI
-            const activeBand = bands.find(b => {
-              const from = Number(b.fromCompanyDollar || 0);
-              const to = b.toCompanyDollar === null || b.toCompanyDollar === undefined ? null : Number(b.toCompanyDollar);
-              return netGciDisplay >= from && (to === null || netGciDisplay < to);
-            }) || bands[0];
-            if (!activeBand) return null;
-            const leaderPct = Number(activeBand.leaderPercent || 0);
-            const companyPct = Number(activeBand.companyPercent || 0);
-            const leaderStructureGross = netGciDisplay > 0 ? Number((netGciDisplay * (leaderPct / 100)).toFixed(2)) : 0;
-            const companyRetained = netGciDisplay > 0 ? Number((netGciDisplay * (companyPct / 100)).toFixed(2)) : 0;
-            const leaderRetained = leaderStructureGross > 0 ? Number((leaderStructureGross - agentDollar).toFixed(2)) : 0;
-            const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
-            return (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-amber-900">Team Leader Commission Breakdown</span>
-                  <span className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-0.5">Read-only · auto-calculated</span>
-                </div>
-                <p className="text-xs text-amber-700">This agent is a team member. The GCI is split between the team structure and the brokerage before the agent receives their portion.{dispRefDollar > 0 ? ` Referral fee of ${fmt(dispRefDollar)} has been deducted from gross GCI before these splits.` : ''}</p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="rounded-md bg-white border border-amber-200 p-3">
-                    <p className="text-xs text-muted-foreground">{dispRefDollar > 0 ? 'Net GCI (after referral)' : 'Gross GCI'}</p>
-                    <p className="text-sm font-bold">{fmt(netGciDisplay)}</p>
-                    {dispRefDollar > 0 && <p className="text-xs text-muted-foreground">Gross: {fmt(gci)}</p>}
-                  </div>
-                  <div className="rounded-md bg-white border border-amber-200 p-3">
-                    <p className="text-xs text-muted-foreground">Leader Side ({leaderPct}%)</p>
-                    <p className="text-sm font-bold text-amber-700">{fmt(leaderStructureGross)}</p>
-                  </div>
-                  <div className="rounded-md bg-white border border-amber-200 p-3">
-                    <p className="text-xs text-muted-foreground">Agent Net (Scott&apos;s Pay)</p>
-                    <p className="text-sm font-bold text-green-700">{fmt(agentDollar)}</p>
-                  </div>
-                  <div className="rounded-md bg-amber-100 border border-amber-300 p-3">
-                    <p className="text-xs text-amber-800 font-medium">Leader Retains</p>
-                    <p className="text-sm font-bold text-amber-900">{fmt(leaderRetained)}</p>
-                    <p className="text-xs text-amber-600">= Leader Side − Agent Net</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-amber-700 pt-1 border-t border-amber-200">
-                  <span>Company Retained: <strong>{fmt(companyRetained)}</strong> ({companyPct}%)</span>
-                  <span className="text-amber-400">|</span>
-                  <span>Check: {fmt(agentDollar)} + {fmt(leaderRetained)} + {fmt(companyRetained)} = {fmt(agentDollar + leaderRetained + companyRetained)}</span>
-                </div>
-              </div>
-            );
-          })()}
+          {/* ── Team Split Override ────────────────────────────────────────────────── */}
+          {/* Shown for team member transactions AND any transaction where admin wants to manually set team numbers */}
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-amber-900">Team Split Override</span>
+              <span className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-0.5">Optional — leave blank for auto-calculation</span>
+            </div>
+            <p className="text-xs text-amber-700">For team member transactions, manually set leader side GCI, member pay (agent net), and leader retained. When any value is filled, auto-calculation is skipped and these exact values are saved to the transaction.</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <FormField control={form.control} name={"leaderSideGci" as any} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Leader Side GCI ($)</FormLabel>
+                  <FormDescription className="text-xs">Total GCI going to team structure</FormDescription>
+                  <FormControl><Input type="number" step="0.01" placeholder="Auto" {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name={"memberPay" as any} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Member Pay ($)</FormLabel>
+                  <FormDescription className="text-xs">Agent net — what the member keeps</FormDescription>
+                  <FormControl><Input type="number" step="0.01" placeholder="Auto" {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name={"leaderRetained" as any} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Leader Retained ($)</FormLabel>
+                  <FormDescription className="text-xs">Leader Side − Member Pay</FormDescription>
+                  <FormControl><Input type="number" step="0.01" placeholder="Auto" {...field} onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }} /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+          </div>
 
           {/* ── Agent Participation (Co-Agent) ────────────────────────────────────────── */}
           <Section title="Agent Participation" description="Is another internal agent co-representing on this transaction?">

@@ -88,6 +88,9 @@ const schema = z.object({
   brokerGci: z.coerce.number().min(0).optional().or(z.literal('')),
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   agentDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+  leaderSideGci: z.coerce.number().min(0).optional().or(z.literal('')),
+  memberPay: z.coerce.number().min(0).optional().or(z.literal('')),
+  leaderRetained: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // Dates
   listingDate: z.string().optional().or(z.literal('')),
@@ -254,7 +257,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const [archiveReason, setArchiveReason] = useState('');
   const [removeOpen, setRemoveOpen] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
-  const [overrideValues, setOverrideValues] = useState({ brokerPct: '', agentPct: '', agentDollar: '', gci: '' });
+  const [overrideValues, setOverrideValues] = useState({ brokerPct: '', agentPct: '', agentDollar: '', gci: '', leaderSideGci: '', memberPay: '', leaderRetained: '' });
 
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [tcProfiles, setTcProfiles] = useState<TcProfile[]>([]);
@@ -294,6 +297,9 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           brokerPct: i.brokerPct ?? '',
           brokerGci: i.brokerGci ?? '',
           agentPct: i.agentPct ?? '',
+          leaderSideGci: i.leaderSideGci ?? i.splitSnapshot?.leaderStructureGross ?? '',
+          memberPay: i.memberPay ?? i.splitSnapshot?.agentNetCommission ?? '',
+          leaderRetained: i.leaderRetained ?? i.splitSnapshot?.leaderRetainedAfterMember ?? '',
           agentDollar: i.agentDollar ?? '',
           listingDate: i.listingDate || '',
           contractDate: i.contractDate || '',
@@ -490,6 +496,9 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           agentPct: overrideValues.agentPct !== '' ? Number(overrideValues.agentPct) : null,
           agentDollar: overrideValues.agentDollar !== '' ? Number(overrideValues.agentDollar) : null,
           gci: overrideValues.gci !== '' ? Number(overrideValues.gci) : null,
+          leaderSideGci: overrideValues.leaderSideGci !== '' ? Number(overrideValues.leaderSideGci) : null,
+          memberPay: overrideValues.memberPay !== '' ? Number(overrideValues.memberPay) : null,
+          leaderRetained: overrideValues.leaderRetained !== '' ? Number(overrideValues.leaderRetained) : null,
         }),
       });
       const data = await res.json();
@@ -788,6 +797,9 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                   setOverrideValues({
                     brokerPct: String(intake.brokerPct ?? ''),
                     agentPct: String(intake.agentPct ?? ''),
+                    leaderSideGci: String(intake.leaderSideGci ?? intake.splitSnapshot?.leaderStructureGross ?? ''),
+                    memberPay: String(intake.memberPay ?? intake.splitSnapshot?.agentNetCommission ?? ''),
+                    leaderRetained: String(intake.leaderRetained ?? intake.splitSnapshot?.leaderRetainedAfterMember ?? ''),
                     agentDollar: String(intake.agentDollar ?? ''),
                     gci: String(intake.gci ?? ''),
                   });
@@ -1496,22 +1508,43 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               Manually set commission split values. When override is active, auto-calculation from the agent&apos;s tier plan is skipped on approval.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">Broker %</label>
-              <Input type="number" step="0.01" value={overrideValues.brokerPct} onChange={(e) => setOverrideValues(v => ({ ...v, brokerPct: e.target.value }))} />
+          <div className="space-y-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Broker / Agent Split</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Total GCI ($)</label>
+                <Input type="number" step="0.01" value={overrideValues.gci} onChange={(e) => setOverrideValues(v => ({ ...v, gci: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Broker %</label>
+                <Input type="number" step="0.01" value={overrideValues.brokerPct} onChange={(e) => setOverrideValues(v => ({ ...v, brokerPct: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Agent %</label>
+                <Input type="number" step="0.01" value={overrideValues.agentPct} onChange={(e) => setOverrideValues(v => ({ ...v, agentPct: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Agent Net $ (override)</label>
+                <Input type="number" step="0.01" value={overrideValues.agentDollar} onChange={(e) => setOverrideValues(v => ({ ...v, agentDollar: e.target.value }))} />
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium">Agent %</label>
-              <Input type="number" step="0.01" value={overrideValues.agentPct} onChange={(e) => setOverrideValues(v => ({ ...v, agentPct: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Agent Net $ (GCI)</label>
-              <Input type="number" step="0.01" value={overrideValues.agentDollar} onChange={(e) => setOverrideValues(v => ({ ...v, agentDollar: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Total GCI ($)</label>
-              <Input type="number" step="0.01" value={overrideValues.gci} onChange={(e) => setOverrideValues(v => ({ ...v, gci: e.target.value }))} />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2 border-t">Team Split (leave blank if not a team transaction)</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium">Leader Side GCI ($)</label>
+                <p className="text-xs text-muted-foreground mb-1">Total going to team structure</p>
+                <Input type="number" step="0.01" value={overrideValues.leaderSideGci} onChange={(e) => setOverrideValues(v => ({ ...v, leaderSideGci: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Member Pay ($)</label>
+                <p className="text-xs text-muted-foreground mb-1">Agent net (member&apos;s take)</p>
+                <Input type="number" step="0.01" value={overrideValues.memberPay} onChange={(e) => setOverrideValues(v => ({ ...v, memberPay: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Leader Retained ($)</label>
+                <p className="text-xs text-muted-foreground mb-1">Leader Side − Member Pay</p>
+                <Input type="number" step="0.01" value={overrideValues.leaderRetained} onChange={(e) => setOverrideValues(v => ({ ...v, leaderRetained: e.target.value }))} />
+              </div>
             </div>
           </div>
           <DialogFooter>

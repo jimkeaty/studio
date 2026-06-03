@@ -465,14 +465,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const overrideAgentDollar = rawAgentDollar !== null ? rawAgentDollar : (intake.agentPct ? grossCommission * (toNum(intake.agentPct) / 100) : 0);
         const overrideBrokerGci = rawBrokerGci !== null ? rawBrokerGci : Math.max(0, grossCommission - overrideAgentDollar);
 
+        // Use manually set team split values if provided
+        const overrideLeaderSideGci = intake.leaderSideGci != null ? toNum(intake.leaderSideGci) : null;
+        const overrideMemberPay = intake.memberPay != null ? toNum(intake.memberPay) : null;
+        const overrideLeaderRetained = intake.leaderRetained != null ? toNum(intake.leaderRetained) : null;
         splitSnapshot = {
           primaryTeamId: null, teamPlanId: null, memberPlanId: null,
           grossCommission,
           agentSplitPercent: intake.agentPct ? toNum(intake.agentPct) : null,
           companySplitPercent: intake.brokerPct ? toNum(intake.brokerPct) : null,
-          agentNetCommission: overrideAgentDollar,
-          leaderStructurePercent: null, leaderStructureGross: null,
-          memberPercentOfLeaderSide: null, memberPaid: null, leaderRetainedAfterMember: null,
+          agentNetCommission: overrideMemberPay !== null ? overrideMemberPay : overrideAgentDollar,
+          leaderStructurePercent: null,
+          leaderStructureGross: overrideLeaderSideGci,
+          memberPercentOfLeaderSide: null,
+          memberPaid: overrideMemberPay,
+          leaderRetainedAfterMember: overrideLeaderRetained,
           companyRetained: overrideBrokerGci,
           commissionOverride: true,
           commissionOverrideBy: intake.commissionOverrideBy || null,
@@ -857,7 +864,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         commissionOverrideBy: decoded.email || decoded.uid,
         commissionOverrideAt: now,
       };
-      const financialFields = ['brokerPct', 'brokerGci', 'agentPct', 'agentDollar', 'gci', 'commissionPercent', 'salePrice'];
+      const financialFields = ['brokerPct', 'brokerGci', 'agentPct', 'agentDollar', 'gci', 'commissionPercent', 'salePrice', 'leaderSideGci', 'memberPay', 'leaderRetained'];
       for (const field of financialFields) {
         if (field in body) {
           const val = body[field];

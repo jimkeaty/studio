@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+  Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
@@ -82,6 +82,10 @@ const schema = z.object({
   brokerGci: z.coerce.number().min(0).optional().or(z.literal('')),
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   agentDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+  leaderSideGci: z.coerce.number().min(0).optional().or(z.literal('')),
+  memberPay: z.coerce.number().min(0).optional().or(z.literal('')),
+  leaderRetained: z.coerce.number().min(0).optional().or(z.literal('')),
+  commissionOverridden: z.boolean().optional(),
 
   listingDate: z.string().optional().or(z.literal('')),
   contractDate: z.string().optional().or(z.literal('')),
@@ -297,6 +301,10 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           brokerGci: src.brokerGci ?? src.splitSnapshot?.companyRetained ?? '',
           agentPct: src.agentPct ?? src.splitSnapshot?.agentSplitPercent ?? '',
           agentDollar: src.agentDollar ?? src.splitSnapshot?.agentNetCommission ?? '',
+          leaderSideGci: src.leaderSideGci ?? src.splitSnapshot?.leaderStructureGross ?? '',
+          memberPay: src.memberPay ?? src.splitSnapshot?.memberPaid ?? '',
+          leaderRetained: src.leaderRetained ?? src.splitSnapshot?.leaderRetainedAfterMember ?? '',
+          commissionOverridden: src.commissionOverridden ?? false,
           listingDate: src.listingDate?.split('T')[0] || '',
           contractDate: src.contractDate?.split('T')[0] || '',
           optionExpiration: src.optionExpiration?.split('T')[0] || '',
@@ -1027,6 +1035,36 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <FormItem><FormLabel>Agent Net ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </Grid2>
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-amber-900">Team Split Override</span>
+                <span className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-0.5">Optional — leave blank for auto-calculation</span>
+              </div>
+              <p className="text-xs text-amber-700">For team member transactions, manually set leader side, member pay, and leader retained. When filled, these values override auto-calculation on approval.</p>
+              <Grid3>
+                <FormField control={form.control} name="leaderSideGci" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Leader Side GCI ($)</FormLabel>
+                    <FormDescription className="text-xs">Total going to team structure</FormDescription>
+                    <FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="memberPay" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Member Pay ($)</FormLabel>
+                    <FormDescription className="text-xs">Agent net (member&apos;s take)</FormDescription>
+                    <FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="leaderRetained" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Leader Retained ($)</FormLabel>
+                    <FormDescription className="text-xs">Leader Side − Member Pay</FormDescription>
+                    <FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl>
+                  </FormItem>
+                )} />
+              </Grid3>
+            </div>
             <div className="max-w-xs">
               <FormField control={form.control} name="earnestMoney" render={({ field }) => (
                 <FormItem><FormLabel>Earnest Money ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
