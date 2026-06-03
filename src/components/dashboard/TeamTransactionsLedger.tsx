@@ -24,7 +24,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw, Paperclip, FileText, PlusCircle, Users } from 'lucide-react';
+import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw, Paperclip, FileText, PlusCircle, Users, Download } from 'lucide-react';
+import { exportToCsv } from '@/lib/exportToCsv';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -906,11 +907,56 @@ export function TeamTransactionsLedger({ teamId, teamName, viewAs }: Props) {
       {/* Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Transactions</CardTitle>
-          <CardDescription>
-            {filtered.length} record{filtered.length !== 1 ? 's' : ''}
-            {yearFilter !== 'all' ? ` in ${yearFilter}` : ''} · Click a row to view or update
-          </CardDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Transactions</CardTitle>
+              <CardDescription>
+                {filtered.length} record{filtered.length !== 1 ? 's' : ''}
+                {yearFilter !== 'all' ? ` in ${yearFilter}` : ''} · Click a row to view or update
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              disabled={filtered.length === 0}
+              onClick={() => {
+                const rows = filtered.map(t => ({
+                  Status: statusConfig[t.status]?.label ?? t.status,
+                  Agent: t._agentDisplayName || '',
+                  Address: t.address || t.propertyAddress || '',
+                  'Closing Type': closingTypeLabel[t.closingType || ''] ?? t.closingType ?? '',
+                  'Transaction Type': txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '',
+                  'Seller Name': t.sellerName || '',
+                  'Buyer Name': t.buyerName || '',
+                  'Contract Date': t.contractDate || '',
+                  'Closed Date': t.closedDate || t.closingDate || '',
+                  'Listing Date': t.listingDate || '',
+                  'Projected Close': t.projectedCloseDate || '',
+                  'Inspection Deadline': t.inspectionDeadline || '',
+                  'List Price': t.listPrice ?? '',
+                  'Sale Price': t.salePrice ?? t.dealValue ?? '',
+                  'GCI': t.splitSnapshot?.grossCommission ?? '',
+                  'Agent Net': t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? '',
+                  'Leader Retained': t.splitSnapshot?.leaderRetainedAfterMember ?? '',
+                  'Other Agent': t.otherAgentName || '',
+                  'Other Agent Brokerage': t.otherAgentBrokerage || '',
+                  'Mortgage Company': t.mortgageCompany || '',
+                  'Loan Officer': t.loanOfficer || '',
+                  'Title Company': t.titleCompany || '',
+                  Notes: t.notes || '',
+                }));
+                const yearLabel = yearFilter !== 'all' ? yearFilter : 'all-years';
+                const agentLabel = agentFilter !== 'all'
+                  ? `-${(agentOptions.find(([id]) => id === agentFilter)?.[1] ?? agentFilter).replace(/\s+/g, '-').toLowerCase()}`
+                  : '';
+                exportToCsv(rows, `team-transactions-${yearLabel}${agentLabel}.csv`);
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {error && (
