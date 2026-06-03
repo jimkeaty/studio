@@ -218,8 +218,11 @@ export async function PATCH(
       await adminDb.collection('staffQueue').add(staffQueueItem);
     }
 
-    // If agent is moving from active → pending, re-submit to TC queue
-    if (resubmitToTc) {
+    // If agent is moving from active → pending AND is working with TC, re-submit to TC queue.
+    // Only listings (closingType = 'listing' or 'dual') with workingWithTc=true go to the TC queue.
+    // Buyer/referral transactions and listings without TC never create a tcIntake on status change.
+    const shouldResubmitToTc = !!resubmitToTc && isListingTx && !!txData.workingWithTc;
+    if (shouldResubmitToTc) {
       const mergedData = { ...txData, ...updates };
       const intake: Record<string, any> = {
         // Workflow status (TC queue status, not listing status)
@@ -350,8 +353,8 @@ export async function PATCH(
             });
           }
         }
-        // Notify TC about resubmission
-        if (resubmitToTc) {
+        // Notify TC about resubmission (only if listing + workingWithTc)
+        if (shouldResubmitToTc) {
           const tcUids = await getTcUids(adminDb);
           if (tcUids.length > 0) {
             await sendNotification(adminDb, {
@@ -426,7 +429,7 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ ok: true, updated: Object.keys(updates), resubmitted: !!resubmitToTc });
+    return NextResponse.json({ ok: true, updated: Object.keys(updates), resubmitted: shouldResubmitToTc });
   } catch (err: any) {
     console.error('[api/agent/transactions/[txId]]', err);
     return jsonError(500, err.message || 'Internal Server Error');

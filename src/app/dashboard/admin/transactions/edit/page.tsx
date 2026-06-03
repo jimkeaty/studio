@@ -103,7 +103,8 @@ const schema = z.object({
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5, 'Full property address is required'),
-  clientName: z.string().min(1, 'Client name is required'),
+  // clientName is optional for referral and listing types (client may not be known yet)
+  clientName: z.string().optional().or(z.literal('')),
   dealSource: z.string().optional(),
   listPrice: z.coerce.number().min(0).optional().or(z.literal('')),
   salePrice: z.coerce.number().min(0).optional().or(z.literal('')),

@@ -73,7 +73,8 @@ const schema = z.object({
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual']),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5),
-  clientName: z.string().min(1),
+  // clientName is optional for referral and listing types (client may not be known yet)
+  clientName: z.string().optional().or(z.literal('')),
   dealSource: z.string().optional(),
 
   // Financial

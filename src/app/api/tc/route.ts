@@ -367,17 +367,21 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit();
 
-    // ── Staff Queue: only create an item for listing/dual transactions ──
+    // ── Queue routing ─────────────────────────────────────────────────────────
     // Rules:
-    //   - Listings (closingType = 'listing' or 'dual'): always notify staff (new listing + every status change)
-    //   - Buyer/referral transactions: only notify staff when the deal is CLOSED
-    //   - New buyer/referral submissions go to the transaction ledger only, not the staff queue
+    //   - TC queue (tcIntakes): ONLY listings (closingType = 'listing' or 'dual') where the agent
+    //     toggled "Working with TC" ON. Buyer/referral transactions never go to the TC queue.
+    //   - Staff queue: ALL listings go here (regardless of TC flag) so staff always sees new listings.
+    //     Buyer/referral transactions are NOT added to the staff queue on new submission — they appear
+    //     in the transaction ledger and only hit the staff queue when they close.
     const workingWithTc = !!body.workingWithTc;
     const isListingType = closingType === 'listing' || closingType === 'dual';
+
+    // Staff queue — always for listings
     if (isListingType) {
       const staffQueueItem: Record<string, any> = {
-        transactionId: null, // Will be set when TC approves or immediately if not using TC
-        tcIntakeId: ref.id,
+        transactionId: txRef.id, // Link immediately since we create the transaction doc above
+        tcIntakeId: workingWithTc ? ref.id : null, // Only link TC intake when agent is using TC
         agentId,
         agentName: agentDisplayName,
         submittedBy: uid,
@@ -399,27 +403,40 @@ export async function POST(req: NextRequest) {
       };
       await adminDb.collection('staffQueue').add(staffQueueItem);
     }
-    // Buyer/referral transactions are saved to the transaction ledger only (no staff queue entry on new submission)
+    // Buyer/referral transactions are saved to the transaction ledger only (no staff queue or TC queue entry on new submission)
 
     // ── Notifications ────────────────────────────────────────────────────────
     // Fire-and-forget: don't let notification errors block the response
     void (async () => {
       try {
-        const workingWithTc = !!body.workingWithTc;
-        if (workingWithTc) {
-          // Notify all TC coordinators about the new intake
+        // TC notification: only for listings with workingWithTc enabled
+        if (isListingType && workingWithTc) {
           const tcUids = await getTcUids(adminDb);
           if (tcUids.length > 0) {
             await sendNotification(adminDb, {
               type: 'tc_new_intake',
               recipientUids: tcUids,
               title: 'New TC Intake Submitted',
-              body: `${agentDisplayName} submitted a new transaction: ${address}`,
+              body: `${agentDisplayName} submitted a new listing: ${address}`,
               url: '/dashboard/admin/tc',
             });
           }
-        } else {
-          // Not using TC — notify staff directly
+        }
+        // Staff queue notification: always for listings (staff always sees new listings)
+        if (isListingType) {
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: 'New Listing Submitted',
+              body: `${agentDisplayName} submitted a new listing: ${address}`,
+              url: '/dashboard/admin/staff-queue',
+            });
+          }
+        }
+        // For buyer/referral transactions (not listings): notify staff via transaction ledger
+        if (!isListingType) {
           const staffUids = await getAllStaffUids(adminDb);
           if (staffUids.length > 0) {
             await sendNotification(adminDb, {
@@ -428,19 +445,6 @@ export async function POST(req: NextRequest) {
               title: 'New Transaction Added',
               body: `${agentDisplayName} added a new transaction: ${address}`,
               url: '/dashboard/admin/transactions',
-            });
-          }
-        }
-        // Notify staff queue watchers if a staff queue item was created
-        if (isListingType) {
-          const staffUids = await getAllStaffUids(adminDb);
-          if (staffUids.length > 0) {
-            await sendNotification(adminDb, {
-              type: 'staff_queue_new',
-              recipientUids: staffUids,
-              title: 'New Staff Queue Item',
-              body: `New listing submitted by ${agentDisplayName}: ${address}`,
-              url: '/dashboard/admin/staff-queue',
             });
           }
         }
