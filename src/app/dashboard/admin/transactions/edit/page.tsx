@@ -1778,12 +1778,13 @@ export default function EditTransactionPage() {
                 const agentDollarNum = Number(form.watch('agentDollar' as any)) || 0;
                 // Auto leader side = agentDollar (the full agent-side GCI before member split)
                 const autoLeaderSide = agentDollarNum > 0 ? agentDollarNum : (gciNum > 0 ? gciNum : null);
+                const fieldEmpty = field.value === '' || field.value == null;
                 return (
                   <FormItem>
                     <FormLabel>Leader Side GCI ($)</FormLabel>
                     <FormDescription className="text-xs">
                       Total GCI going to team structure
-                      {autoLeaderSide != null && !field.value && (
+                      {autoLeaderSide != null && fieldEmpty && (
                         <span className="ml-1 text-amber-600 font-medium">(auto: ${autoLeaderSide.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
                       )}
                     </FormDescription>
@@ -1795,12 +1796,13 @@ export default function EditTransactionPage() {
                 const agentDollarNum = Number(form.watch('agentDollar' as any)) || 0;
                 // Auto member pay = agentDollar (what the member actually keeps after leader split)
                 const autoMemberPay = agentDollarNum > 0 ? agentDollarNum : null;
+                const fieldEmpty = field.value === '' || field.value == null;
                 return (
                   <FormItem>
                     <FormLabel>Member Pay ($)</FormLabel>
                     <FormDescription className="text-xs">
                       Agent net — what the member keeps
-                      {autoMemberPay != null && !field.value && (
+                      {autoMemberPay != null && fieldEmpty && (
                         <span className="ml-1 text-amber-600 font-medium">(auto: ${autoMemberPay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
                       )}
                     </FormDescription>
@@ -1809,21 +1811,31 @@ export default function EditTransactionPage() {
                 );
               }} />
               <FormField control={form.control} name={"leaderRetained" as any} render={({ field }) => {
-                const leaderSideVal = Number(form.watch('leaderSideGci' as any)) || 0;
-                const memberPayVal = Number(form.watch('memberPay' as any)) || 0;
                 const agentDollarNum = Number(form.watch('agentDollar' as any)) || 0;
-                // Auto retained = leaderSide - memberPay (if both are set or can be inferred)
-                const autoRetained = leaderSideVal > 0 && memberPayVal > 0
+                const leaderSideRaw = form.watch('leaderSideGci' as any);
+                const memberPayRaw = form.watch('memberPay' as any);
+                const leaderSideFilled = leaderSideRaw !== '' && leaderSideRaw != null;
+                const memberPayFilled = memberPayRaw !== '' && memberPayRaw != null;
+                const leaderSideVal = leaderSideFilled ? Number(leaderSideRaw) : 0;
+                const memberPayVal = memberPayFilled ? Number(memberPayRaw) : 0;
+                // Auto retained calculation:
+                // Case 1: both leaderSide and memberPay are explicitly filled → retained = leaderSide - memberPay
+                // Case 2: only leaderSide is filled, memberPay is empty → retained = leaderSide (leader keeps all)
+                // Case 3: neither is filled but agentDollar exists → show agentDollar as retained (leader personal deal)
+                const autoRetained = leaderSideFilled && memberPayFilled
                   ? Math.round((leaderSideVal - memberPayVal) * 100) / 100
-                  : leaderSideVal > 0 && agentDollarNum > 0
-                  ? Math.round((leaderSideVal - agentDollarNum) * 100) / 100
+                  : leaderSideFilled && !memberPayFilled
+                  ? leaderSideVal
+                  : agentDollarNum > 0
+                  ? agentDollarNum  // leader personal deal — full agent net is retained
                   : null;
+                const fieldEmpty = field.value === '' || field.value == null;
                 return (
                   <FormItem>
                     <FormLabel>Leader Retained ($)</FormLabel>
                     <FormDescription className="text-xs">
                       Leader Side − Member Pay
-                      {autoRetained != null && !field.value && (
+                      {autoRetained != null && fieldEmpty && (
                         <span className="ml-1 text-amber-600 font-medium">(auto: ${autoRetained.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
                       )}
                     </FormDescription>
