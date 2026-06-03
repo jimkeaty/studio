@@ -942,6 +942,19 @@ export async function GET(req: NextRequest) {
         activeAgentCount: view === 'team' ? activeAgentCount : undefined,
         totalTeamMembers: view === 'team' ? totalTeamMembers : undefined,
       },
+      // TEMPORARY DEBUG — remove after diagnosing team view issue
+      _debug: isAdminCaller ? {
+        uid,
+        profileDocId,
+        profileAgentId: profileData?.agentId ?? null,
+        profileTeamRole: profileData?.teamRole ?? null,
+        profilePrimaryTeamId: profileData?.primaryTeamId ?? null,
+        isTeamLeader,
+        teamId,
+        agentIdList: [...agentIds],
+        totalTxFetched: allAgentTx.length,
+        totalTxForYear: transactions.length,
+      } : undefined,
       // Team leader earnings breakdown (only present when view=team and caller is team leader)
       teamLeaderEarnings,
       // Team transactions list (only present when view=team and caller is team leader)
