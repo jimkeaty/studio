@@ -239,6 +239,14 @@ export async function PATCH(
       if (Object.keys(allowed).length > 0) {
         allowed.updatedAt = now;
 
+        // Keep dealValue in sync with salePrice so volume metrics stay accurate
+        if (allowed.salePrice !== undefined) {
+          const sp = Number(allowed.salePrice);
+          if (!isNaN(sp) && sp > 0) {
+            allowed.dealValue = sp;
+          }
+        }
+
         // ── Auto-recalculate commission when financial fields change ──────────
         // If any commission-triggering field changed, recompute the splitSnapshot
         // so agent net, company dollar, and tier are always up to date.

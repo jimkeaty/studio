@@ -631,6 +631,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         dealSource: toOptStr(intake.dealSource),
 
         listPrice: intake.listPrice ?? null,
+        salePrice: intake.salePrice ? toNum(intake.salePrice) : null,
+        // dealValue mirrors salePrice (authoritative) or falls back to listPrice for active listings
         dealValue: intake.salePrice ? toNum(intake.salePrice) : intake.listPrice ? toNum(intake.listPrice) : null,
         commissionPercent: intake.commissionPercent ?? null,
         transactionFee: intake.transactionFee ?? null,

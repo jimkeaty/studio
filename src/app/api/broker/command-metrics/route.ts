@@ -360,7 +360,8 @@ export async function GET(req: NextRequest) {
       const m = closedDate.getMonth();
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-      const vol = t.dealValue ?? 0;
+      // salePrice is authoritative — dealValue may be stale on older transactions
+      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
       const isPrevPassThrough = ((t.dealSource || '').toLowerCase()) === 'pass_through';
 
       prevMonthly[m].closedVolume += vol;
@@ -426,7 +427,8 @@ export async function GET(req: NextRequest) {
         const m = closedDate.getMonth();
         const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
         const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-        const vol = t.dealValue ?? 0;
+        // salePrice is authoritative — dealValue may be stale on older transactions
+        const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
 
         compMonths[m].grossMargin += margin;
         compMonths[m].closedVolume += vol;
@@ -493,7 +495,8 @@ export async function GET(req: NextRequest) {
           }
           const entry = memberMap.get(agentKey)!;
           entry.closedCount += 1;
-          entry.closedVolume += t.dealValue ?? 0;
+          // salePrice is authoritative — dealValue may be stale on older transactions
+          entry.closedVolume += (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
           entry.totalGCI += gci;
           entry.memberPaid += memberPaid;
           entry.leaderRetained += leaderRetained;

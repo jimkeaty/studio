@@ -175,6 +175,15 @@ export async function PATCH(
     updates.updatedAt = new Date().toISOString();
     updates.lastUpdatedBy = uid;
 
+    // Keep dealValue in sync with salePrice so volume metrics stay accurate.
+    // When salePrice is edited, dealValue must also be updated or old value persists in charts.
+    if (updates.salePrice !== undefined) {
+      const sp = Number(updates.salePrice);
+      if (!isNaN(sp) && sp > 0) {
+        updates.dealValue = sp;
+      }
+    }
+
     // Save updates to the transaction document
     await txRef.update(updates);
 
