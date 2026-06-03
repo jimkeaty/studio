@@ -465,8 +465,14 @@ export async function GET(req: NextRequest) {
           addToSide(sideBreakdown.closed, getSideKey(t), dealValue, agentNet);
         }
       } else if (t.status === 'pending' || t.status === 'under_contract') {
-        const contractDate = parseDate(t.contractDate);
-        const mi = contractDate && contractDate.getFullYear() === year ? contractDate.getMonth() : null;
+        // Use projectedCloseDate to bucket pending transactions into the month
+        // they are expected to close — not the month they went under contract.
+        // If no projected close date is set, exclude from monthly chart but
+        // still count in totals so the pipeline summary is accurate.
+        const projectedDate = parseDate((t as any).projectedCloseDate) ||
+          parseDate((t as any).projectedClosingDate) ||
+          parseDate((t as any).projectedClose);
+        const mi = projectedDate && projectedDate.getFullYear() === year ? projectedDate.getMonth() : null;
 
         totals.pendingVolume += dealValue;
         totals.pendingCount += sideCount;

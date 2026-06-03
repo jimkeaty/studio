@@ -32,12 +32,18 @@ export interface AgentYearMonthData {
     volume: number;
     sales: number;
     gci?: number; // stripped from non-admin responses
+    pendingVolume: number;
+    pendingSales: number;
+    pendingNetIncome: number;
   }[];
   totals: {
     netIncome: number;
     volume: number;
     sales: number;
     gci?: number; // stripped from non-admin responses
+    pendingVolume: number;
+    pendingSales: number;
+    pendingNetIncome: number;
   };
 }
 
@@ -106,7 +112,20 @@ export async function GET(req: NextRequest) {
     const currentDayOfMonth = today.getDate(); // 1-31
 
     // ── Group by year → month ─────────────────────────────────────────────────
-    const yearMap = new Map<number, Map<number, { netIncome: number; volume: number; sales: number; gci: number }>>();
+    const yearMap = new Map<number, Map<number, { netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number }>>();
+
+    // Also fetch pending/under_contract transactions for this agent/team
+    const pendingPromises: Promise<FirebaseFirestore.QuerySnapshot>[] = [];
+    for (let i = 0; i < agentIds.length; i += 30) {
+      pendingPromises.push(
+        adminDb.collection('transactions')
+          .where('agentId', 'in', agentIds.slice(i, i + 30))
+          .where('status', 'in', ['pending', 'under_contract'])
+          .get()
+      );
+    }
+    const pendingSnaps = await Promise.all(pendingPromises);
+    const pendingDocs = pendingSnaps.flatMap(s => s.docs);
 
     for (const doc of docs) {
       const d = doc.data();
@@ -123,7 +142,7 @@ export async function GET(req: NextRequest) {
 
       if (!yearMap.has(yr)) yearMap.set(yr, new Map());
       const monthMap = yearMap.get(yr)!;
-      if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0 });
+      if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0 });
       const bucket = monthMap.get(mo)!;
 
       const split = d.splitSnapshot || {};
@@ -131,12 +150,39 @@ export async function GET(req: NextRequest) {
       const companyRetained = Number(split.companyRetained) || Number(d.brokerProfit) || 0;
       // agentNetCommission from snapshot is most accurate; fall back to gci - companyRetained
       const agentNet = Number(split.agentNetCommission) || Math.max(0, gci - companyRetained);
-      const dealValue = Number(d.dealValue) || 0;
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
 
       bucket.netIncome += agentNet;
       bucket.volume += dealValue;
       bucket.sales += 1;
       bucket.gci += gci;
+    }
+
+    // Process pending transactions — bucket by projectedCloseDate
+    for (const doc of pendingDocs) {
+      const d = doc.data();
+      const projectedDate = toDate(d.projectedCloseDate) || toDate(d.projectedClosingDate) || toDate(d.projectedClose);
+      if (!projectedDate) continue; // skip if no projected date
+
+      const yr = projectedDate.getFullYear();
+      const mo = projectedDate.getMonth() + 1; // 1-12
+
+      if (!yearMap.has(yr)) yearMap.set(yr, new Map());
+      const monthMap = yearMap.get(yr)!;
+      if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0 });
+      const bucket = monthMap.get(mo)!;
+
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
+      const split = d.splitSnapshot || {};
+      const gci = Number(split.grossCommission) || Number(d.commission) || 0;
+      const companyRetained = Number(split.companyRetained) || Number(d.brokerProfit) || 0;
+      const agentNet = Number(split.agentNetCommission) || Math.max(0, gci - companyRetained);
+      const isDual = String(d.closingType || '').toLowerCase() === 'dual';
+      const sideCount = isDual ? 2 : 1;
+
+      bucket.pendingVolume += dealValue;
+      bucket.pendingSales += sideCount;
+      bucket.pendingNetIncome += agentNet;
     }
 
     // ── Build sorted year array ───────────────────────────────────────────────
@@ -145,23 +191,40 @@ export async function GET(req: NextRequest) {
       const monthMap = yearMap.get(yr)!;
       const months: AgentYearMonthData['months'] = [];
       let totalNet = 0, totalVol = 0, totalSales = 0, totalGci = 0;
+      let totalPendingVol = 0, totalPendingSales = 0, totalPendingNet = 0;
 
       for (let m = 1; m <= 12; m++) {
-        const bucket = monthMap.get(m) || { netIncome: 0, volume: 0, sales: 0, gci: 0 };
-        months.push({ month: m, label: MONTH_LABELS[m - 1], ...bucket });
+        const bucket = monthMap.get(m) || { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0 };
+        months.push({
+          month: m,
+          label: MONTH_LABELS[m - 1],
+          netIncome: bucket.netIncome,
+          volume: bucket.volume,
+          sales: bucket.sales,
+          gci: bucket.gci,
+          pendingVolume: bucket.pendingVolume,
+          pendingSales: bucket.pendingSales,
+          pendingNetIncome: bucket.pendingNetIncome,
+        });
         totalNet += bucket.netIncome;
         totalVol += bucket.volume;
         totalSales += bucket.sales;
         totalGci += bucket.gci;
+        totalPendingVol += bucket.pendingVolume;
+        totalPendingSales += bucket.pendingSales;
+        totalPendingNet += bucket.pendingNetIncome;
       }
 
       // Strip GCI (gross commission income) from non-admin responses
       years.push({
         year: yr,
-        months: months.map(m => isAdminCaller ? m : { month: m.month, label: m.label, netIncome: m.netIncome, volume: m.volume, sales: m.sales }),
+        months: months.map(m => isAdminCaller ? m : {
+          month: m.month, label: m.label, netIncome: m.netIncome, volume: m.volume, sales: m.sales,
+          pendingVolume: m.pendingVolume, pendingSales: m.pendingSales, pendingNetIncome: m.pendingNetIncome,
+        }),
         totals: isAdminCaller
-          ? { netIncome: totalNet, volume: totalVol, sales: totalSales, gci: totalGci }
-          : { netIncome: totalNet, volume: totalVol, sales: totalSales },
+          ? { netIncome: totalNet, volume: totalVol, sales: totalSales, gci: totalGci, pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingNetIncome: totalPendingNet }
+          : { netIncome: totalNet, volume: totalVol, sales: totalSales, pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingNetIncome: totalPendingNet },
       });
     }
 

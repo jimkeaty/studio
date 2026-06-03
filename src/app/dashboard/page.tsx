@@ -2770,8 +2770,8 @@ const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 type AgentMultiYearData = {
   year: number;
-  months: { month: number; label: string; netIncome: number; volume: number; sales: number; gci: number }[];
-  totals: { netIncome: number; volume: number; sales: number; gci: number };
+  months: { month: number; label: string; netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number }[];
+  totals: { netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number };
 };
 
 function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team'; viewAs: string | null }) {
@@ -2781,6 +2781,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
   const [metric, setMetric] = useState<'netIncome' | 'volume' | 'sales'>('netIncome');
   const [chartView, setChartView] = useState<'month' | 'quarter' | 'year'>('month');
   const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('ytd');
+  const [showPendingMY, setShowPendingMY] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -2826,6 +2827,14 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
   const metricLabel = { netIncome: 'Net Income', volume: 'Dollar Volume', sales: 'Number of Sales' }[metric];
   const fmt = (val: number) => metric === 'sales' ? val.toLocaleString() : fmtCurrencyCompact(val, true);
 
+  // Pending metric key mapping
+  const agentPendingKey: Record<string, 'pendingVolume' | 'pendingSales' | 'pendingNetIncome'> = {
+    netIncome: 'pendingNetIncome',
+    volume: 'pendingVolume',
+    sales: 'pendingSales',
+  };
+  const agentPendingMetric = agentPendingKey[metric];
+
   const chartData = (() => {
     const filtered = allYears.filter(y => selectedYears.includes(y.year));
     if (chartView === 'month') {
@@ -2833,6 +2842,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
         const pt: Record<string, any> = { label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i] };
         for (const yr of filtered) {
           pt[String(yr.year)] = i > getMonthLimit(yr.year) ? null : (yr.months[i]?.[metric] ?? 0);
+          if (showPendingMY) pt[`${yr.year}_pending`] = yr.months[i]?.[agentPendingMetric] ?? 0;
         }
         return pt;
       });
@@ -2844,6 +2854,10 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
           const limit = getMonthLimit(yr.year);
           const qMos = yr.months.slice(q * 3, Math.min(q * 3 + 3, limit + 1));
           pt[String(yr.year)] = qMos.length > 0 ? qMos.reduce((s, m) => s + (m[metric] ?? 0), 0) : null;
+          if (showPendingMY) {
+            const allQMos = yr.months.slice(q * 3, q * 3 + 3);
+            pt[`${yr.year}_pending`] = allQMos.reduce((s, m) => s + (m[agentPendingMetric] ?? 0), 0);
+          }
         }
         return pt;
       });
@@ -2853,7 +2867,8 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
       const val = compareMode === 'ytd' || yr.year === currentYearMY
         ? yr.months.slice(0, limit + 1).reduce((s, m) => s + (m[metric] ?? 0), 0)
         : yr.totals[metric] ?? 0;
-      return { label: String(yr.year), value: val };
+      const pendingVal = showPendingMY ? (yr.totals[agentPendingMetric] ?? 0) : 0;
+      return { label: String(yr.year), value: val, pendingValue: pendingVal };
     });
   })();
 
@@ -2898,6 +2913,14 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
                 </button>
               ))}
             </div>
+            {/* Pending toggle */}
+            <button
+              type="button"
+              onClick={() => setShowPendingMY(p => !p)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingMY ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
+            >
+              {showPendingMY ? '● Pending On' : 'Show Pending'}
+            </button>
             {/* Year pills */}
             <div className="flex flex-wrap items-center gap-1.5 ml-auto">
               <span className="text-xs text-muted-foreground mr-1">Years:</span>
@@ -2937,9 +2960,12 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
               <Legend />
               {allYears.filter(yr => selectedYears.includes(yr.year)).map((yr) => {
                 const colorIdx = allYears.findIndex(y => y.year === yr.year);
-                return (
-                  <Bar key={yr.year} dataKey={String(yr.year)} fill={YEAR_COLORS[colorIdx % YEAR_COLORS.length]} radius={[4, 4, 0, 0]} name={String(yr.year)} />
-                );
+                return [
+                  <Bar key={yr.year} dataKey={String(yr.year)} fill={YEAR_COLORS[colorIdx % YEAR_COLORS.length]} radius={[4, 4, 0, 0]} name={String(yr.year)} />,
+                  showPendingMY && (
+                    <Bar key={`${yr.year}_pending`} dataKey={`${yr.year}_pending`} fill={YEAR_COLORS[colorIdx % YEAR_COLORS.length]} fillOpacity={0.35} radius={[4, 4, 0, 0]} name={`${yr.year} Pending`} strokeDasharray="4 2" stroke={YEAR_COLORS[colorIdx % YEAR_COLORS.length]} strokeWidth={1} />
+                  ),
+                ];
               })}
             </BarChart>
           )}
@@ -2952,8 +2978,11 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
               <tr>
                 <th className="px-4 py-2 text-left font-medium">Year</th>
                 <th className="px-4 py-2 text-right font-medium">Net Income</th>
+                {showPendingMY && <th className="px-4 py-2 text-right font-medium text-amber-600">Pending Net</th>}
                 <th className="px-4 py-2 text-right font-medium">Volume</th>
+                {showPendingMY && <th className="px-4 py-2 text-right font-medium text-amber-600">Pending Vol</th>}
                 <th className="px-4 py-2 text-right font-medium">Sales</th>
+                {showPendingMY && <th className="px-4 py-2 text-right font-medium text-amber-600">Pending</th>}
                 <th className="px-4 py-2 text-right font-medium">YoY Change</th>
               </tr>
             </thead>
@@ -2965,9 +2994,6 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
                 const prevYtdVal = prev ? prev.months.slice(0, ytdCutoff).reduce((s, m) => s + m[metric], 0) : null;
                 const change = prevYtdVal && prevYtdVal > 0 ? ((ytdVal - prevYtdVal) / prevYtdVal * 100) : null;
                 const limit = getMonthLimit(yr.year);
-                const displayVal = compareMode === 'ytd' || yr.year === currentYearMY
-                  ? yr.months.slice(0, limit + 1).reduce((s, m) => s + m[metric], 0)
-                  : yr.totals[metric] ?? 0;
                 const colorIdx = allYears.findIndex(y => y.year === yr.year);
                 return (
                   <tr key={yr.year} className="border-t">
@@ -2976,8 +3002,11 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
                       {yr.year}{compareMode === 'ytd' && <span className="text-xs text-muted-foreground ml-1">YTD</span>}
                     </td>
                     <td className="px-4 py-2 text-right">{fmtCurrencyCompact(yr.months.slice(0, limit + 1).reduce((s, m) => s + m.netIncome, 0), true)}</td>
+                    {showPendingMY && <td className="px-4 py-2 text-right text-amber-600">{fmtCurrencyCompact(yr.totals.pendingNetIncome ?? 0, true)}</td>}
                     <td className="px-4 py-2 text-right">{fmtCurrencyCompact(yr.months.slice(0, limit + 1).reduce((s, m) => s + m.volume, 0), true)}</td>
+                    {showPendingMY && <td className="px-4 py-2 text-right text-amber-600">{fmtCurrencyCompact(yr.totals.pendingVolume ?? 0, true)}</td>}
                     <td className="px-4 py-2 text-right">{yr.months.slice(0, limit + 1).reduce((s, m) => s + m.sales, 0).toLocaleString()}</td>
+                    {showPendingMY && <td className="px-4 py-2 text-right text-amber-600">{(yr.totals.pendingSales ?? 0).toLocaleString()}</td>}
                     <td className={`px-4 py-2 text-right font-medium ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
                       {change !== null ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%` : '—'}
                     </td>

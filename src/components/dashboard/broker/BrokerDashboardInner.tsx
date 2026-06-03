@@ -135,8 +135,8 @@ function KPICard({
 
 type MultiYearData = {
   year: number;
-  months: { month: number; label: string; grossMargin: number; volume: number; sales: number; gci: number }[];
-  totals: { grossMargin: number; volume: number; sales: number; gci: number };
+  months: { month: number; label: string; grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number }[];
+  totals: { grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number };
 };
 
 const YEAR_COLORS = [
@@ -153,6 +153,7 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
   const [metric, setMetric] = useState<'grossMargin' | 'volume' | 'sales'>('grossMargin');
   const [view, setView] = useState<'month' | 'quarter' | 'year'>('month');
   const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('full');
+  const [showPendingMY, setShowPendingMY] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -205,6 +206,14 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
     return 11; // full year for past years in full mode
   };
 
+  // Pending metric key mapping
+  const pendingMetricKey: Record<string, 'pendingVolume' | 'pendingSales' | 'pendingGci'> = {
+    grossMargin: 'pendingGci',
+    volume: 'pendingVolume',
+    sales: 'pendingSales',
+  };
+  const pendingKey = pendingMetricKey[metric];
+
   // Build chart data based on view
   const chartData = (() => {
     const filteredYears = allYears.filter(y => selectedYears.includes(y.year));
@@ -215,6 +224,9 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
         for (const yr of filteredYears) {
           const limit = getYearMonthLimit(yr.year);
           point[String(yr.year)] = i > limit ? null : (yr.months[i]?.[metric] ?? 0);
+          if (showPendingMY) {
+            point[`${yr.year}_pending`] = yr.months[i]?.[pendingKey] ?? 0;
+          }
         }
         return point;
       });
@@ -227,6 +239,10 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
           const limit = getYearMonthLimit(yr.year);
           const qMonths = yr.months.slice(q * 3, Math.min(q * 3 + 3, limit + 1));
           point[String(yr.year)] = qMonths.length > 0 ? qMonths.reduce((sum, m) => sum + (m[metric] ?? 0), 0) : null;
+          if (showPendingMY) {
+            const allQMonths = yr.months.slice(q * 3, q * 3 + 3);
+            point[`${yr.year}_pending`] = allQMonths.reduce((sum, m) => sum + (m[pendingKey] ?? 0), 0);
+          }
         }
         return point;
       });
@@ -238,7 +254,8 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
       const val = compareMode === 'ytd' || yr.year === currentYearMY
         ? yr.months.slice(0, limit + 1).reduce((s, m) => s + (m[metric] ?? 0), 0)
         : yr.totals[metric] ?? 0;
-      return { label: String(yr.year), value: val };
+      const pendingVal = showPendingMY ? (yr.totals[pendingKey] ?? 0) : 0;
+      return { label: String(yr.year), value: val, pendingValue: pendingVal };
     });
   })();
 
@@ -307,6 +324,15 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
               ))}
             </div>
 
+            {/* Pending toggle */}
+            <button
+              type="button"
+              onClick={() => setShowPendingMY(p => !p)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingMY ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
+            >
+              {showPendingMY ? '● Pending On' : 'Show Pending'}
+            </button>
+
             {/* Year selectors */}
             <div className="flex flex-wrap items-center gap-1.5 ml-auto">
               <span className="text-xs text-muted-foreground mr-1">Years:</span>
@@ -363,15 +389,28 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
                 .filter(yr => selectedYears.includes(yr.year))
                 .map((yr) => {
                   const colorIdx = allYears.findIndex(y => y.year === yr.year);
-                  return (
+                  return [
                     <Bar
                       key={yr.year}
                       dataKey={String(yr.year)}
                       fill={YEAR_COLORS[colorIdx % YEAR_COLORS.length]}
                       radius={[4, 4, 0, 0]}
                       name={String(yr.year)}
-                    />
-                  );
+                    />,
+                    showPendingMY && (
+                      <Bar
+                        key={`${yr.year}_pending`}
+                        dataKey={`${yr.year}_pending`}
+                        fill={YEAR_COLORS[colorIdx % YEAR_COLORS.length]}
+                        fillOpacity={0.35}
+                        radius={[4, 4, 0, 0]}
+                        name={`${yr.year} Pending`}
+                        strokeDasharray="4 2"
+                        stroke={YEAR_COLORS[colorIdx % YEAR_COLORS.length]}
+                        strokeWidth={1}
+                      />
+                    ),
+                  ];
                 })}
             </BarChart>
           )}
@@ -384,8 +423,11 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
               <tr>
                 <th className="px-4 py-2 text-left font-medium">Year</th>
                 <th className="px-4 py-2 text-right font-medium">Gross Margin</th>
+                {showPendingMY && <th className="px-4 py-2 text-right font-medium text-amber-600">Pending GCI</th>}
                 <th className="px-4 py-2 text-right font-medium">Volume</th>
+                {showPendingMY && <th className="px-4 py-2 text-right font-medium text-amber-600">Pending Vol</th>}
                 <th className="px-4 py-2 text-right font-medium">Sales</th>
+                {showPendingMY && <th className="px-4 py-2 text-right font-medium text-amber-600">Pending</th>}
                 <th className="px-4 py-2 text-right font-medium">YoY Change</th>
               </tr>
             </thead>
@@ -405,6 +447,9 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
                   const sales = compareMode === 'ytd' || yr.year === currentYearMY
                     ? ytdMonths.reduce((s, m) => s + m.sales, 0)
                     : yr.totals.sales;
+                  const pendingVol = yr.totals.pendingVolume ?? 0;
+                  const pendingGci = yr.totals.pendingGci ?? 0;
+                  const pendingSales = yr.totals.pendingSales ?? 0;
                   const metricVal = metric === 'grossMargin' ? margin : metric === 'volume' ? volume : sales;
                   const prev = arr[idx + 1];
                   // YoY Change always compares Jan–today for both years (never full-year vs YTD)
@@ -422,8 +467,11 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
                         {yr.year}{compareMode === 'ytd' && <span className="text-xs text-muted-foreground ml-1">YTD</span>}
                       </td>
                       <td className="px-4 py-2 text-right">{formatCurrency(margin, true)}</td>
+                      {showPendingMY && <td className="px-4 py-2 text-right text-amber-600">{formatCurrency(pendingGci, true)}</td>}
                       <td className="px-4 py-2 text-right">{formatCurrency(volume, true)}</td>
+                      {showPendingMY && <td className="px-4 py-2 text-right text-amber-600">{formatCurrency(pendingVol, true)}</td>}
                       <td className="px-4 py-2 text-right">{sales.toLocaleString()}</td>
+                      {showPendingMY && <td className="px-4 py-2 text-right text-amber-600">{pendingSales.toLocaleString()}</td>}
                       <td className={`px-4 py-2 text-right font-medium ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-red-600') : ''}`}>
                         {change !== null ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%` : '—'}
                       </td>

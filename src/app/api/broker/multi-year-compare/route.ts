@@ -30,12 +30,18 @@ export interface YearMonthData {
     volume: number;
     sales: number;
     gci: number;
+    pendingVolume: number;
+    pendingSales: number;
+    pendingGci: number;
   }[];
   totals: {
     grossMargin: number;
     volume: number;
     sales: number;
     gci: number;
+    pendingVolume: number;
+    pendingSales: number;
+    pendingGci: number;
   };
 }
 
@@ -75,8 +81,18 @@ export async function GET(req: NextRequest) {
     const currentMonth = today.getMonth() + 1; // 1-12
     const currentDayOfMonth = today.getDate(); // 1-31
 
-    // Group by year and month
-    const yearMap = new Map<number, Map<number, { grossMargin: number; volume: number; sales: number; gci: number }>>();
+    // Group by year and month — separate buckets for closed and pending
+    const yearMap = new Map<number, Map<number, { grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number }>>();
+
+    // Also fetch pending/under_contract transactions for the pending overlay
+    let pendingQuery: FirebaseFirestore.Query = adminDb.collection('transactions')
+      .where('status', 'in', ['pending', 'under_contract']);
+    if (teamId) {
+      pendingQuery = adminDb.collection('transactions')
+        .where('splitSnapshot.primaryTeamId', '==', teamId)
+        .where('status', 'in', ['pending', 'under_contract']);
+    }
+    const pendingSnap = await pendingQuery.get();
 
     for (const doc of snap.docs) {
       const d = doc.data();
@@ -98,7 +114,7 @@ export async function GET(req: NextRequest) {
       }
       const monthMap = yearMap.get(yr)!;
       if (!monthMap.has(mo)) {
-        monthMap.set(mo, { grossMargin: 0, volume: 0, sales: 0, gci: 0 });
+        monthMap.set(mo, { grossMargin: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingGci: 0 });
       }
       const bucket = monthMap.get(mo)!;
 
@@ -123,6 +139,32 @@ export async function GET(req: NextRequest) {
       if (!isPassThrough) bucket.gci += gci;
     }
 
+    // Process pending transactions — bucket by projectedCloseDate
+    for (const doc of pendingSnap.docs) {
+      const d = doc.data();
+      if (demoAgentIds.size > 0 && demoAgentIds.has(String(d.agentId || ''))) continue;
+      const projectedDate = toDate(d.projectedCloseDate) || toDate(d.projectedClosingDate) || toDate(d.projectedClose);
+      if (!projectedDate) continue; // skip if no projected date
+
+      const yr = projectedDate.getFullYear();
+      const mo = projectedDate.getMonth() + 1; // 1-12
+
+      if (!yearMap.has(yr)) yearMap.set(yr, new Map());
+      const monthMap = yearMap.get(yr)!;
+      if (!monthMap.has(mo)) monthMap.set(mo, { grossMargin: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingGci: 0 });
+      const bucket = monthMap.get(mo)!;
+
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
+      const split = d.splitSnapshot || {};
+      const gci = Number(split.grossCommission) || Number(d.commission) || 0;
+      const isDual = String(d.closingType || '').toLowerCase() === 'dual';
+      const sideCount = isDual ? 2 : 1;
+
+      bucket.pendingVolume += dealValue;
+      bucket.pendingSales += sideCount;
+      bucket.pendingGci += gci;
+    }
+
     // Convert to sorted array
     const years: YearMonthData[] = [];
     const sortedYears = [...yearMap.keys()].sort((a, b) => a - b);
@@ -131,24 +173,37 @@ export async function GET(req: NextRequest) {
       const monthMap = yearMap.get(yr)!;
       const months: YearMonthData['months'] = [];
       let totalGM = 0, totalVol = 0, totalSales = 0, totalGci = 0;
+      let totalPendingVol = 0, totalPendingSales = 0, totalPendingGci = 0;
 
       for (let m = 1; m <= 12; m++) {
-        const bucket = monthMap.get(m) || { grossMargin: 0, volume: 0, sales: 0, gci: 0 };
+        const bucket = monthMap.get(m) || { grossMargin: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingGci: 0 };
         months.push({
           month: m,
           label: MONTH_LABELS[m - 1],
-          ...bucket,
+          grossMargin: bucket.grossMargin,
+          volume: bucket.volume,
+          sales: bucket.sales,
+          gci: bucket.gci,
+          pendingVolume: bucket.pendingVolume,
+          pendingSales: bucket.pendingSales,
+          pendingGci: bucket.pendingGci,
         });
         totalGM += bucket.grossMargin;
         totalVol += bucket.volume;
         totalSales += bucket.sales;
         totalGci += bucket.gci;
+        totalPendingVol += bucket.pendingVolume;
+        totalPendingSales += bucket.pendingSales;
+        totalPendingGci += bucket.pendingGci;
       }
 
       years.push({
         year: yr,
         months,
-        totals: { grossMargin: totalGM, volume: totalVol, sales: totalSales, gci: totalGci },
+        totals: {
+          grossMargin: totalGM, volume: totalVol, sales: totalSales, gci: totalGci,
+          pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingGci: totalPendingGci,
+        },
       });
     }
 
