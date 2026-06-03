@@ -86,9 +86,16 @@ export async function GET(req: NextRequest) {
     const compareYearParam = searchParams.get('compareYear');
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
 
-    // ── 1. Fetch all agent profiles ──────────────────────────────────────────
+    // ── 1. Fetch all agent profiles (excluding demo accounts) ───────────────
     const agentSnap = await adminDb.collection('agentProfiles').get();
-    const agents = agentSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    const demoAgentIds = new Set(
+      agentSnap.docs
+        .filter(d => d.data().isDemoAccount === true)
+        .map(d => String(d.data().agentId || d.id))
+    );
+    const agents = agentSnap.docs
+      .filter(d => d.data().isDemoAccount !== true)
+      .map(d => ({ id: d.id, ...d.data() } as any));
 
     // ── 2. Fetch all closed transactions (all years) to find first deal dates ─
     const txSnap = await adminDb.collection('transactions')
@@ -99,6 +106,8 @@ export async function GET(req: NextRequest) {
     const firstDealMap = new Map<string, string>();
     for (const doc of txSnap.docs) {
       const t = doc.data() as any;
+      // Skip demo account transactions
+      if (demoAgentIds.size > 0 && demoAgentIds.has(String(t.agentId || ''))) continue;
       const closedDate = parseDate(t.closedDate);
       if (!closedDate) continue;
       const ym = toYearMonth(closedDate);

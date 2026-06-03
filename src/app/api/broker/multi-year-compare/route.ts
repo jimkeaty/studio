@@ -64,11 +64,17 @@ export async function GET(req: NextRequest) {
 
     const snap = await query.get();
 
+    // ── Filter out demo account transactions ─────────────────────────────
+    const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
+    const demoAgentIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
+
     // Group by year and month
     const yearMap = new Map<number, Map<number, { grossMargin: number; volume: number; sales: number; gci: number }>>();
 
     for (const doc of snap.docs) {
       const d = doc.data();
+      // Skip demo account transactions
+      if (demoAgentIds.size > 0 && demoAgentIds.has(String(d.agentId || ''))) continue;
       const closedDate = toDate(d.closedDate);
       if (!closedDate) continue;
 

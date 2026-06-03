@@ -76,10 +76,21 @@ export async function GET(req: NextRequest) {
     }
 
     const snap = await query.get();
-    const intakes = snap.docs.map((d) => ({
-      id: d.id,
-      ...serializeFirestore(d.data()),
-    }));
+
+    // ── Filter out demo account TC intakes ──────────────────────────────
+    const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
+    const demoAgentIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
+
+    let intakes = snap.docs
+      .filter(d => {
+        if (demoAgentIds.size === 0) return true;
+        const agentId = String(d.data().agentId || '');
+        return !demoAgentIds.has(agentId);
+      })
+      .map((d) => ({
+        id: d.id,
+        ...serializeFirestore(d.data()),
+      }));
 
     // Sort client-side to avoid composite index requirements
     intakes.sort((a, b) => {
