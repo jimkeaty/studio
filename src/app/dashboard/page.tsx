@@ -142,8 +142,12 @@ const txTypeLabel: Record<string, string> = { residential_sale: 'Residential', r
 
 // ── Chart Configs ───────────────────────────────────────────────────────────
 
+// Amber/orange used for the current partial month bar so viewers know it is in-progress
+const AGENT_PARTIAL_COLOR = 'hsl(38 92% 50%)';
+
 const incomeChartConfig: ChartConfig = {
   netIncome: { label: 'Net Income', color: 'hsl(var(--chart-1))' },
+  partialNetIncome: { label: 'Net Income (partial month)', color: AGENT_PARTIAL_COLOR },
   pendingNetIncome: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   incomeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareIncome: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
@@ -151,6 +155,7 @@ const incomeChartConfig: ChartConfig = {
 };
 const volumeChartConfig: ChartConfig = {
   closedVolume: { label: 'Closed Volume', color: 'hsl(var(--chart-2))' },
+  partialClosedVolume: { label: 'Closed Volume (partial month)', color: AGENT_PARTIAL_COLOR },
   pendingVolume: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   volumeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareVolume: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
@@ -158,6 +163,7 @@ const volumeChartConfig: ChartConfig = {
 };
 const salesChartConfig: ChartConfig = {
   closedCount: { label: 'Closed Sales', color: 'hsl(var(--chart-1))' },
+  partialClosedCount: { label: 'Closed Sales (partial month)', color: AGENT_PARTIAL_COLOR },
   pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareCount: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
@@ -2434,20 +2440,35 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         </CardHeader>
         <CardContent>
           <ChartContainer config={incomeChartConfig} className="h-[350px] w-full">
-            <BarChart data={months.map((m, i) => ({
-              label: m.label,
-              netIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyNetIncome[i] || 0),
-              pendingNetIncome: isCurrentYear && i > currentMonthIdx ? null : (monthlyPendingNetIncome[i] || 0),
-              incomeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal) : null,
-              compareIncome: compareYear ? (perfData.comparisonData?.months?.[i]?.netIncome ?? null) : null,
-              projectedNetIncome: showProjected ? (projNetIncome[i] ?? null) : null,
-            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => {
+              const isFuture = isCurrentYear && i > currentMonthIdx;
+              const isPartial = isCurrentYear && i === currentMonthIdx;
+              const income = monthlyNetIncome[i] || 0;
+              return {
+                label: m.label,
+                netIncome: (!isFuture && !isPartial) ? income : null,
+                partialNetIncome: isPartial ? income : null,
+                pendingNetIncome: isFuture ? null : (monthlyPendingNetIncome[i] || 0),
+                incomeGoal: showGoals ? (isFuture ? null : m.grossMarginGoal) : null,
+                compareIncome: compareYear ? (perfData.comparisonData?.months?.[i]?.netIncome ?? null) : null,
+                projectedNetIncome: showProjected ? (projNetIncome[i] ?? null) : null,
+              };
+            })} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { netIncome: `${year} Income`, pendingNetIncome: 'Pending', incomeGoal: 'Goal', compareIncome: `${compareYear ?? ''} Income`, projectedNetIncome: 'Projected' }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => {
+                const labels: Record<string, string> = {
+                  netIncome: `${year} Income`,
+                  partialNetIncome: `${year} Income (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  pendingNetIncome: 'Pending', incomeGoal: 'Goal',
+                  compareIncome: `${compareYear ?? ''} Income`, projectedNetIncome: 'Projected',
+                };
+                return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name];
+              }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="netIncome" fill="var(--color-netIncome)" radius={[4, 4, 0, 0]} name={`${year}`} />
+              {isCurrentYear && <Bar dataKey="partialNetIncome" fill={AGENT_PARTIAL_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingNetIncome" fill="var(--color-pendingNetIncome)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
               {showGoals && <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
@@ -2540,20 +2561,34 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         </CardHeader>
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({
-              ...m,
-              closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
-              pendingVolume: isCurrentYear && i > currentMonthIdx ? null : m.pendingVolume,
-              volumeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal) : null,
-              compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
-              projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
-            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => {
+              const isFuture = isCurrentYear && i > currentMonthIdx;
+              const isPartial = isCurrentYear && i === currentMonthIdx;
+              return {
+                ...m,
+                closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
+                partialClosedVolume: isPartial ? m.closedVolume : null,
+                pendingVolume: isFuture ? null : m.pendingVolume,
+                volumeGoal: showGoals ? (isFuture ? null : m.volumeGoal) : null,
+                compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
+                projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
+              };
+            })} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis tickFormatter={val => fmtCurrencyCompact(val, true)} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedVolume: `${year} Closed`, pendingVolume: 'Pending', volumeGoal: 'Goal', compareVolume: `${compareYear ?? ''} Volume`, projectedVolume: 'Projected' }; return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => {
+                const labels: Record<string, string> = {
+                  closedVolume: `${year} Closed`,
+                  partialClosedVolume: `${year} Closed (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  pendingVolume: 'Pending', volumeGoal: 'Goal',
+                  compareVolume: `${compareYear ?? ''} Volume`, projectedVolume: 'Projected',
+                };
+                return [fmtCurrencyCompact(Number(v)), labels[name as string] ?? name];
+              }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
+              {isCurrentYear && <Bar dataKey="partialClosedVolume" fill={AGENT_PARTIAL_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
               {showGoals && <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
@@ -2646,20 +2681,34 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         </CardHeader>
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
-            <BarChart data={months.map((m, i) => ({
-              ...m,
-              closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
-              pendingCount: isCurrentYear && i > currentMonthIdx ? null : m.pendingCount,
-              salesCountGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal) : null,
-              compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
-              projectedCount: showProjected ? (projSales[i] ?? null) : null,
-            }))} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <BarChart data={months.map((m, i) => {
+              const isFuture = isCurrentYear && i > currentMonthIdx;
+              const isPartial = isCurrentYear && i === currentMonthIdx;
+              return {
+                ...m,
+                closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
+                partialClosedCount: isPartial ? m.closedCount : null,
+                pendingCount: isFuture ? null : m.pendingCount,
+                salesCountGoal: showGoals ? (isFuture ? null : m.salesCountGoal) : null,
+                compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
+                projectedCount: showProjected ? (projSales[i] ?? null) : null,
+              };
+            })} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} />
-              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => { const labels: Record<string, string> = { closedCount: `${year} Closed`, pendingCount: 'Pending', salesCountGoal: 'Goal', compareCount: `${compareYear ?? ''} Sales`, projectedCount: 'Projected' }; return [fmtNumNull(Number(v)), labels[name as string] ?? name]; }} />} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(v, name) => {
+                const labels: Record<string, string> = {
+                  closedCount: `${year} Closed`,
+                  partialClosedCount: `${year} Closed (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  pendingCount: 'Pending', salesCountGoal: 'Goal',
+                  compareCount: `${compareYear ?? ''} Sales`, projectedCount: 'Projected',
+                };
+                return [fmtNumNull(Number(v)), labels[name as string] ?? name];
+              }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
+              {isCurrentYear && <Bar dataKey="partialClosedCount" fill={AGENT_PARTIAL_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
               {showGoals && <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}

@@ -64,6 +64,12 @@ export type MonthlyData = {
   grossMarginGoal: number | null;
   volumeGoal: number | null;
   salesCountGoal: number | null;
+
+  // Partial-month indicator — true when this is the current in-progress month.
+  // Goals are pro-rated by daysElapsed/daysInMonth; data is capped at today's day.
+  isPartialMonth?: boolean;
+  partialDayOfMonth?: number;   // day-of-month cap (e.g. 3 on June 3)
+  partialDaysInMonth?: number;  // total days in the month (e.g. 30 for June)
 };
 
 // ── Main response shape ─────────────────────────────────────────────────────

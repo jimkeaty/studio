@@ -61,8 +61,12 @@ const formatNumber = (num: number | null | undefined) =>
 
 // ── Chart configs ───────────────────────────────────────────────────────────
 
+// Amber/orange used for the current partial month bar so viewers know it is in-progress
+const PARTIAL_MONTH_COLOR = 'hsl(38 92% 50%)';
+
 const marginChartConfig: ChartConfig = {
   grossMargin: { label: 'Gross Margin', color: 'hsl(var(--chart-1))' },
+  partialGrossMargin: { label: 'Gross Margin (partial month)', color: PARTIAL_MONTH_COLOR },
   grossMarginGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareMargin: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
   projectedMargin: { label: 'Projected', color: 'hsl(38 92% 50%)' },
@@ -70,6 +74,7 @@ const marginChartConfig: ChartConfig = {
 
 const volumeChartConfig: ChartConfig = {
   closedVolume: { label: 'Closed Volume', color: 'hsl(var(--chart-2))' },
+  partialClosedVolume: { label: 'Closed Volume (partial month)', color: PARTIAL_MONTH_COLOR },
   pendingVolume: { label: 'Pending Volume', color: 'hsl(var(--chart-4))' },
   volumeGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareVolume: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
@@ -78,6 +83,7 @@ const volumeChartConfig: ChartConfig = {
 
 const salesChartConfig: ChartConfig = {
   closedCount: { label: 'Closed Sales', color: 'hsl(var(--chart-1))' },
+  partialClosedCount: { label: 'Closed Sales (partial month)', color: PARTIAL_MONTH_COLOR },
   pendingCount: { label: 'Pending', color: 'hsl(var(--chart-4))' },
   salesCountGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareCount: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
@@ -1530,13 +1536,20 @@ export function BrokerDashboardInner() {
         <CardContent>
           <ChartContainer config={marginChartConfig} className="h-[350px] w-full">
             <BarChart
-              data={months.map((m, i) => ({
-                ...m,
-                grossMargin: isCurrentYear && i > currentMonthIdx ? null : m.grossMargin,
-                grossMarginGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.grossMarginGoal) : null,
-                compareMargin: compareYear ? (data.comparisonData?.months?.[i]?.grossMargin ?? null) : null,
-                projectedMargin: showProjected ? (projectedMonthData?.margin[i] ?? null) : null,
-              }))}
+              data={months.map((m, i) => {
+                const isFuture = isCurrentYear && i > currentMonthIdx;
+                const isPartial = isCurrentYear && i === currentMonthIdx;
+                return {
+                  ...m,
+                  // Completed months use the normal key; current partial month uses its own key
+                  // so it can be styled differently (amber color)
+                  grossMargin: (!isFuture && !isPartial) ? m.grossMargin : null,
+                  partialGrossMargin: isPartial ? m.grossMargin : null,
+                  grossMarginGoal: showGoals ? (isFuture ? null : m.grossMarginGoal) : null,
+                  compareMargin: compareYear ? (data.comparisonData?.months?.[i]?.grossMargin ?? null) : null,
+                  projectedMargin: showProjected ? (projectedMonthData?.margin[i] ?? null) : null,
+                };
+              })}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -1544,13 +1557,16 @@ export function BrokerDashboardInner() {
               <YAxis tickFormatter={val => formatCurrency(val, true)} />
               <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => {
                 const labels: Record<string, string> = {
-                  grossMargin: `${year} Gross Margin`, grossMarginGoal: `${year} Goal`,
+                  grossMargin: `${year} Gross Margin`,
+                  partialGrossMargin: `${year} Gross Margin (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  grossMarginGoal: `${year} Goal`,
                   compareMargin: `${compareYear} Gross Margin`, projectedMargin: 'Projected',
                 };
                 return [formatCurrency(Number(value)), labels[name as string] ?? name];
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="grossMargin" fill="var(--color-grossMargin)" radius={[4, 4, 0, 0]} name={`${year}`} />
+              {isCurrentYear && <Bar dataKey="partialGrossMargin" fill={PARTIAL_MONTH_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareMargin" fill="var(--color-compareMargin)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               {showGoals && <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
               {showProjected && <Bar dataKey="projectedMargin" fill="var(--color-projectedMargin)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
@@ -1653,14 +1669,19 @@ export function BrokerDashboardInner() {
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[350px] w-full">
             <BarChart
-              data={months.map((m, i) => ({
-                ...m,
-                closedVolume: isCurrentYear && i > currentMonthIdx ? null : m.closedVolume,
-                volumeGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.volumeGoal) : null,
-                pendingVolume: (!showPending || (isCurrentYear && i > currentMonthIdx)) ? null : m.pendingVolume,
-                compareVolume: compareYear ? (data.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
-                projectedVolume: showProjected ? (projectedMonthData?.volume[i] ?? null) : null,
-              }))}
+              data={months.map((m, i) => {
+                const isFuture = isCurrentYear && i > currentMonthIdx;
+                const isPartial = isCurrentYear && i === currentMonthIdx;
+                return {
+                  ...m,
+                  closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
+                  partialClosedVolume: isPartial ? m.closedVolume : null,
+                  volumeGoal: showGoals ? (isFuture ? null : m.volumeGoal) : null,
+                  pendingVolume: (!showPending || isFuture) ? null : m.pendingVolume,
+                  compareVolume: compareYear ? (data.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
+                  projectedVolume: showProjected ? (projectedMonthData?.volume[i] ?? null) : null,
+                };
+              })}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -1668,13 +1689,15 @@ export function BrokerDashboardInner() {
               <YAxis tickFormatter={val => formatCurrency(val, true)} />
               <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => {
                 const labels: Record<string, string> = {
-                  closedVolume: `${year} Closed`, pendingVolume: `${year} Pending`,
+                  closedVolume: `${year} Closed`, partialClosedVolume: `${year} Closed (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  pendingVolume: `${year} Pending`,
                   volumeGoal: `${year} Goal`, compareVolume: `${compareYear} Volume`, projectedVolume: 'Projected',
                 };
                 return [formatCurrency(Number(value)), labels[name as string] ?? name];
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
+              {isCurrentYear && <Bar dataKey="partialClosedVolume" fill={PARTIAL_MONTH_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               {showGoals && <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
               {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
@@ -1777,14 +1800,19 @@ export function BrokerDashboardInner() {
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[350px] w-full">
             <BarChart
-              data={months.map((m, i) => ({
-                ...m,
-                closedCount: isCurrentYear && i > currentMonthIdx ? null : m.closedCount,
-                salesCountGoal: showGoals ? (isCurrentYear && i > currentMonthIdx ? null : m.salesCountGoal) : null,
-                pendingCount: (!showPending || (isCurrentYear && i > currentMonthIdx)) ? null : m.pendingCount,
-                compareCount: compareYear ? (data.comparisonData?.months?.[i]?.closedCount ?? null) : null,
-                projectedCount: showProjected ? (projectedMonthData?.sales[i] ?? null) : null,
-              }))}
+              data={months.map((m, i) => {
+                const isFuture = isCurrentYear && i > currentMonthIdx;
+                const isPartial = isCurrentYear && i === currentMonthIdx;
+                return {
+                  ...m,
+                  closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
+                  partialClosedCount: isPartial ? m.closedCount : null,
+                  salesCountGoal: showGoals ? (isFuture ? null : m.salesCountGoal) : null,
+                  pendingCount: (!showPending || isFuture) ? null : m.pendingCount,
+                  compareCount: compareYear ? (data.comparisonData?.months?.[i]?.closedCount ?? null) : null,
+                  projectedCount: showProjected ? (projectedMonthData?.sales[i] ?? null) : null,
+                };
+              })}
               margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -1792,13 +1820,15 @@ export function BrokerDashboardInner() {
               <YAxis allowDecimals={false} />
               <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => {
                 const labels: Record<string, string> = {
-                  closedCount: `${year} Closed`, pendingCount: `${year} Pending`,
+                  closedCount: `${year} Closed`, partialClosedCount: `${year} Closed (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  pendingCount: `${year} Pending`,
                   salesCountGoal: `${year} Goal`, compareCount: `${compareYear} Sales`, projectedCount: 'Projected',
                 };
                 return [formatNumber(Number(value)), labels[name as string] ?? name];
               }} />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
+              {isCurrentYear && <Bar dataKey="partialClosedCount" fill={PARTIAL_MONTH_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               {showGoals && <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
               {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}

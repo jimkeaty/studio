@@ -340,15 +340,41 @@ export async function GET(req: NextRequest) {
       });
     });
 
+    // ── Partial-month helpers ─────────────────────────────────────────────
+    // When viewing the current calendar year, the current in-progress month is capped
+    // at today's day-of-month so YTD comparisons are apples-to-apples.
+    const today = new Date();
+    const currentCalYear = today.getFullYear();
+    const currentCalMonth = today.getMonth(); // 0-based
+    const todayDayOfMonth = today.getDate();  // 1-based
+    const daysInCurrentMonth = new Date(currentCalYear, currentCalMonth + 1, 0).getDate();
+    const isCurrentYear = !isAllYears && year === currentCalYear;
+
     // ── Build 12-month data ───────────────────────────────────────────────
     const months: MonthlyData[] = [];
     for (let m = 1; m <= 12; m++) {
       const md = emptyMonth(m);
       const goals = goalsMap.get(m);
       if (goals) {
-        md.grossMarginGoal = goals.grossMarginGoal;
-        md.volumeGoal = goals.volumeGoal;
-        md.salesCountGoal = goals.salesCountGoal;
+        // Pro-rate goals for the current in-progress month
+        const isThisMonthPartial = isCurrentYear && (m - 1) === currentCalMonth;
+        const prorateFactor = isThisMonthPartial
+          ? todayDayOfMonth / daysInCurrentMonth
+          : 1;
+        md.grossMarginGoal = goals.grossMarginGoal != null
+          ? Math.round(goals.grossMarginGoal * prorateFactor)
+          : null;
+        md.volumeGoal = goals.volumeGoal != null
+          ? Math.round(goals.volumeGoal * prorateFactor)
+          : null;
+        md.salesCountGoal = goals.salesCountGoal != null
+          ? Math.round(goals.salesCountGoal * prorateFactor * 10) / 10
+          : null;
+      }
+      if (isCurrentYear && (m - 1) === currentCalMonth) {
+        md.isPartialMonth = true;
+        md.partialDayOfMonth = todayDayOfMonth;
+        md.partialDaysInMonth = daysInCurrentMonth;
       }
       months.push(md);
     }
@@ -409,6 +435,8 @@ export async function GET(req: NextRequest) {
         if (!isAllYears && (!closedDate || closedDate.getFullYear() !== year)) continue;
         if (isAllYears && !closedDate) continue;
         const mi = closedDate!.getMonth();
+        // Partial-month cap: skip current-month transactions closed after today's day
+        if (isCurrentYear && mi === currentCalMonth && closedDate!.getDate() > todayDayOfMonth) continue;
         if (!isAllYears) {
           months[mi].totalGCI += gci;
           months[mi].grossMargin += companyRetained;
@@ -511,6 +539,8 @@ export async function GET(req: NextRequest) {
       const closedDate = parseDate(t.closedDate);
       // Fall back to month 0 (Jan) when closedDate is missing — still counts toward totals
       const m = closedDate ? closedDate.getMonth() : 0;
+      // Partial-month cap: cap the same month in the previous year at today's day-of-month
+      if (isCurrentYear && closedDate && m === currentCalMonth && closedDate.getDate() > todayDayOfMonth) continue;
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
@@ -568,10 +598,12 @@ export async function GET(req: NextRequest) {
         const closedDate = parseDate(t.closedDate);
         if (!closedDate || closedDate.getFullYear() !== compareYear) continue;
         const m = closedDate.getMonth();
+        // Partial-month cap for comparison year: cap at same day-of-month as today
+        if (isCurrentYear && m === currentCalMonth && closedDate.getDate() > todayDayOfMonth) continue;
         const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
         const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-              const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+        const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
+        const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
 
         compMonths[m].grossMargin += companyRetained;
         compMonths[m].closedVolume += vol;

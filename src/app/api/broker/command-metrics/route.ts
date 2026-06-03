@@ -213,15 +213,51 @@ export async function GET(req: NextRequest) {
       });
     });
 
+    // 5. Partial-month helpers
+    // When viewing the current calendar year, the current in-progress month is capped
+    // at today's day-of-month so YTD comparisons are apples-to-apples.
+    const today = new Date();
+    const currentCalYear = today.getFullYear();
+    const currentCalMonth = today.getMonth(); // 0-based
+    const todayDayOfMonth = today.getDate();  // 1-based
+    // Days in the current calendar month
+    const daysInCurrentMonth = new Date(currentCalYear, currentCalMonth + 1, 0).getDate();
+    // Only apply partial-month logic when the selected year IS the current year
+    const isCurrentYear = year === currentCalYear;
+
+    // Helper: given a Date, return true if it should be included under the partial-month cap
+    // (only applied to the current month of the current year)
+    function isWithinPartialCap(d: Date): boolean {
+      if (!isCurrentYear) return true; // no cap for historical years
+      if (d.getMonth() !== currentCalMonth) return true; // only cap the current month
+      return d.getDate() <= todayDayOfMonth;
+    }
+
     // 5. Initialize 12-month buckets
     const months: MonthlyData[] = [];
     for (let m = 1; m <= 12; m++) {
       const md = emptyMonth(m);
       const goals = goalsMap.get(m);
       if (goals) {
-        md.grossMarginGoal = goals.grossMarginGoal;
-        md.volumeGoal = goals.volumeGoal;
-        md.salesCountGoal = goals.salesCountGoal;
+        // Pro-rate goals for the current in-progress month
+        const isThisMonthPartial = isCurrentYear && (m - 1) === currentCalMonth;
+        const prorateFactor = isThisMonthPartial
+          ? todayDayOfMonth / daysInCurrentMonth
+          : 1;
+        md.grossMarginGoal = goals.grossMarginGoal != null
+          ? Math.round(goals.grossMarginGoal * prorateFactor)
+          : null;
+        md.volumeGoal = goals.volumeGoal != null
+          ? Math.round(goals.volumeGoal * prorateFactor)
+          : null;
+        md.salesCountGoal = goals.salesCountGoal != null
+          ? Math.round(goals.salesCountGoal * prorateFactor * 10) / 10
+          : null;
+      }
+      if (isCurrentYear && (m - 1) === currentCalMonth) {
+        md.isPartialMonth = true;
+        md.partialDayOfMonth = todayDayOfMonth;
+        md.partialDaysInMonth = daysInCurrentMonth;
       }
       months.push(md);
     }
@@ -281,6 +317,9 @@ export async function GET(req: NextRequest) {
         // Check this transaction belongs to the requested year
         const txMonth = closedDate.getMonth(); // 0-based
         if (closedDate.getFullYear() !== year) continue;
+
+        // Partial-month cap: skip current-month transactions closed after today's day
+        if (!isWithinPartialCap(closedDate)) continue;
 
         const md = months[txMonth]; // 0-based index
 
@@ -358,6 +397,9 @@ export async function GET(req: NextRequest) {
       if (!closedDate || closedDate.getFullYear() !== prevYear) continue;
 
       const m = closedDate.getMonth();
+      // Partial-month cap: when viewing the current year, cap the same month in the
+      // previous year at the same day-of-month so seasonality is comparable.
+      if (isCurrentYear && m === currentCalMonth && closedDate.getDate() > todayDayOfMonth) continue;
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       // salePrice is authoritative — dealValue may be stale on older transactions
@@ -425,6 +467,10 @@ export async function GET(req: NextRequest) {
         const closedDate = parseDate(t.closedDate);
         if (!closedDate || closedDate.getFullYear() !== compareYear) continue;
         const m = closedDate.getMonth();
+        // Partial-month cap for comparison year: only include data up to the same
+        // day-of-month as today so the comparison is apples-to-apples with the current year.
+        // This applies to the current calendar month (same month number, different year).
+        if (isCurrentYear && m === currentCalMonth && closedDate.getDate() > todayDayOfMonth) continue;
         const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
         const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
         // salePrice is authoritative — dealValue may be stale on older transactions
