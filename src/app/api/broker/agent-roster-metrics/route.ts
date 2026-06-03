@@ -167,6 +167,9 @@ export async function GET(req: NextRequest) {
     const allProfileSnap = await noStatusQuery.get();
 
     // Merge: use active ones + ones without a status field
+    // Agents who are inactive, terminated, or have moved to another team are excluded from the live roster.
+    // Their historical production remains attributed to the team via splitSnapshot.primaryTeamId on transactions.
+    const INACTIVE_STATUSES = new Set(['inactive', 'terminated', 'out', 'churned']);
     const profileMap = new Map<string, any>();
     for (const doc of profileSnap.docs) {
       profileMap.set(doc.id, { id: doc.id, ...doc.data() });
@@ -174,7 +177,11 @@ export async function GET(req: NextRequest) {
     for (const doc of allProfileSnap.docs) {
       if (!profileMap.has(doc.id)) {
         const d = doc.data();
-        if (!d.status || d.status === 'active' || d.status === 'grace_period') {
+        // Include only if status is missing (legacy doc) OR explicitly active/grace_period
+        // Also check the agentStatus field as a fallback (some profiles use agentStatus instead of status)
+        const statusVal = (d.status ?? d.agentStatus ?? '') as string;
+        const isInactive = INACTIVE_STATUSES.has(statusVal.toLowerCase());
+        if (!isInactive && (!statusVal || statusVal === 'active' || statusVal === 'grace_period')) {
           profileMap.set(doc.id, { id: doc.id, ...d });
         }
       }

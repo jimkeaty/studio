@@ -191,16 +191,27 @@ export async function GET(req: NextRequest) {
 
     // For team view: store the member profile docs so we can reuse them below
     let teamMemberProfileDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    // Active-only roster doc IDs (status active or grace_period, still on this team)
+    let activeRosterDocIds = new Set<string>();
 
     if (view === 'team' && isTeamLeader && teamId) {
       // Team leader viewing their team
+      // Fetch ALL members (any status) so historical transactions from inactive/moved agents are included
       const membersSnap = await adminDb.collection('agentProfiles')
         .where('primaryTeamId', '==', teamId).get();
       teamMemberProfileDocs = membersSnap.docs;
+      // Also fetch active-only roster for display purposes (Today's Focus, agent count)
+      const activeMembersSnap = await adminDb.collection('agentProfiles')
+        .where('primaryTeamId', '==', teamId)
+        .where('status', 'in', ['active', 'grace_period'])
+        .get();
+      // Build set of active member IDs for roster display
+      activeRosterDocIds = new Set<string>(activeMembersSnap.docs.map(d => d.id));
       agentIds = new Set<string>();
       for (const d of membersSnap.docs) {
         const pd = d.data();
         // Include agentId slug, Firestore doc ID, and firebaseUid — transactions may be stored under any
+        // (Include ALL members so historical production from inactive/moved agents is preserved)
         if (pd.agentId) agentIds.add(pd.agentId as string);
         agentIds.add(d.id);
         if (pd.firebaseUid) agentIds.add(pd.firebaseUid as string);
@@ -797,6 +808,9 @@ export async function GET(req: NextRequest) {
       for (const d of memberProfilesSnap3.docs) {
         const pd = d.data();
         if (pd.teamRole === 'leader') continue; // skip the leader themselves
+        // Skip agents who are no longer active on this team (inactive, terminated, or moved to another team)
+        const memberStatus = (pd.status ?? pd.agentStatus ?? 'active') as string;
+        if (!['active', 'grace_period'].includes(memberStatus)) continue;
         const agentKey = (pd.agentId as string) ?? d.id;
         const agentName = memberNameMap3.get(agentKey) ?? agentKey;
 
@@ -842,7 +856,11 @@ export async function GET(req: NextRequest) {
     let activeAgentCount = 0;
     let totalTeamMembers = 0;
     if (view === 'team' && isTeamLeader) {
-      totalTeamMembers = teamMemberProfileDocs.length;
+      // totalTeamMembers = active roster only (excludes inactive/terminated/moved agents)
+      totalTeamMembers = activeRosterDocIds.size || teamMemberProfileDocs.filter(d => {
+        const s = (d.data().status ?? d.data().agentStatus ?? 'active') as string;
+        return ['active', 'grace_period'].includes(s);
+      }).length;
       const activeAgentSet = new Set<string>();
       for (const t of transactions) {
         if (t.status !== 'closed') continue;
