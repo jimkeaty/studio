@@ -625,12 +625,14 @@ export function TeamLeaderDashboard({
   teamError,
   year,
   setYear,
+  viewAs,
 }: {
   teamData: TeamDashboardData | null;
   teamLoading: boolean;
   teamError: string | null;
   year: number;
   setYear: (y: number) => void;
+  viewAs?: string;
 }) {
   const { user } = useUser();
   const router = useRouter();
@@ -720,6 +722,7 @@ export function TeamLeaderDashboard({
         teamName={teamName}
         rosterData={rosterData}
         useBrokerEndpoint={false}
+        viewAs={viewAs}
       />
 
       {/* ── Today's Focus ── */}

@@ -218,7 +218,7 @@ interface AgentYearData {
   totals: { netIncome: number; volume: number; sales: number };
 }
 
-function TeamMultiYearComparison({ teamId }: { teamId: string }) {
+function TeamMultiYearComparison({ teamId, viewAs }: { teamId: string; viewAs?: string }) {
   const { user } = useUser();
   const [allYears, setAllYears] = useState<AgentYearData[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
@@ -233,7 +233,9 @@ function TeamMultiYearComparison({ teamId }: { teamId: string }) {
       setLoading(true);
       try {
         const token = await user.getIdToken();
-        const res = await fetch('/api/agent/multi-year-compare?view=team', {
+        const multiYearParams = new URLSearchParams({ view: 'team' });
+        if (viewAs) multiYearParams.set('viewAs', viewAs);
+        const res = await fetch(`/api/agent/multi-year-compare?${multiYearParams}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -249,7 +251,7 @@ function TeamMultiYearComparison({ teamId }: { teamId: string }) {
       }
     };
     load();
-  }, [user, teamId]);
+  }, [user, teamId, viewAs]);
 
   const toggleYear = (yr: number) => {
     setSelectedYears(prev =>
@@ -919,6 +921,12 @@ export interface TeamCommandDashboardProps {
    * If false (default), data is fetched from the agent endpoint.
    */
   useBrokerEndpoint?: boolean;
+  /**
+   * When the broker is viewing this dashboard as an agent (viewAs impersonation),
+   * pass the agent's ID here so it is forwarded to the API as ?viewAs=<id>.
+   * This ensures the agent endpoint queries the correct agent's data, not the broker's.
+   */
+  viewAs?: string;
 }
 
 export function TeamCommandDashboard({
@@ -926,6 +934,7 @@ export function TeamCommandDashboard({
   teamName,
   rosterData = [],
   useBrokerEndpoint = false,
+  viewAs,
 }: TeamCommandDashboardProps) {
   const { user } = useUser();
   const [year, setYear] = useState<number>(new Date().getFullYear());
@@ -958,6 +967,9 @@ export function TeamCommandDashboard({
         url = `/api/broker/command-metrics?${params}`;
       } else {
         params.set('view', 'team');
+        // When broker is viewing as an agent, forward viewAs so the server
+        // queries the correct agent's team data, not the broker's own data.
+        if (viewAs) params.set('viewAs', viewAs);
         url = `/api/agent/command-metrics?${params}`;
       }
 
@@ -974,7 +986,7 @@ export function TeamCommandDashboard({
     } finally {
       setLoading(false);
     }
-  }, [user, year, compareYear, selectedType, teamId, useBrokerEndpoint]);
+  }, [user, year, compareYear, selectedType, teamId, useBrokerEndpoint, viewAs]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setCatYear(year); setCatBreakdown(null); setCatSourceBreakdown(null); }, [year]);
@@ -995,6 +1007,7 @@ export function TeamCommandDashboard({
           url = `/api/broker/command-metrics?${params}`;
         } else {
           params.set('view', 'team');
+          if (viewAs) params.set('viewAs', viewAs);
           url = `/api/agent/command-metrics?${params}`;
         }
 
@@ -1005,7 +1018,7 @@ export function TeamCommandDashboard({
       } catch { /* silent */ }
       finally { setCatLoading(false); }
     })();
-  }, [catYear, year, user, selectedType, teamId, useBrokerEndpoint]);
+  }, [catYear, year, user, selectedType, teamId, useBrokerEndpoint, viewAs]);
 
   // ── Loading / Error guards ─────────────────────────────────────────────────
   if (loading) {
@@ -1775,7 +1788,7 @@ export function TeamCommandDashboard({
       })()}
 
       {/* ── Multi-Year Production Comparison ────────────────────────────────── */}
-      <TeamMultiYearComparison teamId={teamId} />
+      <TeamMultiYearComparison teamId={teamId} viewAs={viewAs} />
 
       {/* ── Category Breakdown ──────────────────────────────────────────────── */}
       {(() => {
