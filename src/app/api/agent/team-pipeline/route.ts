@@ -164,9 +164,17 @@ export async function GET(req: NextRequest) {
       }).filter((y): y is number => y !== null)
     )).sort((a, b) => b - a);
 
+    // Build the set of all identifiers that belong to the team leader
+    // so the client can identify which transactions are the leader's own deals.
+    const leaderAgentIds: string[] = [uid];
+    if (profileDocId && profileDocId !== uid) leaderAgentIds.push(profileDocId);
+    if (profile?.agentId) leaderAgentIds.push(String(profile.agentId));
+    if (profile?.firebaseUid && profile.firebaseUid !== uid) leaderAgentIds.push(String(profile.firebaseUid));
+
     return NextResponse.json({
       ok: true,
       teamId,
+      leaderAgentIds: [...new Set(leaderAgentIds)],
       activeTransactions,
       pendingTransactions,
       allClosedTransactions,

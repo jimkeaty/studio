@@ -131,7 +131,9 @@ function getSortValue(tx: TeamTx, key: SortKey): string | number {
     case 'dealValue': return tx.dealValue || tx.salePrice || 0;
     case 'agentNet': return tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0;
     case 'gci': return tx.splitSnapshot?.grossCommission ?? 0;
-    case 'leaderRetained': return tx.splitSnapshot?.leaderRetainedAfterMember ?? 0;
+    // NOTE: leaderRetained sort uses the raw snapshot value; the isLeaderOwnDeal
+    // override is applied at render time where leaderAgentIds is in scope.
+    case 'leaderRetained': return tx.splitSnapshot?.leaderRetainedAfterMember ?? tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0;
     default: return '';
   }
 }
@@ -625,6 +627,7 @@ type Props = {
 export function TeamTransactionsLedger({ teamId, teamName, viewAs }: Props) {
   const { user } = useUser();
   const [transactions, setTransactions] = useState<TeamTx[]>([]);
+  const [leaderAgentIds, setLeaderAgentIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -665,6 +668,7 @@ export function TeamTransactionsLedger({ teamId, teamName, viewAs }: Props) {
 
       const all: TeamTx[] = data.allTransactions ?? [];
       setTransactions(all);
+      setLeaderAgentIds(new Set<string>(data.leaderAgentIds ?? []));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -921,31 +925,38 @@ export function TeamTransactionsLedger({ teamId, teamName, viewAs }: Props) {
               className="shrink-0 gap-1.5"
               disabled={filtered.length === 0}
               onClick={() => {
-                const rows = filtered.map(t => ({
-                  Status: statusConfig[t.status]?.label ?? t.status,
-                  Agent: t._agentDisplayName || '',
-                  Address: t.address || t.propertyAddress || '',
-                  'Closing Type': closingTypeLabel[t.closingType || ''] ?? t.closingType ?? '',
-                  'Transaction Type': txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '',
-                  'Seller Name': t.sellerName || '',
-                  'Buyer Name': t.buyerName || '',
-                  'Contract Date': t.contractDate || '',
-                  'Closed Date': t.closedDate || t.closingDate || '',
-                  'Listing Date': t.listingDate || '',
-                  'Projected Close': t.projectedCloseDate || '',
-                  'Inspection Deadline': t.inspectionDeadline || '',
-                  'List Price': t.listPrice ?? '',
-                  'Sale Price': t.salePrice ?? t.dealValue ?? '',
-                  'GCI': t.splitSnapshot?.grossCommission ?? '',
-                  'Agent Net': t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? '',
-                  'Leader Retained': t.splitSnapshot?.leaderRetainedAfterMember ?? '',
-                  'Other Agent': t.otherAgentName || '',
-                  'Other Agent Brokerage': t.otherAgentBrokerage || '',
-                  'Mortgage Company': t.mortgageCompany || '',
-                  'Loan Officer': t.loanOfficer || '',
-                  'Title Company': t.titleCompany || '',
-                  Notes: t.notes || '',
-                }));
+                const rows = filtered.map(t => {
+                  const isLeaderRow = leaderAgentIds.has(t.agentId || '');
+                  const agentNetExport = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? '';
+                  const leaderRetainedExport = isLeaderRow
+                    ? agentNetExport
+                    : (t.splitSnapshot?.leaderRetainedAfterMember ?? '');
+                  return {
+                    Status: statusConfig[t.status]?.label ?? t.status,
+                    Agent: t._agentDisplayName || '',
+                    Address: t.address || t.propertyAddress || '',
+                    'Closing Type': closingTypeLabel[t.closingType || ''] ?? t.closingType ?? '',
+                    'Transaction Type': txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '',
+                    'Seller Name': t.sellerName || '',
+                    'Buyer Name': t.buyerName || '',
+                    'Contract Date': t.contractDate || '',
+                    'Closed Date': t.closedDate || t.closingDate || '',
+                    'Listing Date': t.listingDate || '',
+                    'Projected Close': t.projectedCloseDate || '',
+                    'Inspection Deadline': t.inspectionDeadline || '',
+                    'List Price': t.listPrice ?? '',
+                    'Sale Price': t.salePrice ?? t.dealValue ?? '',
+                    'GCI': t.splitSnapshot?.grossCommission ?? '',
+                    'Agent Net': agentNetExport,
+                    'Leader Retained': leaderRetainedExport,
+                    'Other Agent': t.otherAgentName || '',
+                    'Other Agent Brokerage': t.otherAgentBrokerage || '',
+                    'Mortgage Company': t.mortgageCompany || '',
+                    'Loan Officer': t.loanOfficer || '',
+                    'Title Company': t.titleCompany || '',
+                    Notes: t.notes || '',
+                  };
+                });
                 const yearLabel = yearFilter !== 'all' ? yearFilter : 'all-years';
                 const agentLabel = agentFilter !== 'all'
                   ? `-${(agentOptions.find(([id]) => id === agentFilter)?.[1] ?? agentFilter).replace(/\s+/g, '-').toLowerCase()}`
@@ -1014,9 +1025,14 @@ export function TeamTransactionsLedger({ teamId, teamName, viewAs }: Props) {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((t) => {
-                    const agentNet = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
                     const gci = t.splitSnapshot?.grossCommission ?? 0;
-                    const leaderRetained = t.splitSnapshot?.leaderRetainedAfterMember ?? 0;
+                    const isLeaderOwnDeal = leaderAgentIds.has(t.agentId || '');
+                    // For the leader's own transactions, their full agent net IS their retained amount.
+                    // For team member transactions, use leaderRetainedAfterMember from the split snapshot.
+                    const agentNet = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
+                    const leaderRetained = isLeaderOwnDeal
+                      ? agentNet
+                      : (t.splitSnapshot?.leaderRetainedAfterMember ?? 0);
                     const sc = statusConfig[t.status] || statusConfig.pending;
                     const addr = t.address || t.propertyAddress || '—';
                     const canEdit = t.status !== 'closed';

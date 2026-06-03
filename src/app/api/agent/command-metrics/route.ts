@@ -773,6 +773,11 @@ export async function GET(req: NextRequest) {
     }[] = [];
 
     if (view === 'team' && isTeamLeader && teamId) {
+      // Build the leader identity set for this block (leaderIdSet is scoped to the prior if block)
+      const leaderIdSet = new Set<string>([uid]);
+      if (agentFirebaseUid) leaderIdSet.add(agentFirebaseUid);
+      if (profile?.agentId) leaderIdSet.add(String(profile.agentId));
+
       // Build team transactions list from allAgentTx
       const memberProfilesSnap3 = await adminDb.collection('agentProfiles')
         .where('primaryTeamId', '==', teamId).get();
@@ -807,9 +812,18 @@ export async function GET(req: NextRequest) {
           };
           // Compute per-transaction leaderRetained using the same logic as teamLeaderEarnings
           const gciTx = (snap?.grossCommission ?? raw.commission ?? 0) as number;
-          const memberPaidTx = (snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? 0) as number;
+          const agentKeyTx = (t.agentId as string) || 'unknown';
+          const isLeaderOwnDealTx = leaderIdSet.has(agentKeyTx);
+          // For the leader's own deals: their full agent net IS their retained amount
+          // (no separate member to pay — the leader is the agent).
+          const memberPaidTx = isLeaderOwnDealTx
+            ? (snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? Math.max(0, gciTx - (snap?.companyRetained ?? (raw as any).brokerProfit ?? 0))) as number
+            : (snap?.agentNetCommission ?? snap?.memberPaid ?? snap?.agentDollar ?? 0) as number;
           let leaderRetainedTx: number;
-          if (snap?.leaderRetainedAfterMember != null) {
+          if (isLeaderOwnDealTx) {
+            // Leader's own deal: full agent net flows to leader retained
+            leaderRetainedTx = memberPaidTx;
+          } else if (snap?.leaderRetainedAfterMember != null) {
             leaderRetainedTx = snap.leaderRetainedAfterMember as number;
           } else if (gciTx > 0 && teamLeaderPct > 0 && teamMemberPct > 0) {
             const leaderSideTx = gciTx * (teamLeaderPct / 100);
