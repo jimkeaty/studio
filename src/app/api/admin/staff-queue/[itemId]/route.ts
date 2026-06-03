@@ -43,8 +43,6 @@ const EDITABLE_TX_FIELDS = new Set([
   'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
   'listPrice', 'salePrice', 'dealValue', 'commissionPercent', 'gci', 'transactionFee',
   'brokerPct', 'brokerGci', 'agentPct', 'agentDollar', 'earnestMoney',
-  'leaderSideGci', 'memberPay', 'leaderRetained',
-  'commissionOverridden', 'commissionOverriddenBy', 'commissionOverriddenAt',
   'listingDate', 'contractDate', 'closedDate', 'projectedCloseDate',
   'optionExpiration', 'inspectionDeadline', 'surveyDeadline',
   'loanApplicationDeadline', 'appraisalDeadline', 'titleDeadline', 'finalLoanCommitmentDeadline',
@@ -252,28 +250,7 @@ export async function PATCH(
         // ── Auto-recalculate commission when financial fields change ──────────
         // If any commission-triggering field changed, recompute the splitSnapshot
         // so agent net, company dollar, and tier are always up to date.
-        // Skip auto-recalculation if manual team split overrides are present.
-        const hasManualTeamOverride = (
-          txUpdates.leaderSideGci !== undefined ||
-          txUpdates.memberPay !== undefined ||
-          txUpdates.leaderRetained !== undefined ||
-          txUpdates.agentDollar !== undefined
-        ) && (txUpdates.commissionOverridden === true || currentTx.commissionOverridden === true);
-
-        // When manual team override values are provided, merge them into the splitSnapshot directly
-        if (hasManualTeamOverride) {
-          const currentSplit = currentTx.splitSnapshot || {};
-          allowed.splitSnapshot = {
-            ...currentSplit,
-            ...(txUpdates.agentDollar !== undefined ? { agentNetCommission: Number(txUpdates.agentDollar) } : {}),
-            ...(txUpdates.leaderSideGci !== undefined ? { leaderStructureGross: Number(txUpdates.leaderSideGci) } : {}),
-            ...(txUpdates.memberPay !== undefined ? { memberPaid: Number(txUpdates.memberPay) } : {}),
-            ...(txUpdates.leaderRetained !== undefined ? { leaderRetainedAfterMember: Number(txUpdates.leaderRetained) } : {}),
-            commissionOverride: true,
-          };
-        }
-
-        const hasCommissionChange = !hasManualTeamOverride && Object.keys(txUpdates).some(k => COMMISSION_TRIGGER_FIELDS.has(k));
+        const hasCommissionChange = Object.keys(txUpdates).some(k => COMMISSION_TRIGGER_FIELDS.has(k));
         if (hasCommissionChange) {
           try {
             // Merge new values over current transaction to get the effective GCI
