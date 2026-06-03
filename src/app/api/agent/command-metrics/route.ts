@@ -21,6 +21,7 @@ interface Transaction {
   contractDate?: admin.firestore.Timestamp | string;
   brokerProfit: number;
   dealValue: number;
+  salePrice?: number | string | null;
   commission?: number;
   transactionType: string;
   transactionFee?: number;
@@ -299,7 +300,7 @@ export async function GET(req: NextRequest) {
       const closedDate = parseDate(t.closedDate);
       if (!closedDate || closedDate.getFullYear() !== prevYear) continue;
       const m = closedDate.getMonth();
-      const vol = t.dealValue ?? 0;
+      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
       brokerageMonthly[m].closedVolume += vol;
       brokerageMonthly[m].closedCount += 1;
       brokerageTotalVolume += vol;
@@ -394,7 +395,7 @@ export async function GET(req: NextRequest) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-      const dealValue = t.dealValue ?? 0;
+      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
@@ -485,7 +486,7 @@ export async function GET(req: NextRequest) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-      const dealValue = t.dealValue ?? 0;
+      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
       const isAllTimeDual = String(t.closingType || '').toLowerCase() === 'dual';
       if (isAllTimeDual) {
         addToSide(allTimeSideBreakdown.closed, 'buyer', dealValue / 2, agentNet / 2);
@@ -513,7 +514,7 @@ export async function GET(req: NextRequest) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-      const vol = t.dealValue ?? 0;
+      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isPrevDual = String(t.closingType || '').toLowerCase() === 'dual';
       const prevSideCount = isPrevDual ? 2 : 1;
@@ -569,8 +570,8 @@ export async function GET(req: NextRequest) {
         const m = closedDate.getMonth();
         const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
         const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-        const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-        const vol = t.dealValue ?? 0;
+              const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
+      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
 
         compMonths[m].grossMargin += companyRetained;
         compMonths[m].closedVolume += vol;
@@ -679,7 +680,7 @@ export async function GET(req: NextRequest) {
         } else {
           leaderRetained = 0;
         }
-        const dealValue = t.dealValue ?? 0;
+        const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
         const agentName = memberNameMap.get(agentKey) ?? agentKey;
 
         if (!memberMap.has(agentKey)) {
@@ -791,7 +792,7 @@ export async function GET(req: NextRequest) {
             agentName: memberNameMap3.get((t.agentId as string) ?? '') ?? (t.agentId as string) ?? '',
             address: (raw.address ?? raw.propertyAddress ?? '') as string,
             status: (t.status ?? '') as string,
-            dealValue: (t.dealValue ?? 0) as number,
+            dealValue: ((t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0) as number,
             agentNetCommission: memberPaidTx,
             grossCommission: gciTx,
             leaderRetained: leaderRetainedTx,
@@ -960,19 +961,6 @@ export async function GET(req: NextRequest) {
         activeAgentCount: view === 'team' ? activeAgentCount : undefined,
         totalTeamMembers: view === 'team' ? totalTeamMembers : undefined,
       },
-      // TEMPORARY DEBUG — remove after diagnosing team view issue
-      _debug: isAdminCaller ? {
-        uid,
-        profileDocId,
-        profileAgentId: profileData?.agentId ?? null,
-        profileTeamRole: profileData?.teamRole ?? null,
-        profilePrimaryTeamId: profileData?.primaryTeamId ?? null,
-        isTeamLeader,
-        teamId,
-        agentIdList: [...agentIds],
-        totalTxFetched: allAgentTx.length,
-        totalTxForYear: transactions.length,
-      } : undefined,
       // Team leader earnings breakdown (only present when view=team and caller is team leader)
       teamLeaderEarnings,
       // Team transactions list (only present when view=team and caller is team leader)

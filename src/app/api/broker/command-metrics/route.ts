@@ -23,6 +23,7 @@ interface Transaction {
   contractDate?: admin.firestore.Timestamp | string;
   brokerProfit: number;
   dealValue: number;
+  salePrice?: number | string | null;
   commission?: number;
   transactionType: string;
   transactionFee?: number;
@@ -260,7 +261,9 @@ export async function GET(req: NextRequest) {
     for (const t of transactions) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-      const dealValue = t.dealValue ?? 0;
+      // Use salePrice as fallback — when salePrice is edited, dealValue is now kept in sync,
+      // but older transactions may still have a stale dealValue. salePrice is always authoritative.
+      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;

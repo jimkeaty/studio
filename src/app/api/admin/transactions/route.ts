@@ -300,6 +300,15 @@ export async function PATCH(req: NextRequest) {
       updates.dealType = updates.transactionType;
     }
 
+    // Keep dealValue in sync with salePrice — broker command metrics reads dealValue for volume charts.
+    // When salePrice is edited, dealValue must also be updated or the old value persists in charts.
+    if (updates.salePrice !== undefined) {
+      const sp = Number(updates.salePrice);
+      if (!isNaN(sp) && sp > 0) {
+        updates.dealValue = sp;
+      }
+    }
+
     // Capture existing state BEFORE update so we can rebuild old rollups if needed
     const existingSnap = await adminDb.collection('transactions').doc(id).get();
     const existingData = existingSnap.data() as any;

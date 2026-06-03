@@ -95,7 +95,8 @@ export async function GET(req: NextRequest) {
       const agentNet = Number(split.agentNetCommission) || 0;
       const companyRetained = Number(split.companyRetained) || 0;
       const grossMargin = companyRetained > 0 ? companyRetained : Math.max(0, gci - agentNet);
-      const dealValue = Number(d.dealValue) || Number(d.listPrice) || 0;
+      // salePrice is authoritative — dealValue may be stale if salePrice was edited before the sync fix
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || Number(d.listPrice) || 0);
 
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = String(d.closingType || '').toLowerCase() === 'dual';
