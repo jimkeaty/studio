@@ -55,15 +55,15 @@ export async function POST(req: NextRequest) {
       return jsonError(400, 'closingType must be: buyer, listing, dual, or referral');
     }
 
-    // clientName is required for buyer/dual/referral, but for listings the seller
-    // name is often not yet known at the time of initial submission.
-    // Fall back to sellerName or buyerName so listings can always be saved.
+    // clientName is optional for listings (seller not yet known) and referrals
+    // (client may not be known at time of referral entry).
+    // Fall back to sellerName or buyerName so all types can always be saved.
     const clientName =
       toStr(body.clientName) ||
       toStr(body.sellerName) ||
       toStr(body.buyerName) ||
       '';
-    if (!clientName && closingType !== 'listing') {
+    if (!clientName && closingType !== 'listing' && closingType !== 'referral') {
       return jsonError(400, 'clientName is required');
     }
 

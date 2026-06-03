@@ -2489,6 +2489,16 @@ export default function AddTransactionPage() {
           ═══════════════════════════════════════════════════════════════════ */}
           {watchedClosingType === 'referral' && (
             <Section title="Outbound Referral Details" description="You are referring this client out. Fill in the receiving agent and your referral fee.">
+              {/* Client name — optional for referrals */}
+              <FormField control={form.control} name="clientName" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Client Name <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel>
+                  <FormControl>
+                    <Input placeholder="Client being referred (optional)" {...field} />
+                  </FormControl>
+                  <FormDescription className="text-xs">The person you are referring out. Not required to save.</FormDescription>
+                </FormItem>
+              )} />
               <Grid2>
                 <FormField control={form.control} name="outboundReferralAgentName" render={({ field }) => (
                   <FormItem><FormLabel>Referred-To Agent Name</FormLabel><FormControl><Input placeholder="Agent receiving the referral" {...field} /></FormControl></FormItem>
