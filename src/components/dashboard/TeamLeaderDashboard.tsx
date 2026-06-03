@@ -26,11 +26,12 @@ import {
   Users, TrendingUp, DollarSign, BarChart3, Target, Clock,
   AlertTriangle, Bell, ExternalLink, ChevronDown, ChevronUp,
   Calendar, Home, CheckCircle2, XCircle, Flame, Award,
-  ArrowUpRight, ArrowDownRight, UserCheck, Eye,
+  ArrowUpRight, ArrowDownRight, UserCheck, Eye, Download,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase';
+import { exportToCsv } from '@/lib/exportToCsv';
 import { TeamCommandDashboard } from '@/components/dashboard/TeamCommandDashboard';
 import { TeamTransactionsLedger } from '@/components/dashboard/TeamTransactionsLedger';
 
@@ -301,10 +302,28 @@ function TeamTransactionsList({ transactions }: { transactions: TeamTransaction[
 
   const visible = filtered.slice(0, showCount);
 
+  const handleExport = () => {
+    const rows = filtered.map(t => ({
+      Agent: t.agentName,
+      Address: t.address || '',
+      Status: t.status,
+      'Transaction Type': t.transactionType ?? '',
+      'Deal Value': t.dealValue,
+      'Gross Commission': t.grossCommission,
+      'Agent Net Commission': t.agentNetCommission,
+      'Leader Retained': t.leaderRetained,
+      'Closed Date': t.closedDate ?? '',
+      'Contract Date': t.contractDate ?? '',
+    }));
+    const agentLabel = agentFilter !== 'all' ? agentFilter.replace(/\s+/g, '-').toLowerCase() : 'all-agents';
+    const statusLabel = statusFilter !== 'all' ? `-${statusFilter}` : '';
+    exportToCsv(rows, `team-transactions-${agentLabel}${statusLabel}.csv`);
+  };
+
   return (
     <div className="space-y-3">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
+      {/* Filters + Export */}
+      <div className="flex flex-wrap gap-2 items-center">
         <input
           type="text"
           placeholder="Search address or agent..."
@@ -329,6 +348,16 @@ function TeamTransactionsList({ transactions }: { transactions: TeamTransaction[
             {agents.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 shrink-0"
+          disabled={filtered.length === 0}
+          onClick={handleExport}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export CSV
+        </Button>
       </div>
 
       {/* Table */}

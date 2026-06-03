@@ -26,10 +26,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw, Paperclip, FileText, Trash2, PlusCircle, FileEdit, Clock } from 'lucide-react';
+import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, Save, X, RefreshCw, Paperclip, FileText, Trash2, PlusCircle, FileEdit, Clock, Download } from 'lucide-react';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { exportToCsv } from '@/lib/exportToCsv';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -1027,11 +1028,51 @@ export function AgentTransactionsSection({ agentId, viewAs }: Props) {
       {/* Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Transactions</CardTitle>
-          <CardDescription>
-            {filtered.length} record{filtered.length !== 1 ? 's' : ''}
-            {yearFilter !== 'all' ? ` in ${yearFilter}` : ''} · Click a row to view or update
-          </CardDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Transactions</CardTitle>
+              <CardDescription>
+                {filtered.length} record{filtered.length !== 1 ? 's' : ''}
+                {yearFilter !== 'all' ? ` in ${yearFilter}` : ''} · Click a row to view or update
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              disabled={filtered.length === 0}
+              onClick={() => {
+                const rows = filtered.map(t => ({
+                  Status: (statusConfig[t.status]?.label ?? t.status),
+                  Address: t.address || t.propertyAddress || '',
+                  'Closing Type': closingTypeLabel[t.closingType || ''] ?? t.closingType ?? '',
+                  'Transaction Type': txTypeLabel[t.transactionType || ''] ?? t.transactionType ?? '',
+                  'Client Name': t.clientName || '',
+                  'Seller Name': t.sellerName || '',
+                  'Buyer Name': t.buyerName || '',
+                  'Contract Date': t.contractDate || '',
+                  'Closed Date': t.closedDate || t.closingDate || '',
+                  'Listing Date': t.listingDate || '',
+                  'List Price': t.listPrice ?? '',
+                  'Sale Price': t.salePrice ?? t.dealValue ?? '',
+                  'Gross Commission': t.splitSnapshot?.grossCommission ?? t.commission ?? '',
+                  'Net to Me': t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? '',
+                  Source: t.source || '',
+                  'Other Agent': t.otherAgentName || '',
+                  'Other Agent Brokerage': t.otherAgentBrokerage || '',
+                  'Mortgage Company': t.mortgageCompany || '',
+                  'Loan Officer': t.loanOfficer || '',
+                  'Title Company': t.titleCompany || '',
+                  Notes: t.notes || '',
+                }));
+                const label = yearFilter !== 'all' ? yearFilter : 'all-years';
+                exportToCsv(rows, `my-transactions-${label}.csv`);
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {error && (
