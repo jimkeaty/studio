@@ -3,7 +3,7 @@
 // DELETE /api/admin/transactions — delete a single transaction by id
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { isAdminLike } from '@/lib/auth/staffAccess';
+import { isStaff } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
@@ -34,7 +34,8 @@ async function verifyAdmin(req: NextRequest) {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice('Bearer '.length);
   const decoded = await adminAuth.verifyIdToken(token);
-  if (!(await isAdminLike(decoded.uid))) return null;
+  // Allow any staff user (office_admin, tc_admin, tc) to read/write transactions
+  if (!(await isStaff(decoded.uid))) return null;
   return decoded;
 }
 

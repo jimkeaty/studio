@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase';
-import { useIsAdminLike } from '@/hooks/useIsAdminLike';
+import { useIsStaff } from '@/hooks/useIsStaff';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -254,7 +254,7 @@ function n(val: any): any {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function EditTransactionPage() {
   const { user, loading: userLoading } = useUser();
-  const { isAdmin } = useIsAdminLike();
+  const { isStaff: isAdmin } = useIsStaff(); // any staff user (office_admin, tc_admin, tc) can edit transactions
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
