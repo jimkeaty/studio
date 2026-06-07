@@ -1589,57 +1589,6 @@ export default function BusinessPlanPage() {
                       </TooltipProvider>
                     </div>
                   </div>
-
-                  {/* Per-month seasonality breakdown */}
-                  {(historicalStats?.seasonality || historicalStats?.allTimeSeasonality || brokerageSeasonality) && (
-                    <div className="rounded-lg border border-muted bg-muted/30 p-3">
-                      <p className="text-xs font-semibold text-muted-foreground mb-2">Seasonality Distribution Preview (% of annual goal per month)</p>
-                      <div className="grid grid-cols-6 md:grid-cols-12 gap-1">
-                        {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((label, i) => {
-                          const m = i + 1;
-                          const lastYrPct = historicalStats?.seasonality?.[i]?.salesPct ?? 8.33;
-                          const allTimePct = historicalStats?.allTimeSeasonality?.[i]?.salesPct ?? 8.33;
-                          const brokeragePct = brokerageSeasonality?.[i]?.salesPct ?? 8.33;
-                          const currentPct = parseFloat(seasonWeights[m]?.salesPct ?? '8.33');
-                          return (
-                            <div key={m} className="text-center">
-                              <p className="text-xs font-medium text-muted-foreground">{label}</p>
-                              <p className="text-sm font-bold text-foreground">{currentPct.toFixed(1)}%</p>
-                              {historicalStats?.seasonality && (
-                                <p className="text-xs text-blue-600 dark:text-blue-400">{lastYrPct.toFixed(1)}%</p>
-                              )}
-                              {historicalStats?.allTimeHasData && (
-                                <p className="text-xs text-emerald-600 dark:text-emerald-400">{allTimePct.toFixed(1)}%</p>
-                              )}
-                              {brokerageSeasonality && (
-                                <p className="text-xs text-amber-600 dark:text-amber-400">{brokeragePct.toFixed(1)}%</p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 mt-2">
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <span className="inline-block w-2 h-2 rounded-full bg-foreground"></span> Current weights
-                        </span>
-                        {historicalStats?.seasonality && (
-                          <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span> My last year
-                          </span>
-                        )}
-                        {historicalStats?.allTimeHasData && (
-                          <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span> My all-time
-                          </span>
-                        )}
-                        {brokerageSeasonality && (
-                          <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                            <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span> Brokerage ({brokerageSeasonalityYear})
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Monthly goals table */}
@@ -1648,11 +1597,10 @@ export default function BusinessPlanPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[90px]">Month</TableHead>
+                        <TableHead className="w-[70px] text-center text-muted-foreground text-xs">Season %</TableHead>
                         <TableHead className="text-right">Net Income Goal</TableHead>
                         <TableHead className="text-right">Volume Goal</TableHead>
                         <TableHead className="text-right">Sales Goal (units)</TableHead>
-                        <TableHead className="text-right text-muted-foreground text-xs">Sales %</TableHead>
-                        <TableHead className="text-right text-muted-foreground text-xs">Vol %</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1663,6 +1611,11 @@ export default function BusinessPlanPage() {
                         return (
                           <TableRow key={m}>
                             <TableCell className="font-medium">{MONTH_LABELS[m - 1]}</TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-xs font-semibold text-primary tabular-nums">
+                                {parseFloat(sw.salesPct).toFixed(1)}%
+                              </span>
+                            </TableCell>
                             <TableCell className="text-right">
                               <Input
                                 type="number"
@@ -1690,24 +1643,6 @@ export default function BusinessPlanPage() {
                                 placeholder="—"
                               />
                             </TableCell>
-                            <TableCell className="text-right">
-                              <Input
-                                type="number"
-                                className="w-20 text-right ml-auto text-xs"
-                                value={sw.salesPct}
-                                onChange={e => setSeasonWeights(prev => ({ ...prev, [m]: { ...prev[m], salesPct: e.target.value } }))}
-                                step="0.01"
-                              />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Input
-                                type="number"
-                                className="w-20 text-right ml-auto text-xs"
-                                value={sw.volumePct}
-                                onChange={e => setSeasonWeights(prev => ({ ...prev, [m]: { ...prev[m], volumePct: e.target.value } }))}
-                                step="0.01"
-                              />
-                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -1720,7 +1655,7 @@ export default function BusinessPlanPage() {
                         if (annualGoal > 0 && Math.abs(diff) > 1) {
                           return (
                             <TableRow>
-                              <TableCell colSpan={6} className="py-1">
+                              <TableCell colSpan={5} className="py-1">
                                 <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-xs">
                                   <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-400 text-xs">
                                     {diff > 0 ? `+$${Math.abs(diff).toLocaleString()} over goal` : `-$${Math.abs(diff).toLocaleString()} under goal`}
@@ -1735,6 +1670,9 @@ export default function BusinessPlanPage() {
                       })()}
                       <TableRow className="font-bold bg-muted/30">
                         <TableCell>Total</TableCell>
+                        <TableCell className="text-center text-xs tabular-nums">
+                          {Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.salesPct) || 0), 0).toFixed(1)}%
+                        </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {fmtCurrencyCompact(Object.values(monthlyGoals).reduce((s, g) => s + (parseFloat(g.margin) || 0), 0))}
                         </TableCell>
@@ -1743,12 +1681,6 @@ export default function BusinessPlanPage() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {Object.values(monthlyGoals).reduce((s, g) => s + (parseInt(g.sales, 10) || 0), 0)}
-                        </TableCell>
-                        <TableCell className="text-right text-xs tabular-nums">
-                          {Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.salesPct) || 0), 0).toFixed(1)}%
-                        </TableCell>
-                        <TableCell className="text-right text-xs tabular-nums">
-                          {Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.volumePct) || 0), 0).toFixed(1)}%
                         </TableCell>
                       </TableRow>
                     </TableBody>
