@@ -199,6 +199,7 @@ type AgentMetricsResponse = {
   comparisonData?: { year: number; months: { closedVolume: number; closedCount: number; netIncome: number; grossMargin?: number; totalGCI?: number }[] } | null;
   agentView: { view: string; viewLabel: string; isTeamLeader: boolean; availableTeams: { teamId: string; teamName: string }[]; monthlyNetIncome: number[]; monthlyPendingNetIncome: number[]; netIncome: number; pendingNetIncome: number; goalSegment: string; };
   aggregateStats?: { isAllYears: boolean; avgCommissionPct: number | null; avgNetCommissionPct: number; totalClosedVolume: number; totalClosedCount: number; totalNetIncome: number; };
+  pendingCloseRatio?: { pendingTotal: number; closedFromPending: number; fallThroughCount: number; closeRatePct: number; } | null;
   teamLeaderEarnings?: {
     totalLeaderRetained: number;
     totalMemberPaid: number;
@@ -1241,6 +1242,46 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
             </div>
           );
         })()}
+
+
+        {/* Pending-to-Close Ratio */}
+        {perfData.pendingCloseRatio && perfData.pendingCloseRatio.pendingTotal > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4">
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-3">Pending-to-Close Ratio (YTD)</p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Of deals that went pending where the projected close date has already passed — how many actually closed vs. fell through. Deals still pending with a future close date are excluded.
+            </p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              <div className="relative flex items-center justify-center shrink-0" style={{ width: 80, height: 80 }}>
+                <svg viewBox="0 0 36 36" className="w-20 h-20 -rotate-90">
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" strokeWidth="3" className="text-amber-200 dark:text-amber-900" />
+                  <circle cx="18" cy="18" r="15.9" fill="none" strokeWidth="3"
+                    stroke={perfData.pendingCloseRatio.closeRatePct >= 80 ? '#10b981' : perfData.pendingCloseRatio.closeRatePct >= 60 ? '#f59e0b' : '#ef4444'}
+                    strokeDasharray={`${(perfData.pendingCloseRatio.closeRatePct / 100) * 100} 100`}
+                    strokeLinecap="round" />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-lg font-black leading-none">{perfData.pendingCloseRatio.closeRatePct.toFixed(0)}%</span>
+                  <span className="text-[9px] text-muted-foreground">close rate</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 flex-1 text-center">
+                <div>
+                  <p className="text-xl font-black text-amber-900 dark:text-amber-100">{perfData.pendingCloseRatio.pendingTotal}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Total Resolved</p>
+                </div>
+                <div>
+                  <p className="text-xl font-black text-green-700 dark:text-green-400">{perfData.pendingCloseRatio.closedFromPending}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Closed</p>
+                </div>
+                <div>
+                  <p className="text-xl font-black text-red-600 dark:text-red-400">{perfData.pendingCloseRatio.fallThroughCount}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Fell Through</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
 
         {/* ── Grade Cards ─────────────────────────────────────────────────────────────────── */}
@@ -2891,15 +2932,15 @@ const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 type AgentMultiYearData = {
   year: number;
-  months: { month: number; label: string; netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number }[];
-  totals: { netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number };
+  months: { month: number; label: string; netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number; contractsWritten: number }[];
+  totals: { netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number; contractsWritten: number };
 };
 
 function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team'; viewAs: string | null }) {
   const { user } = useUser();
   const [allYears, setAllYears] = useState<AgentMultiYearData[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
-  const [metric, setMetric] = useState<'netIncome' | 'volume' | 'sales'>('netIncome');
+  const [metric, setMetric] = useState<'netIncome' | 'volume' | 'sales' | 'contractsWritten'>('netIncome');
   const [chartView, setChartView] = useState<'month' | 'quarter' | 'year'>('month');
   const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('ytd');
   const [showPendingMY, setShowPendingMY] = useState(false);
@@ -2945,14 +2986,15 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
     return 11;
   };
 
-  const metricLabel = { netIncome: 'Net Income', volume: 'Dollar Volume', sales: 'Number of Sales' }[metric];
-  const fmt = (val: number) => metric === 'sales' ? val.toLocaleString() : fmtCurrencyCompact(val, true);
+  const metricLabel = { netIncome: 'Net Income', volume: 'Dollar Volume', sales: 'Number of Sales', contractsWritten: 'Contracts Written' }[metric] ?? 'Net Income';
+  const fmt = (val: number) => (metric === 'sales' || metric === 'contractsWritten') ? val.toLocaleString() : fmtCurrencyCompact(val, true);
 
-  // Pending metric key mapping
-  const agentPendingKey: Record<string, 'pendingVolume' | 'pendingSales' | 'pendingNetIncome'> = {
+  // Pending metric key mapping (contractsWritten has no pending overlay — pending contracts are already included)
+  const agentPendingKey: Record<string, 'pendingVolume' | 'pendingSales' | 'pendingNetIncome' | null> = {
     netIncome: 'pendingNetIncome',
     volume: 'pendingVolume',
     sales: 'pendingSales',
+    contractsWritten: null,
   };
   const agentPendingMetric = agentPendingKey[metric];
 
@@ -2963,7 +3005,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
         const pt: Record<string, any> = { label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i] };
         for (const yr of filtered) {
           pt[String(yr.year)] = i > getMonthLimit(yr.year) ? null : (yr.months[i]?.[metric] ?? 0);
-          if (showPendingMY) pt[`${yr.year}_pending`] = yr.months[i]?.[agentPendingMetric] ?? 0;
+          if (showPendingMY && agentPendingMetric) pt[`${yr.year}_pending`] = yr.months[i]?.[agentPendingMetric] ?? 0;
         }
         return pt;
       });
@@ -2975,9 +3017,9 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
           const limit = getMonthLimit(yr.year);
           const qMos = yr.months.slice(q * 3, Math.min(q * 3 + 3, limit + 1));
           pt[String(yr.year)] = qMos.length > 0 ? qMos.reduce((s, m) => s + (m[metric] ?? 0), 0) : null;
-          if (showPendingMY) {
+          if (showPendingMY && agentPendingMetric) {
             const allQMos = yr.months.slice(q * 3, q * 3 + 3);
-            pt[`${yr.year}_pending`] = allQMos.reduce((s, m) => s + (m[agentPendingMetric] ?? 0), 0);
+            pt[`${yr.year}_pending`] = allQMos.reduce((s, m) => s + ((m as any)[agentPendingMetric] ?? 0), 0);
           }
         }
         return pt;
@@ -2988,7 +3030,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
       const val = compareMode === 'ytd' || yr.year === currentYearMY
         ? yr.months.slice(0, limit + 1).reduce((s, m) => s + (m[metric] ?? 0), 0)
         : yr.totals[metric] ?? 0;
-      const pendingVal = showPendingMY ? (yr.totals[agentPendingMetric] ?? 0) : 0;
+      const pendingVal = (showPendingMY && agentPendingMetric) ? (yr.totals[agentPendingMetric] ?? 0) : 0;
       return { label: String(yr.year), value: val, pendingValue: pendingVal };
     });
   })();
@@ -3014,6 +3056,7 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
                 <SelectItem value="netIncome">Net Income</SelectItem>
                 <SelectItem value="volume">Dollar Volume</SelectItem>
                 <SelectItem value="sales">Number of Sales</SelectItem>
+                <SelectItem value="contractsWritten">Contracts Written</SelectItem>
               </SelectContent>
             </Select>
             {/* View toggle */}
@@ -3034,14 +3077,21 @@ function AgentMultiYearComparison({ view, viewAs }: { view: 'personal' | 'team';
                 </button>
               ))}
             </div>
-            {/* Pending toggle */}
-            <button
-              type="button"
-              onClick={() => setShowPendingMY(p => !p)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingMY ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
-            >
-              {showPendingMY ? '● Pending On' : 'Show Pending'}
-            </button>
+            {/* Pending toggle — hidden for contractsWritten since pending contracts are already included */}
+            {metric !== 'contractsWritten' && (
+              <button
+                type="button"
+                onClick={() => setShowPendingMY(p => !p)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingMY ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
+              >
+                {showPendingMY ? '● Pending On' : 'Show Pending'}
+              </button>
+            )}
+            {metric === 'contractsWritten' && (
+              <span className="px-3 py-1.5 rounded-md text-xs text-muted-foreground border border-dashed">
+                Includes all statuses
+              </span>
+            )}
             {/* Year pills */}
             <div className="flex flex-wrap items-center gap-1.5 ml-auto">
               <span className="text-xs text-muted-foreground mr-1">Years:</span>

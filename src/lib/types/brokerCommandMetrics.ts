@@ -200,6 +200,24 @@ export type TeamLeaderEarnings = {
   memberBreakdown: TeamLeaderEarningsMember[];
 };
 
+// ── Contracts written by month (bucketed by contractDate) ─────────────────
+export type ContractsByMonthData = {
+  month: number;       // 1-12
+  label: string;       // 'Jan', 'Feb', ...
+  count: number;       // number of deals that went under contract this month
+  volume: number;      // total sale price of those deals
+};
+
+// ── Pending-to-close ratio ──────────────────────────────────────────────────
+// Of deals that went pending where projectedCloseDate has already passed,
+// how many actually closed vs. fell through.
+export type PendingCloseRatio = {
+  pendingTotal: number;       // total deals that went pending (projectedCloseDate in the past)
+  closedFromPending: number;  // how many of those actually closed
+  fallThroughCount: number;   // how many did NOT close (still pending/canceled/expired)
+  closeRatePct: number;       // closedFromPending / pendingTotal * 100 (0 if pendingTotal=0)
+};
+
 // ── Pending transaction summary for the gross margin pending detail table ──
 export type PendingTransactionSummary = {
   id: string;
@@ -220,6 +238,11 @@ export type BrokerCommandMetrics = {
   teams?: TeamInfo[];              // available teams for team tabs
   teamLeaderEarnings?: TeamLeaderEarnings | null; // populated when teamId is set and team has a leader
   pendingTransactions?: PendingTransactionSummary[]; // pending deals for the gross margin pending detail table
+  // Contracts written by month (bucketed by contractDate, multi-year comparison)
+  contractsByMonth?: ContractsByMonthData[];  // 12 months for the selected year
+  contractsByMonthComparison?: { year: number; months: ContractsByMonthData[] }[]; // up to 4 prior years
+  // Pending-to-close ratio (YTD, resolved deals only)
+  pendingCloseRatio?: PendingCloseRatio;
   // Legacy fields (kept for backward compatibility)
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;

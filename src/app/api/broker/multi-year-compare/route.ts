@@ -1,5 +1,5 @@
 // GET /api/broker/multi-year-compare
-// Returns monthly gross margin, volume, and sales for all years with transaction data
+// Returns monthly gross margin, volume, sales, and contracts written for all years with transaction data
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
@@ -21,31 +21,31 @@ function toDate(value: any): Date | null {
   return null;
 }
 
+type MonthBucket = {
+  grossMargin: number;
+  volume: number;
+  sales: number;
+  gci: number;
+  pendingVolume: number;
+  pendingSales: number;
+  pendingGci: number;
+  contractsWritten: number;  // deals that went under contract this month (by contractDate)
+};
+
 export interface YearMonthData {
   year: number;
-  months: {
+  months: ({
     month: number;
     label: string;
-    grossMargin: number;
-    volume: number;
-    sales: number;
-    gci: number;
-    pendingVolume: number;
-    pendingSales: number;
-    pendingGci: number;
-  }[];
-  totals: {
-    grossMargin: number;
-    volume: number;
-    sales: number;
-    gci: number;
-    pendingVolume: number;
-    pendingSales: number;
-    pendingGci: number;
-  };
+  } & MonthBucket)[];
+  totals: MonthBucket;
 }
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function emptyBucket(): MonthBucket {
+  return { grossMargin: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingGci: 0, contractsWritten: 0 };
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -60,29 +60,13 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get('teamId') || null;
 
-    // Fetch ALL closed transactions
-    let query: FirebaseFirestore.Query = adminDb.collection('transactions')
-      .where('status', '==', 'closed');
-
+    // Fetch ALL transactions (any status) — we need closed for revenue metrics
+    // and contractDate for contractsWritten metric
+    let allTxQuery: FirebaseFirestore.Query = adminDb.collection('transactions');
     if (teamId) {
-      query = query.where('splitSnapshot.primaryTeamId', '==', teamId);
+      allTxQuery = adminDb.collection('transactions')
+        .where('splitSnapshot.primaryTeamId', '==', teamId);
     }
-
-    const snap = await query.get();
-
-    // ── Filter out demo account transactions ─────────────────────────────
-    const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
-    const demoAgentIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
-
-    // Partial-month cap: when comparing across years, only count transactions
-    // in the current calendar month if their day-of-month <= today's day.
-    // This gives an apples-to-apples YTD comparison at any point during the month.
-    const today = new Date();
-    const currentMonth = today.getMonth() + 1; // 1-12
-    const currentDayOfMonth = today.getDate(); // 1-31
-
-    // Group by year and month — separate buckets for closed and pending
-    const yearMap = new Map<number, Map<number, { grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number }>>();
 
     // Also fetch pending/under_contract transactions for the pending overlay
     let pendingQuery: FirebaseFirestore.Query = adminDb.collection('transactions')
@@ -92,46 +76,70 @@ export async function GET(req: NextRequest) {
         .where('splitSnapshot.primaryTeamId', '==', teamId)
         .where('status', 'in', ['pending', 'under_contract']);
     }
-    const pendingSnap = await pendingQuery.get();
 
-    for (const doc of snap.docs) {
+    const [allTxSnap, pendingSnap, demoSnap] = await Promise.all([
+      allTxQuery.get(),
+      pendingQuery.get(),
+      adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get(),
+    ]);
+
+    // ── Filter out demo account transactions ─────────────────────────────
+    const demoAgentIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
+
+    // Partial-month cap: when comparing across years, only count transactions
+    // in the current calendar month if their day-of-month <= today's day.
+    // This gives an apples-to-apples YTD comparison at any point during the month.
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDayOfMonth = today.getDate(); // 1-31
+
+    // Group by year and month
+    const yearMap = new Map<number, Map<number, MonthBucket>>();
+
+    const getOrCreate = (yr: number, mo: number): MonthBucket => {
+      if (!yearMap.has(yr)) yearMap.set(yr, new Map());
+      const monthMap = yearMap.get(yr)!;
+      if (!monthMap.has(mo)) monthMap.set(mo, emptyBucket());
+      return monthMap.get(mo)!;
+    };
+
+    // Process ALL transactions for closed metrics and contractsWritten
+    for (const doc of allTxSnap.docs) {
       const d = doc.data();
-      // Skip demo account transactions
       if (demoAgentIds.size > 0 && demoAgentIds.has(String(d.agentId || ''))) continue;
+
+      const isDual = String(d.closingType || '').toLowerCase() === 'dual';
+      const sideCount = isDual ? 2 : 1;
+      const isPassThrough = String(d.dealSource || '').toLowerCase() === 'pass_through';
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || Number(d.listPrice) || 0);
+
+      // ── contractsWritten: bucket by contractDate (any status) ──────────
+      const contractDate = toDate(d.contractDate);
+      if (contractDate) {
+        const cyr = contractDate.getFullYear();
+        const cmo = contractDate.getMonth() + 1;
+        const cb = getOrCreate(cyr, cmo);
+        cb.contractsWritten += sideCount;
+      }
+
+      // ── Closed metrics: bucket by closedDate ───────────────────────────
+      if (d.status !== 'closed') continue;
       const closedDate = toDate(d.closedDate);
       if (!closedDate) continue;
 
       const yr = closedDate.getFullYear();
       const mo = closedDate.getMonth() + 1; // 1-12
 
-      // Partial-month cap: for any year, if the transaction falls in the same
-      // calendar month as today, only include it if its day <= today's day.
-      // This ensures June 2025 is only counted through June 3 when today is June 3.
+      // Partial-month cap
       if (mo === currentMonth && closedDate.getDate() > currentDayOfMonth) continue;
 
-      if (!yearMap.has(yr)) {
-        yearMap.set(yr, new Map());
-      }
-      const monthMap = yearMap.get(yr)!;
-      if (!monthMap.has(mo)) {
-        monthMap.set(mo, { grossMargin: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingGci: 0 });
-      }
-      const bucket = monthMap.get(mo)!;
+      const bucket = getOrCreate(yr, mo);
 
       const split = d.splitSnapshot || {};
       const gci = Number(split.grossCommission) || Number(d.commission) || 0;
       const agentNet = Number(split.agentNetCommission) || 0;
       const companyRetained = Number(split.companyRetained) || 0;
       const grossMargin = companyRetained > 0 ? companyRetained : Math.max(0, gci - agentNet);
-      // salePrice is authoritative — dealValue may be stale if salePrice was edited before the sync fix
-      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || Number(d.listPrice) || 0);
-
-      // Dual Agent counts as 2 sides (1 buyer + 1 listing)
-      const isDual = String(d.closingType || '').toLowerCase() === 'dual';
-      const sideCount = isDual ? 2 : 1;
-
-      // Pass-through: count volume/sales but exclude from GCI & grossMargin to keep commission % accurate
-      const isPassThrough = String(d.dealSource || '').toLowerCase() === 'pass_through';
 
       if (!isPassThrough) bucket.grossMargin += grossMargin;
       bucket.volume += dealValue;
@@ -149,10 +157,7 @@ export async function GET(req: NextRequest) {
       const yr = projectedDate.getFullYear();
       const mo = projectedDate.getMonth() + 1; // 1-12
 
-      if (!yearMap.has(yr)) yearMap.set(yr, new Map());
-      const monthMap = yearMap.get(yr)!;
-      if (!monthMap.has(mo)) monthMap.set(mo, { grossMargin: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingGci: 0 });
-      const bucket = monthMap.get(mo)!;
+      const bucket = getOrCreate(yr, mo);
 
       const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
       const split = d.splitSnapshot || {};
@@ -172,39 +177,26 @@ export async function GET(req: NextRequest) {
     for (const yr of sortedYears) {
       const monthMap = yearMap.get(yr)!;
       const months: YearMonthData['months'] = [];
-      let totalGM = 0, totalVol = 0, totalSales = 0, totalGci = 0;
-      let totalPendingVol = 0, totalPendingSales = 0, totalPendingGci = 0;
+      const totals = emptyBucket();
 
       for (let m = 1; m <= 12; m++) {
-        const bucket = monthMap.get(m) || { grossMargin: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingGci: 0 };
+        const bucket = monthMap.get(m) ?? emptyBucket();
         months.push({
           month: m,
           label: MONTH_LABELS[m - 1],
-          grossMargin: bucket.grossMargin,
-          volume: bucket.volume,
-          sales: bucket.sales,
-          gci: bucket.gci,
-          pendingVolume: bucket.pendingVolume,
-          pendingSales: bucket.pendingSales,
-          pendingGci: bucket.pendingGci,
+          ...bucket,
         });
-        totalGM += bucket.grossMargin;
-        totalVol += bucket.volume;
-        totalSales += bucket.sales;
-        totalGci += bucket.gci;
-        totalPendingVol += bucket.pendingVolume;
-        totalPendingSales += bucket.pendingSales;
-        totalPendingGci += bucket.pendingGci;
+        totals.grossMargin += bucket.grossMargin;
+        totals.volume += bucket.volume;
+        totals.sales += bucket.sales;
+        totals.gci += bucket.gci;
+        totals.pendingVolume += bucket.pendingVolume;
+        totals.pendingSales += bucket.pendingSales;
+        totals.pendingGci += bucket.pendingGci;
+        totals.contractsWritten += bucket.contractsWritten;
       }
 
-      years.push({
-        year: yr,
-        months,
-        totals: {
-          grossMargin: totalGM, volume: totalVol, sales: totalSales, gci: totalGci,
-          pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingGci: totalPendingGci,
-        },
-      });
+      years.push({ year: yr, months, totals });
     }
 
     return NextResponse.json({ ok: true, years });

@@ -136,8 +136,8 @@ function KPICard({
 
 type MultiYearData = {
   year: number;
-  months: { month: number; label: string; grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number }[];
-  totals: { grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number };
+  months: { month: number; label: string; grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number; contractsWritten: number }[];
+  totals: { grossMargin: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingGci: number; contractsWritten: number };
 };
 
 const YEAR_COLORS = [
@@ -151,7 +151,7 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
   const { user } = useUser();
   const [allYears, setAllYears] = useState<MultiYearData[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
-  const [metric, setMetric] = useState<'grossMargin' | 'volume' | 'sales'>('grossMargin');
+  const [metric, setMetric] = useState<'grossMargin' | 'volume' | 'sales' | 'contractsWritten'>('grossMargin');
   const [view, setView] = useState<'month' | 'quarter' | 'year'>('month');
   const [compareMode, setCompareMode] = useState<'full' | 'ytd'>('full');
   const [showPendingMY, setShowPendingMY] = useState(false);
@@ -190,9 +190,9 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
     );
   };
 
-  const metricLabel = metric === 'grossMargin' ? 'Gross Margin' : metric === 'volume' ? 'Dollar Volume' : 'Number of Sales';
+  const metricLabel = metric === 'grossMargin' ? 'Gross Margin' : metric === 'volume' ? 'Dollar Volume' : metric === 'contractsWritten' ? 'Contracts Written' : 'Number of Sales';
   const metricFormatter = (val: number) =>
-    metric === 'sales' ? val.toLocaleString() : formatCurrency(val, true);
+    (metric === 'sales' || metric === 'contractsWritten') ? val.toLocaleString() : formatCurrency(val, true);
 
   const todayMY = new Date();
   const currentYearMY = todayMY.getFullYear();
@@ -207,11 +207,12 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
     return 11; // full year for past years in full mode
   };
 
-  // Pending metric key mapping
-  const pendingMetricKey: Record<string, 'pendingVolume' | 'pendingSales' | 'pendingGci'> = {
+  // Pending metric key mapping (contractsWritten has no pending overlay — pending deals are already included in contractsWritten)
+  const pendingMetricKey: Record<string, 'pendingVolume' | 'pendingSales' | 'pendingGci' | null> = {
     grossMargin: 'pendingGci',
     volume: 'pendingVolume',
     sales: 'pendingSales',
+    contractsWritten: null, // no separate pending bar — pending contracts are already counted
   };
   const pendingKey = pendingMetricKey[metric];
 
@@ -225,7 +226,7 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
         for (const yr of filteredYears) {
           const limit = getYearMonthLimit(yr.year);
           point[String(yr.year)] = i > limit ? null : (yr.months[i]?.[metric] ?? 0);
-          if (showPendingMY) {
+          if (showPendingMY && pendingKey) {
             point[`${yr.year}_pending`] = yr.months[i]?.[pendingKey] ?? 0;
           }
         }
@@ -240,9 +241,9 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
           const limit = getYearMonthLimit(yr.year);
           const qMonths = yr.months.slice(q * 3, Math.min(q * 3 + 3, limit + 1));
           point[String(yr.year)] = qMonths.length > 0 ? qMonths.reduce((sum, m) => sum + (m[metric] ?? 0), 0) : null;
-          if (showPendingMY) {
+          if (showPendingMY && pendingKey) {
             const allQMonths = yr.months.slice(q * 3, q * 3 + 3);
-            point[`${yr.year}_pending`] = allQMonths.reduce((sum, m) => sum + (m[pendingKey] ?? 0), 0);
+            point[`${yr.year}_pending`] = allQMonths.reduce((sum, m) => sum + ((m as any)[pendingKey] ?? 0), 0);
           }
         }
         return point;
@@ -255,7 +256,7 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
       const val = compareMode === 'ytd' || yr.year === currentYearMY
         ? yr.months.slice(0, limit + 1).reduce((s, m) => s + (m[metric] ?? 0), 0)
         : yr.totals[metric] ?? 0;
-      const pendingVal = showPendingMY ? (yr.totals[pendingKey] ?? 0) : 0;
+      const pendingVal = (showPendingMY && pendingKey) ? (yr.totals[pendingKey] ?? 0) : 0;
       return { label: String(yr.year), value: val, pendingValue: pendingVal };
     });
   })();
@@ -286,6 +287,7 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
                 <SelectItem value="grossMargin">Gross Margin</SelectItem>
                 <SelectItem value="volume">Dollar Volume</SelectItem>
                 <SelectItem value="sales">Number of Sales</SelectItem>
+                <SelectItem value="contractsWritten">Contracts Written</SelectItem>
               </SelectContent>
             </Select>
 
@@ -325,14 +327,21 @@ function MultiYearComparison({ teamId }: { teamId?: string | null }) {
               ))}
             </div>
 
-            {/* Pending toggle */}
-            <button
-              type="button"
-              onClick={() => setShowPendingMY(p => !p)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingMY ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
-            >
-              {showPendingMY ? '● Pending On' : 'Show Pending'}
-            </button>
+            {/* Pending toggle — hidden for contractsWritten since pending contracts are already included */}
+            {metric !== 'contractsWritten' && (
+              <button
+                type="button"
+                onClick={() => setShowPendingMY(p => !p)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingMY ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
+              >
+                {showPendingMY ? '● Pending On' : 'Show Pending'}
+              </button>
+            )}
+            {metric === 'contractsWritten' && (
+              <span className="px-3 py-1.5 rounded-md text-xs text-muted-foreground border border-dashed">
+                Includes all statuses
+              </span>
+            )}
 
             {/* Year selectors */}
             <div className="flex flex-wrap items-center gap-1.5 ml-auto">
@@ -1529,6 +1538,57 @@ export function BrokerDashboardInner() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Pending-to-Close Ratio Card ────────────────────────────────── */}
+      {data.pendingCloseRatio && data.pendingCloseRatio.pendingTotal > 0 && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Target className="h-4 w-4 text-amber-600" />
+              Pending-to-Close Ratio
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Of deals that went pending with a projected close date that has already passed — how many actually closed vs. fell through.
+              Deals still pending with a future projected close date are excluded.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              {/* Circular progress */}
+              <div className="relative flex items-center justify-center shrink-0" style={{ width: 96, height: 96 }}>
+                <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" strokeWidth="3" className="text-amber-200 dark:text-amber-900" />
+                  <circle
+                    cx="18" cy="18" r="15.9" fill="none" strokeWidth="3"
+                    stroke={data.pendingCloseRatio.closeRatePct >= 80 ? '#10b981' : data.pendingCloseRatio.closeRatePct >= 60 ? '#f59e0b' : '#ef4444'}
+                    strokeDasharray={`${(data.pendingCloseRatio.closeRatePct / 100) * 100} 100`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl font-black leading-none">{data.pendingCloseRatio.closeRatePct.toFixed(0)}%</span>
+                  <span className="text-[10px] text-muted-foreground">close rate</span>
+                </div>
+              </div>
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-4 flex-1 text-center">
+                <div>
+                  <p className="text-2xl font-black text-amber-900 dark:text-amber-100">{data.pendingCloseRatio.pendingTotal}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Total Resolved</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-green-700 dark:text-green-400">{data.pendingCloseRatio.closedFromPending}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Closed</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-red-600 dark:text-red-400">{data.pendingCloseRatio.fallThroughCount}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Fell Through</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── CHART 1: Gross Margin ─────────────────────────────────────────── */}
       <Card>

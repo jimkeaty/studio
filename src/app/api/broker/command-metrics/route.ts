@@ -13,6 +13,8 @@ import type {
   TeamLeaderEarnings,
   TeamLeaderEarningsMember,
   PendingTransactionSummary,
+  ContractsByMonthData,
+  PendingCloseRatio,
 } from '@/lib/types/brokerCommandMetrics';
 
 
@@ -302,6 +304,16 @@ export async function GET(req: NextRequest) {
 
     // 6. Process each transaction
     const pendingTransactionsList: PendingTransactionSummary[] = [];
+    // Contracts written by month: bucket by contractDate for the selected year
+    const contractsByMonthMap: ContractsByMonthData[] = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      label: format(new Date(2000, i), 'MMM'),
+      count: 0,
+      volume: 0,
+    }));
+    // Pending-to-close ratio accumulators (all years, resolved deals only)
+    let pcrPendingTotal = 0;
+    let pcrClosedFromPending = 0;
     for (const t of transactions) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
@@ -317,6 +329,44 @@ export async function GET(req: NextRequest) {
       const sideCount = isDual ? 2 : 1;
       // Pass-through transactions: count volume/count but exclude from GCI & commission % calculation
       const isPassThrough = srcKey === 'pass_through';
+
+      // ── Contracts written by month (contractDate bucket) ──────────────
+      // Count every transaction (any status) that has a contractDate in the selected year.
+      // This captures how many deals went under contract each month.
+      const contractDateParsed = parseDate(t.contractDate);
+      if (contractDateParsed && contractDateParsed.getFullYear() === year) {
+        const cmi = contractDateParsed.getMonth(); // 0-based
+        contractsByMonthMap[cmi].count += sideCount;
+        contractsByMonthMap[cmi].volume += dealValue;
+      }
+
+      // ── Pending-to-close ratio ──────────────────────────────────────────
+      // Only include deals where projectedCloseDate has already passed (resolved deals).
+      // Exclude deals still pending with a future projected close date.
+      if (t.status === 'pending' || t.status === 'under_contract') {
+        const projDate = parseDate(t.projectedCloseDate) ||
+          parseDate((t as any).projectedClosingDate) ||
+          parseDate((t as any).projectedClose);
+        if (projDate && projDate < today) {
+          // This pending deal's projected close date has passed — it should have resolved
+          pcrPendingTotal += 1;
+          // It did NOT close (still pending/under_contract) — count as fall-through
+          // (closedFromPending is incremented in the closed block below for deals that closed)
+        }
+      } else if (t.status === 'closed') {
+        // Check if this closed deal was previously pending (has a contractDate before closedDate)
+        // We count it toward pendingCloseRatio if it has a contractDate (went through pending stage)
+        const contractDateForRatio = parseDate(t.contractDate);
+        const closedDateForRatio = parseDate(t.closedDate);
+        if (contractDateForRatio && closedDateForRatio && contractDateForRatio < closedDateForRatio) {
+          // This deal went through a pending stage and closed — it resolves a pending
+          // Only count if the closedDate is not in the future
+          if (closedDateForRatio <= today) {
+            pcrPendingTotal += 1;
+            pcrClosedFromPending += 1;
+          }
+        }
+      }
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -597,6 +647,45 @@ export async function GET(req: NextRequest) {
       return a.projectedCloseDate.localeCompare(b.projectedCloseDate);
     });
 
+    // Build pending-to-close ratio
+    const pendingCloseRatio: PendingCloseRatio = {
+      pendingTotal: pcrPendingTotal,
+      closedFromPending: pcrClosedFromPending,
+      fallThroughCount: Math.max(0, pcrPendingTotal - pcrClosedFromPending),
+      closeRatePct: pcrPendingTotal > 0
+        ? Math.round((pcrClosedFromPending / pcrPendingTotal) * 10000) / 100
+        : 0,
+    };
+
+    // Build contractsByMonth comparison data for prior years (up to 4 years back)
+    // We already have prevTransactions; fetch up to 3 more years for the comparison pills
+    const compYears = [year - 1, year - 2, year - 3, year - 4].filter(y => y > 2000);
+    const compYearSnaps = await Promise.all(
+      compYears.map(y => adminDb.collection('transactions').where('year', '==', y).get())
+    );
+    const contractsByMonthComparison = compYears.map((y, idx) => {
+      const snap = compYearSnaps[idx];
+      const cMonths: ContractsByMonthData[] = Array.from({ length: 12 }, (_, i) => ({
+        month: i + 1,
+        label: format(new Date(2000, i), 'MMM'),
+        count: 0,
+        volume: 0,
+      }));
+      for (const doc of snap.docs) {
+        const tx = doc.data() as Transaction;
+        if (demoAgentIds.has(String(tx.agentId || ''))) continue;
+        if (teamAgentIds && !teamAgentIds.has(tx.agentId)) continue;
+        const cd = parseDate(tx.contractDate);
+        if (!cd || cd.getFullYear() !== y) continue;
+        const mi = cd.getMonth();
+        const dv = (tx.salePrice && Number(tx.salePrice) > 0 ? Number(tx.salePrice) : null) ?? tx.dealValue ?? 0;
+        const isDualC = String((tx as any).closingType || '').toLowerCase() === 'dual';
+        cMonths[mi].count += isDualC ? 2 : 1;
+        cMonths[mi].volume += dv;
+      }
+      return { year: y, months: cMonths };
+    });
+
     const result: BrokerCommandMetrics = {
       overview,
       prevYearStats,
@@ -604,6 +693,9 @@ export async function GET(req: NextRequest) {
       comparisonData,
       teams,
       pendingTransactions: pendingTransactionsList,
+      contractsByMonth: contractsByMonthMap,
+      contractsByMonthComparison,
+      pendingCloseRatio,
       ...(teamLeaderEarnings ? { teamLeaderEarnings } : {}),
     };
 

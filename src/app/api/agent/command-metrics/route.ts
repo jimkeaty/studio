@@ -12,6 +12,8 @@ import type {
   MonthlyData,
   CategoryMetrics,
   Metric,
+  ContractsByMonthData,
+  PendingCloseRatio,
 } from '@/lib/types/brokerCommandMetrics';
 
 interface Transaction {
@@ -417,6 +419,17 @@ export async function GET(req: NextRequest) {
     const monthlyNetIncome: number[] = new Array(12).fill(0);
     const monthlyPendingNetIncome: number[] = new Array(12).fill(0);
 
+    // Contracts written by month: bucket by contractDate for the selected year
+    const contractsByMonthMap: ContractsByMonthData[] = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      label: format(new Date(2000, i), 'MMM'),
+      count: 0,
+      volume: 0,
+    }));
+    // Pending-to-close ratio accumulators (resolved deals only)
+    let pcrPendingTotal = 0;
+    let pcrClosedFromPending = 0;
+
     for (const t of transactions) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
@@ -429,6 +442,33 @@ export async function GET(req: NextRequest) {
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = String(t.closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
+
+      // ── Contracts written by month (contractDate bucket) ──────────────
+      const contractDateParsed = parseDate(t.contractDate);
+      if (!isAllYears && contractDateParsed && contractDateParsed.getFullYear() === year) {
+        const cmi = contractDateParsed.getMonth();
+        contractsByMonthMap[cmi].count += sideCount;
+        contractsByMonthMap[cmi].volume += dealValue;
+      }
+
+      // ── Pending-to-close ratio ──────────────────────────────────────────
+      if (t.status === 'pending' || t.status === 'under_contract') {
+        const projDate = parseDate((t as any).projectedCloseDate) ||
+          parseDate((t as any).projectedClosingDate) ||
+          parseDate((t as any).projectedClose);
+        if (projDate && projDate < today) {
+          pcrPendingTotal += 1;
+        }
+      } else if (t.status === 'closed') {
+        const contractDateForRatio = parseDate(t.contractDate);
+        const closedDateForRatio = parseDate(t.closedDate);
+        if (contractDateForRatio && closedDateForRatio && contractDateForRatio < closedDateForRatio) {
+          if (closedDateForRatio <= today) {
+            pcrPendingTotal += 1;
+            pcrClosedFromPending += 1;
+          }
+        }
+      }
 
       if (t.status === 'closed') {
         const closedDate = parseDate(t.closedDate);
@@ -1019,6 +1059,17 @@ export async function GET(req: NextRequest) {
       teamTransactions: (view === 'team' && isTeamLeader) ? teamTransactions : undefined,
       // Inactive member alerts (only present when view=team and caller is team leader)
       inactiveMemberAlerts: (view === 'team' && isTeamLeader) ? inactiveMemberAlerts : undefined,
+      // Contracts written by month (bucketed by contractDate)
+      contractsByMonth: contractsByMonthMap,
+      // Pending-to-close ratio
+      pendingCloseRatio: {
+        pendingTotal: pcrPendingTotal,
+        closedFromPending: pcrClosedFromPending,
+        fallThroughCount: Math.max(0, pcrPendingTotal - pcrClosedFromPending),
+        closeRatePct: pcrPendingTotal > 0
+          ? Math.round((pcrClosedFromPending / pcrPendingTotal) * 10000) / 100
+          : 0,
+      } satisfies PendingCloseRatio,
     });
   } catch (error: any) {
     console.error('[api/agent/command-metrics]', error);

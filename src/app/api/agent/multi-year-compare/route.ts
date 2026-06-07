@@ -35,6 +35,7 @@ export interface AgentYearMonthData {
     pendingVolume: number;
     pendingSales: number;
     pendingNetIncome: number;
+    contractsWritten: number; // deals that went under contract (by contractDate)
   }[];
   totals: {
     netIncome: number;
@@ -44,6 +45,7 @@ export interface AgentYearMonthData {
     pendingVolume: number;
     pendingSales: number;
     pendingNetIncome: number;
+    contractsWritten: number;
   };
 }
 
@@ -112,7 +114,7 @@ export async function GET(req: NextRequest) {
     const currentDayOfMonth = today.getDate(); // 1-31
 
     // ── Group by year → month ─────────────────────────────────────────────────
-    const yearMap = new Map<number, Map<number, { netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number }>>();
+    const yearMap = new Map<number, Map<number, { netIncome: number; volume: number; sales: number; gci: number; pendingVolume: number; pendingSales: number; pendingNetIncome: number; contractsWritten: number }>>();
 
     // Also fetch pending/under_contract transactions for this agent/team
     const pendingPromises: Promise<FirebaseFirestore.QuerySnapshot>[] = [];
@@ -142,7 +144,7 @@ export async function GET(req: NextRequest) {
 
       if (!yearMap.has(yr)) yearMap.set(yr, new Map());
       const monthMap = yearMap.get(yr)!;
-      if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0 });
+      if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
       const bucket = monthMap.get(mo)!;
 
       const split = d.splitSnapshot || {};
@@ -156,9 +158,20 @@ export async function GET(req: NextRequest) {
       bucket.volume += dealValue;
       bucket.sales += 1;
       bucket.gci += gci;
+
+      // Track contractsWritten — bucket by contractDate (when the deal went under contract)
+      const contractDate = toDate(d.contractDate) || toDate(d.pendingDate);
+      if (contractDate) {
+        const cyr = contractDate.getFullYear();
+        const cmo = contractDate.getMonth() + 1;
+        if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
+        const cMonthMap = yearMap.get(cyr)!;
+        if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
+        cMonthMap.get(cmo)!.contractsWritten += 1;
+      }
     }
 
-    // Process pending transactions — bucket by projectedCloseDate
+    // Process pending transactions — bucket by projectedCloseDate (and also track contractsWritten by contractDate)
     for (const doc of pendingDocs) {
       const d = doc.data();
       const projectedDate = toDate(d.projectedCloseDate) || toDate(d.projectedClosingDate) || toDate(d.projectedClose);
@@ -169,7 +182,7 @@ export async function GET(req: NextRequest) {
 
       if (!yearMap.has(yr)) yearMap.set(yr, new Map());
       const monthMap = yearMap.get(yr)!;
-      if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0 });
+      if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
       const bucket = monthMap.get(mo)!;
 
       const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
@@ -183,6 +196,17 @@ export async function GET(req: NextRequest) {
       bucket.pendingVolume += dealValue;
       bucket.pendingSales += sideCount;
       bucket.pendingNetIncome += agentNet;
+
+      // Track contractsWritten for pending deals — bucket by contractDate
+      const pendingContractDate = toDate(d.contractDate) || toDate(d.pendingDate);
+      if (pendingContractDate) {
+        const cyr = pendingContractDate.getFullYear();
+        const cmo = pendingContractDate.getMonth() + 1;
+        if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
+        const cMonthMap = yearMap.get(cyr)!;
+        if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
+        cMonthMap.get(cmo)!.contractsWritten += 1;
+      }
     }
 
     // ── Build sorted year array ───────────────────────────────────────────────
@@ -191,10 +215,10 @@ export async function GET(req: NextRequest) {
       const monthMap = yearMap.get(yr)!;
       const months: AgentYearMonthData['months'] = [];
       let totalNet = 0, totalVol = 0, totalSales = 0, totalGci = 0;
-      let totalPendingVol = 0, totalPendingSales = 0, totalPendingNet = 0;
+      let totalPendingVol = 0, totalPendingSales = 0, totalPendingNet = 0, totalContractsWritten = 0;
 
       for (let m = 1; m <= 12; m++) {
-        const bucket = monthMap.get(m) || { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0 };
+        const bucket = monthMap.get(m) || { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 };
         months.push({
           month: m,
           label: MONTH_LABELS[m - 1],
@@ -205,6 +229,7 @@ export async function GET(req: NextRequest) {
           pendingVolume: bucket.pendingVolume,
           pendingSales: bucket.pendingSales,
           pendingNetIncome: bucket.pendingNetIncome,
+          contractsWritten: (bucket as any).contractsWritten ?? 0,
         });
         totalNet += bucket.netIncome;
         totalVol += bucket.volume;
@@ -213,6 +238,7 @@ export async function GET(req: NextRequest) {
         totalPendingVol += bucket.pendingVolume;
         totalPendingSales += bucket.pendingSales;
         totalPendingNet += bucket.pendingNetIncome;
+        totalContractsWritten += (bucket as any).contractsWritten ?? 0;
       }
 
       // Strip GCI (gross commission income) from non-admin responses
@@ -221,10 +247,11 @@ export async function GET(req: NextRequest) {
         months: months.map(m => isAdminCaller ? m : {
           month: m.month, label: m.label, netIncome: m.netIncome, volume: m.volume, sales: m.sales,
           pendingVolume: m.pendingVolume, pendingSales: m.pendingSales, pendingNetIncome: m.pendingNetIncome,
+          contractsWritten: m.contractsWritten,
         }),
         totals: isAdminCaller
-          ? { netIncome: totalNet, volume: totalVol, sales: totalSales, gci: totalGci, pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingNetIncome: totalPendingNet }
-          : { netIncome: totalNet, volume: totalVol, sales: totalSales, pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingNetIncome: totalPendingNet },
+          ? { netIncome: totalNet, volume: totalVol, sales: totalSales, gci: totalGci, pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingNetIncome: totalPendingNet, contractsWritten: totalContractsWritten }
+          : { netIncome: totalNet, volume: totalVol, sales: totalSales, pendingVolume: totalPendingVol, pendingSales: totalPendingSales, pendingNetIncome: totalPendingNet, contractsWritten: totalContractsWritten },
       });
     }
 
