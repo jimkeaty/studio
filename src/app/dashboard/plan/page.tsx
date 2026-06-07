@@ -325,36 +325,104 @@ export default function BusinessPlanPage() {
   const avgCommPct = historicalStats?.avgCommissionPct ?? 0;
   const avgNetPct = historicalStats?.avgNetPct ?? 0;
 
+  // Editable overrides for the reference data (0 = use historical value)
+  const [overrideAvgSalePrice, setOverrideAvgSalePrice] = useState(0);
+  const [overrideAvgCommPct, setOverrideAvgCommPct] = useState(0);
+  const [overrideAvgNetPct, setOverrideAvgNetPct] = useState(0);
+  const [loadingLiveCommission, setLoadingLiveCommission] = useState(false);
+
+  // Reset overrides when historical stats load
+  useEffect(() => {
+    setOverrideAvgSalePrice(0);
+    setOverrideAvgCommPct(0);
+    setOverrideAvgNetPct(0);
+  }, [historicalStats]);
+
+  // Fetch live commission structure and compute effective avg net %
+  const fetchLiveCommission = useCallback(async () => {
+    if (!user) return;
+    const agentId = isImpersonating && effectiveUid ? effectiveUid : user.uid;
+    setLoadingLiveCommission(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/agent-profiles/${agentId}/commission`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      // Compute effective avg net % from tiers
+      // Use the agent's current YTD GCI to determine which tier they are in,
+      // or use the first tier as the baseline if no YTD data
+      const tiers: Array<{ agentPct: number; minGci?: number; maxGci?: number }> = data.tiers ?? [];
+      if (tiers.length > 0) {
+        const ytdGci: number = data.ytdTierProgressionGci ?? 0;
+        // Find the active tier
+        let activeTier = tiers[0];
+        for (const tier of tiers) {
+          const min = tier.minGci ?? 0;
+          if (ytdGci >= min) activeTier = tier;
+        }
+        const liveNetPct = activeTier.agentPct;
+        setOverrideAvgNetPct(liveNetPct);
+        // Also update the avgCommission form field using live net %
+        const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
+        const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
+        if (asp > 0 && commPct > 0) {
+          const liveAvgNet = Math.round(asp * (commPct / 100) * (liveNetPct / 100));
+          form.setValue('avgCommission', liveAvgNet);
+          handleCalculate();
+        }
+        toast({ title: 'Live Commission Loaded', description: `Active tier: ${liveNetPct}% agent net (based on $${ytdGci.toLocaleString()} YTD GCI)` });
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Failed to load live commission' });
+    } finally {
+      setLoadingLiveCommission(false);
+    }
+  }, [user, isImpersonating, effectiveUid, avgCommPct, avgSalePrice, overrideAvgCommPct, overrideAvgSalePrice, form, handleCalculate, toast]);
+
   const handleVolumeChange = (val: string) => {
     setYearlyVolume(val);
     const vol = parseFloat(val) || 0;
-    if (vol > 0 && avgSalePrice > 0) setYearlySales(String(Math.round(vol / avgSalePrice)));
-    if (vol > 0 && avgCommPct > 0 && avgNetPct > 0) {
-      const totalGCI = vol * (avgCommPct / 100);
-      setYearlyIncome(String(Math.round(totalGCI * (avgNetPct / 100))));
+    const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
+    const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
+    const netPct = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
+    if (vol > 0 && asp > 0) setYearlySales(String(Math.round(vol / asp)));
+    if (vol > 0 && commPct > 0 && netPct > 0) {
+      const totalGCI = vol * (commPct / 100);
+      setYearlyIncome(String(Math.round(totalGCI * (netPct / 100))));
     }
+    setTimeout(distributeGoals, 50);
   };
 
   const handleSalesChange = (val: string) => {
     setYearlySales(val);
     const sales = parseInt(val, 10) || 0;
-    if (sales > 0 && avgSalePrice > 0) {
-      const calcVol = Math.round(sales * avgSalePrice);
+    const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
+    const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
+    const netPct = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
+    if (sales > 0 && asp > 0) {
+      const calcVol = Math.round(sales * asp);
       setYearlyVolume(String(calcVol));
-      if (avgCommPct > 0 && avgNetPct > 0) {
-        setYearlyIncome(String(Math.round(calcVol * (avgCommPct / 100) * (avgNetPct / 100))));
+      if (commPct > 0 && netPct > 0) {
+        setYearlyIncome(String(Math.round(calcVol * (commPct / 100) * (netPct / 100))));
       }
     }
+    setTimeout(distributeGoals, 50);
   };
 
   const handleGoalIncomeChange = (val: string) => {
     setYearlyIncome(val);
     const income = parseFloat(val) || 0;
-    if (income > 0 && avgNetPct > 0 && avgCommPct > 0) {
-      const calcVol = Math.round(income / ((avgCommPct / 100) * (avgNetPct / 100)));
+    const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
+    const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
+    const netPct = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
+    if (income > 0 && netPct > 0 && commPct > 0) {
+      const calcVol = Math.round(income / ((commPct / 100) * (netPct / 100)));
       setYearlyVolume(String(calcVol));
-      if (avgSalePrice > 0) setYearlySales(String(Math.round(calcVol / avgSalePrice)));
+      if (asp > 0) setYearlySales(String(Math.round(calcVol / asp)));
     }
+    setTimeout(distributeGoals, 50);
   };
 
   const distributeGoals = useCallback(() => {
@@ -656,8 +724,9 @@ export default function BusinessPlanPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Row 1: Transaction averages */}
+              {/* Row 1: Transaction averages — each card has an editable override input */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Avg Sale Price */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Sale Price</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
@@ -665,8 +734,23 @@ export default function BusinessPlanPage() {
                       ? `$${historicalStats.avgSalePrice.toLocaleString()}`
                       : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground">per closing</p>
+                  <p className="text-xs text-muted-foreground mb-2">per closing (historical)</p>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
+                    <Input
+                      type="number"
+                      className="h-7 text-xs px-2 border-blue-300"
+                      placeholder={String(historicalStats.avgSalePrice ?? '')}
+                      value={overrideAvgSalePrice > 0 ? overrideAvgSalePrice : ''}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value) || 0;
+                        setOverrideAvgSalePrice(v);
+                        setTimeout(distributeGoals, 50);
+                      }}
+                    />
+                  </div>
                 </div>
+                {/* Avg Commission % */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Commission %</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
@@ -674,8 +758,24 @@ export default function BusinessPlanPage() {
                       ? `${historicalStats.avgCommissionPct.toFixed(2)}%`
                       : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground">GCI / sale price</p>
+                  <p className="text-xs text-muted-foreground mb-2">GCI / sale price (historical)</p>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      className="h-7 text-xs px-2 border-blue-300"
+                      placeholder={historicalStats.avgCommissionPct != null ? historicalStats.avgCommissionPct.toFixed(2) : ''}
+                      value={overrideAvgCommPct > 0 ? overrideAvgCommPct : ''}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value) || 0;
+                        setOverrideAvgCommPct(v);
+                        setTimeout(distributeGoals, 50);
+                      }}
+                    />
+                  </div>
                 </div>
+                {/* Avg Net Take-Home (derived, shows override if applicable) */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Net Take-Home</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
@@ -683,8 +783,20 @@ export default function BusinessPlanPage() {
                       ? `$${historicalStats.avgNetCommission.toLocaleString()}`
                       : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground">per closing</p>
+                  <p className="text-xs text-muted-foreground mb-2">per closing (historical)</p>
+                  {(overrideAvgSalePrice > 0 || overrideAvgCommPct > 0 || overrideAvgNetPct > 0) && (() => {
+                    const asp2 = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
+                    const cp2 = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
+                    const np2 = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
+                    const derived = asp2 > 0 && cp2 > 0 && np2 > 0 ? Math.round(asp2 * (cp2 / 100) * (np2 / 100)) : null;
+                    return derived !== null ? (
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                        Override: ${derived.toLocaleString()}
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
+                {/* Avg Net % */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Net %</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
@@ -692,7 +804,22 @@ export default function BusinessPlanPage() {
                       ? `${historicalStats.avgNetPct.toFixed(1)}%`
                       : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground">of GCI kept</p>
+                  <p className="text-xs text-muted-foreground mb-2">of GCI kept (historical)</p>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      className="h-7 text-xs px-2 border-blue-300"
+                      placeholder={historicalStats.avgNetPct != null ? historicalStats.avgNetPct.toFixed(1) : ''}
+                      value={overrideAvgNetPct > 0 ? overrideAvgNetPct : ''}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value) || 0;
+                        setOverrideAvgNetPct(v);
+                        setTimeout(distributeGoals, 50);
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
               {/* Row 2: Volume / closings summary */}
@@ -1097,6 +1224,17 @@ export default function BusinessPlanPage() {
                               />
                             </FormControl>
                           </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-1 w-full text-xs"
+                            onClick={fetchLiveCommission}
+                            disabled={loadingLiveCommission}
+                          >
+                            <TrendingUp className="h-3 w-3 mr-1" />
+                            {loadingLiveCommission ? 'Loading...' : 'Use Live Commission'}
+                          </Button>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1370,6 +1508,27 @@ export default function BusinessPlanPage() {
                         );
                       })}
                       {/* Totals row */}
+                      {/* Mismatch warning row */}
+                      {(() => {
+                        const totalMonthlyIncome = Object.values(monthlyGoals).reduce((s, g) => s + (parseFloat(g.margin) || 0), 0);
+                        const annualGoal = parseFloat(yearlyIncome) || 0;
+                        const diff = Math.round(totalMonthlyIncome - annualGoal);
+                        if (annualGoal > 0 && Math.abs(diff) > 1) {
+                          return (
+                            <TableRow>
+                              <TableCell colSpan={6} className="py-1">
+                                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-xs">
+                                  <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-400 text-xs">
+                                    {diff > 0 ? `+$${Math.abs(diff).toLocaleString()} over goal` : `-$${Math.abs(diff).toLocaleString()} under goal`}
+                                  </Badge>
+                                  <span>Monthly totals don&apos;t match annual goal of {fmtCurrencyCompact(annualGoal)}. Click &quot;Distribute Across All Months&quot; to fix.</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
+                        return null;
+                      })()}
                       <TableRow className="font-bold bg-muted/30">
                         <TableCell>Total</TableCell>
                         <TableCell className="text-right tabular-nums">
