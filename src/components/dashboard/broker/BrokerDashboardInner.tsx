@@ -31,6 +31,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { BrokerCommandMetrics, MonthlyData, PrevYearStats, CategoryMetrics, SourceBreakdown } from '@/lib/types/brokerCommandMetrics';
 import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsChart';
+import { BrokerageReportCard } from '@/components/dashboard/broker/BrokerageReportCard';
+import { BrokerageKpiTracker } from '@/components/dashboard/broker/BrokerageKpiTracker';
+import type { BrokerKpiActuals, BrokerKpiGoals } from '@/components/dashboard/broker/BrokerageKpiTracker';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -508,16 +511,75 @@ function GoalsEditor({
   segment?: string;
 }) {
   const { user } = useUser();
-  const [goals, setGoals] = useState<Record<number, { margin: string; volume: string; sales: string }>>({});
+  const [goals, setGoals] = useState<Record<number, { margin: string; volume: string; sales: string }>>({})
   const [yearlyVolume, setYearlyVolume] = useState('');
   const [yearlySales, setYearlySales] = useState('');
   const [yearlyMargin, setYearlyMargin] = useState('');
   const [goalAvgSalePrice, setGoalAvgSalePrice] = useState('');
   const [goalAvgCommPct, setGoalAvgCommPct] = useState('');
   // Editable seasonality weights (% of year for each month) — single weight drives both sales and volume
-  const [seasonWeights, setSeasonWeights] = useState<Record<number, { pct: string }>>({});
+  const [seasonWeights, setSeasonWeights] = useState<Record<number, { pct: string }>>({})
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
+
+  // KPI + Recruiting annual goals
+  const [kpiGoalFields, setKpiGoalFields] = useState({
+    callsGoal: '', engagementsGoal: '', appointmentsSetGoal: '',
+    appointmentsHeldGoal: '', contractsWrittenGoal: '', closingsGoal: '',
+    agentCountGoal: '', newHiresGoal: '',
+    recruitingCallsGoal: '', recruitingApptSetGoal: '',
+    recruitingApptHeldGoal: '', recruitingClosingsGoal: '',
+  });
+  const [kpiSaving, setKpiSaving] = useState(false);
+
+  // Load existing KPI goals
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/broker/kpi-goals?year=${year}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && data.goals) {
+            setKpiGoalFields(prev => ({
+              ...prev,
+              ...Object.fromEntries(
+                Object.entries(data.goals).map(([k, v]) => [k, v != null ? String(v) : ''])
+              ),
+            }));
+          }
+        }
+      } catch { /* silent */ }
+    })();
+  }, [user, year]);
+
+  const saveKpiGoals = async () => {
+    if (!user) return;
+    setKpiSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const body: Record<string, number | null> = { year };
+      const numFields = [
+        'callsGoal','engagementsGoal','appointmentsSetGoal','appointmentsHeldGoal',
+        'contractsWrittenGoal','closingsGoal','agentCountGoal','newHiresGoal',
+        'recruitingCallsGoal','recruitingApptSetGoal','recruitingApptHeldGoal','recruitingClosingsGoal',
+      ] as const;
+      for (const k of numFields) {
+        body[k] = kpiGoalFields[k] ? parseInt(kpiGoalFields[k], 10) : null;
+      }
+      await fetch('/api/broker/kpi-goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      onSaved();
+    } catch (err) {
+      console.error('Failed to save KPI goals:', err);
+    } finally {
+      setKpiSaving(false);
+    }
+  };
 
   const hasPrevData = prevYearStats && prevYearStats.totalSales > 0;
   const avgSalePrice = prevYearStats?.avgSalePrice ?? 0;
@@ -1017,6 +1079,70 @@ function GoalsEditor({
                 {saving ? 'Saving...' : 'Save Goals'}
               </Button>
             </div>
+
+            {/* ── KPI Goals Section ─────────────────────────────────────── */}
+            <div className="mt-8 border-t pt-6">
+              <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
+                <Target className="h-4 w-4 text-primary" /> Production KPI Annual Goals
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">Set annual targets for brokerage-wide production KPIs. These drive the KPI Tracker grades and catch-up calculations.</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {([
+                  { key: 'callsGoal', label: 'Calls' },
+                  { key: 'engagementsGoal', label: 'Engagements' },
+                  { key: 'appointmentsSetGoal', label: 'Appointments Set' },
+                  { key: 'appointmentsHeldGoal', label: 'Appointments Held' },
+                  { key: 'contractsWrittenGoal', label: 'Contracts Written' },
+                  { key: 'closingsGoal', label: 'Closings' },
+                ] as const).map(({ key, label }) => (
+                  <div key={key}>
+                    <Label className="text-xs text-muted-foreground">{label}</Label>
+                    <Input
+                      type="number"
+                      value={kpiGoalFields[key]}
+                      onChange={e => setKpiGoalFields(prev => ({ ...prev, [key]: e.target.value }))}
+                      placeholder="0"
+                      className="h-8 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Recruiting Goals Section ──────────────────────────────── */}
+            <div className="mt-6 border-t pt-6">
+              <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" /> Recruiting & Agent Count Goals
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">Set annual targets for recruiting pipeline activity and agent count growth.</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {([
+                  { key: 'agentCountGoal', label: 'Agent Count Goal (end of year)' },
+                  { key: 'newHiresGoal', label: 'New Hires Goal' },
+                  { key: 'recruitingCallsGoal', label: 'Recruiting Calls' },
+                  { key: 'recruitingApptSetGoal', label: 'Recruiting Appts Set' },
+                  { key: 'recruitingApptHeldGoal', label: 'Recruiting Appts Held' },
+                  { key: 'recruitingClosingsGoal', label: 'Recruiting Closings' },
+                ] as const).map(({ key, label }) => (
+                  <div key={key}>
+                    <Label className="text-xs text-muted-foreground">{label}</Label>
+                    <Input
+                      type="number"
+                      value={kpiGoalFields[key]}
+                      onChange={e => setKpiGoalFields(prev => ({ ...prev, [key]: e.target.value }))}
+                      placeholder="0"
+                      className="h-8 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end mt-4">
+                <Button onClick={saveKpiGoals} disabled={kpiSaving} variant="outline">
+                  <Save className="mr-2 h-4 w-4" />
+                  {kpiSaving ? 'Saving...' : 'Save KPI & Recruiting Goals'}
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -1043,6 +1169,54 @@ export function BrokerDashboardInner() {
   const [catBreakdown, setCatBreakdown] = useState<{ closed: CategoryMetrics; pending: CategoryMetrics } | null>(null);
   const [catSourceBreakdown, setCatSourceBreakdown] = useState<{ closed: Record<string, { count: number; volume: number; netRevenue: number }>; pending: Record<string, { count: number; volume: number; netRevenue: number }> } | null>(null);
   const [catLoading, setCatLoading] = useState(false);
+
+  // ── KPI Goals + Actuals ──────────────────────────────────────────────────
+  const [kpiGoals, setKpiGoals] = useState<BrokerKpiGoals>({
+    callsGoal: null, engagementsGoal: null, appointmentsSetGoal: null,
+    appointmentsHeldGoal: null, contractsWrittenGoal: null, closingsGoal: null,
+    agentCountGoal: null, newHiresGoal: null,
+    recruitingCallsGoal: null, recruitingApptSetGoal: null,
+    recruitingApptHeldGoal: null, recruitingClosingsGoal: null,
+  });
+  const [kpiActuals, setKpiActuals] = useState<BrokerKpiActuals>({
+    calls: 0, engagements: 0, appointmentsSet: 0, appointmentsHeld: 0,
+    contractsWritten: 0, closings: 0, agentCount: 0,
+    recruitingCalls: 0, recruitingApptSet: 0, recruitingApptHeld: 0, recruitingClosings: 0,
+  });
+  const [kpiYtdFraction, setKpiYtdFraction] = useState<number>(1);
+  const [kpiLoading, setKpiLoading] = useState(false);
+  // Collapsible state for new sections
+  const [reportCardOpen, setReportCardOpen] = useState(true);
+  const [kpiTrackerOpen, setKpiTrackerOpen] = useState(true);
+
+  const fetchKpiData = useCallback(async () => {
+    if (!user) return;
+    setKpiLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const [goalsRes, actualsRes] = await Promise.all([
+        fetch(`/api/broker/kpi-goals?year=${year}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/broker/kpi-actuals?year=${year}`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (goalsRes.ok) {
+        const g = await goalsRes.json();
+        if (g.ok && g.goals) setKpiGoals(prev => ({ ...prev, ...g.goals }));
+      }
+      if (actualsRes.ok) {
+        const a = await actualsRes.json();
+        if (a.ok) {
+          if (a.actuals) setKpiActuals(a.actuals);
+          if (a.ytdFraction) setKpiYtdFraction(a.ytdFraction);
+        }
+      }
+    } catch (err) {
+      console.error('[BrokerCommand] KPI fetch error:', err);
+    } finally {
+      setKpiLoading(false);
+    }
+  }, [user, year]);
+
+  useEffect(() => { fetchKpiData(); }, [fetchKpiData]);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -1201,6 +1375,9 @@ export function BrokerDashboardInner() {
     ? Math.round((totals.closedVolume / ytdVolumeGoal) * 100) : null;
   const gradeSales = ytdSalesGoal
     ? Math.round((totals.closedCount / ytdSalesGoal) * 100) : null;
+
+  // Pipeline GCI = sum of pendingGci across all months
+  const pendingGci = months.reduce((s, m) => s + ((m as any).pendingGci ?? 0), 0);
 
   const teamName = selectedTeam
     ? (data.teams ?? []).find(t => t.teamId === selectedTeam)?.teamName ?? selectedTeam
@@ -2226,6 +2403,35 @@ export function BrokerDashboardInner() {
           </Card>
         );
       })()}
+
+      {/* ── Brokerage Report Card ──────────────────────────────────────────── */}
+      <BrokerageReportCard
+        totals={{
+          grossMargin: totals.grossMargin,
+          closedVolume: totals.closedVolume,
+          closedCount: totals.closedCount,
+          pendingVolume: totals.pendingVolume,
+          pendingCount: totals.pendingCount,
+        }}
+        pendingGci={pendingGci}
+        yearlyGrossMarginGoal={yearlyGrossMarginGoal}
+        yearlyVolumeGoal={yearlyVolumeGoal}
+        yearlySalesGoal={yearlySalesGoal}
+        ytdFraction={ytdFraction}
+        isCurrentYear={isCurrentYear}
+        open={reportCardOpen}
+        onToggle={() => setReportCardOpen(v => !v)}
+      />
+
+      {/* ── Brokerage KPI Tracker ─────────────────────────────────────────── */}
+      <BrokerageKpiTracker
+        actuals={kpiActuals}
+        goals={kpiGoals}
+        ytdFraction={kpiYtdFraction}
+        loading={kpiLoading}
+        open={kpiTrackerOpen}
+        onToggle={() => setKpiTrackerOpen(v => !v)}
+      />
 
       {/* ── Goals Editor ───────────────────────────────────────────────────── */}
       <GoalsEditor months={months} year={year} prevYearStats={data.prevYearStats} onSaved={fetchData} segment={selectedTeam || 'TOTAL'} />
