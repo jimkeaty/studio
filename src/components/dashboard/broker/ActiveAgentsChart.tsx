@@ -26,7 +26,7 @@ import { useUser } from '@/firebase';
 // ── Chart config (mirrors production chart colors) ───────────────────────────
 const chartConfig: ChartConfig = {
   activeClosed: { label: 'Active (Closed Deal)', color: 'hsl(var(--chart-1))' },
-  activeTenure: { label: 'Active (Tenure)', color: 'hsl(var(--chart-2))' },
+  activeTenure: { label: 'Active (No Deals Yet)', color: 'hsl(var(--chart-2))' },
   pipeline:     { label: 'Pipeline (Upcoming)', color: 'hsl(var(--chart-4))' },
   goal:         { label: 'Goal', color: 'hsl(var(--chart-3))' },
   projected:    { label: 'Projected', color: 'hsl(38 92% 50%)' },
@@ -345,7 +345,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
                 stackId="agents"
                 fill="var(--color-activeTenure)"
                 radius={[0, 0, 0, 0]}
-                name="Active (Tenure)"
+                name="Active (No Deals Yet)"
               />
               <Bar
                 dataKey="pipeline"
