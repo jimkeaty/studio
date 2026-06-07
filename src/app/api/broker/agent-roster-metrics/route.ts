@@ -343,7 +343,7 @@ export async function GET(req: NextRequest) {
       for (const t of transactions) {
         const status = String(t.status || '').trim();
         const net = getTransactionNet(t);
-        const dealValue = asNumber(t.dealValue);
+        const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
         // Dual Agent counts as 2 sides (1 buyer + 1 listing)
         const isDual = String((t as any).closingType || '').toLowerCase() === 'dual';
         const sideCount = isDual ? 2 : 1;

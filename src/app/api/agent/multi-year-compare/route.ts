@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
       const companyRetained = Number(split.companyRetained) || Number(d.brokerProfit) || 0;
       // agentNetCommission from snapshot is most accurate; fall back to gci - companyRetained
       const agentNet = Number(split.agentNetCommission) || Math.max(0, gci - companyRetained);
-      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.listPrice) || 0);
 
       bucket.netIncome += agentNet;
       bucket.volume += dealValue;
@@ -193,7 +193,7 @@ export async function GET(req: NextRequest) {
       if (!monthMap.has(mo)) monthMap.set(mo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
       const bucket = monthMap.get(mo)!;
 
-      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.listPrice) || 0);
       const split = d.splitSnapshot || {};
       const gci = Number(split.grossCommission) || Number(d.commission) || 0;
       const companyRetained = Number(split.companyRetained) || Number(d.brokerProfit) || 0;

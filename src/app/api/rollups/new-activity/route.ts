@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
           t.streetAddress ||
           "Transaction"
       );
-      const price = toMoney(t.dealValue ?? t.price ?? t.salePrice);
+      const price = toMoney(t.salePrice ?? t.listPrice ?? t.price);
       const status = String(t.status || "").toLowerCase();
 
       const closedDateRaw = t.closedDate || t.closingDate || null;

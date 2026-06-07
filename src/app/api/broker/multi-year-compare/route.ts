@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
       const isDual = String(d.closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
       const isPassThrough = String(d.dealSource || '').toLowerCase() === 'pass_through';
-      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || Number(d.listPrice) || 0);
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.listPrice) || 0);
 
       // ── contractsWritten: bucket by contractDate (any status) ──────────
       // Apply partial-month cap: if contractDate falls in the current calendar month,
@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
 
       const bucket = getOrCreate(yr, mo);
 
-      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || 0);
+      const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.listPrice) || 0);
       const split = d.splitSnapshot || {};
       const gci = Number(split.grossCommission) || Number(d.commission) || 0;
       const isDual = String(d.closingType || '').toLowerCase() === 'dual';

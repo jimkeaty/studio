@@ -128,7 +128,7 @@ function getSortValue(tx: TeamTx, key: SortKey): string | number {
     case 'dealType': return tx.transactionType || '';
     case 'contractDate': return tx.contractDate || '';
     case 'closedDate': return tx.closedDate || tx.closingDate || '';
-    case 'dealValue': return tx.dealValue || tx.salePrice || 0;
+    case 'dealValue': return tx.salePrice || tx.listPrice || tx.dealValue || 0;
     case 'agentNet': return tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0;
     case 'gci': return tx.splitSnapshot?.grossCommission ?? 0;
     // NOTE: leaderRetained sort uses the raw snapshot value; the isLeaderOwnDeal
@@ -157,7 +157,7 @@ function TeamEditForm({ tx, open, onClose, onSaved, viewAs }: EditFormProps) {
   const [status, setStatus] = useState(tx.status || 'active');
   const [propertyAddress, setPropertyAddress] = useState(tx.address || tx.propertyAddress || '');
   const [listPrice, setListPrice] = useState(String(tx.listPrice || ''));
-  const [salePrice, setSalePrice] = useState(String(tx.salePrice || tx.dealValue || ''));
+  const [salePrice, setSalePrice] = useState(String(tx.salePrice || tx.listPrice || ''));
   const [listingDate, setListingDate] = useState(tx.listingDate || '');
   const [contractDate, setContractDate] = useState(tx.contractDate || '');
   const [closingDate, setClosingDate] = useState(tx.closingDate || tx.closedDate || '');
@@ -216,7 +216,7 @@ function TeamEditForm({ tx, open, onClose, onSaved, viewAs }: EditFormProps) {
     setStatus(tx.status || 'active');
     setPropertyAddress(tx.address || tx.propertyAddress || '');
     setListPrice(String(tx.listPrice || ''));
-    setSalePrice(String(tx.salePrice || tx.dealValue || ''));
+    setSalePrice(String(tx.salePrice || tx.listPrice || ''));
     setListingDate(tx.listingDate || '');
     setContractDate(tx.contractDate || '');
     setClosingDate(tx.closingDate || tx.closedDate || '');
@@ -946,7 +946,7 @@ export function TeamTransactionsLedger({ teamId, teamName, viewAs, isAdminViewer
                     'Projected Close': t.projectedCloseDate || '',
                     'Inspection Deadline': t.inspectionDeadline || '',
                     'List Price': t.listPrice ?? '',
-                    'Sale Price': t.salePrice ?? t.dealValue ?? '',
+                    'Sale Price': t.salePrice ?? t.listPrice ?? '',
                     'GCI': t.splitSnapshot?.grossCommission ?? '',
                     'Agent Net': agentNetExport,
                     'Leader Retained': leaderRetainedExport,
@@ -1116,7 +1116,7 @@ export function TeamTransactionsLedger({ teamId, teamName, viewAs, isAdminViewer
                         <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.projectedCloseDate) || '—'}</TableCell>
                         <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.inspectionDeadline) || '—'}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap text-sm">
-                          {(t.dealValue || t.salePrice) ? formatCurrency(t.dealValue || t.salePrice || 0) : '—'}
+                          {(t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—'}
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap text-sm font-medium">
                           {gci ? formatCurrency(gci) : '—'}

@@ -162,7 +162,7 @@ export async function GET(req: NextRequest) {
 
       for (const t of txs) {
         const status = String(t.status || '').trim();
-        const dealValue = num(t.dealValue);
+        const dealValue = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
         const closedDate = toDate(t.closedDate || t.closingDate);
         const contractDate = toDate(t.contractDate);
         const txDate = closedDate || contractDate;

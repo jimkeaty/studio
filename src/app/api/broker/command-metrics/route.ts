@@ -32,6 +32,7 @@ interface Transaction {
   brokerProfit: number;
   dealValue: number;
   salePrice?: number | string | null;
+  listPrice?: number | string | null;
   commission?: number;
   transactionType: string;
   transactionFee?: number;
@@ -317,9 +318,8 @@ export async function GET(req: NextRequest) {
     for (const t of transactions) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-      // Use salePrice as fallback — when salePrice is edited, dealValue is now kept in sync,
-      // but older transactions may still have a stale dealValue. salePrice is always authoritative.
-      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+      // salePrice is always authoritative for volume; listPrice is the only fallback.
+      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
@@ -470,8 +470,8 @@ export async function GET(req: NextRequest) {
       if (isCurrentYear && m === currentCalMonth && closedDate.getDate() > todayDayOfMonth) continue;
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-      // salePrice is authoritative — dealValue may be stale on older transactions
-      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+      // salePrice is always authoritative; listPrice is the only fallback
+      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
       const isPrevPassThrough = ((t.dealSource || '').toLowerCase()) === 'pass_through';
 
       prevMonthly[m].closedVolume += vol;
@@ -541,8 +541,8 @@ export async function GET(req: NextRequest) {
         if (isCurrentYear && m === currentCalMonth && closedDate.getDate() > todayDayOfMonth) continue;
         const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
         const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
-        // salePrice is authoritative — dealValue may be stale on older transactions
-        const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+        // salePrice is always authoritative; listPrice is the only fallback
+        const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
 
         compMonths[m].grossMargin += margin;
         compMonths[m].closedVolume += vol;
@@ -609,8 +609,8 @@ export async function GET(req: NextRequest) {
           }
           const entry = memberMap.get(agentKey)!;
           entry.closedCount += 1;
-          // salePrice is authoritative — dealValue may be stale on older transactions
-          entry.closedVolume += (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+          // salePrice is always authoritative; listPrice is the only fallback
+          entry.closedVolume += (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
           entry.totalGCI += gci;
           entry.memberPaid += memberPaid;
           entry.leaderRetained += leaderRetained;
@@ -673,7 +673,7 @@ export async function GET(req: NextRequest) {
         const cd = parseDate(tx.contractDate);
         if (!cd || cd.getFullYear() !== y) continue;
         const mi = cd.getMonth();
-        const dv = (tx.salePrice && Number(tx.salePrice) > 0 ? Number(tx.salePrice) : null) ?? tx.dealValue ?? 0;
+        const dv = (tx.salePrice && Number(tx.salePrice) > 0 ? Number(tx.salePrice) : null) ?? (tx.listPrice && Number(tx.listPrice) > 0 ? Number(tx.listPrice) : 0);
         const isDualC = String((tx as any).closingType || '').toLowerCase() === 'dual';
         cMonths[mi].count += isDualC ? 2 : 1;
         cMonths[mi].volume += dv;

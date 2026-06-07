@@ -194,11 +194,13 @@ export async function rebuildAgentRollup(
     }
 
     // Volume credit: proportional to side credit for co-agent transactions
+    // salePrice is always authoritative; listPrice is the only fallback.
+    const txSalePrice = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
     const volumeCredit = t.hasCoAgent
-      ? num(t.dealValue) * (isCoAgentOnTx
+      ? txSalePrice * (isCoAgentOnTx
           ? num(t.coAgent?.sideCredit ?? 0.5)
           : num(t.primaryAgentSideCredit ?? 0.5))
-      : num(t.dealValue);
+      : txSalePrice;
 
     if (txYear === year) {
       // Closed transactions — calendar year
@@ -261,7 +263,8 @@ export async function rebuildAgentRollup(
       const status = String(t.status || '').toLowerCase();
       const isDual = String(t.closingType || '').toLowerCase() === 'dual';
       const coSideCredit = num(t.coAgent?.sideCredit ?? 0.5) * (isDual ? 2 : 1);
-      const coVolumeCredit = num(t.dealValue) * num(t.coAgent?.sideCredit ?? 0.5);
+      const coTxSalePrice = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
+      const coVolumeCredit = coTxSalePrice * num(t.coAgent?.sideCredit ?? 0.5);
       const coSplitSnapshot = t.coAgent?.splitSnapshot;
 
       if (txYear === year) {

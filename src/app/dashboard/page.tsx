@@ -233,8 +233,6 @@ function CompareSelector({ value, onChange, years }: { value: number | null; onC
   );
 }
 
-// ── Goals Editor (Broker-style with auto-calculations & seasonality) ─────────
-
 type AgentPrevYearStats = {
   year: number;
   totalVolume: number;
@@ -250,459 +248,6 @@ type AgentPrevYearStats = {
   avgCommissionPct?: number;
 };
 
-function GoalsEditor({ months, year, goalSegment, onSaved, prevYearStats, brokerageSeasonality }: {
-  months: MonthlyData[];
-  year: number;
-  goalSegment: string;
-  onSaved: () => void;
-  prevYearStats?: AgentPrevYearStats;
-  brokerageSeasonality?: { month: number; label: string; volumePct: number; salesPct: number }[];
-}) {
-  const { user } = useUser();
-  const [goals, setGoals] = useState<Record<number, { margin: string; volume: string; sales: string }>>({});
-  const [yearlyVolume, setYearlyVolume] = useState('');
-  const [yearlySales, setYearlySales] = useState('');
-  const [yearlyIncome, setYearlyIncome] = useState('');
-  const [seasonWeights, setSeasonWeights] = useState<Record<number, { salesPct: string; volumePct: string }>>({});
-  const [saving, setSaving] = useState(false);
-  const [open, setOpen] = useState(false);
-  // 'personal' = agent's own prev year | 'brokerage' = Keaty Real Estate brokerage-wide
-  // Auto-default to 'brokerage' if agent has no personal prev-year data
-  const hasPrevData = !!(prevYearStats && prevYearStats.totalSales > 0);
-  const [seasonalitySource, setSeasonalitySource] = useState<'personal' | 'brokerage'>(
-    hasPrevData ? 'personal' : 'brokerage'
-  );
-  const avgSalePrice = prevYearStats?.avgSalePrice ?? 0;
-  const avgCommPct = prevYearStats?.avgCommissionPct ?? 0;
-  const avgMarginPct = prevYearStats?.avgMarginPct ?? 0;
-
-  // Initialize from current goals + prev year seasonality
-  useEffect(() => {
-    const map: typeof goals = {};
-    let totalMargin = 0, totalVolume = 0, totalSales = 0;
-    for (const m of months) {
-      map[m.month] = {
-        margin: m.grossMarginGoal != null ? String(Math.round(m.grossMarginGoal)) : '',
-        volume: m.volumeGoal != null ? String(Math.round(m.volumeGoal)) : '',
-        sales: m.salesCountGoal != null ? String(Math.round(m.salesCountGoal)) : '',
-      };
-      totalMargin += m.grossMarginGoal ?? 0;
-      totalVolume += m.volumeGoal ?? 0;
-      totalSales += m.salesCountGoal ?? 0;
-    }
-    setGoals(map);
-    if (totalVolume > 0) setYearlyVolume(String(Math.round(totalVolume)));
-    if (totalSales > 0) setYearlySales(String(Math.round(totalSales)));
-    if (totalMargin > 0) setYearlyIncome(String(Math.round(totalMargin)));
-
-    const sw: typeof seasonWeights = {};
-    // Use the active seasonality source to initialize weights
-    const activeSeasonality = seasonalitySource === 'brokerage' && brokerageSeasonality
-      ? brokerageSeasonality
-      : prevYearStats?.seasonality;
-    for (let m = 1; m <= 12; m++) {
-      const s = activeSeasonality?.[m - 1];
-      sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
-    }
-    setSeasonWeights(sw);
-  }, [months, prevYearStats, brokerageSeasonality, seasonalitySource]);
-
-  // Volume → auto-calc sales + income
-  const handleVolumeChange = (val: string) => {
-    setYearlyVolume(val);
-    const vol = parseFloat(val) || 0;
-    if (vol > 0 && avgSalePrice > 0) setYearlySales(String(Math.round(vol / avgSalePrice)));
-    if (vol > 0 && avgCommPct > 0 && avgMarginPct > 0) {
-      const totalGCI = vol * (avgCommPct / 100);
-      setYearlyIncome(String(Math.round(totalGCI * (avgMarginPct / 100))));
-    }
-  };
-
-  // Sales → auto-calc volume + income
-  const handleSalesChange = (val: string) => {
-    setYearlySales(val);
-    const sales = parseInt(val, 10) || 0;
-    if (sales > 0 && avgSalePrice > 0) {
-      const calcVol = Math.round(sales * avgSalePrice);
-      setYearlyVolume(String(calcVol));
-      if (avgCommPct > 0 && avgMarginPct > 0) {
-        setYearlyIncome(String(Math.round(calcVol * (avgCommPct / 100) * (avgMarginPct / 100))));
-      }
-    }
-  };
-
-  // Income → back-calc volume + sales
-  const handleIncomeChange = (val: string) => {
-    setYearlyIncome(val);
-    const income = parseFloat(val) || 0;
-    if (income > 0 && avgMarginPct > 0 && avgCommPct > 0) {
-      const calcVol = Math.round(income / ((avgCommPct / 100) * (avgMarginPct / 100)));
-      setYearlyVolume(String(calcVol));
-      if (avgSalePrice > 0) setYearlySales(String(Math.round(calcVol / avgSalePrice)));
-    }
-  };
-
-  // Distribute across months using seasonality
-  const distribute = () => {
-    const vol = parseFloat(yearlyVolume) || 0;
-    const sales = parseInt(yearlySales, 10) || 0;
-    const income = parseFloat(yearlyIncome) || 0;
-    const newGoals: typeof goals = {};
-    for (let m = 1; m <= 12; m++) {
-      const sw = seasonWeights[m];
-      const volPct = parseFloat(sw?.volumePct) || 8.33;
-      const salesPct = parseFloat(sw?.salesPct) || 8.33;
-      newGoals[m] = {
-        volume: vol > 0 ? String(Math.round(vol * (volPct / 100))) : '',
-        sales: sales > 0 ? String(Math.round(sales * (salesPct / 100))) : '',
-        margin: income > 0 ? String(Math.round(income * (salesPct / 100))) : '',
-      };
-    }
-    setGoals(newGoals);
-  };
-
-  const resetSeasonality = () => {
-    const sw: typeof seasonWeights = {};
-    for (let m = 1; m <= 12; m++) sw[m] = { salesPct: '8.33', volumePct: '8.33' };
-    setSeasonWeights(sw);
-  };
-
-  const resetSeasonalityToPrev = () => {
-    if (!prevYearStats) return;
-    const sw: typeof seasonWeights = {};
-    for (let m = 1; m <= 12; m++) {
-      const s = prevYearStats?.seasonality?.[m - 1];
-      sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
-    }
-    setSeasonWeights(sw);
-  };
-
-  const resetSeasonalityToBrokerage = () => {
-    if (!brokerageSeasonality) return;
-    const sw: typeof seasonWeights = {};
-    for (let m = 1; m <= 12; m++) {
-      const s = brokerageSeasonality[m - 1];
-      sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
-    }
-    setSeasonWeights(sw);
-  };
-
-  const save = async () => {
-    if (!user) return;
-    setSaving(true);
-    try {
-      const token = await user.getIdToken();
-      const promises = [];
-      for (let m = 1; m <= 12; m++) {
-        const g = goals[m];
-        if (!g) continue;
-        promises.push(
-          fetch('/api/broker/goals', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              year, month: m, segment: goalSegment,
-              grossMarginGoal: g.margin ? parseFloat(g.margin) : null,
-              volumeGoal: g.volume ? parseFloat(g.volume) : null,
-              salesCountGoal: g.sales ? parseInt(g.sales, 10) : null,
-            }),
-          })
-        );
-      }
-      await Promise.all(promises);
-      onSaved();
-    } catch (err) { console.error('Failed to save goals:', err); }
-    finally { setSaving(false); }
-  };
-
-  // Totals for footer + seasonality validation
-  const totalsMargin = Object.values(goals).reduce((s, g) => s + (parseFloat(g.margin) || 0), 0);
-  const totalsVolume = Object.values(goals).reduce((s, g) => s + (parseFloat(g.volume) || 0), 0);
-  const totalsSales = Object.values(goals).reduce((s, g) => s + (parseInt(g.sales, 10) || 0), 0);
-  const totalSalesPct = Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.salesPct) || 0), 0);
-  const totalVolPct = Object.values(seasonWeights).reduce((s, w) => s + (parseFloat(w.volumePct) || 0), 0);
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <Card>
-        <CardHeader className="pb-3">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="flex w-full justify-between p-0 h-auto hover:bg-transparent">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Target className="h-5 w-5" /> Set Monthly Goals
-              </CardTitle>
-              {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-            </Button>
-          </CollapsibleTrigger>
-          <CardDescription>
-            Enter a yearly goal — income, volume, and sales auto-calculate from {hasPrevData ? `${prevYearStats.year}` : 'previous year'} averages.
-          </CardDescription>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="space-y-6">
-            {/* Previous Year Reference Stats */}
-            {hasPrevData && (
-              <div className="bg-muted/50 rounded-lg p-4">
-                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                  {prevYearStats.year} Reference Data
-                  <Badge variant="secondary" className="text-xs">Previous Year</Badge>
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Net Income</span>
-                    <p className="font-semibold">{fmtCurrency((prevYearStats.totalGrossMargin ?? 0))}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Volume</span>
-                    <p className="font-semibold">{fmtCurrencyCompact(prevYearStats.totalVolume, true)}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Deals</span>
-                    <p className="font-semibold">{prevYearStats.totalSales}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Avg Sale Price</span>
-                    <p className="font-semibold">{fmtCurrency(prevYearStats.avgSalePrice)}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Avg Net/Deal</span>
-                    <p className="font-semibold">{fmtCurrency((prevYearStats.avgGrossMargin ?? 0))}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Increase Production Selector */}
-            {hasPrevData && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-semibold text-blue-800">Increase Production Over Last Year</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {[5, 10, 15, 20, 25, 30, 40, 50].map(pct => {
-                    const targetIncome = Math.round((prevYearStats.totalGrossMargin ?? 0) * (1 + pct / 100));
-                    const isActive = yearlyIncome && Math.abs(parseFloat(yearlyIncome) - targetIncome) < 100;
-                    return (
-                      <button key={pct} type="button" onClick={() => {
-                        const newVol = Math.round(prevYearStats.totalVolume * (1 + pct / 100));
-                        handleVolumeChange(String(newVol));
-                      }} className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'}`}>
-                        +{pct}%
-                      </button>
-                    );
-                  })}
-                  <div className="flex items-center gap-1 ml-2">
-                    <Input type="number" placeholder="Custom %" className="w-24 h-8 text-sm" min={0} max={500} onChange={e => {
-                      const pct = parseFloat(e.target.value);
-                      if (pct > 0 && prevYearStats.totalVolume > 0) {
-                        handleVolumeChange(String(Math.round(prevYearStats.totalVolume * (1 + pct / 100))));
-                      }
-                    }} />
-                    <span className="text-xs text-muted-foreground">%</span>
-                  </div>
-                </div>
-                {yearlyIncome && (prevYearStats.totalGrossMargin ?? 0) > 0 && (
-                  <p className="text-xs text-blue-600">
-                    {fmtCurrency((prevYearStats.totalGrossMargin ?? 0))} → {fmtCurrency(parseFloat(yearlyIncome))}
-                    {' '}({((parseFloat(yearlyIncome) / (prevYearStats.totalGrossMargin ?? 0) - 1) * 100).toFixed(1)}% increase)
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Yearly Goal Inputs */}
-            <div className="border rounded-lg p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-sm">Yearly Goals for {year}</h4>
-                {hasPrevData && (
-                  <span className="text-xs text-muted-foreground">Enter any field — others auto-calculate</span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="agent-yearly-income" className="text-xs">Net Income Goal ($)</Label>
-                  <Input id="agent-yearly-income" type="number" value={yearlyIncome} onChange={e => handleIncomeChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${fmtCurrency((prevYearStats.totalGrossMargin ?? 0))}` : 'e.g. 120000'} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="agent-yearly-volume" className="text-xs">Volume Goal ($)</Label>
-                  <Input id="agent-yearly-volume" type="number" value={yearlyVolume} onChange={e => handleVolumeChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${fmtCurrencyCompact(prevYearStats.totalVolume, true)}` : 'e.g. 5000000'} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="agent-yearly-sales" className="text-xs">
-                    Sales Goal (#)
-                    {avgSalePrice > 0 && <span className="text-muted-foreground ml-1">@ {fmtCurrency(avgSalePrice)} avg</span>}
-                  </Label>
-                  <Input id="agent-yearly-sales" type="number" value={yearlySales} onChange={e => handleSalesChange(e.target.value)} placeholder={hasPrevData ? `Last year: ${prevYearStats.totalSales}` : 'e.g. 20'} />
-                </div>
-              </div>
-              {/* Seasonality Source Selector */}
-              <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Seasonality Source</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
-                          <Info className="h-4 w-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs">
-                        <p className="font-semibold mb-1">What is Seasonality?</p>
-                        <p className="text-xs mb-2">Seasonality distributes your annual goal across months based on historical close patterns — so busier months get a larger share of your goal.</p>
-                        <p className="font-semibold text-xs mb-1">My Previous Year</p>
-                        <p className="text-xs mb-2">Uses your own personal closing history from last year. Best for established agents with a consistent pattern.</p>
-                        <p className="font-semibold text-xs mb-1">Keaty Real Estate Brokerage</p>
-                        <p className="text-xs">Uses the brokerage-wide closing pattern from all agents last year. Best for new agents or those who want to align with overall market trends.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={seasonalitySource === 'personal' ? 'default' : 'outline'}
-                    disabled={!hasPrevData}
-                    onClick={() => { setSeasonalitySource('personal'); resetSeasonalityToPrev(); }}
-                    className="gap-1.5"
-                  >
-                    <User className="h-3.5 w-3.5" />
-                    My Previous Year
-                    {!hasPrevData && <span className="text-xs opacity-60">(no data)</span>}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={seasonalitySource === 'brokerage' ? 'default' : 'outline'}
-                    disabled={!brokerageSeasonality}
-                    onClick={() => { setSeasonalitySource('brokerage'); resetSeasonalityToBrokerage(); }}
-                    className="gap-1.5"
-                  >
-                    <Building2 className="h-3.5 w-3.5" />
-                    Keaty Real Estate Brokerage
-                  </Button>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="default" onClick={distribute} disabled={!yearlyIncome && !yearlyVolume && !yearlySales}>
-                  <Target className="mr-2 h-4 w-4" /> Distribute Across Months
-                </Button>
-              </div>
-            </div>
-
-            {/* Editable Seasonality Weights */}
-            <Collapsible>
-              <div className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="p-0 h-auto hover:bg-transparent">
-                      <h4 className="font-semibold text-sm flex items-center gap-1">
-                        Seasonality Weights
-                        <ChevronDown className="h-4 w-4" />
-                      </h4>
-                    </Button>
-                  </CollapsibleTrigger>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => { resetSeasonality(); setTimeout(distribute, 50); }} className="text-xs h-7">
-                      Even Split
-                    </Button>
-                  </div>
-                </div>
-                <CollapsibleContent>
-                  <div className="overflow-x-auto mt-2">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2 pr-4 font-medium">Month</th>
-                          <th className="text-center py-2 px-2 font-medium">Sales %</th>
-                          <th className="text-center py-2 px-2 font-medium">Volume %</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
-                          const sw = seasonWeights[m] || { salesPct: '8.33', volumePct: '8.33' };
-                          const label = months.find(md => md.month === m)?.label || `M${m}`;
-                          return (
-                            <tr key={m} className="border-b last:border-0">
-                              <td className="py-1.5 pr-4 font-medium">{label}</td>
-                              <td className="py-1.5 px-2">
-                                <Input type="number" step="0.1" value={sw.salesPct} onChange={e => setSeasonWeights(p => ({ ...p, [m]: { ...p[m], salesPct: e.target.value } }))} className="h-7 w-20 text-center mx-auto" />
-                              </td>
-                              <td className="py-1.5 px-2">
-                                <Input type="number" step="0.1" value={sw.volumePct} onChange={e => setSeasonWeights(p => ({ ...p, [m]: { ...p[m], volumePct: e.target.value } }))} className="h-7 w-20 text-center mx-auto" />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="flex gap-4 text-xs mt-2">
-                    <span className={totalSalesPct > 99.5 && totalSalesPct < 100.5 ? 'text-green-600' : 'text-amber-600'}>
-                      Sales: {totalSalesPct.toFixed(1)}%
-                    </span>
-                    <span className={totalVolPct > 99.5 && totalVolPct < 100.5 ? 'text-green-600' : 'text-amber-600'}>
-                      Volume: {totalVolPct.toFixed(1)}%
-                    </span>
-                  </div>
-                </CollapsibleContent>
-              </div>
-            </Collapsible>
-
-            {/* Monthly Breakdown Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 pr-4 font-medium">Month</th>
-                    <th className="text-center py-2 px-1 font-medium w-16">Season %</th>
-                    <th className="text-left py-2 px-2 font-medium">Income Goal ($)</th>
-                    <th className="text-left py-2 px-2 font-medium">Volume Goal ($)</th>
-                    <th className="text-left py-2 px-2 font-medium">Sales Goal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
-                    const g = goals[m] || { margin: '', volume: '', sales: '' };
-                    const sw = seasonWeights[m] || { salesPct: '8.33', volumePct: '8.33' };
-                    const label = months.find(md => md.month === m)?.label || `M${m}`;
-                    return (
-                      <tr key={m} className="border-b last:border-0">
-                        <td className="py-2 pr-4 font-medium">{label}</td>
-                        <td className="py-2 px-1">
-                          <Input type="number" step="0.1" value={sw.salesPct} onChange={e => setSeasonWeights(p => ({ ...p, [m]: { ...p[m], salesPct: e.target.value, volumePct: e.target.value } }))} className="h-7 w-16 text-center text-xs bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" />
-                        </td>
-                        <td className="py-2 px-2"><Input type="number" value={g.margin} onChange={e => setGoals(p => ({ ...p, [m]: { ...p[m], margin: e.target.value } }))} placeholder="0" className="h-8 w-28" /></td>
-                        <td className="py-2 px-2"><Input type="number" value={g.volume} onChange={e => setGoals(p => ({ ...p, [m]: { ...p[m], volume: e.target.value } }))} placeholder="0" className="h-8 w-28" /></td>
-                        <td className="py-2 px-2"><Input type="number" value={g.sales} onChange={e => setGoals(p => ({ ...p, [m]: { ...p[m], sales: e.target.value } }))} placeholder="0" className="h-8 w-24" /></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 font-semibold">
-                    <td className="py-2 pr-4">Total</td>
-                    <td className={cn('py-2 px-1 text-center text-xs', totalSalesPct > 99.5 && totalSalesPct < 100.5 ? 'text-green-600' : 'text-amber-600')}>{totalSalesPct.toFixed(1)}%</td>
-                    <td className="py-2 px-2">{fmtCurrency(totalsMargin)}</td>
-                    <td className="py-2 px-2">{fmtCurrencyCompact(totalsVolume, true)}</td>
-                    <td className="py-2 px-2">{totalsSales}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            <div className="flex justify-end">
-              <Button onClick={save} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" />{saving ? 'Saving...' : 'Save Goals'}
-              </Button>
-            </div>
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
-  );
-}
 
 // ── KPI icon map ────────────────────────────────────────────────────────────
 
@@ -714,16 +259,6 @@ const kpiMeta: Record<string, { label: string; icon: React.ElementType; unit: st
   contractsWritten: { label: 'Contracts Written', icon: FileSignature, unit: 'contracts' },
   closings: { label: 'Closings', icon: CheckCircle2, unit: 'closings' },
 };
-
-// ── Main Page ───────────────────────────────────────────────────────────────
-
-export default function AgentDashboardPageWrapper() {
-  return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <AgentDashboardPage />
-    </Suspense>
-  );
-}
 
 function AgentDashboardPage() {
   const { user, loading: userLoading } = useUser();
@@ -1053,18 +588,24 @@ function AgentDashboardPage() {
           </DashboardSection>
 
           {/* ════════════════════════════════════════════════════════════════
-              7. SET MONTHLY GOALS
+              7. SET YOUR GOALS — BUSINESS PLAN
              ════════════════════════════════════════════════════════════════ */}
-          {perfData?.overview && (
-            <GoalsEditor
-              months={perfData.overview.months}
-              year={perfYear}
-              goalSegment={perfData.agentView.goalSegment}
-              onSaved={fetchPerf}
-              prevYearStats={perfData.prevYearStats}
-              brokerageSeasonality={perfData.brokerageSeasonality}
-            />
-          )}
+          <Card className="border border-primary/20 bg-primary/5">
+            <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-5 px-6">
+              <div className="flex items-start gap-3">
+                <Target className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">Set Your {perfYear} Goals</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Build your full business plan, set monthly income targets, and track your path to your goal — all in one place.
+                  </p>
+                </div>
+              </div>
+              <Button asChild className="flex-shrink-0">
+                <a href="/dashboard/plan">Open Business Plan</a>
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* ═══ APPOINTMENTS PIPELINE ═══════════════════════════════ */}
           <AppointmentsPipeline
@@ -3435,7 +2976,7 @@ function PendingTable({ transactions }: { transactions: Transaction[] }) {
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Pending</CardTitle><CardDescription>Deals in progress — not yet closed.</CardDescription></CardHeader>
       <CardContent>{pending.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">No pending transactions.</p>) : (
         <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Client</TableHead><TableHead>Contract Date</TableHead><TableHead>Est. Close</TableHead><TableHead className="text-right">Sale Price</TableHead><TableHead className="text-right">Projected Net Income</TableHead></TableRow></TableHeader>
-          <TableBody>{pending.map(t => { const projNet = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{t.clientName ?? '—'}</TableCell><TableCell>{formatDate(t.contractDate)}</TableCell><TableCell><span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>{(t.closedDate || t.closingDate) && <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
+          <TableBody>{pending.map(t => { const projNet = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{t.clientName ?? '—'}</TableCell><TableCell>{formatDate(t.contractDate)}</TableCell><TableCell><span className="text-sm">{formatDate(t.closedDate ?? t.closingDate)}</span>{(t.closedDate || t.closingDate) && <span className="block text-xs text-muted-foreground">{getTimelineBucket(t.closedDate ?? t.closingDate)}</span>}</TableCell><TableCell className="text-right">{(t.salePrice ?? t.listPrice) ? formatCurrencyLocal((t.salePrice ?? t.listPrice)!) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{projNet ? formatCurrencyLocal(projNet) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
       )}</CardContent></Card>
   );
 }
@@ -3446,7 +2987,7 @@ function ClosedTable({ transactions, year }: { transactions: Transaction[]; year
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileCheck2 className="h-5 w-5" /> Closed Transactions — {year}</CardTitle><CardDescription>All transactions you closed this calendar year.</CardDescription></CardHeader>
       <CardContent>{closed.length === 0 ? (<p className="text-sm text-muted-foreground text-center py-6">No closed transactions for {year}.</p>) : (
         <Table><TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Closed Date</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Sale Price</TableHead><TableHead className="text-right">Your Net Income</TableHead></TableRow></TableHeader>
-          <TableBody>{closed.map(t => { const net = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{formatDate(t.closedDate ?? t.closingDate)}</TableCell><TableCell>{t.transactionType ? <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge> : '—'}</TableCell><TableCell className="text-right">{t.dealValue ? formatCurrencyLocal(t.dealValue) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{net ? formatCurrencyLocal(net) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
+          <TableBody>{closed.map(t => { const net = (t as any).netIncome ?? (t as any).netCommission ?? null; return (<TableRow key={t.id}><TableCell className="font-medium">{t.address}</TableCell><TableCell>{formatDate(t.closedDate ?? t.closingDate)}</TableCell><TableCell>{t.transactionType ? <Badge variant="outline">{txTypeLabel[t.transactionType] ?? t.transactionType}</Badge> : '—'}</TableCell><TableCell className="text-right">{(t.salePrice ?? t.listPrice) ? formatCurrencyLocal((t.salePrice ?? t.listPrice)!) : '—'}</TableCell><TableCell className="text-right font-semibold text-primary">{net ? formatCurrencyLocal(net) : '—'}</TableCell></TableRow>); })}</TableBody></Table>
       )}</CardContent></Card>
   );
 }
@@ -3637,8 +3178,8 @@ function PipelineKanban({
     (t.year === year || (t.closedDate ?? t.closingDate ?? '').startsWith(String(year)))
   ).sort((a, b) => ((b.closedDate ?? b.closingDate ?? '') > (a.closedDate ?? a.closingDate ?? '') ? 1 : -1));
 
-  const totalPendingVol = pending.reduce((s, t) => s + (t.dealValue ?? 0), 0);
-  const totalClosedVol = closed.reduce((s, t) => s + (t.dealValue ?? 0), 0);
+  const totalPendingVol = pending.reduce((s, t) => s + (t.salePrice ?? t.listPrice ?? 0), 0);
+  const totalClosedVol = closed.reduce((s, t) => s + (t.salePrice ?? t.listPrice ?? 0), 0);
   const totalLeadsVol = opportunities.reduce((s, o) => s + ((o.priceRangeLow ?? 0) + (o.priceRangeHigh ?? 0)) / 2, 0);
 
   const colConfig = [
@@ -3720,7 +3261,7 @@ function PipelineKanban({
               return (
                 <div key={t.id} className="bg-white rounded-lg border p-3 hover:shadow-sm transition-shadow">
                   <p className="text-xs font-semibold text-foreground truncate">{t.address}</p>
-                  <p className="text-sm font-bold text-amber-700 mt-0.5">{t.dealValue ? fmtCurrencyCompact(t.dealValue, true) : '—'}</p>
+                  <p className="text-sm font-bold text-amber-700 mt-0.5">{(t.salePrice ?? t.listPrice) ? fmtCurrencyCompact((t.salePrice ?? t.listPrice)!, true) : '—'}</p>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-[10px] text-muted-foreground">
                       Closes {formatDate(t.closedDate ?? t.closingDate)}
@@ -3756,7 +3297,7 @@ function PipelineKanban({
               return (
                 <div key={t.id} className="bg-white rounded-lg border p-3 hover:shadow-sm transition-shadow">
                   <p className="text-xs font-semibold text-foreground truncate">{t.address}</p>
-                  <p className="text-sm font-bold text-green-700 mt-0.5">{t.dealValue ? fmtCurrencyCompact(t.dealValue, true) : '—'}</p>
+                  <p className="text-sm font-bold text-green-700 mt-0.5">{(t.salePrice ?? t.listPrice) ? fmtCurrencyCompact((t.salePrice ?? t.listPrice)!, true) : '—'}</p>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-[10px] text-muted-foreground">Closed {formatDate(t.closedDate ?? t.closingDate)}</span>
                     {net && <span className="text-[10px] font-bold text-green-700">{fmtCurrencyCompact(net, true)} net</span>}

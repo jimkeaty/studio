@@ -138,7 +138,7 @@ function getSortValue(tx: AgentTx, key: SortKey): string | number {
     case 'dealType': return tx.transactionType || '';
     case 'contractDate': return tx.contractDate || '';
     case 'closedDate': return tx.closedDate || tx.closingDate || '';
-    case 'dealValue': return tx.dealValue || tx.salePrice || 0;
+    case 'dealValue': return tx.salePrice || tx.listPrice || tx.dealValue || 0;
     case 'netToMe': return tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0;
     default: return '';
   }
@@ -163,7 +163,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
   const [status, setStatus] = useState(tx.status || 'active');
   const [propertyAddress, setPropertyAddress] = useState(tx.address || tx.propertyAddress || '');
   const [listPrice, setListPrice] = useState(String(tx.listPrice || ''));
-  const [salePrice, setSalePrice] = useState(String(tx.salePrice || tx.dealValue || ''));
+  const [salePrice, setSalePrice] = useState(String(tx.salePrice || tx.listPrice || ''));
   const [listingDate, setListingDate] = useState(tx.listingDate || '');
   const [contractDate, setContractDate] = useState(tx.contractDate || '');
   const [closingDate, setClosingDate] = useState(tx.closingDate || tx.closedDate || '');
@@ -231,7 +231,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
     setStatus(tx.status || 'active');
     setPropertyAddress(tx.address || tx.propertyAddress || '');
     setListPrice(String(tx.listPrice || ''));
-    setSalePrice(String(tx.salePrice || tx.dealValue || ''));
+    setSalePrice(String(tx.salePrice || tx.listPrice || ''));
     setListingDate(tx.listingDate || '');
     setContractDate(tx.contractDate || '');
     setClosingDate(tx.closingDate || tx.closedDate || '');
@@ -1055,7 +1055,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                   'Closed Date': t.closedDate || t.closingDate || '',
                   'Listing Date': t.listingDate || '',
                   'List Price': t.listPrice ?? '',
-                  'Sale Price': t.salePrice ?? t.dealValue ?? '',
+                  'Sale Price': t.salePrice ?? t.listPrice ?? '',
                   'Gross Commission': t.splitSnapshot?.grossCommission ?? t.commission ?? '',
                   'Net to Me': t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? '',
                   Source: t.source || '',
@@ -1126,7 +1126,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       <div className="grid grid-cols-2 gap-2 text-center">
                         <div>
                           <p className="text-xs text-muted-foreground">Sale Price</p>
-                          <p className="text-sm font-semibold">{(t.dealValue || t.salePrice) ? formatCurrency(t.dealValue || t.salePrice || 0) : '—'}</p>
+                          <p className="text-sm font-semibold">{(t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—'}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Net to Me</p>
@@ -1286,7 +1286,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.projectedCloseDate) || '—'}</TableCell>
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.inspectionDeadline) || '—'}</TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap text-sm">
-                            {(t.dealValue || t.salePrice) ? formatCurrency(t.dealValue || t.salePrice || 0) : '—'}
+                            {(t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—'}
                           </TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap font-semibold text-primary text-sm">
                             {net ? formatCurrency(net) : '—'}

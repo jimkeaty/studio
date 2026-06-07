@@ -363,7 +363,7 @@ export async function GET(req: NextRequest) {
     for (const t of txDocs) {
       const status = String(t.status || "").trim();
       const net = getTransactionNet(t);
-      const dealValue = asNumber(t.dealValue);
+      const dealValue = asNumber(t.salePrice ?? t.listPrice);
       const gci = asNumber(t.splitSnapshot?.grossCommission || t.commission);
          // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = String((t as any).closingType || "").toLowerCase() === "dual";
@@ -968,7 +968,7 @@ export async function GET(req: NextRequest) {
         const d = getTransactionDateForEarned(t);
         if (!d) continue;
         prevNetEarned += getTransactionNet(t);
-        prevClosedVolume += asNumber(t.dealValue);
+        prevClosedVolume += asNumber(t.salePrice ?? t.listPrice);
         prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
         prevClosedUnits += 1;
       }

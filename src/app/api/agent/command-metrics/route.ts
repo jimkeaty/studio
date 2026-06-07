@@ -24,6 +24,7 @@ interface Transaction {
   brokerProfit: number;
   dealValue: number;
   salePrice?: number | string | null;
+  listPrice?: number | string | null;
   commission?: number;
   transactionType: string;
   transactionFee?: number;
@@ -434,7 +435,7 @@ export async function GET(req: NextRequest) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
       const txFee = t.transactionFee ?? 0;
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
@@ -563,7 +564,7 @@ export async function GET(req: NextRequest) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+      const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
       const isAllTimeDual = String(t.closingType || '').toLowerCase() === 'dual';
       if (isAllTimeDual) {
         addToSide(allTimeSideBreakdown.closed, 'buyer', dealValue / 2, agentNet / 2);
@@ -593,7 +594,7 @@ export async function GET(req: NextRequest) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isPrevDual = String(t.closingType || '').toLowerCase() === 'dual';
       const prevSideCount = isPrevDual ? 2 : 1;
@@ -652,7 +653,7 @@ export async function GET(req: NextRequest) {
         const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
         const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
         const agentNet = t.splitSnapshot?.agentNetCommission ?? (gci - companyRetained);
-        const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+        const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
 
         compMonths[m].grossMargin += companyRetained;
         compMonths[m].closedVolume += vol;
@@ -761,7 +762,7 @@ export async function GET(req: NextRequest) {
         } else {
           leaderRetained = 0;
         }
-        const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+        const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
         const agentName = memberNameMap.get(agentKey) ?? agentKey;
 
         if (!memberMap.has(agentKey)) {
@@ -887,7 +888,7 @@ export async function GET(req: NextRequest) {
             agentName: memberNameMap3.get((t.agentId as string) ?? '') ?? (t.agentId as string) ?? '',
             address: (raw.address ?? raw.propertyAddress ?? '') as string,
             status: (t.status ?? '') as string,
-            dealValue: ((t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0) as number,
+            dealValue: ((t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0)) as number,
             agentNetCommission: memberPaidTx,
             grossCommission: gciTx,
             leaderRetained: leaderRetainedTx,

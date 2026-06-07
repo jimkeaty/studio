@@ -259,7 +259,7 @@ async function scoreThresholdMap(
       } else if (config.metric === 'pending_deals' && (t.status === 'pending' || t.status === 'under_contract')) {
         agentDates.set(dateStr, existing + 1);
       } else if (config.metric === 'closed_volume' && t.status === 'closed') {
-        agentDates.set(dateStr, existing + num(t.dealValue));
+        agentDates.set(dateStr, existing + ((t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0)));
       } else if (config.metric === 'total_units' && (t.status === 'closed' || t.status === 'pending' || t.status === 'under_contract')) {
         agentDates.set(dateStr, existing + 1);
       }
@@ -485,7 +485,7 @@ async function scorePoints(
 
     for (const t of txs) {
       const status = String(t.status || '').trim();
-      const dealValue = num(t.dealValue);
+      const dealValue = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
       const closedDate = toDate(t.closedDate || t.closingDate);
       const contractDate = toDate(t.contractDate);
       const txDate = closedDate || contractDate;

@@ -105,7 +105,7 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
       address: String(t.address || "").trim(),
       agentId: String(t.agentId || ""),
       agentName: String(t.agentDisplayName || t.agentId || ""),
-      dealValue: num(t.dealValue),
+      dealValue: (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0),
       gci: num(t.commission),
       date: "",
       status,
@@ -260,7 +260,7 @@ async function handlePeriod(
 
     if (status === "closed") {
       agg.closed += sideCount;
-      agg.closedVolume += num(t.dealValue);
+      agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
       agg.totalGCI += num(t.commission);
       agg.agentNetCommission += num(
         t.splitSnapshot?.agentNetCommission ?? t.commission
