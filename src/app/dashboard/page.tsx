@@ -32,7 +32,7 @@ import {
   BarChart3, BarChart2, Users, Percent, Save, ChevronDown, ChevronUp, ChevronsDown,
   Phone, MessageSquare, CalendarCheck, CalendarCheck2, FileSignature, CheckCircle2,
   Zap, Bell, PlusCircle, ClipboardList, LayoutList, Settings2, Flame,
-  TrendingDown, Award, Star, Info, User, Building2,
+  TrendingDown, Award, Star, Info, User, Building2, EyeOff, Eye, SlidersHorizontal,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { TeamLeaderDashboard } from '@/components/dashboard/TeamLeaderDashboard';
@@ -57,12 +57,14 @@ function DashboardSection({
   title,
   icon: Icon,
   children,
+  headerExtra,
 }: {
   storageKey: string;
   defaultOpen: boolean;
   title: string;
   icon: React.ElementType;
   children: React.ReactNode;
+  headerExtra?: React.ReactNode;
 }) {
   const [open, setOpen] = useState<boolean>(() => {
     if (typeof window === 'undefined') return defaultOpen;
@@ -82,12 +84,15 @@ function DashboardSection({
           <Icon className="h-4 w-4 text-primary" />
           {title}
         </h2>
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-muted">
-            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            <span className="sr-only">{open ? 'Collapse' : 'Expand'} {title}</span>
-          </Button>
-        </CollapsibleTrigger>
+        <div className="flex items-center gap-1">
+          {headerExtra}
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-muted">
+              {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              <span className="sr-only">{open ? 'Collapse' : 'Expand'} {title}</span>
+            </Button>
+          </CollapsibleTrigger>
+        </div>
       </div>
       <CollapsibleContent>
         {children}
@@ -787,6 +792,8 @@ function AgentDashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
 
+  // KPI manage mode
+  const [kpiManageMode, setKpiManageMode] = useState(false);
   // Performance data
   const [perfYear, setPerfYear] = useState<number>(new Date().getFullYear());
   const [perfView, setPerfView] = useState<'personal' | 'team'>('personal');
@@ -995,8 +1002,25 @@ function AgentDashboardPage() {
           {/* ════════════════════════════════════════════════════════════════
               4. KPIs — All 6 with uniform activity-tracker style
              ════════════════════════════════════════════════════════════════ */}
-          <DashboardSection storageKey="dash-kpi-open" defaultOpen={true} title="KPI Tracker" icon={Target}>
-            <KpiSection dashboard={dashboard} plan={plan} />
+          <DashboardSection
+            storageKey="dash-kpi-open"
+            defaultOpen={true}
+            title="KPI Tracker"
+            icon={Target}
+            headerExtra={
+              <KpiSectionManageButton
+                manageMode={kpiManageMode}
+                setManageMode={setKpiManageMode}
+                hiddenCount={(() => {
+                  try {
+                    const stored = typeof window !== 'undefined' ? localStorage.getItem('dash-kpi-hidden') : null;
+                    return stored ? (JSON.parse(stored) as string[]).length : 0;
+                  } catch { return 0; }
+                })()}
+              />
+            }
+          >
+            <KpiSection dashboard={dashboard} plan={plan} manageMode={kpiManageMode} />
           </DashboardSection>
 
           {/* ════════════════════════════════════════════════════════════════
@@ -2148,32 +2172,127 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
 // 4. KPI SECTION — Uniform Activity-Tracker-Style Cards
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function KpiSection({ dashboard, plan }: { dashboard: AgentDashboardData; plan: BusinessPlan | null }) {
+const KPI_HIDDEN_STORAGE_KEY = 'dash-kpi-hidden';
+
+function useHiddenKpis() {
+  const [hiddenKpis, setHiddenKpisState] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const stored = localStorage.getItem(KPI_HIDDEN_STORAGE_KEY);
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const setHiddenKpis = (updater: (prev: Set<string>) => Set<string>) => {
+    setHiddenKpisState(prev => {
+      const next = updater(prev);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(KPI_HIDDEN_STORAGE_KEY, JSON.stringify([...next]));
+      }
+      return next;
+    });
+  };
+
+  const toggleHidden = (key: string) => {
+    setHiddenKpis(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const showAll = () => setHiddenKpis(() => new Set());
+
+  return { hiddenKpis, toggleHidden, showAll };
+}
+
+function KpiSectionManageButton({ manageMode, setManageMode, hiddenCount }: {
+  manageMode: boolean;
+  setManageMode: (v: boolean) => void;
+  hiddenCount: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => setManageMode(!manageMode)}
+      className={cn(
+        'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+        manageMode
+          ? 'bg-primary text-primary-foreground border-primary'
+          : 'bg-background text-muted-foreground border-border hover:bg-muted'
+      )}
+    >
+      <SlidersHorizontal className="h-3 w-3" />
+      {manageMode ? 'Done' : hiddenCount > 0 ? `Manage (${hiddenCount} hidden)` : 'Manage'}
+    </button>
+  );
+}
+
+function KpiSection({ dashboard, plan, manageMode }: { dashboard: AgentDashboardData; plan: BusinessPlan | null; manageMode: boolean }) {
+  const { hiddenKpis, toggleHidden, showAll } = useHiddenKpis();
+  const allKeys = Object.keys(dashboard.kpis);
+  const visibleEntries = Object.entries(dashboard.kpis).filter(([key]) => manageMode || !hiddenKpis.has(key));
+  const hiddenCount = hiddenKpis.size;
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">KPI Tracker</h2>
+      {/* Hidden indicator strip (shown when not in manage mode and some are hidden) */}
+      {!manageMode && hiddenCount > 0 && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 border border-dashed">
+          <span className="flex items-center gap-1.5">
+            <EyeOff className="h-3.5 w-3.5" />
+            {hiddenCount} KPI{hiddenCount > 1 ? 's' : ''} hidden
+          </span>
+          <button type="button" onClick={showAll} className="text-primary hover:underline font-medium">Show all</button>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {Object.entries(dashboard.kpis).map(([key, kpi]) => {
+        {visibleEntries.map(([key, kpi]) => {
           const meta = kpiMeta[key] || { label: key, icon: Target, unit: key };
-          // daily target from plan
           const dailyTarget = plan?.calculatedTargets?.[key as keyof typeof plan.calculatedTargets];
           const dailyBase = typeof dailyTarget === 'object' && dailyTarget && 'daily' in dailyTarget ? (dailyTarget as any).daily : 0;
+          const isHidden = hiddenKpis.has(key);
           return (
-            <KpiTrackerCard
-              key={key}
-              label={meta.label}
-              icon={meta.icon}
-              unit={meta.unit}
-              actual={kpi.actual}
-              target={kpi.target}
-              performance={kpi.performance}
-              grade={kpi.grade}
-              isGracePeriod={dashboard.isLeadIndicatorGracePeriod}
-              dailyBase={dailyBase}
-            />
+            <div key={key} className="relative group">
+              {manageMode && (
+                <button
+                  type="button"
+                  onClick={() => toggleHidden(key)}
+                  className={cn(
+                    'absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border shadow-sm transition-colors',
+                    isHidden
+                      ? 'bg-muted text-muted-foreground border-border hover:bg-background'
+                      : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                  )}
+                >
+                  {isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                  {isHidden ? 'Show' : 'Hide'}
+                </button>
+              )}
+              <div className={cn(isHidden && manageMode ? 'opacity-40 pointer-events-none select-none' : '')}>
+                <KpiTrackerCard
+                  label={meta.label}
+                  icon={meta.icon}
+                  unit={meta.unit}
+                  actual={kpi.actual}
+                  target={kpi.target}
+                  performance={kpi.performance}
+                  grade={kpi.grade}
+                  isGracePeriod={dashboard.isLeadIndicatorGracePeriod}
+                  dailyBase={dailyBase}
+                />
+              </div>
+            </div>
           );
         })}
       </div>
+      {manageMode && hiddenCount > 0 && (
+        <div className="flex items-center justify-end">
+          <button type="button" onClick={showAll} className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Eye className="h-3 w-3" /> Show all {allKeys.length} KPIs
+          </button>
+        </div>
+      )}
     </div>
   );
 }
