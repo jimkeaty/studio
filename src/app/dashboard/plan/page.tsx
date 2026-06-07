@@ -239,6 +239,11 @@ export default function BusinessPlanPage() {
   const [historicalStats, setHistoricalStats] = useState<HistoricalStats | null>(null);
   const [histLoading, setHistLoading] = useState(false);
 
+  // Brokerage-wide seasonality (fetched once on load, available to all agents)
+  type BrokerageSeasonality = { month: number; label: string; salesPct: number; volumePct: number };
+  const [brokerageSeasonality, setBrokerageSeasonality] = useState<BrokerageSeasonality[] | null>(null);
+  const [brokerageSeasonalityYear, setBrokerageSeasonalityYear] = useState<number | null>(null);
+
   // Monthly Goals state
   const [monthlyGoals, setMonthlyGoals] = useState<Record<number, { margin: string; volume: string; sales: string }>>({});
   const [seasonWeights, setSeasonWeights] = useState<Record<number, { salesPct: string; volumePct: string }>>(() => {
@@ -455,7 +460,7 @@ export default function BusinessPlanPage() {
     setMonthlyGoals(newGoals);
   }, [yearlyVolume, yearlySales, yearlyIncome, seasonWeights, setMonthlyGoals]);
 
-  const applySeasonality = (source: 'lastYear' | 'allTime' | 'even') => {
+  const applySeasonality = (source: 'lastYear' | 'allTime' | 'brokerage' | 'even') => {
     const sw: typeof seasonWeights = {};
     for (let m = 1; m <= 12; m++) {
       if (source === 'even') {
@@ -466,6 +471,12 @@ export default function BusinessPlanPage() {
       } else if (source === 'allTime' && historicalStats?.allTimeSeasonality) {
         const s = historicalStats.allTimeSeasonality[m - 1];
         sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
+      } else if (source === 'brokerage' && brokerageSeasonality) {
+        const s = brokerageSeasonality[m - 1];
+        sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
+      } else {
+        // Fallback to even if source data not available
+        sw[m] = { salesPct: '8.33', volumePct: '8.33' };
       }
     }
     setSeasonWeights(sw);
@@ -544,6 +555,19 @@ export default function BusinessPlanPage() {
           .then((d: HistoricalStats) => { setHistoricalStats(d.hasData ? d : null); })
           .catch(() => {})
           .finally(() => setHistLoading(false));
+
+        // Load brokerage-wide seasonality (available to all agents as a baseline)
+        if (brokerageSeasonalityYear !== histYear) {
+          fetch(`/api/brokerage-seasonality?year=${histYear}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.json())
+            .then((d: { hasData: boolean; seasonality: BrokerageSeasonality[] }) => {
+              if (d.hasData && d.seasonality?.length === 12) {
+                setBrokerageSeasonality(d.seasonality);
+                setBrokerageSeasonalityYear(histYear);
+              }
+            })
+            .catch(() => {});
+        }
 
         // Load monthly goals from command-metrics
         const metricsParams = new URLSearchParams({ year });
@@ -1512,6 +1536,39 @@ export default function BusinessPlanPage() {
                       </div>
                     )}
 
+                    {/* Use Brokerage Seasonality — always shown when data is available, highlighted for agents with no personal history */}
+                    {brokerageSeasonality && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={!historicalStats ? 'default' : 'outline'}
+                          className={!historicalStats ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600' : ''}
+                          onClick={() => applySeasonality('brokerage')}
+                        >
+                          {!historicalStats && <span className="mr-1">★</span>}
+                          Use Brokerage Seasonality
+                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                                <Info className="h-4 w-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              <p className="font-semibold mb-1">Use Brokerage Seasonality</p>
+                              <p>Distributes your annual goals based on <strong>Keaty Real Estate&apos;s overall closing pattern</strong> — calculated from all agent transactions across the brokerage for the prior year.</p>
+                              <p className="mt-1">This is the best starting point if you are new or do not yet have enough personal transaction history to establish your own seasonal pattern.</p>
+                              {brokerageSeasonalityYear && (
+                                <p className="mt-1 text-muted-foreground">Based on {brokerageSeasonalityYear} brokerage data.</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    )}
+
                     {/* Distribute Across All Months */}
                     <div className="flex items-center gap-1">
                       <Button type="button" size="sm" variant="secondary" onClick={distributeGoals}>
@@ -1534,7 +1591,7 @@ export default function BusinessPlanPage() {
                   </div>
 
                   {/* Per-month seasonality breakdown */}
-                  {(historicalStats?.seasonality || historicalStats?.allTimeSeasonality) && (
+                  {(historicalStats?.seasonality || historicalStats?.allTimeSeasonality || brokerageSeasonality) && (
                     <div className="rounded-lg border border-muted bg-muted/30 p-3">
                       <p className="text-xs font-semibold text-muted-foreground mb-2">Seasonality Distribution Preview (% of annual goal per month)</p>
                       <div className="grid grid-cols-6 md:grid-cols-12 gap-1">
@@ -1542,6 +1599,7 @@ export default function BusinessPlanPage() {
                           const m = i + 1;
                           const lastYrPct = historicalStats?.seasonality?.[i]?.salesPct ?? 8.33;
                           const allTimePct = historicalStats?.allTimeSeasonality?.[i]?.salesPct ?? 8.33;
+                          const brokeragePct = brokerageSeasonality?.[i]?.salesPct ?? 8.33;
                           const currentPct = parseFloat(seasonWeights[m]?.salesPct ?? '8.33');
                           return (
                             <div key={m} className="text-center">
@@ -1553,6 +1611,9 @@ export default function BusinessPlanPage() {
                               {historicalStats?.allTimeHasData && (
                                 <p className="text-xs text-emerald-600 dark:text-emerald-400">{allTimePct.toFixed(1)}%</p>
                               )}
+                              {brokerageSeasonality && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400">{brokeragePct.toFixed(1)}%</p>
+                              )}
                             </div>
                           );
                         })}
@@ -1563,12 +1624,17 @@ export default function BusinessPlanPage() {
                         </span>
                         {historicalStats?.seasonality && (
                           <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span> Last year
+                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span> My last year
                           </span>
                         )}
                         {historicalStats?.allTimeHasData && (
                           <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span> All-time
+                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span> My all-time
+                          </span>
+                        )}
+                        {brokerageSeasonality && (
+                          <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                            <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span> Brokerage ({brokerageSeasonalityYear})
                           </span>
                         )}
                       </div>
