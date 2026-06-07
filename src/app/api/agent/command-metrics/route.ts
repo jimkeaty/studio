@@ -452,21 +452,24 @@ export async function GET(req: NextRequest) {
       }
 
       // ── Pending-to-close ratio ──────────────────────────────────────────
+      // Only count deals that explicitly went through pending/under_contract status.
+      // For still-pending deals: only count if projectedCloseDate has already passed (deal should have resolved).
+      // For closed deals: only count deals closed in the selected year (not all-time historical).
       if (t.status === 'pending' || t.status === 'under_contract') {
         const projDate = parseDate((t as any).projectedCloseDate) ||
           parseDate((t as any).projectedClosingDate) ||
           parseDate((t as any).projectedClose);
         if (projDate && projDate < today) {
+          // Past their projected close date and still pending = fell through (not yet resolved)
           pcrPendingTotal += 1;
         }
       } else if (t.status === 'closed') {
-        const contractDateForRatio = parseDate(t.contractDate);
         const closedDateForRatio = parseDate(t.closedDate);
-        if (contractDateForRatio && closedDateForRatio && contractDateForRatio < closedDateForRatio) {
-          if (closedDateForRatio <= today) {
-            pcrPendingTotal += 1;
-            pcrClosedFromPending += 1;
-          }
+        // Only count closed deals in the selected year — these are the deals that went pending and closed
+        const txYearForRatio = closedDateForRatio ? closedDateForRatio.getFullYear() : getTxYear(t);
+        if (closedDateForRatio && closedDateForRatio <= today && (isAllYears || txYearForRatio === year)) {
+          pcrPendingTotal += 1;
+          pcrClosedFromPending += 1;
         }
       }
 

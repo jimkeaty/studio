@@ -354,17 +354,12 @@ export async function GET(req: NextRequest) {
           // (closedFromPending is incremented in the closed block below for deals that closed)
         }
       } else if (t.status === 'closed') {
-        // Check if this closed deal was previously pending (has a contractDate before closedDate)
-        // We count it toward pendingCloseRatio if it has a contractDate (went through pending stage)
-        const contractDateForRatio = parseDate(t.contractDate);
+        // Count closed deals in the selected year as successfully resolved pendings.
+        // Scoped to the selected year so the ratio reflects this year's pipeline performance.
         const closedDateForRatio = parseDate(t.closedDate);
-        if (contractDateForRatio && closedDateForRatio && contractDateForRatio < closedDateForRatio) {
-          // This deal went through a pending stage and closed — it resolves a pending
-          // Only count if the closedDate is not in the future
-          if (closedDateForRatio <= today) {
-            pcrPendingTotal += 1;
-            pcrClosedFromPending += 1;
-          }
+        if (closedDateForRatio && closedDateForRatio <= today && closedDateForRatio.getFullYear() === year) {
+          pcrPendingTotal += 1;
+          pcrClosedFromPending += 1;
         }
       }
 

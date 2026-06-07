@@ -1245,7 +1245,7 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
 
 
         {/* Pending-to-Close Ratio */}
-        {perfData.pendingCloseRatio && perfData.pendingCloseRatio.pendingTotal > 0 && (
+        {perfData.pendingCloseRatio && (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4">
             <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-3">Pending-to-Close Ratio (YTD)</p>
             <p className="text-xs text-muted-foreground mb-3">
