@@ -3396,3 +3396,11 @@ function QuickActionBar() {
     </div>
   );
 }
+
+export default function AgentDashboardPageWrapper() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <AgentDashboardPage />
+    </Suspense>
+  );
+}
