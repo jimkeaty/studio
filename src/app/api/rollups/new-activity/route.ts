@@ -70,6 +70,9 @@ async function getAgentNameMap(db: any, year: number) {
   return map;
 }
 
+// Closing types that represent the listing/seller side
+const LISTING_CLOSING_TYPES = new Set(["listing", "dual"]);
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -87,8 +90,9 @@ export async function GET(req: NextRequest) {
       getAgentNameMap(db, year),
     ]);
 
-    const newListings: any[] = [];
-    const newContracts: any[] = [];
+    const recentSold: any[] = [];       // closed within lookback
+    const newActiveListings: any[] = []; // status=active, listingDate within lookback
+    const underContracts: any[] = [];    // pending/under_contract within lookback
 
     // YTD totals
     let ytdVolume = 0;
@@ -112,13 +116,16 @@ export async function GET(req: NextRequest) {
       );
       const price = toMoney(t.salePrice ?? t.listPrice ?? t.price);
       const status = String(t.status || "").toLowerCase();
+      const closingType = String(t.closingType || t.transactionType || "").toLowerCase();
 
       const closedDateRaw = t.closedDate || t.closingDate || null;
       const contractDateRaw =
         t.contractDate || t.pendingDate || t.underContractDate || null;
+      const listingDateRaw = t.listingDate || t.listDate || null;
 
       const closedDate = toDate(closedDateRaw);
       const contractDate = toDate(contractDateRaw);
+      const listingDate = toDate(listingDateRaw);
 
       // YTD totals for closed transactions
       if (status === "closed") {
@@ -129,9 +136,9 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      // Recent listings (closed within lookback)
+      // ── Recent Sold (closed within lookback) ──────────────────────────────
       if (closedDate && closedDate >= cutoff && status === "closed") {
-        newListings.push({
+        recentSold.push({
           id: `${doc.id}_closed`,
           date: toYmd(closedDateRaw),
           agentDisplayName,
@@ -140,13 +147,31 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Recent contracts (pending within lookback)
+      // ── New Active Listings (status=active, listing side, listed within lookback) ──
+      // Falls back to createdAt if listingDate is not set so newly added listings still appear
+      const listingEffectiveDate = listingDate ?? toDate(t.createdAt ?? null);
+      if (
+        status === "active" &&
+        LISTING_CLOSING_TYPES.has(closingType) &&
+        listingEffectiveDate &&
+        listingEffectiveDate >= cutoff
+      ) {
+        newActiveListings.push({
+          id: `${doc.id}_active`,
+          date: toYmd(listingDateRaw ?? t.createdAt ?? null),
+          agentDisplayName,
+          addressShort,
+          price: toMoney(t.listPrice ?? t.salePrice ?? t.price),
+        });
+      }
+
+      // ── Under Contract (pending/under_contract within lookback) ───────────
       if (
         (status === "pending" || status === "under_contract") &&
         contractDate &&
         contractDate >= cutoff
       ) {
-        newContracts.push({
+        underContracts.push({
           id: `${doc.id}_contract`,
           date: toYmd(contractDateRaw),
           agentDisplayName,
@@ -156,16 +181,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    newListings.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    newContracts.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    recentSold.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    newActiveListings.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    underContracts.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
     return NextResponse.json({
       ok: true,
       year,
       lookbackDays,
       generatedAt: new Date().toISOString(),
-      newListings: newListings.slice(0, showTopN),
-      newContracts: newContracts.slice(0, showTopN),
+      // New field names — keep legacy aliases for backwards compat
+      recentSold: recentSold.slice(0, showTopN),
+      newActiveListings: newActiveListings.slice(0, showTopN),
+      underContracts: underContracts.slice(0, showTopN),
+      // Legacy aliases so any existing consumers don't break
+      newListings: recentSold.slice(0, showTopN),
+      newContracts: underContracts.slice(0, showTopN),
       ytdTotals: {
         totalVolume: ytdVolume,
         totalSales: ytdSales,

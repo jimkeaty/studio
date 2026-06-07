@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building, FileSignature, Home, AlertCircle, DollarSign, BarChart, Users } from 'lucide-react';
+import { Building, FileSignature, Home, AlertCircle, DollarSign, BarChart, Users, ListPlus } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -61,17 +61,24 @@ const ActivityColumn = ({
   items,
   icon: Icon,
   loading,
+  priceColor = 'text-orange-400',
 }: {
   title: string;
   items: ActivityItem[];
   icon: React.ElementType;
   loading: boolean;
+  priceColor?: string;
 }) => (
   <Card className="flex-1 bg-gray-800/50 border-gray-700">
     <CardHeader>
       <CardTitle className="flex items-center gap-3 text-2xl font-semibold text-gray-300">
         <Icon className="h-6 w-6 text-primary" />
         {title}
+        {!loading && items.length > 0 && (
+          <span className="ml-auto text-sm font-normal text-gray-500 bg-gray-700/50 px-2 py-0.5 rounded-full">
+            {items.length}
+          </span>
+        )}
       </CardTitle>
     </CardHeader>
     <CardContent>
@@ -94,7 +101,7 @@ const ActivityColumn = ({
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="text-center py-10 text-gray-500">No new activity to report.</div>
+        <div className="text-center py-10 text-gray-500">No recent activity.</div>
       ) : (
         <div className="space-y-4">
           {items.map((item) => (
@@ -107,7 +114,7 @@ const ActivityColumn = ({
                 <p className="text-sm text-gray-400">{formatDate(item.date)}</p>
               </div>
               <div className="col-span-2 text-right">
-                <p className="text-xl font-bold text-orange-400">{formatCurrency(item.price)}</p>
+                <p className={`text-xl font-bold ${priceColor}`}>{formatCurrency(item.price)}</p>
                 <p className="text-sm text-gray-500 truncate">{item.addressShort}</p>
               </div>
             </div>
@@ -119,8 +126,9 @@ const ActivityColumn = ({
 );
 
 export default function NewActivityPage() {
-  const [newListings, setNewListings] = useState<ActivityItem[]>([]);
-  const [newContracts, setNewContracts] = useState<ActivityItem[]>([]);
+  const [newActiveListings, setNewActiveListings] = useState<ActivityItem[]>([]);
+  const [underContracts, setUnderContracts] = useState<ActivityItem[]>([]);
+  const [recentSold, setRecentSold] = useState<ActivityItem[]>([]);
   const [ytdTotals, setYtdTotals] = useState<YtdTotals | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,8 +143,9 @@ export default function NewActivityPage() {
         if (!json?.ok) {
           throw new Error(json?.error || 'Failed to load new activity');
         }
-        setNewListings(Array.isArray(json.newListings) ? json.newListings : []);
-        setNewContracts(Array.isArray(json.newContracts) ? json.newContracts : []);
+        setNewActiveListings(Array.isArray(json.newActiveListings) ? json.newActiveListings : []);
+        setUnderContracts(Array.isArray(json.underContracts) ? json.underContracts : []);
+        setRecentSold(Array.isArray(json.recentSold) ? json.recentSold : []);
         setYtdTotals(json.ytdTotals ?? null);
         setError(null);
       })
@@ -160,7 +169,7 @@ export default function NewActivityPage() {
             Activity Board
           </h1>
           <p className="text-lg sm:text-xl text-gray-400 mt-1">
-            New listings and contracts — last 60 days
+            New listings, under contract &amp; recent sold — last 60 days
           </p>
         </div>
       </header>
@@ -186,7 +195,7 @@ export default function NewActivityPage() {
         </div>
       )}
 
-      <main className="max-w-screen-2xl mx-auto flex flex-col lg:flex-row gap-8">
+      <main className="max-w-screen-2xl mx-auto flex flex-col lg:flex-row gap-6">
         {error ? (
           <Alert
             variant="destructive"
@@ -198,17 +207,29 @@ export default function NewActivityPage() {
           </Alert>
         ) : (
           <>
+            {/* New Listings — active listing-side transactions listed within 60 days */}
             <ActivityColumn
-              title="Recent Sold"
-              items={newListings}
-              icon={Home}
+              title="New Listings"
+              items={newActiveListings}
+              icon={ListPlus}
               loading={loading}
+              priceColor="text-emerald-400"
             />
+            {/* Under Contract — pending/under_contract within 60 days */}
             <ActivityColumn
-              title="New Contracts"
-              items={newContracts}
+              title="Under Contract"
+              items={underContracts}
               icon={FileSignature}
               loading={loading}
+              priceColor="text-yellow-400"
+            />
+            {/* Recent Sold — closed within 60 days */}
+            <ActivityColumn
+              title="Recent Sold"
+              items={recentSold}
+              icon={Home}
+              loading={loading}
+              priceColor="text-orange-400"
             />
           </>
         )}
