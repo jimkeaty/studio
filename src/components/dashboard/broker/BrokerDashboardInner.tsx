@@ -67,6 +67,7 @@ const PARTIAL_MONTH_COLOR = 'hsl(38 92% 50%)';
 const marginChartConfig: ChartConfig = {
   grossMargin: { label: 'Gross Margin', color: 'hsl(var(--chart-1))' },
   partialGrossMargin: { label: 'Gross Margin (partial month)', color: PARTIAL_MONTH_COLOR },
+  pendingGrossMargin: { label: 'Pending Margin', color: 'hsl(var(--chart-4))' },
   grossMarginGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareMargin: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
   projectedMargin: { label: 'Projected', color: 'hsl(38 92% 50%)' },
@@ -1023,6 +1024,7 @@ export function BrokerDashboardInner() {
   const [showGoals, setShowGoals] = useState(false);
   const [showProjected, setShowProjected] = useState(false);
   const [showPending, setShowPending] = useState(false);
+  const [showPendingGM, setShowPendingGM] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null); // null = all teams
   const [selectedType, setSelectedType] = useState<string | null>(null); // null = all types
   const [data, setData] = useState<BrokerCommandMetrics | null>(null);
@@ -1556,6 +1558,9 @@ export function BrokerDashboardInner() {
                   📈 Projected
                 </button>
               )}
+              <button type="button" onClick={() => setShowPendingGM(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingGM ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                Pending
+              </button>
             </div>
           </div>
           {gradeMargin && (() => { const g = letterGrade(gradeMargin); return (
@@ -1593,6 +1598,7 @@ export function BrokerDashboardInner() {
                   // so it can be styled differently (amber color)
                   grossMargin: (!isFuture && !isPartial) ? m.grossMargin : null,
                   partialGrossMargin: isPartial ? m.grossMargin : null,
+                  pendingGrossMargin: (!showPendingGM || isFuture) ? null : (m.pendingGci ?? 0),
                   grossMarginGoal: showGoals ? (isFuture ? null : m.grossMarginGoal) : null,
                   compareMargin: compareYear ? (data.comparisonData?.months?.[i]?.grossMargin ?? null) : null,
                   projectedMargin: showProjected ? (projectedMonthData?.margin[i] ?? null) : null,
@@ -1607,6 +1613,7 @@ export function BrokerDashboardInner() {
                 const labels: Record<string, string> = {
                   grossMargin: `${year} Gross Margin`,
                   partialGrossMargin: `${year} Gross Margin (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  pendingGrossMargin: 'Pending Gross Margin',
                   grossMarginGoal: `${year} Goal`,
                   compareMargin: `${compareYear} Gross Margin`, projectedMargin: 'Projected',
                 };
@@ -1618,6 +1625,7 @@ export function BrokerDashboardInner() {
               {compareYear && <Bar dataKey="compareMargin" fill="var(--color-compareMargin)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
               {showGoals && <Bar dataKey="grossMarginGoal" fill="var(--color-grossMarginGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
               {showProjected && <Bar dataKey="projectedMargin" fill="var(--color-projectedMargin)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
+              {showPendingGM && <Bar dataKey="pendingGrossMargin" fill="var(--color-pendingGrossMargin)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
             </BarChart>
           </ChartContainer>
           {/* Summaries */}
@@ -1653,6 +1661,58 @@ export function BrokerDashboardInner() {
                   <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{formatNumber(projectedMonthData.fullYearSales)}</p></div>
                 </div>
               )}
+            </div>
+          )}
+          {/* Pending Gross Margin detail table */}
+          {showPendingGM && data.pendingTransactions && data.pendingTransactions.length > 0 && (() => {
+            const pendingTxs = data.pendingTransactions!;
+            const totalPendingGci = pendingTxs.reduce((s, t) => s + t.pendingGci, 0);
+            return (
+              <div className="mt-4 border-t pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-amber-700">Pending Transactions — Anticipated Gross Margin</h4>
+                  <span className="text-sm font-semibold text-amber-700">{formatCurrency(totalPendingGci)}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left">
+                        <th className="px-3 py-2 font-medium text-muted-foreground">Address</th>
+                        <th className="px-3 py-2 font-medium text-muted-foreground">Agent</th>
+                        <th className="px-3 py-2 font-medium text-muted-foreground">Proj. Close</th>
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">Sale Price</th>
+                        <th className="px-3 py-2 text-right font-medium text-amber-600">Anticipated Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingTxs.map((t, idx) => (
+                        <tr key={t.id || idx} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="px-3 py-2 font-medium">{t.address || '—'}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{t.agentName}</td>
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {t.projectedCloseDate
+                              ? new Date(t.projectedCloseDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                              : <span className="text-red-500 text-xs">No date set</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right">{formatCurrency(t.salePrice)}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-amber-700">{formatCurrency(t.pendingGci)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t bg-muted/20">
+                        <td className="px-3 py-2 font-semibold" colSpan={4}>Total Anticipated Gross Margin</td>
+                        <td className="px-3 py-2 text-right font-bold text-amber-700">{formatCurrency(totalPendingGci)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+          {showPendingGM && (!data.pendingTransactions || data.pendingTransactions.length === 0) && (
+            <div className="mt-4 border-t pt-4 text-sm text-muted-foreground text-center py-4">
+              No pending transactions found for {year}.
             </div>
           )}
         </CardContent>

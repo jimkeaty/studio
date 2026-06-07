@@ -1016,7 +1016,7 @@ function AgentDashboardPage() {
           {/* ════════════════════════════════════════════════════════════════
               5b. MULTI-YEAR PRODUCTION COMPARISON
              ════════════════════════════════════════════════════════════════ */}
-          <DashboardSection storageKey="dash-multiyear-open" defaultOpen={false} title="Multi-Year Production Comparison" icon={TrendingUp}>
+          <DashboardSection storageKey="dash-multiyear-open" defaultOpen={true} title="Multi-Year Production Comparison" icon={TrendingUp}>
             <AgentMultiYearComparison view={perfView} viewAs={viewAs} />
           </DashboardSection>
 

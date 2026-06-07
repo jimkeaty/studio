@@ -12,15 +12,21 @@ import type {
   Metric,
   TeamLeaderEarnings,
   TeamLeaderEarningsMember,
+  PendingTransactionSummary,
 } from '@/lib/types/brokerCommandMetrics';
 
 
 // ── Transaction shape in Firestore ──────────────────────────────────────────
 interface Transaction {
   agentId: string;
+  agentDisplayName?: string;
   status: string;
+  address?: string;
   closedDate?: admin.firestore.Timestamp | string;
   contractDate?: admin.firestore.Timestamp | string;
+  projectedCloseDate?: admin.firestore.Timestamp | string;
+  projectedClosingDate?: admin.firestore.Timestamp | string;
+  projectedClose?: admin.firestore.Timestamp | string;
   brokerProfit: number;
   dealValue: number;
   salePrice?: number | string | null;
@@ -75,6 +81,7 @@ function emptyMonth(monthNum: number): MonthlyData {
     transactionFees: 0,
     closedVolume: 0,
     pendingVolume: 0,
+    pendingGci: 0,
     closedCount: 0,
     pendingCount: 0,
     grossMarginGoal: null,
@@ -171,8 +178,8 @@ export async function GET(req: NextRequest) {
     }
 
     const snapResults = await Promise.all(fetchPromises);
-    const allTransactions = snapResults[0].docs.map(d => d.data() as Transaction);
-    const allPrevTransactions = snapResults[1].docs.map(d => d.data() as Transaction);
+    const allTransactions = snapResults[0].docs.map(d => ({ id: d.id, ...d.data() }) as Transaction & { id: string });
+    const allPrevTransactions = snapResults[1].docs.map(d => ({ id: d.id, ...d.data() }) as Transaction & { id: string });
 
     // Apply team filter
     const transactions = filterTransactions(allTransactions);
@@ -294,6 +301,7 @@ export async function GET(req: NextRequest) {
     };
 
     // 6. Process each transaction
+    const pendingTransactionsList: PendingTransactionSummary[] = [];
     for (const t of transactions) {
       const gci = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
       const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
@@ -346,32 +354,41 @@ export async function GET(req: NextRequest) {
 
         // Source
         addToSource(sourceBreakdown.closed, srcKey, dealValue, companyRetained);
-
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         // Use projectedCloseDate to bucket pending transactions into the month
         // they are expected to close — not the month they went under contract.
         // If no projected close date is set, exclude from monthly chart but
         // still count in totals so the pipeline summary is accurate.
-        const projectedDate = parseDate((t as any).projectedCloseDate) ||
-          parseDate((t as any).projectedClosingDate) ||
-          parseDate((t as any).projectedClose);
+        const projectedDate = parseDate(t.projectedCloseDate) ||
+          parseDate(t.projectedClosingDate) ||
+          parseDate(t.projectedClose);
         const txMonth = projectedDate ? projectedDate.getMonth() : null;
-
         // Pending totals always count for the year
         totals.pendingVolume += dealValue;
         totals.pendingCount += sideCount;
-
         // Monthly (use projected close month — skip if no projected date)
         if (txMonth !== null && projectedDate && projectedDate.getFullYear() === year) {
           months[txMonth].pendingVolume += dealValue;
           months[txMonth].pendingCount += sideCount;
+          if (!isPassThrough) months[txMonth].pendingGci += companyRetained;
         }
-
+        // Accumulate pending transaction summary for detail table
+        if (!isPassThrough) {
+          pendingTransactionsList.push({
+            id: (t as any).id ?? (t as any).transactionId ?? '',
+            address: t.address ?? '',
+            agentId: t.agentId,
+            agentName: t.agentDisplayName ?? t.agentId,
+            projectedCloseDate: projectedDate ? projectedDate.toISOString().slice(0, 10) : null,
+            projectedCloseMonth: projectedDate ? projectedDate.getMonth() + 1 : null,
+            salePrice: dealValue,
+            pendingGci: companyRetained,
+          });
+        }
         // Category
         categoryBreakdown.pending[catKey].count += sideCount;
         categoryBreakdown.pending[catKey].netRevenue += companyRetained;
         categoryBreakdown.pending[catKey].volume += dealValue;
-
         // Source
         addToSource(sourceBreakdown.pending, srcKey, dealValue, companyRetained);
       }
@@ -572,12 +589,21 @@ export async function GET(req: NextRequest) {
       sourceBreakdown,
     };
 
+    // Sort pending transactions by projected close date ascending
+    pendingTransactionsList.sort((a, b) => {
+      if (!a.projectedCloseDate && !b.projectedCloseDate) return 0;
+      if (!a.projectedCloseDate) return 1;
+      if (!b.projectedCloseDate) return -1;
+      return a.projectedCloseDate.localeCompare(b.projectedCloseDate);
+    });
+
     const result: BrokerCommandMetrics = {
       overview,
       prevYearStats,
       availableYears,
       comparisonData,
       teams,
+      pendingTransactions: pendingTransactionsList,
       ...(teamLeaderEarnings ? { teamLeaderEarnings } : {}),
     };
 

@@ -73,7 +73,7 @@ function emptyMonth(m: number): MonthlyData {
   return {
     month: m, label: format(new Date(2000, m - 1), 'MMM'),
     totalGCI: 0, grossMargin: 0, grossMarginPct: 0, transactionFees: 0,
-    closedVolume: 0, pendingVolume: 0, closedCount: 0, pendingCount: 0,
+    closedVolume: 0, pendingVolume: 0, pendingGci: 0, closedCount: 0, pendingCount: 0,
     grossMarginGoal: null, volumeGoal: null, salesCountGoal: null,
   };
 }

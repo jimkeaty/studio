@@ -55,6 +55,7 @@ export type MonthlyData = {
   // Volume
   closedVolume: number;       // Total $ volume of closed deals
   pendingVolume: number;      // Total $ volume of pending deals
+  pendingGci: number;         // Anticipated gross margin (company retained) from pending deals
 
   // Counts
   closedCount: number;        // Number of closed deals
@@ -199,6 +200,18 @@ export type TeamLeaderEarnings = {
   memberBreakdown: TeamLeaderEarningsMember[];
 };
 
+// ── Pending transaction summary for the gross margin pending detail table ──
+export type PendingTransactionSummary = {
+  id: string;
+  address: string;
+  agentId: string;
+  agentName: string;
+  projectedCloseDate: string | null;
+  projectedCloseMonth: number | null; // 1-12, null if no projected date
+  salePrice: number;
+  pendingGci: number;   // anticipated company-retained gross margin
+};
+
 export type BrokerCommandMetrics = {
   overview: BrokerCommandOverview;
   prevYearStats?: PrevYearStats;
@@ -206,6 +219,7 @@ export type BrokerCommandMetrics = {
   comparisonData?: ComparisonData | null;  // monthly data for the selected comparison year
   teams?: TeamInfo[];              // available teams for team tabs
   teamLeaderEarnings?: TeamLeaderEarnings | null; // populated when teamId is set and team has a leader
+  pendingTransactions?: PendingTransactionSummary[]; // pending deals for the gross margin pending detail table
   // Legacy fields (kept for backward compatibility)
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;
