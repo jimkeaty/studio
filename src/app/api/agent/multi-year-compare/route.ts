@@ -159,18 +159,26 @@ export async function GET(req: NextRequest) {
       bucket.sales += 1;
       bucket.gci += gci;
 
-      // Track contractsWritten — bucket by contractDate (when the deal went under contract)
+            // Track contractsWritten — bucket by contractDate (when the deal went under contract)
+      // Apply the same partial-month cap: if contractDate falls in the same calendar month as today,
+      // only count it if its day-of-month <= today's day. This ensures June 2025 is only counted
+      // through June 7 when today is June 7, giving apples-to-apples year-over-year comparison.
       const contractDate = toDate(d.contractDate) || toDate(d.pendingDate);
       if (contractDate) {
         const cyr = contractDate.getFullYear();
         const cmo = contractDate.getMonth() + 1;
-        if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
-        const cMonthMap = yearMap.get(cyr)!;
-        if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
-        cMonthMap.get(cmo)!.contractsWritten += 1;
+        // Partial-month cap: skip if this contract date is in the current calendar month
+        // but after today's day-of-month
+        if (cmo === currentMonth && contractDate.getDate() > currentDayOfMonth) {
+          // skip — beyond today's day in this calendar month
+        } else {
+          if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
+          const cMonthMap = yearMap.get(cyr)!;
+          if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
+          cMonthMap.get(cmo)!.contractsWritten += 1;
+        }
       }
     }
-
     // Process pending transactions — bucket by projectedCloseDate (and also track contractsWritten by contractDate)
     for (const doc of pendingDocs) {
       const d = doc.data();
@@ -198,14 +206,17 @@ export async function GET(req: NextRequest) {
       bucket.pendingNetIncome += agentNet;
 
       // Track contractsWritten for pending deals — bucket by contractDate
+      // Apply partial-month cap: skip if contractDate is in the current calendar month but after today's day
       const pendingContractDate = toDate(d.contractDate) || toDate(d.pendingDate);
       if (pendingContractDate) {
         const cyr = pendingContractDate.getFullYear();
         const cmo = pendingContractDate.getMonth() + 1;
-        if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
-        const cMonthMap = yearMap.get(cyr)!;
-        if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
-        cMonthMap.get(cmo)!.contractsWritten += 1;
+        if (!(cmo === currentMonth && pendingContractDate.getDate() > currentDayOfMonth)) {
+          if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
+          const cMonthMap = yearMap.get(cyr)!;
+          if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
+          cMonthMap.get(cmo)!.contractsWritten += 1;
+        }
       }
     }
 

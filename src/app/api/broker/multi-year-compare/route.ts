@@ -114,12 +114,16 @@ export async function GET(req: NextRequest) {
       const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.dealValue) || Number(d.listPrice) || 0);
 
       // ── contractsWritten: bucket by contractDate (any status) ──────────
+      // Apply partial-month cap: if contractDate falls in the current calendar month,
+      // only count it if its day-of-month <= today's day (apples-to-apples YTD comparison).
       const contractDate = toDate(d.contractDate);
       if (contractDate) {
         const cyr = contractDate.getFullYear();
         const cmo = contractDate.getMonth() + 1;
-        const cb = getOrCreate(cyr, cmo);
-        cb.contractsWritten += sideCount;
+        if (!(cmo === currentMonth && contractDate.getDate() > currentDayOfMonth)) {
+          const cb = getOrCreate(cyr, cmo);
+          cb.contractsWritten += sideCount;
+        }
       }
 
       // ── Closed metrics: bucket by closedDate ───────────────────────────
