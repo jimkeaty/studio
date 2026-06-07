@@ -41,11 +41,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,15 +55,20 @@ type RecruitingConfig = {
   recurring: boolean;
 };
 
-type AnnualWindow = {
-  windowYear: number;
-  windowStartsAt: string;
-  windowEndsAt: string;
+/**
+ * Matches AnniversaryYearProgress as serialised to JSON by the API route.
+ * Dates become ISO strings over the wire.
+ */
+type AnniversaryYearProgress = {
+  yearNumber: number;
+  windowStart: string | Date;   // ISO string over the wire; Date in TypeScript types
+  windowEnd: string | Date;     // ISO string over the wire; Date in TypeScript types
   closedGci: number;
   pendingGci: number;
   qualified: boolean;
-  payoutAmount: number;
-  payoutPaid: boolean;
+  expired: boolean;
+  isCurrent: boolean;
+  payoutEarned: number;  // NOT payoutAmount
 };
 
 type EnhancedDownlineMember = DownlineMember & {
@@ -77,12 +77,11 @@ type EnhancedDownlineMember = DownlineMember & {
     status: "qualified" | "in_progress" | "expired" | "missing_data";
     closedCompanyGciGrossInWindow: number;
     pendingCompanyGciGrossInWindow: number;
-    windowStartsAt?: string;
-    windowEndsAt?: string;
+    windowEndsAt?: string | null;
     annualPayout: number;
-    annualWindows?: AnnualWindow[];
-    lifetimeEarned?: number;
-  };
+    anniversaryYears?: AnniversaryYearProgress[];   // NOT annualWindows
+    totalLifetimePayouts?: number;                  // NOT lifetimeEarned
+  } | null;
 };
 
 type ApiSummary = {
@@ -95,7 +94,8 @@ type ApiSummary = {
   totalAnnualIncome: number;
   tier1AnnualIncome: number;
   tier2AnnualIncome: number;
-  potentialIfAllQualify: number;
+  totalLifetimeIncome: number;
+  // potentialIfAllQualify is NOT returned by the API – computed locally in useMemo
 };
 
 type RecruitingApiResponse =
@@ -195,12 +195,13 @@ const AnnualHistoryRow = ({
   window: w,
   threshold,
 }: {
-  window: AnnualWindow;
+  window: AnniversaryYearProgress;
   threshold: number;
 }) => {
   const fmt = (n: number) => `$${n.toLocaleString()}`;
-  const startYear = new Date(w.windowStartsAt).getFullYear();
-  const endYear = new Date(w.windowEndsAt).getFullYear();
+  // windowStart / windowEnd are ISO strings from the API
+  const startYear = new Date(w.windowStart as string).getFullYear();
+  const endYear   = new Date(w.windowEnd as string).getFullYear();
   const label = startYear === endYear ? `${startYear}` : `${startYear}–${endYear}`;
 
   return (
@@ -214,7 +215,7 @@ const AnnualHistoryRow = ({
       </span>
       <span className="w-16 text-right shrink-0">
         {w.qualified ? (
-          <span className="text-green-700 font-semibold">{fmt(w.payoutAmount)}</span>
+          <span className="text-green-700 font-semibold">{fmt(w.payoutEarned)}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
@@ -245,7 +246,6 @@ export function RecruitingIncentiveTracker() {
 
       try {
         const token = await user.getIdToken();
-        const agentId = isImpersonating && effectiveUid ? effectiveUid : user.uid;
 
         // Fetch recruiting data and plan goal in parallel
         const [recruitRes, planRes] = await Promise.all([
@@ -286,8 +286,18 @@ export function RecruitingIncentiveTracker() {
   }, [user, isImpersonating, effectiveUid]);
 
   const summary = useMemo(() => {
-    if (apiSummary) return apiSummary;
-    // Fallback: compute from downline
+    const t1Pay = config?.tier1PayoutAmount ?? 500;
+    const t2Pay = config?.tier2PayoutAmount ?? 500;
+
+    if (apiSummary) {
+      // API summary doesn't include potentialIfAllQualify — compute it from downline
+      const potentialIfAllQualify = downline.reduce((acc, member) => {
+        return acc + (member.tier === 1 ? t1Pay : t2Pay);
+      }, 0);
+      return { ...apiSummary, potentialIfAllQualify };
+    }
+
+    // Fallback: compute everything from downline
     return downline.reduce(
       (acc, member) => {
         if (member.tier === 1) acc.tier1Count++;
@@ -303,8 +313,6 @@ export function RecruitingIncentiveTracker() {
           if (member.tier === 2) acc.tier2AnnualIncome += payout;
         }
         acc.totalRecruits++;
-        const t1Pay = config?.tier1PayoutAmount ?? 500;
-        const t2Pay = config?.tier2PayoutAmount ?? 500;
         acc.potentialIfAllQualify += member.tier === 1 ? t1Pay : t2Pay;
         return acc;
       },
@@ -312,6 +320,7 @@ export function RecruitingIncentiveTracker() {
         tier1Count: 0, tier2Count: 0, qualifiedCount: 0, totalRecruits: 0,
         tier1QualifiedCount: 0, tier2QualifiedCount: 0,
         totalAnnualIncome: 0, tier1AnnualIncome: 0, tier2AnnualIncome: 0,
+        totalLifetimeIncome: 0,
         potentialIfAllQualify: 0,
       }
     );
@@ -320,7 +329,7 @@ export function RecruitingIncentiveTracker() {
   const gciThreshold = config?.gciThreshold ?? 40000;
   const t1Pay = config?.tier1PayoutAmount ?? 500;
   const t2Pay = config?.tier2PayoutAmount ?? 500;
-  const fmt = (n: number) => `$${n.toLocaleString()}`;
+  const fmt = (n: number) => `$${(n ?? 0).toLocaleString()}`;
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
@@ -474,14 +483,17 @@ export function RecruitingIncentiveTracker() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {downline.filter(m => m.tier === 1).map((member: any) => {
-                      const qp = member.qualificationProgress as any | null;
+                    {downline.filter(m => m.tier === 1).map((member) => {
+                      const qp = member.qualificationProgress as EnhancedDownlineMember["qualificationProgress"];
                       const status: "qualified" | "in_progress" | "expired" | "missing_data" = qp?.status ?? "missing_data";
                       const closed = Number(qp?.closedCompanyGciGrossInWindow || 0);
                       const pending = Number(qp?.pendingCompanyGciGrossInWindow || 0);
                       const annualPayout = Number(qp?.annualPayout || 0);
-                      const lifetimeEarned = Number(qp?.lifetimeEarned || 0);
-                      const hasHistory = (qp?.annualWindows?.length ?? 0) > 1;
+                      // Use totalLifetimePayouts (correct API field name)
+                      const lifetimeEarned = Number(qp?.totalLifetimePayouts || 0);
+                      // Use anniversaryYears (correct API field name)
+                      const annualWindows = qp?.anniversaryYears ?? [];
+                      const hasHistory = annualWindows.length > 1;
                       const isExpanded = expandedRows.has(member.agentId);
 
                       let timeLeft = "—";
@@ -515,7 +527,7 @@ export function RecruitingIncentiveTracker() {
                               <TableCell colSpan={7} className="bg-muted/20 px-6 py-3">
                                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Annual Window History</p>
                                 <div className="space-y-1">
-                                  {(qp.annualWindows as AnnualWindow[]).map((w, i) => (
+                                  {annualWindows.map((w, i) => (
                                     <AnnualHistoryRow key={i} window={w} threshold={gciThreshold} />
                                   ))}
                                 </div>
@@ -551,14 +563,17 @@ export function RecruitingIncentiveTracker() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {downline.filter(m => m.tier === 2).map((member: any) => {
-                      const qp = member.qualificationProgress as any | null;
+                    {downline.filter(m => m.tier === 2).map((member) => {
+                      const qp = member.qualificationProgress as EnhancedDownlineMember["qualificationProgress"];
                       const status: "qualified" | "in_progress" | "expired" | "missing_data" = qp?.status ?? "missing_data";
                       const closed = Number(qp?.closedCompanyGciGrossInWindow || 0);
                       const pending = Number(qp?.pendingCompanyGciGrossInWindow || 0);
                       const annualPayout = Number(qp?.annualPayout || 0);
-                      const lifetimeEarned = Number(qp?.lifetimeEarned || 0);
-                      const hasHistory = (qp?.annualWindows?.length ?? 0) > 1;
+                      // Use totalLifetimePayouts (correct API field name)
+                      const lifetimeEarned = Number(qp?.totalLifetimePayouts || 0);
+                      // Use anniversaryYears (correct API field name)
+                      const annualWindows = qp?.anniversaryYears ?? [];
+                      const hasHistory = annualWindows.length > 1;
                       const isExpanded = expandedRows.has(member.agentId);
 
                       return (
@@ -586,7 +601,7 @@ export function RecruitingIncentiveTracker() {
                               <TableCell colSpan={7} className="bg-muted/20 px-6 py-3">
                                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Annual Window History</p>
                                 <div className="space-y-1">
-                                  {(qp.annualWindows as AnnualWindow[]).map((w, i) => (
+                                  {annualWindows.map((w, i) => (
                                     <AnnualHistoryRow key={i} window={w} threshold={gciThreshold} />
                                   ))}
                                 </div>
