@@ -2,6 +2,7 @@
 // POST /api/contacts                            — create or upsert a contact
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isStaff } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -41,11 +42,19 @@ export async function GET(req: NextRequest) {
     const q = (url.searchParams.get('q') || '').toLowerCase().trim();
     const limitN = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
 
-    // Contacts are shared across the brokerage (all authenticated users can read)
+    // Staff (admin, TC, office staff) see ALL contacts.
+    // Agents only see contacts they personally created (createdBy == their uid).
+    const callerIsStaff = await isStaff(uid);
+
     let query: FirebaseFirestore.Query = adminDb.collection('contacts').limit(limitN);
 
     if (type && VALID_TYPES.includes(type as ContactType)) {
       query = query.where('type', '==', type);
+    }
+
+    // Scope to agent's own contacts when caller is not staff
+    if (!callerIsStaff) {
+      query = query.where('createdBy', '==', uid);
     }
 
     const snap = await query.get();
