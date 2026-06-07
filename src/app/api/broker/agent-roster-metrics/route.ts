@@ -460,6 +460,8 @@ export async function GET(req: NextRequest) {
     const graceAtRisk = rows.filter(r => r.graceStatus === 'grace_at_risk').length;
     const graceNoDeal = rows.filter(r => r.graceStatus === 'in_grace').length;
 
+    // No Deals Yet — established agents (past grace) with zero closed and zero pending
+    const noDealsYet = rows.filter(r => !r.isGracePeriod && r.closedDeals === 0 && r.pendingDeals === 0).length;
     // Team Group breakdown
     const teamGroupBreakdown: Record<string, number> = {};
     for (const r of rows) {
@@ -491,6 +493,7 @@ export async function GET(req: NextRequest) {
         graceAtRisk,
         graceNoDeal,
         established: totalAgents - inGrace.length,
+        noDealsYet,
         // New breakdowns
         teamGroupBreakdown,
         statusBreakdown,

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
+import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ComposedChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -475,6 +475,8 @@ function AgentPerformanceRoster({ year }: { year: number }) {
       filtered = filtered.filter((a: any) => a.graceStatus === 'grace_at_risk');
     } else if (filterGrace === 'no_deal') {
       filtered = filtered.filter((a: any) => a.isGracePeriod && !a.hasFirstDeal);
+    } else if (filterGrace === 'no_deals_yet') {
+      filtered = filtered.filter((a: any) => !a.isGracePeriod && a.closedDeals === 0 && a.pendingDeals === 0);
     }
   }
 
@@ -518,11 +520,13 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
   // Separate grace period agents for the tracker
   const graceAgents = agents.filter((a: any) => a.isGracePeriod || a.graceStatus === 'grace_passed');
+  // No Deals Yet agents — established (past grace) with zero closed and zero pending
+  const noDealsYetAgents = agents.filter((a: any) => !a.isGracePeriod && a.closedDeals === 0 && a.pendingDeals === 0);
 
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <Card className="border-2">
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground">Total Agents</p>
@@ -554,6 +558,18 @@ function AgentPerformanceRoster({ year }: { year: number }) {
             <p className="text-2xl font-bold">{summary.avgIncomePerf}%</p>
           </CardContent>
         </Card>
+        <button
+          onClick={() => setFilterGrace(filterGrace === 'no_deals_yet' ? 'all' : 'no_deals_yet')}
+          className={`rounded-lg border-2 transition-all text-left ${filterGrace === 'no_deals_yet' ? 'border-amber-500 ring-2 ring-amber-400 ring-offset-1' : 'border-amber-200 hover:border-amber-400'} bg-amber-50/50`}>
+          <div className="p-4 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+              <p className="text-xs text-amber-700 font-medium">No Deals Yet</p>
+            </div>
+            <p className="text-2xl font-bold text-amber-700">{summary.noDealsYet ?? 0}</p>
+            <p className="text-[10px] text-amber-600">Click to filter</p>
+          </div>
+        </button>
       </div>
 
       {/* Team Group Breakdown */}
@@ -705,6 +721,73 @@ function AgentPerformanceRoster({ year }: { year: number }) {
         </Card>
       )}
 
+      {/* ── No Deals Yet Tracker ─────────────────────────────────────── */}
+      {noDealsYetAgents.length > 0 && (
+        <Card className="border-2 border-amber-200">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <CardTitle className="text-lg">Active — No Deals Yet</CardTitle>
+              </div>
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                {noDealsYetAgents.length} agent{noDealsYetAgents.length !== 1 ? 's' : ''} need attention
+              </Badge>
+            </div>
+            <CardDescription>
+              These agents are past their 90-day grace period and have not yet closed or gone under contract on any deal this year. Prioritize outreach to get them into production.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {noDealsYetAgents
+                .sort((a: any, b: any) => {
+                  // Sort by start date ascending (longest without a deal first)
+                  const aDate = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+                  const bDate = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+                  return aDate - bDate;
+                })
+                .map((a: any) => (
+                  <div key={a.agentId} className="flex items-center gap-3 p-3 rounded-lg border bg-amber-50/30 border-amber-200">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{a.displayName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {a.teamName || a.teamGroup || 'No Team'}
+                        {a.startDate && ` · Started ${a.startDate}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 shrink-0">
+                      <div className="text-center min-w-[60px]">
+                        <p className="text-xs text-muted-foreground">Engagements</p>
+                        <p className="text-sm font-medium">{a.engagementsActual}</p>
+                      </div>
+                      <div className="text-center min-w-[60px]">
+                        <p className="text-xs text-muted-foreground">Appts Held</p>
+                        <p className="text-sm font-medium">{a.appointmentsHeldActual}</p>
+                      </div>
+                      <div className="text-center min-w-[60px]">
+                        <p className="text-xs text-muted-foreground">Income Grade</p>
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${
+                          a.incomeGrade === 'A' ? 'bg-green-100 text-green-700'
+                          : a.incomeGrade === 'B' ? 'bg-blue-100 text-blue-700'
+                          : a.incomeGrade === 'C' ? 'bg-yellow-100 text-yellow-700'
+                          : a.incomeGrade === 'D' ? 'bg-orange-100 text-orange-700'
+                          : 'bg-red-100 text-red-700'
+                        }`}>{a.incomeGrade}</span>
+                      </div>
+                      <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                        <Button variant="outline" size="sm" className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-50">
+                          <Eye className="h-3 w-3 mr-1" />View Dashboard
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Grade Distribution Bar */}
       <div className="flex items-center gap-2 text-sm">
         <span className="text-muted-foreground font-medium">Grade Distribution:</span>
@@ -742,6 +825,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
             <SelectItem value="in_grace">In Grace Period</SelectItem>
             <SelectItem value="at_risk">Grace At Risk</SelectItem>
             <SelectItem value="no_deal">Grace — No Deal</SelectItem>
+            <SelectItem value="no_deals_yet">Active — No Deals Yet</SelectItem>
             <SelectItem value="established">Established</SelectItem>
           </SelectContent>
         </Select>
@@ -788,7 +872,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((a: any) => (
-                    <TableRow key={a.agentId} className={a.isGracePeriod ? 'bg-amber-50/50' : ''}>
+                    <TableRow key={a.agentId} className={a.isGracePeriod ? 'bg-amber-50/50' : (!a.isGracePeriod && a.closedDeals === 0 && a.pendingDeals === 0 ? 'bg-amber-50/20' : '')}>
                       {/* Agent Name */}
                       <TableCell className="sticky left-0 bg-background z-10 font-medium">
                         <div>
@@ -796,6 +880,9 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <AgentStatusBadge status={a.agentStatus} />
                             {a.teamRole === 'leader' && <Badge variant="outline" className="text-[9px] h-4 px-1">Leader</Badge>}
+                            {!a.isGracePeriod && a.closedDeals === 0 && a.pendingDeals === 0 && (
+                              <Badge className="text-[9px] h-4 px-1 bg-amber-100 text-amber-800 border border-amber-300">No Deals Yet</Badge>
+                            )}
                           </div>
                         </div>
                       </TableCell>
@@ -881,11 +968,16 @@ function AgentPerformanceRoster({ year }: { year: number }) {
       {view === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((a: any) => (
-            <Card key={a.agentId} className={`overflow-hidden ${a.isGracePeriod ? 'border-amber-300' : (a.incomeGrade === 'F' || a.incomeGrade === 'D') ? 'border-red-300' : (a.incomeGrade === 'A') ? 'border-green-300' : ''}`}>
+            <Card key={a.agentId} className={`overflow-hidden ${a.isGracePeriod ? 'border-amber-300' : (!a.isGracePeriod && a.closedDeals === 0 && a.pendingDeals === 0) ? 'border-amber-300 bg-amber-50/20' : (a.incomeGrade === 'F' || a.incomeGrade === 'D') ? 'border-red-300' : (a.incomeGrade === 'A') ? 'border-green-300' : ''}`}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-base">{a.displayName}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base">{a.displayName}</CardTitle>
+                      {!a.isGracePeriod && a.closedDeals === 0 && a.pendingDeals === 0 && (
+                        <Badge className="text-[9px] h-4 px-1 bg-amber-100 text-amber-800 border border-amber-300">No Deals Yet</Badge>
+                      )}
+                    </div>
                     <CardDescription className="text-xs">
                       {TEAM_GROUP_LABELS[a.teamGroup] || a.teamGroup || 'Independent'}
                       {a.teamRole === 'leader' && ' · Team Leader'}
