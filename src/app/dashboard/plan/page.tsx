@@ -41,6 +41,8 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
 
 type SeasonalityMonth = { month: number; label: string; volumePct: number; salesPct: number };
 type HistoricalStats = {
@@ -329,6 +331,8 @@ export default function BusinessPlanPage() {
   const [overrideAvgSalePrice, setOverrideAvgSalePrice] = useState(0);
   const [overrideAvgCommPct, setOverrideAvgCommPct] = useState(0);
   const [overrideAvgNetPct, setOverrideAvgNetPct] = useState(0);
+  // Direct dollar override for Avg Net Take-Home — synced two-way with the Advanced Assumptions avgCommission field
+  const [overrideAvgNetCommission, setOverrideAvgNetCommission] = useState(0);
   const [loadingLiveCommission, setLoadingLiveCommission] = useState(false);
 
   // Reset overrides when historical stats load
@@ -336,6 +340,7 @@ export default function BusinessPlanPage() {
     setOverrideAvgSalePrice(0);
     setOverrideAvgCommPct(0);
     setOverrideAvgNetPct(0);
+    setOverrideAvgNetCommission(0);
   }, [historicalStats]);
 
   // Fetch live commission structure and compute effective avg net %
@@ -353,26 +358,33 @@ export default function BusinessPlanPage() {
       // Compute effective avg net % from tiers
       // Use the agent's current YTD GCI to determine which tier they are in,
       // or use the first tier as the baseline if no YTD data
-      const tiers: Array<{ agentPct: number; minGci?: number; maxGci?: number }> = data.tiers ?? [];
+      // API returns agentSplitPercent (not agentPct) and company-dollar thresholds
+      const tiers: Array<{ agentSplitPercent?: number; agentPct?: number; fromCompanyDollar?: number; minGci?: number }> = data.tiers ?? [];
       if (tiers.length > 0) {
         const ytdGci: number = data.ytdTierProgressionGci ?? 0;
-        // Find the active tier
+        // Find the active tier based on YTD GCI vs tier thresholds
         let activeTier = tiers[0];
         for (const tier of tiers) {
-          const min = tier.minGci ?? 0;
+          const min = tier.fromCompanyDollar ?? tier.minGci ?? 0;
           if (ytdGci >= min) activeTier = tier;
         }
-        const liveNetPct = activeTier.agentPct;
-        setOverrideAvgNetPct(liveNetPct);
-        // Also update the avgCommission form field using live net %
-        const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
-        const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
-        if (asp > 0 && commPct > 0) {
-          const liveAvgNet = Math.round(asp * (commPct / 100) * (liveNetPct / 100));
-          form.setValue('avgCommission', liveAvgNet);
-          handleCalculate();
+        // Support both field names from different commission plan shapes
+        const liveNetPct = activeTier.agentSplitPercent ?? activeTier.agentPct ?? 0;
+        if (liveNetPct > 0) {
+          setOverrideAvgNetPct(liveNetPct);
+          // Compute dollar avg net and sync to both the reference card override AND the Advanced Assumptions field
+          const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
+          const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
+          if (asp > 0 && commPct > 0) {
+            const liveAvgNet = Math.round(asp * (commPct / 100) * (liveNetPct / 100));
+            setOverrideAvgNetCommission(liveAvgNet);
+            form.setValue('avgCommission', liveAvgNet);
+            handleCalculate();
+          }
+          toast({ title: 'Live Commission Loaded', description: `Active tier: ${liveNetPct}% agent net (based on $${ytdGci.toLocaleString()} YTD GCI)` });
+        } else {
+          toast({ variant: 'destructive', title: 'Could not read commission tier', description: 'No agent split percentage found in commission plan.' });
         }
-        toast({ title: 'Live Commission Loaded', description: `Active tier: ${liveNetPct}% agent net (based on $${ytdGci.toLocaleString()} YTD GCI)` });
       }
     } catch {
       toast({ variant: 'destructive', title: 'Failed to load live commission' });
@@ -784,17 +796,30 @@ export default function BusinessPlanPage() {
                       : '—'}
                   </p>
                   <p className="text-xs text-muted-foreground mb-2">per closing (historical)</p>
-                  {(overrideAvgSalePrice > 0 || overrideAvgCommPct > 0 || overrideAvgNetPct > 0) && (() => {
-                    const asp2 = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
-                    const cp2 = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
-                    const np2 = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
-                    const derived = asp2 > 0 && cp2 > 0 && np2 > 0 ? Math.round(asp2 * (cp2 / 100) * (np2 / 100)) : null;
-                    return derived !== null ? (
-                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                        Override: ${derived.toLocaleString()}
-                      </p>
-                    ) : null;
-                  })()}
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
+                    <Input
+                      type="number"
+                      step="1"
+                      className="h-7 text-xs px-2 border-blue-300"
+                      placeholder={historicalStats.avgNetCommission != null ? String(Math.round(historicalStats.avgNetCommission)) : ''}
+                      value={overrideAvgNetCommission > 0 ? overrideAvgNetCommission : ''}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value) || 0;
+                        setOverrideAvgNetCommission(v);
+                        // Sync directly to the Advanced Assumptions avgCommission field
+                        if (v > 0) {
+                          form.setValue('avgCommission', v);
+                          handleCalculate();
+                        }
+                      }}
+                    />
+                  </div>
+                  {overrideAvgNetCommission > 0 && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      → Advanced Assumptions updated
+                    </p>
+                  )}
                 </div>
                 {/* Avg Net % */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
@@ -1224,17 +1249,33 @@ export default function BusinessPlanPage() {
                               />
                             </FormControl>
                           </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="mt-1 w-full text-xs"
-                            onClick={fetchLiveCommission}
-                            disabled={loadingLiveCommission}
-                          >
-                            <TrendingUp className="h-3 w-3 mr-1" />
-                            {loadingLiveCommission ? 'Loading...' : 'Use Live Commission'}
-                          </Button>
+                          <div className="flex items-center gap-1 mt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-xs"
+                              onClick={fetchLiveCommission}
+                              disabled={loadingLiveCommission}
+                            >
+                              <TrendingUp className="h-3 w-3 mr-1" />
+                              {loadingLiveCommission ? 'Loading...' : 'Use Live Commission'}
+                            </Button>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                                    <Info className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs text-xs">
+                                  <p className="font-semibold mb-1">Use Live Commission</p>
+                                  <p>Pulls your current commission split directly from your agent profile. It finds your active tier based on your YTD GCI earned this year and calculates your average net dollar per deal using that live split percentage.</p>
+                                  <p className="mt-1 text-muted-foreground">Example: If your plan is 75% agent split and your avg sale price is $300K at 2.5% commission, your avg net per deal = $300K × 2.5% × 75% = $5,625.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1421,21 +1462,118 @@ export default function BusinessPlanPage() {
                 </div>
 
                 {/* Seasonality buttons */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-muted-foreground">Distribute by seasonality:</span>
-                  {historicalStats?.seasonality && historicalStats.seasonality.some(s => s.salesPct !== 8.33) && (
-                    <Button type="button" size="sm" variant="outline" onClick={() => applySeasonality('lastYear')}>
-                      Use Last Year&apos;s Seasonality
-                    </Button>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">Distribute by seasonality:</span>
+
+                    {/* Use Last Year's Seasonality */}
+                    {historicalStats?.seasonality && historicalStats.seasonality.some(s => s.salesPct !== 8.33) && (
+                      <div className="flex items-center gap-1">
+                        <Button type="button" size="sm" variant="outline" onClick={() => applySeasonality('lastYear')}>
+                          Use Last Year&apos;s Seasonality
+                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                                <Info className="h-4 w-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              <p className="font-semibold mb-1">Use Last Year&apos;s Seasonality</p>
+                              <p>Distributes your annual goals across each month based on <strong>your own closing pattern from last year</strong>. If you closed more deals in spring and summer, those months will receive a larger share of your annual goal.</p>
+                              <p className="mt-1 text-muted-foreground">This is personal to you — it is not a company-wide average.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    )}
+
+                    {/* Use All-Time Seasonality */}
+                    {historicalStats?.allTimeHasData && (
+                      <div className="flex items-center gap-1">
+                        <Button type="button" size="sm" variant="outline" onClick={() => applySeasonality('allTime')}>
+                          Use All-Time Seasonality
+                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                                <Info className="h-4 w-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              <p className="font-semibold mb-1">Use All-Time Seasonality</p>
+                              <p>Distributes your annual goals based on <strong>your closing pattern across every year</strong> of transaction history in the system. This smooths out one-off years and reflects your long-term seasonal rhythm.</p>
+                              <p className="mt-1 text-muted-foreground">Best choice if last year was unusually slow or fast in certain months.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    )}
+
+                    {/* Distribute Across All Months */}
+                    <div className="flex items-center gap-1">
+                      <Button type="button" size="sm" variant="secondary" onClick={distributeGoals}>
+                        Distribute Across All Months
+                      </Button>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                              <Info className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-xs">
+                            <p className="font-semibold mb-1">Distribute Across All Months</p>
+                            <p>Splits your annual goal <strong>evenly across all 12 months</strong> — each month receives exactly 8.33% of the annual target. Use this if you want a flat, consistent monthly goal with no seasonal weighting.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
+
+                  {/* Per-month seasonality breakdown */}
+                  {(historicalStats?.seasonality || historicalStats?.allTimeSeasonality) && (
+                    <div className="rounded-lg border border-muted bg-muted/30 p-3">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Seasonality Distribution Preview (% of annual goal per month)</p>
+                      <div className="grid grid-cols-6 md:grid-cols-12 gap-1">
+                        {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((label, i) => {
+                          const m = i + 1;
+                          const lastYrPct = historicalStats?.seasonality?.[i]?.salesPct ?? 8.33;
+                          const allTimePct = historicalStats?.allTimeSeasonality?.[i]?.salesPct ?? 8.33;
+                          const currentPct = parseFloat(seasonWeights[m]?.salesPct ?? '8.33');
+                          return (
+                            <div key={m} className="text-center">
+                              <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                              <p className="text-sm font-bold text-foreground">{currentPct.toFixed(1)}%</p>
+                              {historicalStats?.seasonality && (
+                                <p className="text-xs text-blue-600 dark:text-blue-400">{lastYrPct.toFixed(1)}%</p>
+                              )}
+                              {historicalStats?.allTimeHasData && (
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400">{allTimePct.toFixed(1)}%</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 mt-2">
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="inline-block w-2 h-2 rounded-full bg-foreground"></span> Current weights
+                        </span>
+                        {historicalStats?.seasonality && (
+                          <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span> Last year
+                          </span>
+                        )}
+                        {historicalStats?.allTimeHasData && (
+                          <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span> All-time
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   )}
-                  {historicalStats?.allTimeHasData && (
-                    <Button type="button" size="sm" variant="outline" onClick={() => applySeasonality('allTime')}>
-                      Use All-Time Seasonality
-                    </Button>
-                  )}
-                  <Button type="button" size="sm" variant="secondary" onClick={distributeGoals}>
-                    Distribute Across All Months
-                  </Button>
                 </div>
 
                 {/* Monthly goals table */}
