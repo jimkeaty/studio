@@ -344,20 +344,19 @@ export default function BusinessPlanPage() {
   const avgCommPct = historicalStats?.avgCommissionPct ?? 0;
   const avgNetPct = historicalStats?.avgNetPct ?? 0;
 
-  // Editable overrides for the reference data (0 = use historical value)
-  const [overrideAvgSalePrice, setOverrideAvgSalePrice] = useState(0);
-  const [overrideAvgCommPct, setOverrideAvgCommPct] = useState(0);
-  const [overrideAvgNetPct, setOverrideAvgNetPct] = useState(0);
-  // Direct dollar override for Avg Net Take-Home — synced two-way with the Advanced Assumptions avgCommission field
-  const [overrideAvgNetCommission, setOverrideAvgNetCommission] = useState(0);
+  // Goal-year assumption inputs (live in Advanced Assumptions, pre-filled from historical data)
+  const [goalAvgSalePrice, setGoalAvgSalePrice] = useState(0);
+  const [goalAvgCommPct, setGoalAvgCommPct] = useState(0);
+  const [goalAvgNetPct, setGoalAvgNetPct] = useState(0);
   const [loadingLiveCommission, setLoadingLiveCommission] = useState(false);
 
-  // Reset overrides when historical stats load
+  // Pre-fill goal assumptions from historical stats when they load
   useEffect(() => {
-    setOverrideAvgSalePrice(0);
-    setOverrideAvgCommPct(0);
-    setOverrideAvgNetPct(0);
-    setOverrideAvgNetCommission(0);
+    if (!historicalStats) return;
+    if (historicalStats.avgSalePrice) setGoalAvgSalePrice(historicalStats.avgSalePrice);
+    if (historicalStats.avgCommissionPct) setGoalAvgCommPct(historicalStats.avgCommissionPct);
+    // avgNetPct pre-fill — will be overwritten by live commission fetch below
+    if (historicalStats.avgNetPct) setGoalAvgNetPct(historicalStats.avgNetPct);
   }, [historicalStats]);
 
   // Fetch live commission structure and compute effective avg net %
@@ -388,13 +387,12 @@ export default function BusinessPlanPage() {
         // Support both field names from different commission plan shapes
         const liveNetPct = activeTier.agentSplitPercent ?? activeTier.agentPct ?? 0;
         if (liveNetPct > 0) {
-          setOverrideAvgNetPct(liveNetPct);
-          // Compute dollar avg net and sync to both the reference card override AND the Advanced Assumptions field
-          const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
-          const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
+          setGoalAvgNetPct(liveNetPct);
+          // Compute dollar avg net and sync to the Advanced Assumptions avgCommission field
+          const commPct = goalAvgCommPct > 0 ? goalAvgCommPct : avgCommPct;
+          const asp = goalAvgSalePrice > 0 ? goalAvgSalePrice : avgSalePrice;
           if (asp > 0 && commPct > 0) {
             const liveAvgNet = Math.round(asp * (commPct / 100) * (liveNetPct / 100));
-            setOverrideAvgNetCommission(liveAvgNet);
             form.setValue('avgCommission', liveAvgNet);
             handleCalculate();
           }
@@ -408,14 +406,14 @@ export default function BusinessPlanPage() {
     } finally {
       setLoadingLiveCommission(false);
     }
-  }, [user, isImpersonating, effectiveUid, avgCommPct, avgSalePrice, overrideAvgCommPct, overrideAvgSalePrice, form, handleCalculate, toast]);
+  }, [user, isImpersonating, effectiveUid, avgCommPct, avgSalePrice, goalAvgCommPct, goalAvgSalePrice, form, handleCalculate, toast]);
 
   const handleVolumeChange = (val: string) => {
     setYearlyVolume(val);
     const vol = parseFloat(val) || 0;
-    const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
-    const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
-    const netPct = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
+    const asp = goalAvgSalePrice > 0 ? goalAvgSalePrice : avgSalePrice;
+    const commPct = goalAvgCommPct > 0 ? goalAvgCommPct : avgCommPct;
+    const netPct = goalAvgNetPct > 0 ? goalAvgNetPct : avgNetPct;
     if (vol > 0 && asp > 0) setYearlySales(String(Math.round(vol / asp)));
     if (vol > 0 && commPct > 0 && netPct > 0) {
       const totalGCI = vol * (commPct / 100);
@@ -427,9 +425,9 @@ export default function BusinessPlanPage() {
   const handleSalesChange = (val: string) => {
     setYearlySales(val);
     const sales = parseInt(val, 10) || 0;
-    const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
-    const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
-    const netPct = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
+    const asp = goalAvgSalePrice > 0 ? goalAvgSalePrice : avgSalePrice;
+    const commPct = goalAvgCommPct > 0 ? goalAvgCommPct : avgCommPct;
+    const netPct = goalAvgNetPct > 0 ? goalAvgNetPct : avgNetPct;
     if (sales > 0 && asp > 0) {
       const calcVol = Math.round(sales * asp);
       setYearlyVolume(String(calcVol));
@@ -443,9 +441,9 @@ export default function BusinessPlanPage() {
   const handleGoalIncomeChange = (val: string) => {
     setYearlyIncome(val);
     const income = parseFloat(val) || 0;
-    const asp = overrideAvgSalePrice > 0 ? overrideAvgSalePrice : avgSalePrice;
-    const commPct = overrideAvgCommPct > 0 ? overrideAvgCommPct : avgCommPct;
-    const netPct = overrideAvgNetPct > 0 ? overrideAvgNetPct : avgNetPct;
+    const asp = goalAvgSalePrice > 0 ? goalAvgSalePrice : avgSalePrice;
+    const commPct = goalAvgCommPct > 0 ? goalAvgCommPct : avgCommPct;
+    const netPct = goalAvgNetPct > 0 ? goalAvgNetPct : avgNetPct;
     if (income > 0 && netPct > 0 && commPct > 0) {
       const calcVol = Math.round(income / ((commPct / 100) * (netPct / 100)));
       setYearlyVolume(String(calcVol));
@@ -529,17 +527,6 @@ export default function BusinessPlanPage() {
     }
   };
 
-  const useHistoricalNumbers = useCallback(() => {
-    if (!historicalStats) return;
-    const r = historicalStats.conversionRates;
-    if (historicalStats.avgNetCommission !== null) form.setValue('avgCommission', historicalStats.avgNetCommission);
-    if (r.callToEngagement !== null) form.setValue('conversions.callToEngagement', r.callToEngagement);
-    if (r.engagementToAppointmentSet !== null) form.setValue('conversions.engagementToAppointmentSet', r.engagementToAppointmentSet);
-    if (r.appointmentSetToHeld !== null) form.setValue('conversions.appointmentSetToHeld', r.appointmentSetToHeld);
-    if (r.appointmentHeldToContract !== null) form.setValue('conversions.appointmentHeldToContract', r.appointmentHeldToContract);
-    if (r.contractToClosing !== null) form.setValue('conversions.contractToClosing', r.contractToClosing);
-    setTimeout(handleCalculate, 0);
-  }, [historicalStats, form, handleCalculate]);
 
   useEffect(() => {
     if (userLoading || !year) return;
@@ -774,136 +761,44 @@ export default function BusinessPlanPage() {
         ) : historicalStats ? (
           <Card className="mb-6 border-blue-300 bg-blue-50 dark:bg-blue-950/30">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2 text-blue-800 dark:text-blue-300">
-                  <BookOpen className="h-5 w-5" />
-                  {historicalStats.year} Actual Performance Reference
-                </CardTitle>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="border-blue-400 text-blue-700 hover:bg-blue-100 dark:text-blue-300"
-                  onClick={useHistoricalNumbers}
-                >
-                  <ArrowDownToLine className="h-4 w-4 mr-1" />
-                  Use These Numbers in Assumptions
-                </Button>
-              </div>
+              <CardTitle className="text-base flex items-center gap-2 text-blue-800 dark:text-blue-300">
+                <BookOpen className="h-5 w-5" />
+                {historicalStats.year} Actual Performance Reference
+              </CardTitle>
               <CardDescription className="text-blue-700 dark:text-blue-400">
-                Your actual results from {historicalStats.year} — use these to set realistic assumptions, or adjust as needed.
+                Your actual results from {historicalStats.year} — for reference only. Set your {parseInt(year)} goals in the Advanced Assumptions below.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Row 1: Transaction averages — each card has an editable override input */}
+              {/* Row 1: Transaction averages — read-only reference */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {/* Avg Sale Price */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Sale Price</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
-                    {historicalStats.avgSalePrice !== null
-                      ? `$${historicalStats.avgSalePrice.toLocaleString()}`
-                      : '—'}
+                    {historicalStats.avgSalePrice !== null ? `$${historicalStats.avgSalePrice.toLocaleString()}` : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground mb-2">per closing (historical)</p>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
-                    <Input
-                      type="number"
-                      className="h-7 text-xs px-2 border-blue-300"
-                      placeholder={String(historicalStats.avgSalePrice ?? '')}
-                      value={overrideAvgSalePrice > 0 ? overrideAvgSalePrice : ''}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value) || 0;
-                        setOverrideAvgSalePrice(v);
-                        setTimeout(distributeGoals, 50);
-                      }}
-                    />
-                  </div>
+                  <p className="text-xs text-muted-foreground">per closing (historical)</p>
                 </div>
-                {/* Avg Commission % */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Commission %</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
-                    {historicalStats.avgCommissionPct !== null
-                      ? `${historicalStats.avgCommissionPct.toFixed(2)}%`
-                      : '—'}
+                    {historicalStats.avgCommissionPct !== null ? `${historicalStats.avgCommissionPct.toFixed(2)}%` : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground mb-2">GCI / sale price (historical)</p>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      className="h-7 text-xs px-2 border-blue-300"
-                      placeholder={historicalStats.avgCommissionPct != null ? historicalStats.avgCommissionPct.toFixed(2) : ''}
-                      value={overrideAvgCommPct > 0 ? overrideAvgCommPct : ''}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value) || 0;
-                        setOverrideAvgCommPct(v);
-                        setTimeout(distributeGoals, 50);
-                      }}
-                    />
-                  </div>
+                  <p className="text-xs text-muted-foreground">GCI / sale price (historical)</p>
                 </div>
-                {/* Avg Net Take-Home (derived, shows override if applicable) */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Net Take-Home</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
-                    {historicalStats.avgNetCommission !== null
-                      ? `$${historicalStats.avgNetCommission.toLocaleString()}`
-                      : '—'}
+                    {historicalStats.avgNetCommission !== null ? `$${historicalStats.avgNetCommission.toLocaleString()}` : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground mb-2">per closing (historical)</p>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
-                    <Input
-                      type="number"
-                      step="1"
-                      className="h-7 text-xs px-2 border-blue-300"
-                      placeholder={historicalStats.avgNetCommission != null ? String(Math.round(historicalStats.avgNetCommission)) : ''}
-                      value={overrideAvgNetCommission > 0 ? overrideAvgNetCommission : ''}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value) || 0;
-                        setOverrideAvgNetCommission(v);
-                        // Sync directly to the Advanced Assumptions avgCommission field
-                        if (v > 0) {
-                          form.setValue('avgCommission', v);
-                          handleCalculate();
-                        }
-                      }}
-                    />
-                  </div>
-                  {overrideAvgNetCommission > 0 && (
-                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                      → Advanced Assumptions updated
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">per closing (historical)</p>
                 </div>
-                {/* Avg Net % */}
                 <div className="rounded-lg bg-white dark:bg-blue-900/30 border border-blue-200 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Avg Net %</p>
                   <p className="text-xl font-bold text-blue-800 dark:text-blue-200">
-                    {historicalStats.avgNetPct !== null
-                      ? `${historicalStats.avgNetPct.toFixed(1)}%`
-                      : '—'}
+                    {historicalStats.avgNetPct !== null ? `${historicalStats.avgNetPct.toFixed(1)}%` : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground mb-2">of GCI kept (historical)</p>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground shrink-0">Override:</span>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="h-7 text-xs px-2 border-blue-300"
-                      placeholder={historicalStats.avgNetPct != null ? historicalStats.avgNetPct.toFixed(1) : ''}
-                      value={overrideAvgNetPct > 0 ? overrideAvgNetPct : ''}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value) || 0;
-                        setOverrideAvgNetPct(v);
-                        setTimeout(distributeGoals, 50);
-                      }}
-                    />
-                  </div>
+                  <p className="text-xs text-muted-foreground">of GCI kept (historical)</p>
                 </div>
               </div>
               {/* Row 2: Volume / closings summary */}
@@ -1287,58 +1182,134 @@ export default function BusinessPlanPage() {
                       <DollarSign /> Financial & Time
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <CardContent className="space-y-6">
+                    {/* Goal-year financial assumptions — three inputs that drive the computed avg net $ */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Goal Avg Sale Price */}
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Goal Avg Sale Price</label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="number"
+                            className="pl-9"
+                            value={goalAvgSalePrice || ''}
+                            placeholder={String(historicalStats?.avgSalePrice ?? 300000)}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value) || 0;
+                              setGoalAvgSalePrice(v);
+                              // Recompute avgCommission in form
+                              if (v > 0 && goalAvgCommPct > 0 && goalAvgNetPct > 0) {
+                                const net = Math.round(v * (goalAvgCommPct / 100) * (goalAvgNetPct / 100));
+                                form.setValue('avgCommission', net);
+                                handleCalculate();
+                              }
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Expected avg sale price for {year}</p>
+                      </div>
+                      {/* Goal Avg Commission % */}
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Goal Avg Commission %</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            className="pl-8"
+                            value={goalAvgCommPct || ''}
+                            placeholder={String(historicalStats?.avgCommissionPct?.toFixed(2) ?? '2.5')}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value) || 0;
+                              setGoalAvgCommPct(v);
+                              if (goalAvgSalePrice > 0 && v > 0 && goalAvgNetPct > 0) {
+                                const net = Math.round(goalAvgSalePrice * (v / 100) * (goalAvgNetPct / 100));
+                                form.setValue('avgCommission', net);
+                                handleCalculate();
+                              }
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">GCI as % of sale price for {year}</p>
+                      </div>
+                      {/* Goal Avg Net % of GCI — with Use Live Commission button */}
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Goal Avg Net % of GCI</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            className="pl-8"
+                            value={goalAvgNetPct || ''}
+                            placeholder={String(historicalStats?.avgNetPct?.toFixed(1) ?? '70')}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value) || 0;
+                              setGoalAvgNetPct(v);
+                              if (goalAvgSalePrice > 0 && goalAvgCommPct > 0 && v > 0) {
+                                const net = Math.round(goalAvgSalePrice * (goalAvgCommPct / 100) * (v / 100));
+                                form.setValue('avgCommission', net);
+                                handleCalculate();
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 text-xs"
+                            onClick={fetchLiveCommission}
+                            disabled={loadingLiveCommission}
+                          >
+                            <TrendingUp className="h-3 w-3 mr-1" />
+                            {loadingLiveCommission ? 'Loading...' : 'Use Live Commission'}
+                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+                                  <Info className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p className="font-semibold mb-1">Use Live Commission</p>
+                                <p>Pulls your current commission split directly from your agent profile. Finds your active tier based on YTD GCI and sets this % automatically.</p>
+                                <p className="mt-1 text-muted-foreground">Example: If your plan is 75% agent split, this field becomes 75% and the Avg Net $ per Deal is computed automatically.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Your commission split % for {year}</p>
+                      </div>
+                    </div>
+                    {/* Computed Avg Net $ per Deal — read-only derived value */}
+                    {goalAvgSalePrice > 0 && goalAvgCommPct > 0 && goalAvgNetPct > 0 && (
+                      <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-800 dark:text-green-300">Avg Net $ per Deal</p>
+                          <p className="text-xs text-muted-foreground">
+                            ${goalAvgSalePrice.toLocaleString()} &times; {goalAvgCommPct.toFixed(2)}% &times; {goalAvgNetPct.toFixed(1)}%
+                          </p>
+                        </div>
+                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                          ${Math.round(goalAvgSalePrice * (goalAvgCommPct / 100) * (goalAvgNetPct / 100)).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                    {/* Hidden avgCommission form field — kept for form submission, driven by the three inputs above */}
                     <FormField
                       control={form.control}
                       name="avgCommission"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Average Net Commission</FormLabel>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                            <FormControl>
-                              <Input
-                                type="number"
-                                {...field}
-                                className="pl-10"
-                                onChange={(e) => {
-                                  field.onChange(e);
-                                  handleCalculate();
-                                }}
-                              />
-                            </FormControl>
-                          </div>
-                          <div className="flex items-center gap-1 mt-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="flex-1 text-xs"
-                              onClick={fetchLiveCommission}
-                              disabled={loadingLiveCommission}
-                            >
-                              <TrendingUp className="h-3 w-3 mr-1" />
-                              {loadingLiveCommission ? 'Loading...' : 'Use Live Commission'}
-                            </Button>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
-                                    <Info className="h-4 w-4" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-xs text-xs">
-                                  <p className="font-semibold mb-1">Use Live Commission</p>
-                                  <p>Pulls your current commission split directly from your agent profile. It finds your active tier based on your YTD GCI earned this year and calculates your average net dollar per deal using that live split percentage.</p>
-                                  <p className="mt-1 text-muted-foreground">Example: If your plan is 75% agent split and your avg sale price is $300K at 2.5% commission, your avg net per deal = $300K × 2.5% × 75% = $5,625.</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                          <FormMessage />
+                        <FormItem className="hidden">
+                          <FormControl><Input type="number" {...field} /></FormControl>
                         </FormItem>
                       )}
                     />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField
                       control={form.control}
                       name="workingDaysPerMonth"
@@ -1383,6 +1354,7 @@ export default function BusinessPlanPage() {
                         </FormItem>
                       )}
                     />
+                    </div>{/* end grid cols-2 */}
                   </CardContent>
                 </Card>
               </div>
