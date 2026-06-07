@@ -18,6 +18,11 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import type { RecruitingIncentiveConfig } from '@/lib/types/recruitingConfig';
+import { DEFAULT_RECRUITING_CONFIG } from '@/lib/types/recruitingConfig';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Link from 'next/link';
 
@@ -1121,9 +1126,10 @@ export default function RecruitingDashboardPage() {
       </div>
 
       <Tabs defaultValue="roster" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
           <TabsTrigger value="recruiting">Recruiting Pipeline</TabsTrigger>
+          <TabsTrigger value="incentive">Incentive Program Config</TabsTrigger>
         </TabsList>
 
         {/* ── TAB 1: Agent Performance Roster ─────────────────────────────── */}
@@ -1295,7 +1301,192 @@ export default function RecruitingDashboardPage() {
       <RecruitingPipelinePanel />
 
         </TabsContent>
+
+        {/* ── TAB 3: Incentive Program Config ─────────────────────────────── */}
+        <TabsContent value="incentive" className="space-y-6 mt-6">
+          <IncentiveConfigPanel />
+        </TabsContent>
+
       </Tabs>
+    </div>
+  );
+}
+
+// ── Incentive Program Config Panel ──────────────────────────────────────────
+function IncentiveConfigPanel() {
+  const { user } = useUser();
+  const { toast } = useToast();
+  const [config, setConfig] = useState<RecruitingIncentiveConfig | null>(null);
+  const [isDefault, setIsDefault] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<Omit<RecruitingIncentiveConfig, 'id' | 'updatedAt' | 'updatedByUid'>>(DEFAULT_RECRUITING_CONFIG);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/admin/recruiting-config', { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        if (json.ok) {
+          setConfig(json.config);
+          setIsDefault(json.isDefault);
+          const { id: _id, updatedAt: _ua, updatedByUid: _ub, ...rest } = json.config;
+          setForm(rest);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/recruiting-config', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setConfig(json.config);
+        setIsDefault(false);
+        toast({ title: 'Saved', description: 'Incentive program configuration saved.' });
+      } else {
+        toast({ title: 'Error', description: json.error || 'Failed to save configuration.', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Unexpected error.', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const upd = (key: keyof typeof form, val: any) => setForm(p => ({ ...p, [key]: val }));
+
+  if (loading) return <div className="space-y-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>;
+
+  return (
+    <div className="space-y-6">
+      {isDefault && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Using Default Configuration</AlertTitle>
+          <AlertDescription>No custom configuration has been saved yet. The values below are the system defaults. Save to lock in your program settings.</AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-green-600" /> Recruiting Incentive Program Settings</CardTitle>
+          <CardDescription>Configure the recruiting incentive program for your brokerage. These settings apply to all agents and are used in the Recruiting Incentive Tracker and Business Plan projections.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+
+          {/* Program Name & Enable */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label>Program Name</Label>
+              <Input value={form.programName} onChange={e => upd('programName', e.target.value)} placeholder="e.g. Keaty Recruiting Incentive Program" />
+            </div>
+            <div className="space-y-2">
+              <Label>Program Status</Label>
+              <div className="flex items-center gap-3 pt-2">
+                <Switch checked={form.enabled} onCheckedChange={v => upd('enabled', v)} />
+                <span className={form.enabled ? 'text-green-600 font-medium' : 'text-muted-foreground'}>{form.enabled ? 'Active' : 'Disabled'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* GCI Threshold & Window */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <Label>GCI Threshold to Qualify ($)</Label>
+              <Input type="number" min={0} value={form.gciThreshold} onChange={e => upd('gciThreshold', Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground">Recruit must close this much GCI within their window to trigger a payout.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Window Type</Label>
+              <Select value={form.windowType} onValueChange={v => upd('windowType', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="anniversary">Anniversary Year (12 months from hire date)</SelectItem>
+                  <SelectItem value="calendar">Calendar Year (Jan 1 – Dec 31)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Window Length (months)</Label>
+              <Input type="number" min={1} max={24} value={form.windowMonths} onChange={e => upd('windowMonths', Number(e.target.value))} />
+            </div>
+          </div>
+
+          {/* Payout Amounts */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <Label>Tier 1 Payout Amount ($)</Label>
+              <Input type="number" min={0} value={form.tier1PayoutAmount} onChange={e => upd('tier1PayoutAmount', Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground">Paid to the direct referrer when their recruit qualifies.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Tier 2 Payout Amount ($)</Label>
+              <Input type="number" min={0} value={form.tier2PayoutAmount} onChange={e => upd('tier2PayoutAmount', Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground">Paid to the upline agent when a Tier 2 recruit qualifies. Set to $0 to disable Tier 2 payouts.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Tier Depth</Label>
+              <Select value={String(form.tierDepth)} onValueChange={v => upd('tierDepth', Number(v) as 1 | 2)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 — Direct recruits only</SelectItem>
+                  <SelectItem value="2">2 — Direct + their recruits</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Recurring */}
+          <div className="space-y-2">
+            <Label>Payout Recurrence</Label>
+            <div className="flex items-center gap-3">
+              <Switch checked={form.recurring} onCheckedChange={v => upd('recurring', v)} />
+              <span className="text-sm">{form.recurring ? 'Recurring — payout renews every year the recruit re-qualifies' : 'One-time — payout is earned once per recruit, ever'}</span>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <Label>Program Description (shown to agents)</Label>
+            <Textarea value={form.description || ''} onChange={e => upd('description', e.target.value)} rows={3} placeholder="Describe the program in plain language for agents..." />
+          </div>
+
+          {/* Preview */}
+          <div className="rounded-lg bg-muted/50 border p-4 space-y-1">
+            <p className="text-sm font-semibold mb-2">Program Preview</p>
+            <p className="text-sm text-muted-foreground">Earn <strong>${form.tier1PayoutAmount.toLocaleString()}</strong> for each agent you directly recruit who closes <strong>${form.gciThreshold.toLocaleString()}</strong> in GCI within their {form.windowType === 'anniversary' ? 'anniversary year' : 'calendar year'} ({form.windowMonths} months).</p>
+            {form.tierDepth === 2 && form.tier2PayoutAmount > 0 && (
+              <p className="text-sm text-muted-foreground">Also earn <strong>${form.tier2PayoutAmount.toLocaleString()}</strong> for each agent your recruits bring on who also qualifies.</p>
+            )}
+            {form.recurring && <p className="text-sm text-muted-foreground">This payout <strong>renews every year</strong> the recruit stays active and re-qualifies.</p>}
+          </div>
+
+          {config?.updatedAt && (
+            <p className="text-xs text-muted-foreground">Last saved: {new Date(config.updatedAt).toLocaleString()}</p>
+          )}
+
+          <Button onClick={handleSave} disabled={saving} className="w-full md:w-auto">
+            <Save className="h-4 w-4 mr-2" />{saving ? 'Saving…' : 'Save Configuration'}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

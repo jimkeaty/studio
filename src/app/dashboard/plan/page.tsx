@@ -35,6 +35,8 @@ import {
   Save,
   ChevronDown,
   ChevronUp,
+  UserPlus,
+  Layers,
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
@@ -255,6 +257,16 @@ export default function BusinessPlanPage() {
   const [isSavingGoals, setIsSavingGoals] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(true);
   const [growthTarget, setGrowthTarget] = useState<number | 'other' | null>(null);
+
+  // ── Recruiting Income Pillar state ──────────────────────────────────────
+  // Industry standard: ~25% of direct recruits will also recruit 1-2 others (Tier 2)
+  const INDUSTRY_TIER2_RATE = 0.25; // 25% of direct recruits also recruit someone
+  const INDUSTRY_TIER2_AVG = 1.5;   // avg number of Tier 2 recruits per Tier 1 who recruits
+
+  const [recruitingGoalIncome, setRecruitingGoalIncome] = useState('');
+  const [recruitingConfig, setRecruitingConfig] = useState<{ tier1PayoutAmount: number; tier2PayoutAmount: number; gciThreshold: number; enabled: boolean } | null>(null);
+  const [recruitingActual, setRecruitingActual] = useState<{ totalAnnualIncome: number; tier1QualifiedCount: number; tier2QualifiedCount: number } | null>(null);
+  const [recruitingPillarOpen, setRecruitingPillarOpen] = useState(false);
   const [customGrowthPct, setCustomGrowthPct] = useState('');
   const [yearlyVolume, setYearlyVolume] = useState('');
   const [yearlySales, setYearlySales] = useState('');
@@ -556,6 +568,24 @@ export default function BusinessPlanPage() {
           .catch(() => {})
           .finally(() => setHistLoading(false));
 
+        // Load recruiting config and actual incentive income in parallel
+        fetch('/api/admin/recruiting-config', { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.json())
+          .then((d: any) => { if (d.ok) setRecruitingConfig(d.config); })
+          .catch(() => {});
+        fetch(`/api/recruiting?${isImpersonating && effectiveUid ? `viewAs=${effectiveUid}` : ''}`, { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.json())
+          .then((d: any) => {
+            if (d.ok && d.summary) {
+              setRecruitingActual({
+                totalAnnualIncome: d.summary.totalAnnualIncome ?? 0,
+                tier1QualifiedCount: d.summary.tier1QualifiedCount ?? 0,
+                tier2QualifiedCount: d.summary.tier2QualifiedCount ?? 0,
+              });
+            }
+          })
+          .catch(() => {});
+
         // Load brokerage-wide seasonality (available to all agents as a baseline)
         if (brokerageSeasonalityYear !== histYear) {
           fetch(`/api/brokerage-seasonality?year=${histYear}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -599,7 +629,11 @@ export default function BusinessPlanPage() {
 
         // If no plan exists, server returns ok:true with plan:{} — keep defaults
         if (json?.ok && json.plan && typeof json.plan === "object" && Object.keys(json.plan).length > 0) {
-          const plan = json.plan as BusinessPlan;
+          const plan = json.plan as BusinessPlan & { recruitingGoalIncome?: number };
+          // Restore recruiting pillar goal if saved
+          if (plan.recruitingGoalIncome != null && plan.recruitingGoalIncome > 0) {
+            setRecruitingGoalIncome(String(plan.recruitingGoalIncome));
+          }
 
           // Only reset if we have plan assumptions; otherwise defaults stay
           if (plan?.assumptions?.conversionRates) {
@@ -668,7 +702,7 @@ export default function BusinessPlanPage() {
 
       const finalCalculatedPlan = calculatePlan(data.annualIncomeGoal, assumptions);
 
-      const planToSave: BusinessPlan = {
+      const planToSave: BusinessPlan & { recruitingGoalIncome?: number } = {
         userId: effectiveUid ?? user.uid,
         year: parseInt(year, 10),
         annualIncomeGoal: data.annualIncomeGoal,
@@ -677,6 +711,7 @@ export default function BusinessPlanPage() {
         assumptions,
         calculatedTargets: finalCalculatedPlan,
         updatedAt: new Date().toISOString(),
+        ...(parseFloat(recruitingGoalIncome) > 0 ? { recruitingGoalIncome: parseFloat(recruitingGoalIncome) } : {}),
       };
 
       const token = await user.getIdToken();
@@ -1691,7 +1726,154 @@ export default function BusinessPlanPage() {
           </Card>
         </Collapsible>
 
-        {/* ── SECTION 7: SAVE PLAN ─────────────────────────────────────── */}
+        {/* ── SECTION 7: RECRUITING INCOME PILLAR ──────────────────── */}
+        <Collapsible open={recruitingPillarOpen} onOpenChange={setRecruitingPillarOpen}>
+          <Card className="border-violet-200 bg-violet-50/30">
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer select-none hover:bg-violet-50/60 rounded-t-lg transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <UserPlus className="h-5 w-5 text-violet-600" />
+                    <div>
+                      <CardTitle className="text-base">Recruiting Income Pillar <span className="text-xs font-normal text-muted-foreground ml-2">(Optional)</span></CardTitle>
+                      <CardDescription>Plan how many agents you want to recruit to add an extra income stream alongside your sales goal.</CardDescription>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {parseFloat(recruitingGoalIncome) > 0 && (
+                      <Badge variant="outline" className="text-violet-700 border-violet-300 bg-violet-50">
+                        Goal: {fmtCurrency(parseFloat(recruitingGoalIncome))}
+                      </Badge>
+                    )}
+                    {recruitingPillarOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </div>
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="space-y-6 pt-0">
+                {recruitingConfig && !recruitingConfig.enabled && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                    The recruiting incentive program is currently disabled. Contact your broker to enable it.
+                  </div>
+                )}
+
+                {/* Goal Input */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1">
+                      How much do you want to earn from recruiting this year?
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild><Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            This is a separate income pillar — it does not reduce your sales targets. It is purely additive. Enter your recruiting income goal and the plan will tell you how many agents you need to recruit.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        min={0}
+                        step={500}
+                        className="pl-8"
+                        placeholder="e.g. 5000"
+                        value={recruitingGoalIncome}
+                        onChange={e => setRecruitingGoalIncome(e.target.value)}
+                      />
+                    </div>
+                    {recruitingActual && recruitingActual.totalAnnualIncome > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Current year actual: <span className="font-semibold text-green-700">{fmtCurrency(recruitingActual.totalAnnualIncome)}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Plan vs Actual summary */}
+                  {recruitingActual && (
+                    <div className="rounded-lg border bg-white p-4 space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Current Year Actual</p>
+                      <div className="flex justify-between text-sm">
+                        <span>Tier 1 qualified recruits</span>
+                        <span className="font-semibold">{recruitingActual.tier1QualifiedCount}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Tier 2 qualified recruits</span>
+                        <span className="font-semibold">{recruitingActual.tier2QualifiedCount}</span>
+                      </div>
+                      <Separator className="my-2" />
+                      <div className="flex justify-between text-sm font-semibold">
+                        <span>Total incentive income earned</span>
+                        <span className="text-green-700">{fmtCurrency(recruitingActual.totalAnnualIncome)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Reverse-calculated recruiting plan */}
+                {(() => {
+                  const goalAmt = parseFloat(recruitingGoalIncome);
+                  const t1Pay = recruitingConfig?.tier1PayoutAmount ?? 500;
+                  const t2Pay = recruitingConfig?.tier2PayoutAmount ?? 500;
+                  const gciThreshold = recruitingConfig?.gciThreshold ?? 40000;
+                  if (!goalAmt || goalAmt <= 0) return null;
+
+                  // Work backward: each direct recruit = t1Pay + (TIER2_RATE × TIER2_AVG × t2Pay)
+                  const incomePerDirectRecruit = t1Pay + (INDUSTRY_TIER2_RATE * INDUSTRY_TIER2_AVG * t2Pay);
+                  const directRecruitsNeeded = Math.ceil(goalAmt / incomePerDirectRecruit);
+                  const expectedTier2 = Math.round(directRecruitsNeeded * INDUSTRY_TIER2_RATE * INDUSTRY_TIER2_AVG);
+                  const totalExpectedIncome = Math.round(
+                    directRecruitsNeeded * t1Pay + expectedTier2 * t2Pay
+                  );
+                  const recruitsPerMonth = (directRecruitsNeeded / 12).toFixed(1);
+                  const recruitsPerQuarter = Math.ceil(directRecruitsNeeded / 4);
+
+                  return (
+                    <div className="space-y-4">
+                      <Separator />
+                      <div className="flex items-center gap-2">
+                        <Layers className="h-4 w-4 text-violet-600" />
+                        <p className="text-sm font-semibold">Your Recruiting Plan to Reach {fmtCurrency(goalAmt)}</p>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="rounded-lg border bg-white p-4 text-center">
+                          <p className="text-2xl font-bold text-violet-700">{directRecruitsNeeded}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Direct recruits needed</p>
+                          <p className="text-xs text-muted-foreground">(Tier 1)</p>
+                        </div>
+                        <div className="rounded-lg border bg-white p-4 text-center">
+                          <p className="text-2xl font-bold text-violet-500">{expectedTier2}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Projected Tier 2 recruits</p>
+                          <p className="text-xs text-muted-foreground">(from your recruits recruiting)</p>
+                        </div>
+                        <div className="rounded-lg border bg-white p-4 text-center">
+                          <p className="text-2xl font-bold">{recruitsPerMonth}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Recruits per month</p>
+                          <p className="text-xs text-muted-foreground">({recruitsPerQuarter}/quarter)</p>
+                        </div>
+                        <div className="rounded-lg border bg-white p-4 text-center">
+                          <p className="text-2xl font-bold text-green-700">{fmtCurrency(totalExpectedIncome)}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Projected total income</p>
+                          <p className="text-xs text-muted-foreground">(Tier 1 + Tier 2)</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg bg-violet-50 border border-violet-200 p-4 text-sm space-y-1">
+                        <p className="font-semibold text-violet-800 mb-2">How this is calculated</p>
+                        <p className="text-muted-foreground">Each direct recruit who closes <strong>{fmtCurrency(gciThreshold)}</strong> in GCI earns you <strong>{fmtCurrency(t1Pay)}</strong>. Based on industry standards, approximately <strong>25%</strong> of your direct recruits will also recruit 1–2 agents of their own (Tier 2), earning you an additional <strong>{fmtCurrency(t2Pay)}</strong> per qualified Tier 2 recruit. These payouts <strong>renew every year</strong> as long as each recruit stays active and re-qualifies.</p>
+                        <p className="text-xs text-muted-foreground mt-2">Industry standard Tier 2 rate: 25% of direct recruits recruit others · Avg Tier 2 per recruiter: 1.5</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
+        {/* ── SECTION 8: SAVE PLAN ─────────────────────────────────────── */}
         <div className="flex justify-end pt-2 pb-8">
           <Button type="submit" size="lg" disabled={isSaving}>
             {isSaving ? 'Saving...' : <><CheckCircle className="mr-2 h-4 w-4" /> Save Plan</>}
