@@ -3,11 +3,12 @@
 //   - activeClosed: agents who have closed at least 1 deal (activation by deal)
 //   - activeTenure: agents who have been with the brokerage 3+ months but no deal yet
 //   - pipeline: recruiting pipeline candidates with expected start dates in future months
-// Also returns projection line, goal line, KPI cards, and comparison year data.
+// Also returns projection line, goal line, KPI cards, comparison year data,
+// deals-per-agent per month, team breakdown, and grace period graduation projection.
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
-import { format, addMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { format, addMonths } from 'date-fns';
 import type admin from 'firebase-admin';
 
 function jsonError(s: number, e: string) {
@@ -43,12 +44,6 @@ function toYearMonth(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/** Parse a YYYY-MM string into a Date (first day of that month) */
-function fromYearMonth(ym: string): Date {
-  const [y, m] = ym.split('-').map(Number);
-  return new Date(y, m - 1, 1);
-}
-
 /**
  * Determine the activation month for an agent.
  * Activation = earliest of:
@@ -68,11 +63,9 @@ function getActivationMonth(
       tenureActivation = toYearMonth(tenureDate);
     }
   }
-
   if (!firstDealMonth && !tenureActivation) return null;
   if (!firstDealMonth) return tenureActivation;
   if (!tenureActivation) return firstDealMonth;
-  // Return the earlier of the two
   return firstDealMonth < tenureActivation ? firstDealMonth : tenureActivation;
 }
 
@@ -85,6 +78,7 @@ export async function GET(req: NextRequest) {
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()), 10);
     const compareYearParam = searchParams.get('compareYear');
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
+    const teamGroupFilter = searchParams.get('teamGroup') || null; // e.g. 'cgl', 'sgl', 'charles_ditch_team'
 
     // ── 1. Fetch all agent profiles (excluding demo accounts) ───────────────
     const agentSnap = await adminDb.collection('agentProfiles').get();
@@ -93,9 +87,17 @@ export async function GET(req: NextRequest) {
         .filter(d => d.data().isDemoAccount === true)
         .map(d => String(d.data().agentId || d.id))
     );
-    const agents = agentSnap.docs
+    let agents = agentSnap.docs
       .filter(d => d.data().isDemoAccount !== true)
       .map(d => ({ id: d.id, ...d.data() } as any));
+
+    // Apply team group filter if specified
+    if (teamGroupFilter) {
+      agents = agents.filter((a: any) => {
+        const tg = (a.teamGroup || '').toLowerCase();
+        return tg === teamGroupFilter.toLowerCase();
+      });
+    }
 
     // ── 2. Fetch all closed transactions (all years) to find first deal dates ─
     const txSnap = await adminDb.collection('transactions')
@@ -104,20 +106,23 @@ export async function GET(req: NextRequest) {
 
     // Build map: agentId → earliest closed month (YYYY-MM)
     const firstDealMap = new Map<string, string>();
+    // Build map: agentId → Set of YYYY-MM months they had a closed deal
+    const dealMonthsMap = new Map<string, Set<string>>();
+
     for (const doc of txSnap.docs) {
       const t = doc.data() as any;
-      // Skip demo account transactions
       if (demoAgentIds.size > 0 && demoAgentIds.has(String(t.agentId || ''))) continue;
       const closedDate = parseDate(t.closedDate);
       if (!closedDate) continue;
       const ym = toYearMonth(closedDate);
-
       const agentIds = [t.agentId, t.coAgentId].filter(Boolean) as string[];
       for (const aid of agentIds) {
+        // Track first deal
         const existing = firstDealMap.get(aid);
-        if (!existing || ym < existing) {
-          firstDealMap.set(aid, ym);
-        }
+        if (!existing || ym < existing) firstDealMap.set(aid, ym);
+        // Track all deal months
+        if (!dealMonthsMap.has(aid)) dealMonthsMap.set(aid, new Set());
+        dealMonthsMap.get(aid)!.add(ym);
       }
     }
 
@@ -128,15 +133,11 @@ export async function GET(req: NextRequest) {
     // ── 4. Fetch recruiting goals for the year ───────────────────────────────
     const goalsSnap = await adminDb.collection('recruitingGoals')
       .where('year', '==', year).get();
-    const goalsMap = new Map<number, number>(); // month (1-12) → goal agent count
+    const goalsMap = new Map<number, number>();
     goalsSnap.docs.forEach(d => {
       const g = d.data() as any;
-      if (g.month && g.activeAgentsGoal != null) {
-        goalsMap.set(g.month, g.activeAgentsGoal);
-      }
+      if (g.month && g.activeAgentsGoal != null) goalsMap.set(g.month, g.activeAgentsGoal);
     });
-
-    // Also check brokerCommandGoals for agent count goals (legacy)
     const bcGoalsSnap = await adminDb.collection('brokerCommandGoals')
       .where('year', '==', year)
       .where('segment', '==', 'AGENT_COUNT')
@@ -151,10 +152,12 @@ export async function GET(req: NextRequest) {
     // ── 5. Build per-agent activation/deactivation info ──────────────────────
     type AgentRecord = {
       agentId: string;
-      activationMonth: string | null; // YYYY-MM when they became "active"
-      endMonth: string | null;        // YYYY-MM when they left (exclusive)
+      activationMonth: string | null;
+      endMonth: string | null;
       firstDealMonth: string | null;
       startDate: string | null;
+      teamGroup: string | null;
+      graceEndMonth: string | null; // YYYY-MM when 90-day grace ends
     };
 
     const agentRecords: AgentRecord[] = agents.map((a: any) => {
@@ -166,30 +169,46 @@ export async function GET(req: NextRequest) {
       let endMonth: string | null = null;
       if (endDate) {
         const ed = parseDate(endDate);
-        if (ed) {
-          // Agent is no longer active starting the month after their end date
-          endMonth = toYearMonth(addMonths(ed, 1));
-        }
+        if (ed) endMonth = toYearMonth(addMonths(ed, 1));
       }
-      return { agentId, activationMonth, endMonth, firstDealMonth: firstDeal, startDate };
+      // Grace end month: startDate + 3 months
+      let graceEndMonth: string | null = null;
+      if (startDate) {
+        const sd = parseDate(startDate);
+        if (sd) graceEndMonth = toYearMonth(addMonths(sd, 3));
+      }
+      return {
+        agentId,
+        activationMonth,
+        endMonth,
+        firstDealMonth: firstDeal,
+        startDate,
+        teamGroup: a.teamGroup || null,
+        graceEndMonth,
+      };
     });
 
     // ── 6. Build monthly data for the target year ────────────────────────────
+    const now = new Date();
+    const currentYM = toYearMonth(now);
+
     const months = Array.from({ length: 12 }, (_, i) => {
-      const monthNum = i + 1; // 1-12
+      const monthNum = i + 1;
       const ym = `${year}-${String(monthNum).padStart(2, '0')}`;
 
       let activeClosed = 0;
-      let activeTenure = 0;
+      let activeTenure = 0; // "Active (No Deals Yet)"
+      // Team breakdown
+      const teamCounts: Record<string, number> = {};
 
       for (const ar of agentRecords) {
         if (!ar.activationMonth) continue;
-        // Agent must have activated by this month
         if (ar.activationMonth > ym) continue;
-        // Agent must not have left before this month
         if (ar.endMonth && ar.endMonth <= ym) continue;
 
-        // Classify: activeClosed if they have a closed deal by this month
+        const tg = ar.teamGroup || 'unknown';
+        teamCounts[tg] = (teamCounts[tg] || 0) + 1;
+
         if (ar.firstDealMonth && ar.firstDealMonth <= ym) {
           activeClosed++;
         } else {
@@ -208,6 +227,15 @@ export async function GET(req: NextRequest) {
       const totalActive = activeClosed + activeTenure;
       const goal = goalsMap.get(monthNum) ?? null;
 
+      // Deals closed in this month (for deals-per-agent)
+      let dealsInMonth = 0;
+      for (const [, monthsSet] of dealMonthsMap) {
+        if (monthsSet.has(ym)) dealsInMonth++;
+      }
+      const dealsPerAgent = totalActive > 0
+        ? Math.round((dealsInMonth / totalActive) * 100) / 100
+        : 0;
+
       return {
         month: monthNum,
         label: format(new Date(year, i), 'MMM'),
@@ -217,11 +245,14 @@ export async function GET(req: NextRequest) {
         pipeline: pipelineCount,
         totalActive,
         goal,
+        dealsInMonth,
+        dealsPerAgent,
+        teamCounts,
       };
     });
 
     // ── 7. Build comparison year data ────────────────────────────────────────
-    let compareMonths: Array<{ month: number; totalActive: number }> | null = null;
+    let compareMonths: Array<{ month: number; totalActive: number; dealsPerAgent: number }> | null = null;
     if (compareYear) {
       compareMonths = Array.from({ length: 12 }, (_, i) => {
         const monthNum = i + 1;
@@ -233,16 +264,18 @@ export async function GET(req: NextRequest) {
           if (ar.endMonth && ar.endMonth <= ym) continue;
           total++;
         }
-        return { month: monthNum, totalActive: total };
+        let dealsInMonth = 0;
+        for (const [, monthsSet] of dealMonthsMap) {
+          if (monthsSet.has(ym)) dealsInMonth++;
+        }
+        const dealsPerAgent = total > 0 ? Math.round((dealsInMonth / total) * 100) / 100 : 0;
+        return { month: monthNum, totalActive: total, dealsPerAgent };
       });
     }
 
     // ── 8. Build projection line for future months ───────────────────────────
-    const now = new Date();
-    const currentYM = toYearMonth(now);
     const projectionMonths = months.map(m => {
       if (m.ym <= currentYM) return { month: m.month, projected: null };
-      // Current actives + pipeline agents expected to start by this month
       const currentActives = months.find(x => x.ym === currentYM)?.totalActive ?? 0;
       const pipelineByMonth = pipeline.filter((p: any) => {
         if (!p.expectedStartDate) return false;
@@ -250,8 +283,6 @@ export async function GET(req: NextRequest) {
         if (!sd) return false;
         return toYearMonth(sd) <= m.ym && toYearMonth(sd) > currentYM;
       }).length;
-      // Estimate departures: use average monthly departure rate from last 12 months
-      // For now use a simple 0 departure assumption (can be refined)
       const projected = currentActives + pipelineByMonth;
       return { month: m.month, projected };
     });
@@ -268,7 +299,68 @@ export async function GET(req: NextRequest) {
       return ar.endMonth.startsWith(String(year)) && ar.endMonth <= currentYM;
     }).length;
 
-    // ── 10. Available years for compare selector ─────────────────────────────
+    // YTD deals per agent: total closed deals YTD / current active agents
+    let ytdDeals = 0;
+    for (let m = 1; m <= currentMonthData.month; m++) {
+      const ym = `${year}-${String(m).padStart(2, '0')}`;
+      for (const [, monthsSet] of dealMonthsMap) {
+        if (monthsSet.has(ym)) ytdDeals++;
+      }
+    }
+    const ytdDealsPerAgent = currentMonthData.totalActive > 0
+      ? Math.round((ytdDeals / currentMonthData.totalActive) * 100) / 100
+      : 0;
+
+    // No Deals Yet count: active agents past grace period with no closed deals
+    const noDealsYetCount = agentRecords.filter(ar => {
+      if (!ar.activationMonth) return false;
+      if (ar.activationMonth > currentYM) return false;
+      if (ar.endMonth && ar.endMonth <= currentYM) return false;
+      // Must be past grace period (graceEndMonth <= currentYM)
+      if (!ar.graceEndMonth || ar.graceEndMonth > currentYM) return false;
+      // Must have no closed deals
+      return !ar.firstDealMonth;
+    }).length;
+
+    // ── 10. Grace period graduation projection ───────────────────────────────
+    // For the next 3 months: how many grace-period agents will graduate (complete 90 days)?
+    // These agents are currently in grace period (graceEndMonth > currentYM)
+    // and will become "established active" when their grace period ends.
+    const graceProjection: Array<{
+      ym: string;
+      label: string;
+      graduatingCount: number;
+      projectedTotal: number;
+    }> = [];
+
+    for (let offset = 1; offset <= 3; offset++) {
+      const projDate = addMonths(now, offset);
+      const projYM = toYearMonth(projDate);
+      const projLabel = format(projDate, 'MMM yyyy');
+
+      // Agents graduating in this specific month
+      const graduating = agentRecords.filter(ar => {
+        if (!ar.graceEndMonth) return false;
+        if (ar.endMonth && ar.endMonth <= projYM) return false;
+        return ar.graceEndMonth === projYM;
+      }).length;
+
+      // Total projected active agents in that month (current actives + pipeline joining by then)
+      const currentActives = currentMonthData.totalActive;
+      const pipelineJoining = pipeline.filter((p: any) => {
+        if (!p.expectedStartDate) return false;
+        const sd = parseDate(p.expectedStartDate);
+        if (!sd) return false;
+        const startYM = toYearMonth(sd);
+        return startYM > currentYM && startYM <= projYM;
+      }).length;
+      // Estimate departures as 0 for simplicity
+      const projectedTotal = currentActives + pipelineJoining;
+
+      graceProjection.push({ ym: projYM, label: projLabel, graduatingCount: graduating, projectedTotal });
+    }
+
+    // ── 11. Available years for compare selector ─────────────────────────────
     const allStartYears = agentRecords
       .map(ar => ar.startDate ? new Date(ar.startDate + 'T00:00:00').getFullYear() : null)
       .filter(Boolean) as number[];
@@ -277,9 +369,13 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b - a)
       .slice(0, 5);
 
+    // ── 12. Team group breakdown for current month ───────────────────────────
+    const teamGroupBreakdown = currentMonthData.teamCounts;
+
     return NextResponse.json({
       ok: true,
       year,
+      teamGroupFilter,
       months,
       compareYear,
       compareMonths,
@@ -290,7 +386,12 @@ export async function GET(req: NextRequest) {
         ytdNewHires,
         ytdDepartures,
         pipelineCount: pipeline.length,
+        ytdDealsPerAgent,
+        ytdDeals,
+        noDealsYetCount,
       },
+      graceProjection,
+      teamGroupBreakdown,
       availableYears,
     });
   } catch (err: any) {
