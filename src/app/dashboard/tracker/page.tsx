@@ -125,6 +125,8 @@ export default function DailyTrackerPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showApptModal, setShowApptModal] = useState(false);
+  // Track whether the user has made unsaved changes to the current day's activity
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [apptDraftRows, setApptDraftRows] = useState<DraftAppointment[]>([]);
   const [isSavingAppointments, setIsSavingAppointments] = useState(false);
 
@@ -175,6 +177,7 @@ export default function DailyTrackerPage() {
     const loadDay = async () => {
       if (!user) return;
       setError(null);
+      setHasUnsavedChanges(false);
       try {
         const viewAsParam = isImpersonating && effectiveUid ? `&viewAs=${effectiveUid}` : '';
         const res = await authedFetch(`/api/daily-activity?date=${selectedDate}${viewAsParam}`);
@@ -233,6 +236,7 @@ export default function DailyTrackerPage() {
         }
         return;
       }
+      setHasUnsavedChanges(false);
       toast({ title: 'Saved! ✓', description: `Activity for ${selectedDate} has been logged.` });
       // Refresh range
       const { start, end } = monthStartEnd;
@@ -386,6 +390,7 @@ export default function DailyTrackerPage() {
 
   const selectedActivity = activityMap[selectedDate] || activity;
   const selectedScore = activityScore(selectedActivity);
+  const isToday2 = selectedDate === today;
 
   return (
     <div className="space-y-6">
@@ -593,7 +598,7 @@ export default function DailyTrackerPage() {
                       {calcHours(activity.startTime || '', activity.endTime || '')} hours worked
                     </p>
                   )}
-                  {/* Activity counters */}
+                  {/* Activity counters — editable number input with +/- buttons */}
                   <div className="space-y-2">
                     {[
                       { label: 'Calls', key: 'callsCount' as const, icon: Phone },
@@ -608,14 +613,29 @@ export default function DailyTrackerPage() {
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setActivity(a => ({ ...a, [key]: Math.max(0, (a[key] || 0) - 1) }))}
-                            className="w-6 h-6 rounded border text-sm font-bold hover:bg-muted flex items-center justify-center"
+                            onClick={() => { setActivity(a => ({ ...a, [key]: Math.max(0, (a[key] || 0) - 1) })); setHasUnsavedChanges(true); }}
+                            className="w-7 h-7 rounded border text-sm font-bold hover:bg-muted flex items-center justify-center shrink-0"
+                            aria-label={`Decrease ${label}`}
                           >−</button>
-                          <span className="w-8 text-center text-sm font-bold">{activity[key] || 0}</span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            value={activity[key] ?? 0}
+                            onChange={(e) => {
+                              const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                              setActivity(a => ({ ...a, [key]: val }));
+                              setHasUnsavedChanges(true);
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            className="w-14 h-7 text-center text-sm font-bold rounded border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            aria-label={label}
+                          />
                           <button
                             type="button"
-                            onClick={() => setActivity(a => ({ ...a, [key]: (a[key] || 0) + 1 }))}
-                            className="w-6 h-6 rounded border text-sm font-bold hover:bg-muted flex items-center justify-center"
+                            onClick={() => { setActivity(a => ({ ...a, [key]: (a[key] || 0) + 1 })); setHasUnsavedChanges(true); }}
+                            className="w-7 h-7 rounded border text-sm font-bold hover:bg-muted flex items-center justify-center shrink-0"
+                            aria-label={`Increase ${label}`}
                           >+</button>
                         </div>
                       </div>
@@ -623,11 +643,27 @@ export default function DailyTrackerPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Notes</Label>
-                    <Textarea placeholder="Optional notes..." value={activity.notes || ''} onChange={(e) => setActivity(a => ({ ...a, notes: e.target.value }))} className="text-sm h-16 resize-none" />
+                    <Textarea
+                      placeholder="Optional notes..."
+                      value={activity.notes || ''}
+                      onChange={(e) => { setActivity(a => ({ ...a, notes: e.target.value })); setHasUnsavedChanges(true); }}
+                      className="text-sm h-16 resize-none"
+                    />
                   </div>
-                  <Button onClick={saveDailyActivity} disabled={saving} className="w-full">
+                  {/* Pending changes indicator */}
+                  {hasUnsavedChanges && (
+                    <p className="text-[11px] text-amber-600 font-medium text-center flex items-center justify-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      Unsaved changes
+                    </p>
+                  )}
+                  <Button
+                    onClick={saveDailyActivity}
+                    disabled={saving}
+                    className={`w-full transition-all ${hasUnsavedChanges ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
+                  >
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    {saving ? 'Saving…' : 'Save Day'}
+                    {saving ? 'Saving…' : hasUnsavedChanges ? 'Save Changes' : 'Save Day'}
                   </Button>
                   <p className="text-[10px] text-muted-foreground text-center">Edits locked after 45 days</p>
                 </CardContent>
