@@ -1,8 +1,10 @@
 // src/app/api/admin/branding/upload/route.ts
 // POST /api/admin/branding/upload?type=logo|animated
 // Accepts multipart/form-data with a `logo` file field.
-// Uploads to Firebase Storage and returns a long-lived signed URL.
+// Uploads to Firebase Storage and returns a permanent download URL using
+// Firebase Storage download tokens (no IAM signBlob permission required).
 import { NextRequest, NextResponse } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 import { admin, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
@@ -31,6 +33,15 @@ function extractBearer(req: NextRequest) {
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
+}
+
+/**
+ * Build a permanent Firebase Storage download URL from a storage path and token.
+ * Format: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{encodedPath}?alt=media&token={token}
+ */
+function buildDownloadUrl(bucket: string, storagePath: string, token: string): string {
+  const encodedPath = encodeURIComponent(storagePath);
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media&token=${token}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -74,6 +85,11 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // ---------- Generate a download token ----------
+    // Setting firebaseStorageDownloadTokens in the metadata creates a permanent
+    // public download URL without requiring iam.serviceAccountTokenCreator.
+    const downloadToken = uuidv4();
+
     // ---------- Upload to Storage ----------
     const ext = EXTENSION_MAP[file.type] || 'png';
     const timestamp = Date.now();
@@ -88,21 +104,18 @@ export async function POST(req: NextRequest) {
         metadata: {
           uploadedBy: decoded.uid,
           uploadType,
+          // This token is what Firebase uses to generate the public download URL
+          firebaseStorageDownloadTokens: downloadToken,
         },
       },
     });
 
-    // ---------- Generate a long-lived signed URL (10 years) ----------
-    // We use a signed URL because the bucket has uniform bucket-level access
-    // enabled, which prevents makePublic() from working.
-    const [signedUrl] = await blob.getSignedUrl({
-      action: 'read',
-      expires: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000, // 10 years
-    });
+    // ---------- Build permanent download URL ----------
+    const downloadUrl = buildDownloadUrl(BUCKET_NAME, storagePath, downloadToken);
 
     return NextResponse.json({
       ok: true,
-      url: signedUrl,
+      url: downloadUrl,
       type: uploadType,
       storagePath,
     });
