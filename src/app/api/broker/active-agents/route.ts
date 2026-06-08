@@ -160,17 +160,29 @@ export async function GET(req: NextRequest) {
       graceEndMonth: string | null; // YYYY-MM when 90-day grace ends
     };
 
+    // Statuses that mean the agent is no longer active at the brokerage
+    const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
+
     const agentRecords: AgentRecord[] = agents.map((a: any) => {
       const agentId = a.agentId || a.id;
       const startDate = a.startDate || null;
       const endDate = a.endDate || null;
+      const profileStatus = String(a.status || a.agentStatus || '').toLowerCase();
       const firstDeal = firstDealMap.get(agentId) || null;
       const activationMonth = getActivationMonth(startDate, firstDeal);
+
       let endMonth: string | null = null;
       if (endDate) {
+        // Explicit end date set — use it (agent drops out the month after)
         const ed = parseDate(endDate);
         if (ed) endMonth = toYearMonth(addMonths(ed, 1));
+      } else if (INACTIVE_STATUSES.has(profileStatus)) {
+        // Agent marked inactive/out in profile but no end date set.
+        // Treat today as their effective end so they are excluded from the
+        // current month onwards, but all historical months remain correct.
+        endMonth = toYearMonth(new Date());
       }
+
       // Grace end month: startDate + 3 months
       let graceEndMonth: string | null = null;
       if (startDate) {
