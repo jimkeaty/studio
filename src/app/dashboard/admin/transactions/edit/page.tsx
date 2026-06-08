@@ -1601,37 +1601,7 @@ export default function EditTransactionPage() {
                 </FormItem>
               )} />
             </div>
-            <Separator />
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Breakdown</p>
-              <p className="text-xs text-muted-foreground mt-1">This is the buyer closing cost amount the seller is paying toward the following: buyer agent commission, transaction fee, home warranty, and any other buyer closing costs.</p>
-            </div>
-            <Grid3>
-              <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Buyer&apos;s Agent Commission ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Transaction Fee ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="buyerClosingCostHomeWarranty" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Home Warranty ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="buyerClosingCostOther" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>All Other Buyer&apos;s Closing Costs ($)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                </FormItem>
-              )} />
-            </Grid3>
+{/* Breakdown fields hidden per broker request — fields preserved in code and Firestore but not shown in UI */}
           </Section>
 
           {/* ── Commission & Fees ────────────────────────────────── */}

@@ -3391,44 +3391,7 @@ export default function AddTransactionPage() {
                 </FormItem>
               )} />
             </div>
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Breakdown</p>
-              <p className="text-xs text-muted-foreground mt-1">This is the buyer closing cost amount the seller is paying toward: buyer agent commission, transaction fee, home warranty, and any other buyer closing costs.</p>
-            </div>
-            <Grid3>
-              <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Buyer&apos;s Agent Commission ($)</FormLabel>
-                  <FormControl>
-                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Transaction Fee ($)</FormLabel>
-                  <FormControl>
-                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="buyerClosingCostHomeWarranty" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Home Warranty ($)</FormLabel>
-                  <FormControl>
-                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                  </FormControl>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="buyerClosingCostOther" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>All Other Buyer&apos;s Closing Costs ($)</FormLabel>
-                  <FormControl>
-                    <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                  </FormControl>
-                </FormItem>
-              )} />
-            </Grid3>
+{/* Breakdown fields hidden per broker request — fields preserved in code and Firestore but not shown in UI */}
 
             <Separator />
 
