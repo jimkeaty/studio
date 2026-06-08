@@ -377,6 +377,28 @@ export default function EditTransactionPage() {
     }
   }, [watchedCBP, watchedCommPct]);
 
+  // Watched split percentages for auto-recalc of dollar amounts when user manually types a %
+  const watchedBrokerPct = form.watch('brokerPct');
+  const watchedAgentPct = form.watch('agentPct');
+
+  // When user manually overrides a split %, auto-recalc the corresponding dollar amount.
+  // Only fires when commissionManualOverride is true (user has typed into a split field).
+  useEffect(() => {
+    if (!commissionManualOverride.current) return;
+    const gci = Number(form.getValues('gci')) || 0;
+    if (gci <= 0) return;
+    const refPct = Number(form.getValues('outboundReferralPercent')) || 0;
+    const refDollar = hasOutboundReferral
+      ? (Number(form.getValues('outboundReferralDollar')) || (refPct > 0 ? Math.round(gci * (refPct / 100) * 100) / 100 : 0))
+      : 0;
+    const netGci = Math.max(0, gci - refDollar);
+    const aPct = Number(form.getValues('agentPct')) || 0;
+    const bPct = Number(form.getValues('brokerPct')) || 0;
+    if (aPct > 0) form.setValue('agentDollar', Number((netGci * (aPct / 100)).toFixed(2)) as any);
+    if (bPct > 0) form.setValue('brokerGci', Number((netGci * (bPct / 100)).toFixed(2)) as any);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedBrokerPct, watchedAgentPct]);
+
   // Auto-calculate commission split when GCI or agent commission profile changes.
   // NOTE: For team members on a team WITH a leader, tier.agentSplitPercent is already
   // the EFFECTIVE % of full GCI (leaderPercent × memberPercent / 100), so the formula
@@ -797,11 +819,18 @@ export default function EditTransactionPage() {
         payload.brokerProfit = brokerGci;
       }
 
-      // Commission override concept removed — whatever is in the fields is what saves.
-      // Clear any legacy override flags so old transactions are cleaned up on next save.
-      payload.commissionOverridden = false;
-      payload.commissionOverriddenBy = null;
-      payload.commissionOverriddenAt = null;
+      // If the user manually changed any split field, mark the transaction as commission-overridden.
+      // The server-side PATCH route checks this flag to skip profile-based recalculation.
+      if (commissionManualOverride.current) {
+        payload.commissionOverridden = true;
+        payload.commissionOverriddenBy = user.uid;
+        payload.commissionOverriddenAt = new Date().toISOString();
+      } else {
+        // No manual override — clear any legacy override flags
+        payload.commissionOverridden = false;
+        payload.commissionOverriddenBy = null;
+        payload.commissionOverriddenAt = null;
+      }
 
       // Add co-agent data to the payload
       payload.hasCoAgent = hasCoAgent;
@@ -1772,7 +1801,14 @@ export default function EditTransactionPage() {
                     <FormItem>
                       <FormLabel>Broker %</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="30" {...field} />
+                        <Input
+                          type="number" step="0.01" placeholder="30"
+                          {...field}
+                          onChange={(e) => {
+                            commissionManualOverride.current = true;
+                            field.onChange(e);
+                          }}
+                        />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -1780,7 +1816,14 @@ export default function EditTransactionPage() {
                     <FormItem>
                       <FormLabel>Broker GCI ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="0" {...field} />
+                        <Input
+                          type="number" step="0.01" placeholder="0"
+                          {...field}
+                          onChange={(e) => {
+                            commissionManualOverride.current = true;
+                            field.onChange(e);
+                          }}
+                        />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -1788,7 +1831,14 @@ export default function EditTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent %</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="70" {...field} />
+                        <Input
+                          type="number" step="0.01" placeholder="70"
+                          {...field}
+                          onChange={(e) => {
+                            commissionManualOverride.current = true;
+                            field.onChange(e);
+                          }}
+                        />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -1796,9 +1846,16 @@ export default function EditTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent Net $</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="0" {...field} />
+                        <Input
+                          type="number" step="0.01" placeholder="0"
+                          {...field}
+                          onChange={(e) => {
+                            commissionManualOverride.current = true;
+                            field.onChange(e);
+                          }}
+                        />
                       </FormControl>
-                      <FormDescription>Auto-calculated from agent profile. Editable.</FormDescription>
+                      <FormDescription>Auto-calculated from agent profile. Editable — type to override.</FormDescription>
                     </FormItem>
                   )} />
                 </Grid2>

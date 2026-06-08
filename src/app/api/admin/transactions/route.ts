@@ -438,8 +438,14 @@ export async function PATCH(req: NextRequest) {
     // When a referral fee is added/changed on a closed transaction, recalculate the
     // agent's commission using the net-after-referral GCI and update the splitSnapshot.
     // Rollup is already rebuilt above so it will pick up the new splitSnapshot values.
+    // SKIP if the admin has manually overridden the commission split — preserve their values.
     const referralChanged = updates.outboundReferralFee !== undefined;
-    if (referralChanged) {
+    const isCommissionOverridden = updates.commissionOverridden === true || existingData?.commissionOverridden === true;
+    // Only recalculate if the referral fee actually changed from the stored value
+    const existingReferralPct = Number(existingData?.outboundReferralFee?.referralPercent ?? 0);
+    const newReferralPct = updates.outboundReferralFee ? Number(updates.outboundReferralFee.referralPercent ?? 0) : existingReferralPct;
+    const referralActuallyChanged = referralChanged && (newReferralPct !== existingReferralPct);
+    if (referralActuallyChanged && !isCommissionOverridden) {
       try {
         const txData = updatedSnap.data() as any;
         const agentId = String(txData?.agentId || '').trim();
