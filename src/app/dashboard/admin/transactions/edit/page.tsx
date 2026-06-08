@@ -386,6 +386,17 @@ export default function EditTransactionPage() {
   // IMPORTANT: All splits are calculated on netGci (after referral fee deduction).
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
+    // CRITICAL: When editing an existing transaction that already has saved commission
+    // values, do NOT overwrite them with the agent's current profile tier.
+    // Only update the active tier badge display; leave the saved split fields intact.
+    if (txLoadedWithCommission.current) {
+      const gciForBadge = Number(watchedGCI) || 0;
+      if (gciForBadge > 0) {
+        const ytdBadge = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+        setActiveTier(findActiveTier(agentCommission.tiers, ytdBadge > 0 ? ytdBadge : gciForBadge));
+      }
+      return;
+    }
     const gci = Number(watchedGCI) || 0;
     if (gci <= 0) { setActiveTier(null); return; }
     // Deduct outbound referral fee before computing any splits
@@ -420,6 +431,17 @@ export default function EditTransactionPage() {
   // in case the agent change doesn't change GCI but the tier structure is different)
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
+    // CRITICAL: When editing an existing transaction with saved commission values,
+    // do NOT recalculate splits from the agent's current profile tier.
+    // The saved values are the source of truth; only update the tier badge display.
+    if (txLoadedWithCommission.current) {
+      const gciForBadge2 = Number(form.getValues('gci')) || 0;
+      if (gciForBadge2 > 0) {
+        const ytdBadge2 = agentCommission.ytdTierProgressionCompanyDollar ?? 0;
+        setActiveTier(findActiveTier(agentCommission.tiers, ytdBadge2 > 0 ? ytdBadge2 : gciForBadge2));
+      }
+      return;
+    }
     const gci = Number(form.getValues('gci')) || 0;
     if (gci <= 0) return;
     // Deduct outbound referral fee before computing any splits
