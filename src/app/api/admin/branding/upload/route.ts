@@ -7,7 +7,7 @@ import { admin, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
 const BUCKET_NAME = 'smart-broker-usa.firebasestorage.app';
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 const ALLOWED_TYPES = new Set([
   'image/png',
   'image/jpeg',
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     // ---------- Validate size ----------
     if (file.size > MAX_FILE_SIZE) {
-      return jsonError(400, `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 5 MB.`);
+      return jsonError(400, `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 15 MB.`);
     }
 
     // ---------- Read file bytes ----------
