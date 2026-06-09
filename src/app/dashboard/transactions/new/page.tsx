@@ -3905,9 +3905,9 @@ export default function AddTransactionPage() {
           </Section>}
 
           {/* ═══════════════════════════════════════════════════════════════════
-              SECTION 6 — ADDITIONAL INFO / COMMENTS (hidden for referral and active listings)
+              SECTION 6 — ADDITIONAL INFO / COMMENTS (hidden for referral, listing, and active listings)
           ═══════════════════════════════════════════════════════════════════ */}
-          {watchedClosingType !== 'referral' && !isActiveListing && <Section title="Additional Info">
+          {watchedClosingType !== 'referral' && watchedClosingType !== 'listing' && !isActiveListing && <Section title="Additional Info">
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
               <FormItem>
