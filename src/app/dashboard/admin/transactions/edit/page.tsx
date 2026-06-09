@@ -277,6 +277,9 @@ export default function EditTransactionPage() {
   // saved values on the transaction are the source of truth until the user explicitly
   // changes a commission field.
   const txLoadedWithCommission = useRef(false);
+  // True while form.reset() is in progress (initial data load). Prevents the salePrice
+  // watcher from overwriting the loaded commissionBasePrice/GCI on first render.
+  const formInitializing = useRef(false);
   // Per-transaction commission override state — loaded from Firestore, persisted on save
   // Extra buyer/seller visibility state
   const [showBuyer3, setShowBuyer3] = useState(false);
@@ -344,10 +347,12 @@ export default function EditTransactionPage() {
     commPctManuallyEdited.current = false;
   }, [watchedClosingType, watchedDealType]);
 
-  // Auto-fill commissionBasePrice from salePrice when not manually overridden
-  // Skip if the transaction was loaded with existing commission values.
+  // Auto-fill commissionBasePrice from salePrice when not manually overridden.
+  // On initial load (formInitializing) we skip so the saved CBP is preserved.
+  // After load, if the user changes the sale price we always update CBP (unless they
+  // manually customised it), so GCI recalculates from the new sale price.
   useEffect(() => {
-    if (cbpManuallyEdited.current || txLoadedWithCommission.current) return;
+    if (cbpManuallyEdited.current || formInitializing.current) return;
     const sp = Number(watchedSalePrice) || 0;
     if (sp > 0) form.setValue('commissionBasePrice', sp as any);
   }, [watchedSalePrice]);
@@ -365,10 +370,11 @@ export default function EditTransactionPage() {
     if (autoPct > 0) form.setValue('commissionPercent', autoPct as any);
   }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer]);
 
-  // Auto-calculate GCI when commissionBasePrice × commissionPercent both set
-  // Skip if the transaction was loaded with existing commission values.
+  // Auto-calculate GCI when commissionBasePrice × commissionPercent both set.
+  // Skip only during the initial form load (formInitializing) so we don't overwrite
+  // the saved GCI. After load, any change to CBP or commissionPercent recalculates GCI.
   useEffect(() => {
-    if (txLoadedWithCommission.current) return;
+    if (formInitializing.current) return;
     const cbp = Number(watchedCBP) || 0;
     const pct = Number(watchedCommPct) || 0;
     if (cbp > 0 && pct > 0) {
@@ -447,6 +453,26 @@ export default function EditTransactionPage() {
       }
     }
   }, [watchedGCI, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, agentCommission]);
+
+  // When GCI changes on an existing transaction (txLoadedWithCommission=true), recalculate
+  // the split dollar amounts from the already-saved split percentages so the dollar fields
+  // stay in sync with the new GCI. This fires when salePrice changes and cascades through
+  // CBP → GCI → here. Skips if the user has manually overridden a split field.
+  useEffect(() => {
+    if (!txLoadedWithCommission.current || commissionManualOverride.current || formInitializing.current) return;
+    const gci = Number(watchedGCI) || 0;
+    if (gci <= 0) return;
+    const refPct = Number(form.getValues('outboundReferralPercent')) || 0;
+    const refDollar = hasOutboundReferral
+      ? (Number(form.getValues('outboundReferralDollar')) || (refPct > 0 ? Math.round(gci * (refPct / 100) * 100) / 100 : 0))
+      : 0;
+    const netGci = Math.max(0, gci - refDollar);
+    const aPct = Number(form.getValues('agentPct')) || 0;
+    const bPct = Number(form.getValues('brokerPct')) || 0;
+    if (aPct > 0) form.setValue('agentDollar', Number((netGci * (aPct / 100)).toFixed(2)) as any);
+    if (bPct > 0) form.setValue('brokerGci', Number((netGci * (bPct / 100)).toFixed(2)) as any);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedGCI]);
 
   // When agent changes and commission profile loads, re-run split calc with current GCI
   // (agentCommission change above handles this, but we also need to re-trigger CBP→GCI
@@ -578,6 +604,8 @@ export default function EditTransactionPage() {
           txLoadedWithCommission.current = true;
         }
 
+        // Suppress CBP/GCI watchers during the reset so saved values are not overwritten.
+        formInitializing.current = true;
         form.reset({
           agentId: tx.agentId || '',
           agentDisplayName: tx.agentDisplayName || '',
@@ -685,6 +713,8 @@ export default function EditTransactionPage() {
           additionalComments: tx.additionalComments || '',
           notes: tx.notes || '',
         });
+        // Allow a tick for React to flush the reset before re-enabling CBP/GCI watchers.
+        setTimeout(() => { formInitializing.current = false; }, 0);
         // Auto-show extra buyer/seller rows if they have saved data
         if (tx.buyer3Name || tx.buyer3Email || tx.buyer3Phone) setShowBuyer3(true);
         if (tx.buyer4Name || tx.buyer4Email || tx.buyer4Phone) { setShowBuyer3(true); setShowBuyer4(true); }
