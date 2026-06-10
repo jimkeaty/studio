@@ -280,6 +280,9 @@ export default function EditTransactionPage() {
   // True while form.reset() is in progress (initial data load). Prevents the salePrice
   // watcher from overwriting the loaded commissionBasePrice/GCI on first render.
   const formInitializing = useRef(false);
+  // Holds the raw splitSnapshot loaded from Firestore so we can merge it on save
+  // and never accidentally drop fields that the form doesn't manage (e.g. primaryTeamId).
+  const loadedSplitSnapshot = useRef<Record<string, any>>({});
   // Per-transaction commission override state — loaded from Firestore, persisted on save
   // Extra buyer/seller visibility state
   const [showBuyer3, setShowBuyer3] = useState(false);
@@ -731,6 +734,9 @@ export default function EditTransactionPage() {
         }
         // Load saved team split values into override state (so they show as pre-filled editable inputs)
         const savedSplit = tx.splitSnapshot || {};
+        // Persist the full loaded splitSnapshot so onSubmit can merge into it
+        // and never accidentally drop fields the form doesn't directly manage.
+        loadedSplitSnapshot.current = { ...savedSplit };
         if (savedSplit.leaderStructureGross != null) setOverrideLeaderSide(String(savedSplit.leaderStructureGross));
         if (savedSplit.memberPaid != null) setOverrideMemberPay(String(savedSplit.memberPaid));
         if (savedSplit.leaderRetainedAfterMember != null) setOverrideLeaderRetained(String(savedSplit.leaderRetainedAfterMember));
@@ -835,16 +841,23 @@ export default function EditTransactionPage() {
           }
         }
         payload.splitSnapshot = {
+          // Start from the previously-saved splitSnapshot so we never drop fields
+          // that the form doesn't directly manage (primaryTeamId, teamPlanId, etc.)
+          ...loadedSplitSnapshot.current,
+          // Overlay the live form values — these always win over the stored values
           grossCommission: gci,
           agentNetCommission: agentDollar || null,
           companyRetained: brokerGci,
           agentSplitPercent: agentPct || null,
           companySplitPercent: brokerPct || null,
-          // Team split fields — saved whenever present
+          // Team split fields — use override if set, otherwise auto-computed, otherwise keep existing
           ...(teamLeaderSide != null ? { leaderStructureGross: teamLeaderSide } : {}),
           ...(teamMemberPay != null ? { memberPaid: teamMemberPay } : {}),
           ...(teamLeaderRetained != null ? { leaderRetainedAfterMember: teamLeaderRetained } : {}),
         };
+        // Also update the loadedSplitSnapshot ref so a second save in the same session
+        // merges from the just-saved values rather than the original loaded ones.
+        loadedSplitSnapshot.current = { ...payload.splitSnapshot };
         payload.commission = gci;
         payload.brokerProfit = brokerGci;
       }
