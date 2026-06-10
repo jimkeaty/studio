@@ -274,6 +274,10 @@ export default function EditTransactionPage() {
   const commPctManuallyEdited = useRef(false);
   // When the user types a GCI value directly, lock it so CBP×pct auto-calc won't overwrite it.
   const gciManuallyEdited = useRef(false);
+  // True if the loaded transaction already has commissionOverridden=true in Firestore.
+  // Used to preserve the override flag on save even when the user doesn't touch commission
+  // fields in the current session (commissionManualOverride stays false in that case).
+  const txWasOverridden = useRef(false);
   // True once the existing transaction has been loaded and commission values populated.
   // When true, the agent commission fetch must NOT reset commissionManualOverride — the
   // saved values on the transaction are the source of truth until the user explicitly
@@ -608,6 +612,7 @@ export default function EditTransactionPage() {
         // manually set to a different amount (e.g. after seller concessions).
         if (tx.commissionOverridden) {
           gciManuallyEdited.current = true;
+          txWasOverridden.current = true;
         }
         // When loading an existing transaction, preserve the saved commission values.
         // The fields will be pre-populated from Firestore; the agent profile fetch
@@ -872,14 +877,19 @@ export default function EditTransactionPage() {
         payload.brokerProfit = brokerGci;
       }
 
-      // If the user manually changed any split field, mark the transaction as commission-overridden.
-      // The server-side PATCH route checks this flag to skip profile-based recalculation.
-      if (commissionManualOverride.current) {
+      // If the user manually changed any split field in this session, OR if the transaction
+      // was already marked as commission-overridden when it was loaded, preserve the flag.
+      // Only clear the flag if neither condition is true (i.e. a brand-new transaction with
+      // no prior manual override and no commission changes in this session).
+      if (commissionManualOverride.current || txWasOverridden.current) {
         payload.commissionOverridden = true;
-        payload.commissionOverriddenBy = user.uid;
-        payload.commissionOverriddenAt = new Date().toISOString();
+        if (commissionManualOverride.current) {
+          // Update the override metadata only when the user actively changed something
+          payload.commissionOverriddenBy = user.uid;
+          payload.commissionOverriddenAt = new Date().toISOString();
+        }
       } else {
-        // No manual override — clear any legacy override flags
+        // No manual override in this session and no prior override — clear legacy flags
         payload.commissionOverridden = false;
         payload.commissionOverriddenBy = null;
         payload.commissionOverriddenAt = null;
