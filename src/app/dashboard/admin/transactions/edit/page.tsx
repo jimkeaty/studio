@@ -2337,14 +2337,13 @@ export default function EditTransactionPage() {
                 </span>
                 {wizardStep < 4 ? (
                   <div className="flex items-center gap-2">
-                    {/* On the commission step (step 3), show a Save shortcut so users don't
-                        have to advance to step 4 just to save commission changes. */}
-                    {wizardStep === 3 && (
-                      <Button type="submit" size="lg" disabled={saving} variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
-                        <Save className="mr-2 h-4 w-4" />
-                        {saving ? 'Saving...' : 'Save'}
-                      </Button>
-                    )}
+                    {/* Show a Save button on every step so changes are never lost when
+                        the user navigates between steps. The Next button still advances
+                        the wizard without saving (for users who want to continue). */}
+                    <Button type="submit" size="lg" disabled={saving} variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
+                      <Save className="mr-2 h-4 w-4" />
+                      {saving ? 'Saving...' : 'Save'}
+                    </Button>
                     <Button type="button" size="lg" onClick={() => setWizardStep(s => s + 1)}>
                       Next <ChevronRight className="ml-1 h-4 w-4" />
                     </Button>
