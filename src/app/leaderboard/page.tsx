@@ -101,6 +101,21 @@ const LeaderboardSkeleton = () => (
   </div>
 );
 
+// Display config shape (subset of LeaderboardConfig)
+type DisplayConfig = {
+  showGCI: boolean;
+  showVolume: boolean;
+  showSales: boolean;
+  showTopN: number;
+};
+
+const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
+  showGCI: true,
+  showVolume: true,
+  showSales: true,
+  showTopN: 50,
+};
+
 export default function LeaderboardPage() {
   const [rows, setRows] = useState<LeaderRow[]>([]);
   const [teamTotals, setTeamTotals] = useState<TeamTotals | null>(null);
@@ -108,11 +123,30 @@ export default function LeaderboardPage() {
   const [recentSold, setRecentSold] = useState<RecentDeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [displayConfig, setDisplayConfig] = useState<DisplayConfig>(DEFAULT_DISPLAY_CONFIG);
 
   const [period, setPeriod] = useState<string>('yearly');
   const [year, setYear] = useState(0);
   const [quarter, setQuarter] = useState(() => Math.ceil((new Date().getMonth() + 1) / 3));
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+
+  // Load board config (display toggles) once on mount
+  useEffect(() => {
+    fetch('/api/board-config?board=leaderboard')
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.ok && json.config) {
+          const cfg = json.config;
+          setDisplayConfig({
+            showGCI: cfg.showGCI !== false,
+            showVolume: cfg.showVolume !== false,
+            showSales: cfg.showSales !== false,
+            showTopN: typeof cfg.showTopN === 'number' && cfg.showTopN > 0 ? cfg.showTopN : 50,
+          });
+        }
+      })
+      .catch((err) => console.warn('Could not load leaderboard display config:', err));
+  }, []);
 
   useEffect(() => {
     setYear(new Date().getFullYear());
@@ -142,7 +176,13 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, [period, year, quarter, month]);
 
-  const leaderScore = rows.length > 0 ? rows[0].closed : 0;
+  // Apply showTopN limit from config
+  const visibleRows = useMemo(
+    () => rows.slice(0, displayConfig.showTopN),
+    [rows, displayConfig.showTopN]
+  );
+
+  const leaderScore = visibleRows.length > 0 ? visibleRows[0].closed : 0;
 
   const periodLabel = period === 'yearly'
     ? `${year}`
@@ -240,7 +280,7 @@ export default function LeaderboardPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {rows.map((agent, index) => {
+            {visibleRows.map((agent, index) => {
               const progress = leaderScore > 0 ? (agent.closed / leaderScore) * 100 : 0;
               const rankStyle = RANK_STYLES[index] ?? { border: 'border-white/10', rankColor: 'text-slate-500', shadow: '' };
               const gradientClass = AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length];
@@ -294,20 +334,32 @@ export default function LeaderboardPage() {
                         style={{ width: `${progress}%` }}
                       />
                     </div>
-                    {/* Stats */}
+                    {/* Stats row — conditionally shown based on config */}
                     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-white/50">
-                      <span>Vol: <span className="text-white/80 font-semibold">{fmtCurrency(agent.closedVolume)}</span></span>
+                      {displayConfig.showVolume && (
+                        <span>Vol: <span className="text-white/80 font-semibold">{fmtCurrency(agent.closedVolume)}</span></span>
+                      )}
                       {agent.listings > 0 && <span>Listings: <span className="text-white/80 font-semibold">{agent.listings}</span></span>}
                       {agent.pending > 0 && <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>}
                     </div>
                   </div>
 
-                  {/* GCI + Closed */}
-                  <div className="flex-shrink-0 text-right">
-                    <div className="text-xl sm:text-2xl font-black text-emerald-400 tabular-nums">{fmtCurrency(agent.totalGCI)}</div>
-                    <div className="text-xs text-white/50 mt-0.5">GCI</div>
-                    <div className="text-sm font-bold text-white mt-1">{agent.closed} <span className="text-white/50 font-normal">closed</span></div>
-                  </div>
+                  {/* GCI + Closed — conditionally shown based on config */}
+                  {(displayConfig.showGCI || displayConfig.showSales) && (
+                    <div className="flex-shrink-0 text-right">
+                      {displayConfig.showGCI && (
+                        <>
+                          <div className="text-xl sm:text-2xl font-black text-emerald-400 tabular-nums">{fmtCurrency(agent.totalGCI)}</div>
+                          <div className="text-xs text-white/50 mt-0.5">GCI</div>
+                        </>
+                      )}
+                      {displayConfig.showSales && (
+                        <div className={cn('font-bold text-white', displayConfig.showGCI ? 'text-sm mt-1' : 'text-xl sm:text-2xl')}>
+                          {agent.closed} <span className="text-white/50 font-normal text-sm">closed</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

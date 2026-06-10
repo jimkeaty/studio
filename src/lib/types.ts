@@ -374,6 +374,10 @@ export interface LeaderboardConfig {
   subtitle: string;
   primaryMetricKey: LeaderboardMetricKey;
   showTopN: number;
+  /** TV display column toggles */
+  showGCI?: boolean;
+  showVolume?: boolean;
+  showSales?: boolean;
 }
 
 export interface ProductionLeaderboardRow {

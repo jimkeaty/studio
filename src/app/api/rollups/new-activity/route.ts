@@ -93,8 +93,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const year = Number(searchParams.get("year") || new Date().getFullYear());
 
-    const lookbackDays = 60;
-    const showTopN = 25;
+    // Read display config from Firestore boardConfig
+    const configDoc = await adminDb.collection('boardConfig').doc('activityBoard').get();
+    const boardCfg = configDoc.exists ? configDoc.data()! : {};
+    const lookbackDays: number = Number(boardCfg.lookbackDays ?? 60);
+    const showTopN: number = Number(boardCfg.showTopN ?? 25);
 
     const db = adminDb;
     const cutoff = new Date();
