@@ -975,7 +975,11 @@ export default function EditTransactionPage() {
       )}
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
+            // Surface validation errors so the user knows why the save didn't fire
+            const messages = Object.entries(errors).map(([field, err]) => `${field}: ${(err as any)?.message || 'invalid'}`).join('; ');
+            toast({ title: 'Please fix form errors before saving', description: messages, variant: 'destructive' });
+          })} className="space-y-6">
 
           {/* ── Wizard Progress Bar ──────────────────────────────────────── */}
           {(() => {
@@ -1909,7 +1913,7 @@ export default function EditTransactionPage() {
                       step="0.01"
                       className="w-full text-sm font-bold text-amber-700 bg-transparent border-b border-amber-300 focus:outline-none focus:border-amber-600 py-0.5"
                       value={overrideLeaderSide !== '' ? overrideLeaderSide : leaderStructureGross}
-                      onChange={e => setOverrideLeaderSide(e.target.value)}
+                      onChange={e => { commissionManualOverride.current = true; setOverrideLeaderSide(e.target.value); }}
                     />
                     {overrideLeaderSide !== '' && Number(overrideLeaderSide) !== leaderStructureGross && (
                       <p className="text-xs text-amber-500">calc: {fmt(leaderStructureGross)}</p>
@@ -1929,7 +1933,7 @@ export default function EditTransactionPage() {
                       step="0.01"
                       className="w-full text-sm font-bold text-amber-900 bg-transparent border-b border-amber-400 focus:outline-none focus:border-amber-700 py-0.5"
                       value={overrideLeaderRetained !== '' ? overrideLeaderRetained : leaderRetained}
-                      onChange={e => setOverrideLeaderRetained(e.target.value)}
+                      onChange={e => { commissionManualOverride.current = true; setOverrideLeaderRetained(e.target.value); }}
                     />
                     {overrideLeaderRetained !== '' && Number(overrideLeaderRetained) !== leaderRetained && (
                       <p className="text-xs text-amber-500">calc: {fmt(leaderRetained)}</p>
@@ -2332,9 +2336,19 @@ export default function EditTransactionPage() {
                   Step {wizardStep} of 4
                 </span>
                 {wizardStep < 4 ? (
-                  <Button type="button" size="lg" onClick={() => setWizardStep(s => s + 1)}>
-                    Next <ChevronRight className="ml-1 h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {/* On the commission step (step 3), show a Save shortcut so users don't
+                        have to advance to step 4 just to save commission changes. */}
+                    {wizardStep === 3 && (
+                      <Button type="submit" size="lg" disabled={saving} variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
+                        <Save className="mr-2 h-4 w-4" />
+                        {saving ? 'Saving...' : 'Save'}
+                      </Button>
+                    )}
+                    <Button type="button" size="lg" onClick={() => setWizardStep(s => s + 1)}>
+                      Next <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
                 ) : (
                   <>
                     <Button type="submit" size="lg" disabled={saving} variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
