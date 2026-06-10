@@ -99,9 +99,9 @@ function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | 
 const schema = z.object({
   agentId: z.string().min(1, 'Agent is required'),
   agentDisplayName: z.string().min(1),
-  status: z.enum(['active', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'temp_off_market'], { required_error: 'Please select a status to continue' }),
+  status: z.enum(['active', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'temp_off_market', 'coming_soon'], { required_error: 'Please select a status to continue' }),
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
-  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
+  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing', 'commercial_sale', 'commercial_lease']),
   address: z.string().min(5, 'Full property address is required'),
   // clientName is optional for referral and listing types (client may not be known yet)
   clientName: z.string().optional().or(z.literal('')),
@@ -627,7 +627,7 @@ export default function EditTransactionPage() {
         form.reset({
           agentId: tx.agentId || '',
           agentDisplayName: tx.agentDisplayName || '',
-          status: tx.status || undefined,
+          status: (['active','pending','closed','cancelled','canceled','expired','temp_off_market','coming_soon'].includes(tx.status) ? tx.status : 'active') as any,
           closingType: (tx.closingType as any) || 'buyer',
           dealType: (tx.dealType || tx.transactionType || 'residential_sale') as any,
           address: tx.address || '',
@@ -819,18 +819,6 @@ export default function EditTransactionPage() {
       // Build the payload — include splitSnapshot if split fields are set
       const payload: any = { id: txId, ...values };
 
-      // DEBUG: log raw form values for commission fields
-      console.log('[SAVE DEBUG] raw form values:', {
-        gci: values.gci,
-        agentDollar: values.agentDollar,
-        brokerGci: values.brokerGci,
-        agentPct: values.agentPct,
-        brokerPct: values.brokerPct,
-        commissionManualOverride: commissionManualOverride.current,
-        txWasOverridden: txWasOverridden.current,
-        gciManuallyEdited: gciManuallyEdited.current,
-      });
-
       // Rebuild splitSnapshot from individual split fields
       const gci = Number(values.gci) || 0;
       const agentPct = Number(values.agentPct) || 0;
@@ -940,20 +928,6 @@ export default function EditTransactionPage() {
       delete payload.outboundReferralDollar;
       delete payload.outboundReferralBrokerName;
       delete payload.outboundReferralContactName;
-
-      // DEBUG: log final payload commission fields before sending
-      console.log('[SAVE DEBUG] final payload commission:', {
-        gci: payload.gci,
-        commission: payload.commission,
-        agentDollar: payload.agentDollar,
-        brokerGci: payload.brokerGci,
-        commissionOverridden: payload.commissionOverridden,
-        splitSnapshot: payload.splitSnapshot ? {
-          grossCommission: payload.splitSnapshot.grossCommission,
-          agentNetCommission: payload.splitSnapshot.agentNetCommission,
-          companyRetained: payload.splitSnapshot.companyRetained,
-        } : 'NOT SET',
-      });
 
       const res = await fetch('/api/admin/transactions', {
         method: 'PATCH',
@@ -1137,6 +1111,7 @@ export default function EditTransactionPage() {
                       <SelectItem value="residential_sale">Residential Sale</SelectItem>
                       <SelectItem value="residential_lease">Residential Lease</SelectItem>
                       <SelectItem value="land">Land</SelectItem>
+                      <SelectItem value="commercial_listing">Commercial Lease/Sale</SelectItem>
                       <SelectItem value="commercial_sale">Commercial Sale</SelectItem>
                       <SelectItem value="commercial_lease">Commercial Lease</SelectItem>
                     </SelectContent>
@@ -1268,6 +1243,7 @@ export default function EditTransactionPage() {
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="coming_soon">Coming Soon</SelectItem>
                       <SelectItem value="temp_off_market">Temp Off Market</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>

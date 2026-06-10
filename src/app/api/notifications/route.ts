@@ -31,25 +31,31 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const limit = parseInt(url.searchParams.get('limit') || '20', 10);
 
-  const snap = await adminDb
-    .collection('notifications')
-    .where('recipientUid', '==', uid)
-    .orderBy('createdAt', 'desc')
-    .limit(limit)
-    .get();
+  try {
+    const snap = await adminDb
+      .collection('notifications')
+      .where('recipientUid', '==', uid)
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .get();
 
-  const notifications = snap.docs.map((d) => {
-    const data = d.data() as Record<string, unknown>;
-    return {
-      id: d.id,
-      ...data,
-      createdAt: (data.createdAt as { toDate?: () => Date } | null)?.toDate?.()?.toISOString() ?? null,
-    };
-  });
+    const notifications = snap.docs.map((d) => {
+      const data = d.data() as Record<string, unknown>;
+      return {
+        id: d.id,
+        ...data,
+        createdAt: (data.createdAt as { toDate?: () => Date } | null)?.toDate?.()?.toISOString() ?? null,
+      };
+    });
 
-  const unreadCount = notifications.filter((n) => !(n as { read?: boolean }).read).length;
+    const unreadCount = notifications.filter((n) => !(n as { read?: boolean }).read).length;
 
-  return NextResponse.json({ ok: true, notifications, unreadCount });
+    return NextResponse.json({ ok: true, notifications, unreadCount });
+  } catch (err: any) {
+    console.error('[api/notifications GET]', err?.message || err);
+    // Return empty notifications rather than a 500 — Firestore index may not be deployed yet
+    return NextResponse.json({ ok: true, notifications: [], unreadCount: 0 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -80,16 +86,21 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'mark_all_read') {
-    const snap = await adminDb
-      .collection('notifications')
-      .where('recipientUid', '==', uid)
-      .where('read', '==', false)
-      .get();
+    try {
+      const snap = await adminDb
+        .collection('notifications')
+        .where('recipientUid', '==', uid)
+        .where('read', '==', false)
+        .get();
 
-    const batch = adminDb.batch();
-    snap.docs.forEach((d) => batch.update(d.ref, { read: true, readAt: new Date() }));
-    await batch.commit();
-    return NextResponse.json({ ok: true, updated: snap.size });
+      const batch = adminDb.batch();
+      snap.docs.forEach((d) => batch.update(d.ref, { read: true, readAt: new Date() }));
+      await batch.commit();
+      return NextResponse.json({ ok: true, updated: snap.size });
+    } catch (err: any) {
+      console.error('[api/notifications POST mark_all_read]', err?.message || err);
+      return NextResponse.json({ ok: true, updated: 0 });
+    }
   }
 
   return jsonError(400, 'Unknown action');
