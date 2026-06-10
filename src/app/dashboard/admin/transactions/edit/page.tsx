@@ -731,8 +731,20 @@ export default function EditTransactionPage() {
           additionalComments: tx.additionalComments || '',
           notes: tx.notes || '',
         });
-        // Allow a tick for React to flush the reset before re-enabling CBP/GCI watchers.
-        setTimeout(() => { formInitializing.current = false; }, 0);
+        // Detect if the stored GCI differs from what CBP×pct would calculate.
+        // If so, the GCI was manually set (or based on concessions) — lock it so the
+        // auto-calc never overwrites it, regardless of commissionOverridden flag.
+        const storedGci = Number(tx.gci ?? split.grossCommission) || 0;
+        const storedCbp = Number(tx.commissionBasePrice) || 0;
+        const storedPct = Number(tx.commissionPercent) || 0;
+        const calcGci = storedCbp > 0 && storedPct > 0 ? Math.round(storedCbp * (storedPct / 100) * 100) / 100 : 0;
+        if (storedGci > 0 && calcGci > 0 && Math.abs(storedGci - calcGci) > 0.5) {
+          // GCI was manually set — lock it
+          gciManuallyEdited.current = true;
+          txWasOverridden.current = true;
+        }
+        // Use a longer delay so all React effects fire with formInitializing=true before we clear it.
+        setTimeout(() => { formInitializing.current = false; }, 300);
         // Auto-show extra buyer/seller rows if they have saved data
         if (tx.buyer3Name || tx.buyer3Email || tx.buyer3Phone) setShowBuyer3(true);
         if (tx.buyer4Name || tx.buyer4Email || tx.buyer4Phone) { setShowBuyer3(true); setShowBuyer4(true); }
