@@ -819,6 +819,18 @@ export default function EditTransactionPage() {
       // Build the payload — include splitSnapshot if split fields are set
       const payload: any = { id: txId, ...values };
 
+      // DEBUG: log raw form values for commission fields
+      console.log('[SAVE DEBUG] raw form values:', {
+        gci: values.gci,
+        agentDollar: values.agentDollar,
+        brokerGci: values.brokerGci,
+        agentPct: values.agentPct,
+        brokerPct: values.brokerPct,
+        commissionManualOverride: commissionManualOverride.current,
+        txWasOverridden: txWasOverridden.current,
+        gciManuallyEdited: gciManuallyEdited.current,
+      });
+
       // Rebuild splitSnapshot from individual split fields
       const gci = Number(values.gci) || 0;
       const agentPct = Number(values.agentPct) || 0;
@@ -928,6 +940,20 @@ export default function EditTransactionPage() {
       delete payload.outboundReferralDollar;
       delete payload.outboundReferralBrokerName;
       delete payload.outboundReferralContactName;
+
+      // DEBUG: log final payload commission fields before sending
+      console.log('[SAVE DEBUG] final payload commission:', {
+        gci: payload.gci,
+        commission: payload.commission,
+        agentDollar: payload.agentDollar,
+        brokerGci: payload.brokerGci,
+        commissionOverridden: payload.commissionOverridden,
+        splitSnapshot: payload.splitSnapshot ? {
+          grossCommission: payload.splitSnapshot.grossCommission,
+          agentNetCommission: payload.splitSnapshot.agentNetCommission,
+          companyRetained: payload.splitSnapshot.companyRetained,
+        } : 'NOT SET',
+      });
 
       const res = await fetch('/api/admin/transactions', {
         method: 'PATCH',

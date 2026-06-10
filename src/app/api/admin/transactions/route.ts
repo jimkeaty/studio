@@ -335,6 +335,19 @@ export async function PATCH(req: NextRequest) {
     }
 
     updates.updatedAt = new Date();
+    // DEBUG: log what is being written to Firestore
+    console.log('[API PATCH DEBUG] writing to Firestore for', id, ':', {
+      gci: updates.gci,
+      commission: updates.commission,
+      agentDollar: updates.agentDollar,
+      brokerGci: updates.brokerGci,
+      commissionOverridden: updates.commissionOverridden,
+      splitSnapshot: updates.splitSnapshot ? {
+        grossCommission: updates.splitSnapshot.grossCommission,
+        agentNetCommission: updates.splitSnapshot.agentNetCommission,
+        companyRetained: updates.splitSnapshot.companyRetained,
+      } : 'NOT IN UPDATES',
+    });
     await adminDb.collection('transactions').doc(id).update(updates);
     // Fetch the updated doc to return
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
