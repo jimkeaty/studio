@@ -602,7 +602,13 @@ export default function EditTransactionPage() {
         // For splitSnapshot fields, extract agentPct/brokerPct/agentDollar/brokerGci
         const split = tx.splitSnapshot || {};
         cbpManuallyEdited.current = !!(tx.commissionBasePrice && tx.commissionBasePrice !== tx.salePrice);
-
+        // If the commission was previously manually overridden, lock GCI so the
+        // CBP×pct auto-calc never fires and silently overwrites the saved value.
+        // This handles the case where commissionBasePrice = salePrice but GCI was
+        // manually set to a different amount (e.g. after seller concessions).
+        if (tx.commissionOverridden) {
+          gciManuallyEdited.current = true;
+        }
         // When loading an existing transaction, preserve the saved commission values.
         // The fields will be pre-populated from Firestore; the agent profile fetch
         // will NOT overwrite them (txLoadedWithCommission guards this).
