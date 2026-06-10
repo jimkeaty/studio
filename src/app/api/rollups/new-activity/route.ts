@@ -70,6 +70,21 @@ async function getAgentNameMap(db: any, year: number) {
   return map;
 }
 
+/** Fetch all demo account agentIds so they can be excluded from public boards. */
+async function getDemoAgentIds(db: any): Promise<Set<string>> {
+  const snap = await db
+    .collection("agentProfiles")
+    .where("isDemoAccount", "==", true)
+    .get();
+  const ids = new Set<string>();
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    const id = String(d.agentId || doc.id || "").trim();
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
 // Closing types that represent the listing/seller side
 const LISTING_CLOSING_TYPES = new Set(["listing", "dual"]);
 
@@ -85,9 +100,10 @@ export async function GET(req: NextRequest) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - lookbackDays);
 
-    const [transactionsSnap, agentNameMap] = await Promise.all([
+    const [transactionsSnap, agentNameMap, demoAgentIds] = await Promise.all([
       db.collection("transactions").where("year", "==", year).get(),
       getAgentNameMap(db, year),
+      getDemoAgentIds(db),
     ]);
 
     const recentSold: any[] = [];       // closed within lookback
@@ -103,6 +119,10 @@ export async function GET(req: NextRequest) {
       const t = doc.data() || {};
 
       const agentId = String(t.agentId || t.userId || "").trim();
+
+      // Skip demo account transactions from all public displays
+      if (demoAgentIds.size > 0 && demoAgentIds.has(agentId)) continue;
+
       const agentDisplayName =
         String(t.agentDisplayName || t.displayName || t.agentName || "").trim() ||
         agentNameMap.get(agentId) ||

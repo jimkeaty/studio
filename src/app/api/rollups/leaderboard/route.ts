@@ -84,7 +84,13 @@ export async function GET(req: NextRequest) {
 
 // ── Yearly (from rollups) ──────────────────────────────────────────────────
 async function handleYearly(db: any, year: number, includeInactive: boolean) {
-  const rollups = await getEffectiveRollups(db, year);
+  const [rollups, demoSnap] = await Promise.all([
+    getEffectiveRollups(db, year),
+    db.collection('agentProfiles').where('isDemoAccount', '==', true).get(),
+  ]);
+  const demoAgentIds = new Set<string>(
+    demoSnap.docs.map((d: any) => String(d.data().agentId || d.id || '').trim()).filter(Boolean)
+  );
 
   // Also fetch recent pendings and recent sold from transactions
   const recentSnap = await db
@@ -100,6 +106,9 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
 
   for (const doc of recentSnap.docs) {
     const t = doc.data() as any;
+    const agentIdForDeal = String(t.agentId || '').trim();
+    // Skip demo account transactions from recent deals feed
+    if (demoAgentIds.size > 0 && demoAgentIds.has(agentIdForDeal)) continue;
     const status = String(t.status || "").toLowerCase();
     const deal: RecentDeal = {
       address: String(t.address || "").trim(),
@@ -122,6 +131,9 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
 
   const rows = (rollups || [])
     .filter((r: any) => {
+      // Exclude demo accounts from leaderboard
+      const aid = String(r.agentId || '').trim();
+      if (demoAgentIds.size > 0 && demoAgentIds.has(aid)) return false;
       if (includeInactive) return true;
       const status = String(r.agentStatus || "active");
       return status === "active" || status === "grace_period" || status === "";
@@ -199,17 +211,20 @@ async function handlePeriod(
   const rangeStart = new Date(Date.UTC(year, startMonth, 1));
   const rangeEnd = new Date(Date.UTC(year, endMonth + 1, 0, 23, 59, 59, 999));
 
-  // Fetch all transactions for the year
-  const snap = await db
-    .collection("transactions")
-    .where("year", "==", year)
-    .get();
-
-  // Also fetch agent profiles for status filtering
-  const profileSnap = await db.collection("agentProfiles").get();
+  // Fetch all transactions for the year + agent profiles (for status + demo filtering)
+  const [snap, profileSnap] = await Promise.all([
+    db.collection("transactions").where("year", "==", year).get(),
+    db.collection("agentProfiles").get(),
+  ]);
   const profileMap = new Map<string, any>();
+  const demoAgentIds = new Set<string>();
   for (const doc of profileSnap.docs) {
-    profileMap.set(doc.id, doc.data());
+    const d = doc.data();
+    profileMap.set(doc.id, d);
+    if (d.isDemoAccount === true) {
+      const aid = String(d.agentId || doc.id || '').trim();
+      if (aid) demoAgentIds.add(aid);
+    }
   }
 
   // Aggregate by agent
@@ -230,6 +245,8 @@ async function handlePeriod(
     const status = String(t.status || "").toLowerCase();
     const agentId = String(t.agentId || "").trim();
     if (!agentId) continue;
+    // Skip demo account transactions
+    if (demoAgentIds.size > 0 && demoAgentIds.has(agentId)) continue;
 
     // Determine the relevant date for this transaction
     let txDate: Date | null = null;
@@ -274,6 +291,8 @@ async function handlePeriod(
   // Build rows
   const rows = Array.from(agentMap.entries())
     .filter(([agentId]) => {
+      // Exclude demo accounts
+      if (demoAgentIds.size > 0 && demoAgentIds.has(agentId)) return false;
       if (includeInactive) return true;
       const profile = profileMap.get(agentId);
       const status = String(profile?.status || "active");

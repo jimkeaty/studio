@@ -122,6 +122,8 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     const agents: { id: string; displayName: string; teamName: string | null }[] = [];
     for (const doc of profileSnap.docs) {
       const d = doc.data();
+      // Exclude demo accounts from all competition standings
+      if (d.isDemoAccount === true) continue;
       if (d.status && d.status !== 'active' && d.status !== 'grace_period') continue;
       agents.push({
         id: d.agentId || doc.id,
