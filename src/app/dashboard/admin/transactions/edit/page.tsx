@@ -272,6 +272,8 @@ export default function EditTransactionPage() {
   const commissionManualOverride = useRef(false);
   const cbpManuallyEdited = useRef(false);
   const commPctManuallyEdited = useRef(false);
+  // When the user types a GCI value directly, lock it so CBP×pct auto-calc won't overwrite it.
+  const gciManuallyEdited = useRef(false);
   // True once the existing transaction has been loaded and commission values populated.
   // When true, the agent commission fetch must NOT reset commissionManualOverride — the
   // saved values on the transaction are the source of truth until the user explicitly
@@ -348,6 +350,7 @@ export default function EditTransactionPage() {
   useEffect(() => {
     cbpManuallyEdited.current = false;
     commPctManuallyEdited.current = false;
+    gciManuallyEdited.current = false;
   }, [watchedClosingType, watchedDealType]);
 
   // Auto-fill commissionBasePrice from salePrice when not manually overridden.
@@ -374,10 +377,11 @@ export default function EditTransactionPage() {
   }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer]);
 
   // Auto-calculate GCI when commissionBasePrice × commissionPercent both set.
-  // Skip only during the initial form load (formInitializing) so we don't overwrite
-  // the saved GCI. After load, any change to CBP or commissionPercent recalculates GCI.
+  // Skip during initial form load (formInitializing) so saved GCI is preserved.
+  // Skip when the user has manually typed a GCI value (gciManuallyEdited) so their
+  // override is never silently overwritten by a CBP or pct change.
   useEffect(() => {
-    if (formInitializing.current) return;
+    if (formInitializing.current || gciManuallyEdited.current) return;
     const cbp = Number(watchedCBP) || 0;
     const pct = Number(watchedCommPct) || 0;
     if (cbp > 0 && pct > 0) {
@@ -1788,8 +1792,21 @@ export default function EditTransactionPage() {
                   <FormField control={form.control} name="gci" render={({ field }) => (
                     <FormItem>
                       <FormLabel>GCI ($)</FormLabel>
-                      <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
-                      <FormDescription>Gross Commission Income</FormDescription>
+                      <FormControl>
+                        <Input
+                          type="number" step="0.01" placeholder="0"
+                          {...field}
+                          onChange={(e) => {
+                            // Lock GCI so CBP×pct auto-calc won't overwrite this value.
+                            // Also flag as a commission manual override so the save
+                            // marks commissionOverridden=true in Firestore.
+                            gciManuallyEdited.current = true;
+                            commissionManualOverride.current = true;
+                            field.onChange(e);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>Gross Commission Income — type to override auto-calc</FormDescription>
                     </FormItem>
                   )} />
                 </Grid3>

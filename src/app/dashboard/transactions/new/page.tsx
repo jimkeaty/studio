@@ -746,9 +746,9 @@ export default function AddTransactionPage() {
     // Clear seller-paying fields when switching modes to avoid misinterpretation
     form.setValue('sellerPayingListingAgent', '' as any);
     form.setValue('sellerPayingBuyerAgent', '' as any);
-    commPctManuallyEdited.current = false;
+        commPctManuallyEdited.current = false;
+    gciManuallyEdited.current = false;
   };
-
   // Extra buyer/seller visibility state
   const [showBuyer3, setShowBuyer3] = useState(false);
   const [showBuyer4, setShowBuyer4] = useState(false);
@@ -865,6 +865,8 @@ export default function AddTransactionPage() {
 
   const cbpManuallyEdited = useRef(false);
   const commPctManuallyEdited = useRef(false);
+  // When the user types a GCI value directly, lock it so CBP×pct auto-calc won't overwrite it.
+  const gciManuallyEdited = useRef(false);
 
   useEffect(() => {
     if (cbpManuallyEdited.current) return;
@@ -885,6 +887,8 @@ export default function AddTransactionPage() {
   }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer, commissionMode]);
 
   useEffect(() => {
+    // Skip if user has manually typed a GCI — their value takes priority over auto-calc.
+    if (gciManuallyEdited.current) return;
     const cbp = Number(watchedCBP) || 0;
     const pct = Number(watchedCommPct) || 0;
     if (cbp > 0 && pct > 0) {
@@ -3598,11 +3602,15 @@ export default function AddTransactionPage() {
                       <FormControl>
                         <CurrencyInput
                           value={field.value as any}
-                          onChange={(val) => field.onChange(val)}
+                          onChange={(val) => {
+                            // Lock GCI so CBP×pct auto-calc won't overwrite this value.
+                            gciManuallyEdited.current = true;
+                            field.onChange(val);
+                          }}
                           placeholder="0"
                         />
                       </FormControl>
-                      <FormDescription>Gross Commission Income</FormDescription>
+                      <FormDescription>Gross Commission Income — type to override auto-calc</FormDescription>
                     </FormItem>
                   )} />
                 </Grid3>
