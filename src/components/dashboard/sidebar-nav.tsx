@@ -42,6 +42,7 @@ import {
   UsersRound,
   Wrench,
   Puzzle,
+  ExternalLink,
   MapPin,
   GraduationCap,
   HelpCircle,
@@ -338,27 +339,45 @@ export function SidebarNav() {
               <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Apps</p>
               {agentPlugins.map((plugin) => {
                 const IconComponent = PLUGIN_ICON_MAP[plugin.iconName] ?? LayoutGrid;
-                const href = plugin.href ?? `/dashboard/apps/${plugin.id}`;
+                const isExternal = !!plugin.externalUrl;
+                const href = isExternal
+                  ? plugin.externalUrl!
+                  : (plugin.href ?? `/dashboard/apps/${plugin.id}`);
+                const isActive = !isExternal &&
+                  (pathname === (plugin.href ?? `/dashboard/apps/${plugin.id}`) ||
+                   pathname.startsWith(`${plugin.href ?? `/dashboard/apps/${plugin.id}`}/`));
+                const buttonContent = (
+                  <SidebarMenuButton
+                    isActive={isActive}
+                    tooltip={plugin.name}
+                    className="justify-start"
+                  >
+                    <IconComponent className="h-4 w-4" />
+                    <span className="flex-1">{plugin.name}</span>
+                    {isExternal && (
+                      <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
+                    )}
+                    {plugin.badge && (
+                      <Badge
+                        variant="secondary"
+                        className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-primary/20"
+                      >
+                        {plugin.badge}
+                      </Badge>
+                    )}
+                  </SidebarMenuButton>
+                );
                 return (
                   <SidebarMenuItem key={plugin.id}>
-                    <Link href={href}>
-                      <SidebarMenuButton
-                        isActive={pathname === href || pathname.startsWith(`${href}/`)}
-                        tooltip={plugin.name}
-                        className="justify-start"
-                      >
-                        <IconComponent className="h-4 w-4" />
-                        <span className="flex-1">{plugin.name}</span>
-                        {plugin.badge && (
-                          <Badge
-                            variant="secondary"
-                            className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-primary/20"
-                          >
-                            {plugin.badge}
-                          </Badge>
-                        )}
-                      </SidebarMenuButton>
-                    </Link>
+                    {isExternal ? (
+                      <a href={href} target="_blank" rel="noopener noreferrer">
+                        {buttonContent}
+                      </a>
+                    ) : (
+                      <Link href={href}>
+                        {buttonContent}
+                      </Link>
+                    )}
                   </SidebarMenuItem>
                 );
               })}

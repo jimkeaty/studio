@@ -41,7 +41,7 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
     description: 'AI-powered business planning tool that helps agents build, track, and optimize their annual production plan.',
     iconName: 'CalendarDays',
     category: 'productivity',
-    href: '/dashboard/apps/smart-planner',
+    externalUrl: 'https://smartplaner-deurais3.manus.space',
     badge: 'New',
     defaultEnabled: true, // All Keaty agents get this
   },
