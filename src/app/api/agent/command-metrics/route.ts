@@ -330,10 +330,14 @@ export async function GET(req: NextRequest) {
      // ── Fetch goals ────────────────────────────────────────────────────
     // Use agentFirebaseUid (the profile doc ID) so goals are always found regardless
     // of whether viewAs was a slug or a Firebase UID.
+    // Goals are keyed by segment = 'agent_{uid}'. The uid used as the key may be
+    // the profile doc ID (slug) OR the Firebase UID depending on who saved them.
+    // Try all resolved IDs so goals are always found regardless of which ID was used.
     const goalSegment = view === 'team' && teamId ? teamId : `agent_${agentFirebaseUid}`;
+    const goalsMap = new Map<number, { grossMarginGoal: number | null; volumeGoal: number | null; salesCountGoal: number | null }>();
+    // Primary lookup: by profile doc ID (agentFirebaseUid)
     const goalsSnap = await adminDb.collection('brokerCommandGoals')
       .where('year', '==', year).where('segment', '==', goalSegment).get();
-    const goalsMap = new Map<number, { grossMarginGoal: number | null; volumeGoal: number | null; salesCountGoal: number | null }>();
     goalsSnap.docs.forEach(d => {
       const g = d.data();
       goalsMap.set(g.month, {
@@ -342,6 +346,33 @@ export async function GET(req: NextRequest) {
         salesCountGoal: g.salesCountGoal ?? null,
       });
     });
+    // Fallback: if no goals found and the caller's Firebase UID differs from the
+    // profile doc ID (slug case), also try the Firebase UID as the segment key.
+    // This handles goals saved by the agent directly (keyed by their Firebase UID)
+    // when the profile doc ID is a slug.
+    if (goalsMap.size === 0 && view !== 'team') {
+      // Build a set of alternate UIDs to try
+      const altUids = new Set<string>();
+      if (decoded.uid !== agentFirebaseUid) altUids.add(decoded.uid);
+      if (profileData?.firebaseUid && profileData.firebaseUid !== agentFirebaseUid) altUids.add(profileData.firebaseUid);
+      if (uid !== agentFirebaseUid) altUids.add(uid);
+      for (const altUid of altUids) {
+        const altSegment = `agent_${altUid}`;
+        const altGoalsSnap = await adminDb.collection('brokerCommandGoals')
+          .where('year', '==', year).where('segment', '==', altSegment).get();
+        altGoalsSnap.docs.forEach(d => {
+          const g = d.data();
+          if (!goalsMap.has(g.month)) {
+            goalsMap.set(g.month, {
+              grossMarginGoal: g.grossMarginGoal ?? null,
+              volumeGoal: g.volumeGoal ?? null,
+              salesCountGoal: g.salesCountGoal ?? null,
+            });
+          }
+        });
+        if (goalsMap.size > 0) break; // found goals, stop trying
+      }
+    }
 
     // ── Partial-month helpers ─────────────────────────────────────────────
     // When viewing the current calendar year, the current in-progress month is capped

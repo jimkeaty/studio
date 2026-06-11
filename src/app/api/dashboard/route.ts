@@ -297,7 +297,7 @@ export async function GET(req: NextRequest) {
     const txDocMap = new Map();
     const activityDocMap = new Map<string, any>();
 
-    const [activitySnapsArray, goalsSnap] = await Promise.all([
+    const [activitySnapsArray, goalsSnap, altGoalsSnap] = await Promise.all([
       // Query daily_activity for ALL resolved agentId values and merge by doc ID
       Promise.all(
         activityIdList.map(agentIdVal =>
@@ -314,6 +314,15 @@ export async function GET(req: NextRequest) {
         .where("year", "==", yearNum)
         .where("segment", "==", goalSegment)
         .get(),
+      // Fallback: also query by the caller's Firebase UID in case goals were saved under a different ID
+      // (e.g. goals saved by agent directly keyed by Firebase UID, but profile doc ID is a slug)
+      uid !== agentFirebaseUid
+        ? adminDb.collection("brokerCommandGoals")
+            .where("year", "==", yearNum)
+            .where("segment", "==", `agent_${uid}`)
+            .get()
+            .catch(() => null)
+        : Promise.resolve(null),
     ]);
 
     // Merge all daily_activity results — deduplicate by doc ID
@@ -641,20 +650,31 @@ export async function GET(req: NextRequest) {
     let projectedVolumeGoal = 0;
     let projectedSalesGoal = 0;
 
-    for (const gDoc of goalsSnap.docs) {
+    // Merge primary and fallback goal docs — deduplicate by month (primary takes precedence)
+    const seenGoalMonths = new Set<number>();
+    const allGoalDocs = [...goalsSnap.docs];
+    if (altGoalsSnap) {
+      for (const d of altGoalsSnap.docs) {
+        const m = asNumber(d.data().month);
+        if (!allGoalDocs.some(gd => asNumber(gd.data().month) === m)) {
+          allGoalDocs.push(d);
+        }
+      }
+    }
+    for (const gDoc of allGoalDocs) {
       const g = gDoc.data();
       const gMonth = asNumber(g.month); // 1-12
+      if (seenGoalMonths.has(gMonth)) continue; // deduplicate
+      seenGoalMonths.add(gMonth);
       yearlyVolumeGoal += asNumber(g.volumeGoal);
       yearlySalesGoal += asNumber(g.salesCountGoal);
       yearlyIncomeGoalFromMonthly += asNumber(g.grossMarginGoal);
-
       // Sum goals for months 1 through current month for YTD targets
       if (gMonth >= 1 && gMonth <= currentMonth) {
         volumeGoalToDate += asNumber(g.volumeGoal);
         salesGoalToDate += asNumber(g.salesCountGoal);
         incomeGoalToDate += asNumber(g.grossMarginGoal);
       }
-
       // Sum goals through projected month (when pending deals close)
       if (gMonth >= 1 && gMonth <= projectedMonth) {
         projectedIncomeGoal += asNumber(g.grossMarginGoal);

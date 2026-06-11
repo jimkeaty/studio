@@ -64,17 +64,33 @@ export async function GET(
     if (!agentId) return jsonError(400, 'Missing agentId');
 
     // Allow: admin-like users can fetch any agent's commission profile.
-    // Allow: an agent can fetch their own commission profile (agentId === their UID).
+    // Allow: an agent can fetch their own commission profile:
+    //   - agentId === their Firebase UID (direct match)
+    //   - agentId is their profile slug, and profile.firebaseUid === their UID
     // Deny: agents cannot fetch other agents' commission profiles.
     const adminAccess = await isAdminLike(decoded.uid);
-    const isSelf = decoded.uid === agentId;
+    let isSelf = decoded.uid === agentId;
+
+    // Resolve the profile doc — it may be stored under a slug, not the Firebase UID
+    let profileSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
+    if (!profileSnap.exists) {
+      // Try finding by agentId slug field
+      const bySlug = await adminDb.collection('agentProfiles')
+        .where('agentId', '==', agentId).limit(1).get();
+      if (!bySlug.empty) {
+        profileSnap = bySlug.docs[0] as any;
+        if (!isSelf && bySlug.docs[0].data()?.firebaseUid === decoded.uid) isSelf = true;
+      } else {
+        return jsonError(404, 'Agent profile not found');
+      }
+    } else if (!isSelf) {
+      // Profile found by agentId — also check if caller's UID matches the profile's firebaseUid
+      if (profileSnap.data()?.firebaseUid === decoded.uid) isSelf = true;
+    }
+    const snap = profileSnap;
+
     if (!adminAccess && !isSelf) {
       return jsonError(403, 'Forbidden');
-    }
-
-    const snap = await adminDb.collection('agentProfiles').doc(agentId).get();
-    if (!snap.exists) {
-      return jsonError(404, 'Agent profile not found');
     }
     const data = snap.data() || {};
 

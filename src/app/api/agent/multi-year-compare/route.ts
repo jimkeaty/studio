@@ -62,8 +62,42 @@ export async function GET(req: NextRequest) {
     const uid = (viewAs && callerIsAdmin) ? viewAs : decoded.uid;
     const view = searchParams.get('view') || 'personal';
 
+    // ── Resolve all possible agentId values (slug + Firebase UID) ────────────
+    // Transactions bulk-imported under a slug must be found when the agent
+    // logs in directly with their Firebase UID, and vice versa.
+    async function resolvePersonalIds(targetUid: string): Promise<string[]> {
+      const ids = new Set<string>([targetUid]);
+      try {
+        const byId = await adminDb.collection('agentProfiles').doc(targetUid).get();
+        if (byId.exists) {
+          const d = byId.data();
+          if (d?.agentId) ids.add(String(d.agentId));
+          if (d?.firebaseUid) ids.add(String(d.firebaseUid));
+        } else {
+          // uid might be a slug
+          const bySlug = await adminDb.collection('agentProfiles')
+            .where('agentId', '==', targetUid).limit(1).get();
+          if (!bySlug.empty) {
+            ids.add(bySlug.docs[0].id);
+            const d = bySlug.docs[0].data();
+            if (d?.firebaseUid) ids.add(String(d.firebaseUid));
+          }
+          // uid might be a Firebase UID stored in firebaseUid field
+          const byFbUid = await adminDb.collection('agentProfiles')
+            .where('firebaseUid', '==', targetUid).limit(1).get();
+          if (!byFbUid.empty) {
+            ids.add(byFbUid.docs[0].id);
+            const d = byFbUid.docs[0].data();
+            if (d?.agentId) ids.add(String(d.agentId));
+          }
+        }
+      } catch { /* non-fatal */ }
+      return Array.from(ids);
+    }
+
     // ── Determine which agent IDs to include ─────────────────────────────────
-    let agentIds: string[] = [uid];
+    // For personal view: always resolve all IDs so bulk-imported transactions are found.
+    let agentIds: string[] = await resolvePersonalIds(uid);
 
     if (view === 'team') {
       // Robust profile resolution: try agentId slug first, then firebaseUid

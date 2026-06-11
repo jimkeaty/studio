@@ -47,6 +47,7 @@ async function resolveAgentIds(uid: string): Promise<string[]> {
       if (d?.agentId) ids.add(String(d.agentId));
       if (d?.firebaseUid) ids.add(String(d.firebaseUid));
     } else {
+      // uid might be a slug — search by agentId field
       const profileBySlugSnap = await adminDb
         .collection('agentProfiles')
         .where('agentId', '==', uid)
@@ -56,6 +57,17 @@ async function resolveAgentIds(uid: string): Promise<string[]> {
         ids.add(profileBySlugSnap.docs[0].id);
         const d = profileBySlugSnap.docs[0].data();
         if (d?.firebaseUid) ids.add(String(d.firebaseUid));
+      }
+      // uid might be a Firebase UID stored in the firebaseUid field
+      const profileByFbUidSnap = await adminDb
+        .collection('agentProfiles')
+        .where('firebaseUid', '==', uid)
+        .limit(1)
+        .get();
+      if (!profileByFbUidSnap.empty) {
+        ids.add(profileByFbUidSnap.docs[0].id);
+        const d = profileByFbUidSnap.docs[0].data();
+        if (d?.agentId) ids.add(String(d.agentId));
       }
     }
   } catch { /* non-fatal */ }
