@@ -193,7 +193,7 @@ type AgentMetricsResponse = {
     categoryBreakdown: { closed: CategoryMetrics; pending: CategoryMetrics };
     sourceBreakdown?: SourceBreakdown;
   };
-  prevYearStats?: { year: number; totalVolume: number; totalSales: number; avgSalePrice: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number }[]; totalGCI?: number; totalGrossMargin?: number; avgGCI?: number; avgGrossMargin?: number; avgMarginPct?: number; avgCommissionPct?: number; };
+  prevYearStats?: { year: number; totalVolume: number; totalSales: number; avgSalePrice: number; seasonality: { month: number; label: string; volumePct: number; salesPct: number; grossMarginPct?: number }[]; totalGCI?: number; totalGrossMargin?: number; avgGCI?: number; avgGrossMargin?: number; avgMarginPct?: number; avgCommissionPct?: number; };
   brokerageSeasonality?: { month: number; label: string; volumePct: number; salesPct: number }[];
   availableYears?: number[];
   comparisonData?: { year: number; months: { closedVolume: number; closedCount: number; netIncome: number; grossMargin?: number; totalGCI?: number }[] } | null;
@@ -683,15 +683,32 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
   const projFull = (() => {
     if (!isCurrentYearPerf) return null;
     const mn = agentView.monthlyNetIncome;
-    const goalVals = overview.months.map(m => m.grossMarginGoal ?? 0);
-    const yearlyGoal = goalVals.reduce((s, v) => s + v, 0);
     const ytdActual = mn.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0);
-    const ytdGoalShare = yearlyGoal > 0
-      ? goalVals.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0) / yearlyGoal
-      : (currentMonthIdxPerf + 1) / 12;
-    return ytdGoalShare > 0 ? Math.round(ytdActual / ytdGoalShare) : Math.round(ytdActual * 12 / (currentMonthIdxPerf + 1));
+    // Use seasonality weights (agent last-year > brokerage > flat) for the pace projection
+    const agentSeason = perfData?.prevYearStats?.seasonality;
+    const brokerageSeason = perfData?.brokerageSeasonality;
+    let weights: number[] | null = null;
+    if (agentSeason && agentSeason.length === 12) {
+      const vals = agentSeason.map(s => s.grossMarginPct ?? s.volumePct);
+      const total = vals.reduce((a, b) => a + b, 0);
+      if (total > 0) weights = vals.map(v => v / total);
+    }
+    if (!weights && brokerageSeason && brokerageSeason.length === 12) {
+      const vals = brokerageSeason.map(s => s.volumePct);
+      const total = vals.reduce((a, b) => a + b, 0);
+      if (total > 0) weights = vals.map(v => v / total);
+    }
+    if (!weights) weights = Array(12).fill(1 / 12);
+    const ytdWeightShare = weights.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0);
+    return ytdWeightShare > 0 ? Math.round(ytdActual / ytdWeightShare) : Math.round(ytdActual * 12 / (currentMonthIdxPerf + 1));
   })();
-  const projLabel = yearlyIncomeGoal && yearlyIncomeGoal > 0 ? 'Seasonality-Based' : 'Straight-Line';
+  const projLabel = (() => {
+    const agentSeason = perfData?.prevYearStats?.seasonality;
+    const brokerageSeason = perfData?.brokerageSeasonality;
+    if (agentSeason && agentSeason.length === 12 && agentSeason.reduce((s, x) => s + (x.volumePct ?? 0), 0) > 0) return 'Agent Seasonality';
+    if (brokerageSeason && brokerageSeason.length === 12) return 'Brokerage Seasonality';
+    return 'Straight-Line';
+  })();
 
   // $ per engagement & $ per appointment from overview dashboard data
   const perEngagement = dashboard?.stats?.engagementValue ?? 0;
@@ -1994,20 +2011,77 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const todayMonthLabel = today.toLocaleString('default', { month: 'long' });
   const todayMonthShort = today.toLocaleString('default', { month: 'short' });
 
-  // Helper: compute projected future months from YTD actuals + goal seasonality
-  function computeProjection(actualArr: number[], goalArr: (number | null)[]): (number | null)[] {
+  // Helper: compute projected future months using seasonality weights.
+  //
+  // Algorithm (seasonality-based):
+  //   1. Sum YTD actuals (Jan → current month) to get ytdActual.
+  //   2. Determine the YTD seasonality share — what % of the full year
+  //      is expected to occur in the months already completed, according
+  //      to the chosen seasonality curve (agent last-year > brokerage).
+  //   3. Divide ytdActual by that share to get projFull — the implied
+  //      full-year total if the agent continues at their current pace
+  //      relative to the seasonal pattern.
+  //   4. For each remaining month, multiply projFull by that month's
+  //      seasonality weight to get the projected value.
+  //
+  // Fallback (straight-line): if no seasonality data exists, distribute
+  // the remaining projected total equally across the remaining months.
+  //
+  // seasonalityKey: which field in the seasonality array to use for weights
+  //   'grossMarginPct' → net income projection
+  //   'volumePct'      → dollar volume projection
+  //   'salesPct'       → sales count projection
+  function computeProjection(
+    actualArr: number[],
+    _goalArr: (number | null)[],  // kept for API compat, no longer used for weights
+    seasonalityKey: 'grossMarginPct' | 'volumePct' | 'salesPct' = 'volumePct',
+  ): (number | null)[] {
     if (!isCurrentYear) return actualArr.map(() => null);
-    const numGoals: number[] = goalArr.map(v => v ?? 0);
-    const yearlyGoal: number = numGoals.reduce((s: number, v: number) => s + v, 0);
-    const ytdActual: number = actualArr.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0);
-    const ytdGoalShare: number = yearlyGoal > 0
-      ? numGoals.slice(0, currentMonthIdx + 1).reduce((s: number, v: number) => s + v, 0) / yearlyGoal
-      : (currentMonthIdx + 1) / 12;
-    const projFull = ytdGoalShare > 0 ? ytdActual / ytdGoalShare : ytdActual * (12 / (currentMonthIdx + 1));
+
+    // Pick best available seasonality curve: agent last-year > brokerage > flat
+    const agentSeason = perfData?.prevYearStats?.seasonality;
+    const brokerageSeason = perfData?.brokerageSeasonality;
+
+    // Build a 12-element weights array (index 0 = Jan, index 11 = Dec)
+    // Each weight is the % of the full year expected in that month (0–100 scale)
+    let weights: number[] | null = null;
+    if (agentSeason && agentSeason.length === 12) {
+      const vals = agentSeason.map(s =>
+        seasonalityKey === 'grossMarginPct' ? (s.grossMarginPct ?? s.volumePct) :
+        seasonalityKey === 'salesPct' ? s.salesPct : s.volumePct
+      );
+      // Only use agent seasonality if it has meaningful variation (agent had data last year)
+      const total = vals.reduce((a, b) => a + b, 0);
+      if (total > 0) weights = vals.map(v => v / total); // normalise to sum=1
+    }
+    if (!weights && brokerageSeason && brokerageSeason.length === 12) {
+      const vals = brokerageSeason.map(s =>
+        seasonalityKey === 'salesPct' ? s.salesPct : s.volumePct
+      );
+      const total = vals.reduce((a, b) => a + b, 0);
+      if (total > 0) weights = vals.map(v => v / total);
+    }
+    // Flat fallback: equal weight per month
+    if (!weights) weights = Array(12).fill(1 / 12);
+
+    // YTD actual total (completed months only)
+    const ytdActual: number = actualArr
+      .slice(0, currentMonthIdx + 1)
+      .reduce((s: number, v: number) => s + v, 0);
+
+    // YTD seasonality share: sum of weights for completed months
+    const ytdWeightShare: number = weights
+      .slice(0, currentMonthIdx + 1)
+      .reduce((s: number, v: number) => s + v, 0);
+
+    // Implied full-year total at current pace
+    const projFull: number = ytdWeightShare > 0
+      ? ytdActual / ytdWeightShare
+      : ytdActual * (12 / (currentMonthIdx + 1));
+
     return actualArr.map((_, i) => {
-      if (i <= currentMonthIdx) return null;
-      const share = yearlyGoal > 0 ? numGoals[i] / yearlyGoal : 1 / 12;
-      return Math.round(projFull * share);
+      if (i <= currentMonthIdx) return null; // past/current months show actuals, not projections
+      return Math.round(projFull * weights![i]);
     });
   }
 
@@ -2016,10 +2090,20 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const salesGoalArr = months.map(m => m.salesCountGoal);
   const hasIncomeGoal = incomeGoalArr.some(v => (v ?? 0) > 0);
 
-  const projNetIncome = computeProjection(monthlyNetIncome, incomeGoalArr);
-  const projVolume = computeProjection(months.map(m => m.closedVolume), volumeGoalArr);
-  const projSales = computeProjection(months.map(m => m.closedCount), salesGoalArr);
-  const projectionLabel = hasIncomeGoal ? 'Seasonality-Based Projection' : 'Straight-Line Projection';
+  const projNetIncome = computeProjection(monthlyNetIncome, incomeGoalArr, 'grossMarginPct');
+  const projVolume = computeProjection(months.map(m => m.closedVolume), volumeGoalArr, 'volumePct');
+  const projSales = computeProjection(months.map(m => m.closedCount), salesGoalArr, 'salesPct');
+  // Projection label: describe the seasonality source actually used
+  const projectionLabel = (() => {
+    const agentSeason = perfData?.prevYearStats?.seasonality;
+    const brokerageSeason = perfData?.brokerageSeasonality;
+    if (agentSeason && agentSeason.length === 12) {
+      const total = agentSeason.reduce((s, x) => s + (x.volumePct ?? 0), 0);
+      if (total > 0) return 'Agent Seasonality Projection';
+    }
+    if (brokerageSeason && brokerageSeason.length === 12) return 'Brokerage Seasonality Projection';
+    return 'Straight-Line Projection';
+  })();
 
   // Full-year projections for summary banner
   const fullYearProjection = (() => {

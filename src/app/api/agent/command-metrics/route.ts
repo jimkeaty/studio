@@ -687,6 +687,8 @@ export async function GET(req: NextRequest) {
       label: format(new Date(2000, i), 'MMM'),
       volumePct: prevTotalVolume > 0 ? Math.round((pm.closedVolume / prevTotalVolume) * 10000) / 100 : 8.33,
       salesPct: prevTotalCount > 0 ? Math.round((pm.closedCount / prevTotalCount) * 10000) / 100 : 8.33,
+      // grossMarginPct: agent's net income share by month — used for income projection
+      grossMarginPct: prevTotalNet > 0 ? Math.round((pm.netIncome / prevTotalNet) * 10000) / 100 : 8.33,
       closedVolume: pm.closedVolume,
       closedCount: pm.closedCount,
       totalGCI: pm.totalGCI,
@@ -1074,6 +1076,7 @@ export async function GET(req: NextRequest) {
         seasonality: ps.seasonality.map(s => ({
           month: s.month, label: s.label,
           volumePct: s.volumePct, salesPct: s.salesPct,
+          grossMarginPct: (s as any).grossMarginPct ?? s.volumePct,
         })),
       };
     }
