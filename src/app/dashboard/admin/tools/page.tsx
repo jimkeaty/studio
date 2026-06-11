@@ -1306,6 +1306,29 @@ export default function AdminToolsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Update Agent Contacts */}
+      <Card className="border-green-200">
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            <Mail className="h-6 w-6 text-green-600 mt-0.5" />
+            <div>
+              <CardTitle className="text-base">Update Agent Contacts</CardTitle>
+              <CardDescription className="mt-1 text-sm">
+                Upload a CSV to fill in missing email and phone numbers for agent profiles.
+                Only fills in fields that are currently blank — never overwrites existing data.
+                Also fixes Firebase Auth UID linking for agents who can’t see their dashboard.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={() => window.location.href = '/dashboard/admin/update-contacts'}>
+            <ArrowRight className="mr-2 h-4 w-4" />
+            Open Update Contacts Tool
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

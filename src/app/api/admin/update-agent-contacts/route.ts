@@ -117,9 +117,11 @@ export async function POST(req: NextRequest) {
       }
 
       const updates: Record<string, string> = {};
-      if (contact.email) updates.email = contact.email.toLowerCase().trim();
-      if (normalizedPhone) updates.phone = normalizedPhone;
-      if (firebaseUid && profileData.firebaseUid !== firebaseUid) {
+      // Only fill in fields that are currently missing — never overwrite existing data
+      if (contact.email && !profileData.email) updates.email = contact.email.toLowerCase().trim();
+      if (normalizedPhone && !profileData.phone) updates.phone = normalizedPhone;
+      // Fix firebaseUid if missing OR if it equals the profile doc ID (a placeholder, not a real Auth UID)
+      if (firebaseUid && (!profileData.firebaseUid || profileData.firebaseUid === profileId)) {
         updates.firebaseUid = firebaseUid;
       }
 
