@@ -314,8 +314,9 @@ export async function GET(req: NextRequest) {
         .where("year", "==", yearNum)
         .where("segment", "==", goalSegment)
         .get(),
-      // Fallback: also query by the caller's Firebase UID in case goals were saved under a different ID
-      // (e.g. goals saved by agent directly keyed by Firebase UID, but profile doc ID is a slug)
+      // Fallback: also query by the caller's Firebase UID in case goals were saved under a different ID.
+      // We try uid (Firebase UID) as the alternate segment key; additional fallbacks are handled
+      // in the merge loop below using the full set of resolved IDs.
       uid !== agentFirebaseUid
         ? adminDb.collection("brokerCommandGoals")
             .where("year", "==", yearNum)
@@ -658,6 +659,29 @@ export async function GET(req: NextRequest) {
         const m = asNumber(d.data().month);
         if (!allGoalDocs.some(gd => asNumber(gd.data().month) === m)) {
           allGoalDocs.push(d);
+        }
+      }
+    }
+    // If still no goals found, try additional segment keys from the resolved profile
+    // (agentId slug, profile doc ID) — covers goals saved while admin was impersonating
+    if (allGoalDocs.length === 0) {
+      const extraIds = new Set<string>();
+      if (_ap?.agentId && _ap.agentId !== agentFirebaseUid && _ap.agentId !== uid) extraIds.add(String(_ap.agentId));
+      if (agentProfileDocId && agentProfileDocId !== agentFirebaseUid && agentProfileDocId !== uid) extraIds.add(agentProfileDocId);
+      if (_ap?.firebaseUid && _ap.firebaseUid !== agentFirebaseUid && _ap.firebaseUid !== uid) extraIds.add(String(_ap.firebaseUid));
+      for (const extraId of extraIds) {
+        const extraSnap = await adminDb.collection("brokerCommandGoals")
+          .where("year", "==", yearNum)
+          .where("segment", "==", `agent_${extraId}`)
+          .get()
+          .catch(() => null);
+        if (extraSnap && !extraSnap.empty) {
+          for (const d of extraSnap.docs) {
+            if (!allGoalDocs.some(gd => asNumber(gd.data().month) === asNumber(d.data().month))) {
+              allGoalDocs.push(d);
+            }
+          }
+          if (allGoalDocs.length > 0) break;
         }
       }
     }

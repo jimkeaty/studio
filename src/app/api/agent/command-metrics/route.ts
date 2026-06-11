@@ -335,6 +335,7 @@ export async function GET(req: NextRequest) {
     // Try all resolved IDs so goals are always found regardless of which ID was used.
     const goalSegment = view === 'team' && teamId ? teamId : `agent_${agentFirebaseUid}`;
     const goalsMap = new Map<number, { grossMarginGoal: number | null; volumeGoal: number | null; salesCountGoal: number | null }>();
+    console.log(`[command-metrics] goals lookup: uid=${uid} decoded.uid=${decoded.uid} agentFirebaseUid=${agentFirebaseUid} profileDocId=${profileDocId} goalSegment=${goalSegment} year=${year}`);
     // Primary lookup: by profile doc ID (agentFirebaseUid)
     const goalsSnap = await adminDb.collection('brokerCommandGoals')
       .where('year', '==', year).where('segment', '==', goalSegment).get();
@@ -346,16 +347,19 @@ export async function GET(req: NextRequest) {
         salesCountGoal: g.salesCountGoal ?? null,
       });
     });
-    // Fallback: if no goals found and the caller's Firebase UID differs from the
-    // profile doc ID (slug case), also try the Firebase UID as the segment key.
-    // This handles goals saved by the agent directly (keyed by their Firebase UID)
-    // when the profile doc ID is a slug.
+    // Fallback: if no goals found, try all other possible segment keys.
+    // Goals may be keyed by: Firebase UID, profile doc ID (slug), agentId slug field,
+    // or the caller's decoded UID — depending on who saved them and when.
     if (goalsMap.size === 0 && view !== 'team') {
-      // Build a set of alternate UIDs to try
+      // Build a comprehensive set of alternate IDs to try
       const altUids = new Set<string>();
       if (decoded.uid !== agentFirebaseUid) altUids.add(decoded.uid);
       if (profileData?.firebaseUid && profileData.firebaseUid !== agentFirebaseUid) altUids.add(profileData.firebaseUid);
       if (uid !== agentFirebaseUid) altUids.add(uid);
+      // Also try the agentId slug from the profile (covers goals saved while admin was impersonating)
+      if (profileData?.agentId && profileData.agentId !== agentFirebaseUid) altUids.add(String(profileData.agentId));
+      // Also try the profile doc ID itself if it differs from agentFirebaseUid
+      if (profileDocId && profileDocId !== agentFirebaseUid) altUids.add(profileDocId);
       for (const altUid of altUids) {
         const altSegment = `agent_${altUid}`;
         const altGoalsSnap = await adminDb.collection('brokerCommandGoals')
@@ -373,6 +377,43 @@ export async function GET(req: NextRequest) {
         if (goalsMap.size > 0) break; // found goals, stop trying
       }
     }
+    // Last-resort fallback: if still no goals found and we have no profile, try to find
+    // the profile by doing a broader search and then look up goals under all found IDs.
+    // This handles the case where the agent has never logged in before (no firebaseUid stamped)
+    // and their email in the auth token doesn't match their profile email.
+    if (goalsMap.size === 0 && !profileDocId && view !== 'team') {
+      // Try to find any profile that references this Firebase UID in any field
+      const allProfilesSnap = await adminDb.collection('agentProfiles').get().catch(() => null);
+      if (allProfilesSnap) {
+        for (const doc of allProfilesSnap.docs) {
+          const pd = doc.data();
+          // Check if this profile could belong to the current user
+          if (pd.firebaseUid === uid || pd.agentId === uid || doc.id === uid) {
+            const seg = `agent_${doc.id}`;
+            const snap = await adminDb.collection('brokerCommandGoals')
+              .where('year', '==', year).where('segment', '==', seg).get().catch(() => null);
+            if (snap && !snap.empty) {
+              snap.docs.forEach(d => {
+                const g = d.data();
+                if (!goalsMap.has(g.month)) {
+                  goalsMap.set(g.month, {
+                    grossMarginGoal: g.grossMarginGoal ?? null,
+                    volumeGoal: g.volumeGoal ?? null,
+                    salesCountGoal: g.salesCountGoal ?? null,
+                  });
+                }
+              });
+              // Stamp the firebaseUid for future lookups
+              if (!pd.firebaseUid) {
+                adminDb.collection('agentProfiles').doc(doc.id).update({ firebaseUid: uid }).catch(() => {});
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+    console.log(`[command-metrics] goals resolved: ${goalsMap.size} months | segment=${goalSegment} | uid=${uid} | profileDocId=${profileDocId}`);
 
     // ── Partial-month helpers ─────────────────────────────────────────────
     // When viewing the current calendar year, the current in-progress month is capped
