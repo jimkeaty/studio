@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck, KeyRound } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck, KeyRound, Mail } from 'lucide-react';
 
 interface MigrationResult {
   ok: boolean;
@@ -70,6 +70,39 @@ export default function AdminToolsPage() {
       setUidStampResult({ ok: false, error: err?.message || 'Unknown error' });
     } finally {
       setUidStampRunning(false);
+    }
+  }
+
+  // Bulk Invite Agents
+  const [inviteRunning, setInviteRunning] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{
+    ok: boolean;
+    dryRun?: boolean;
+    summary?: { invited: number; alreadyExists: number; skippedNoEmail: number; wouldInvite: number; errors: number; total: number };
+    results?: { profileId: string; email: string; name: string; status: string; firebaseUid?: string; error?: string }[];
+    error?: string;
+  } | null>(null);
+
+  async function runBulkInvite(dryRun: boolean) {
+    if (!user) return;
+    if (!dryRun && !confirm(
+      `This will create Firebase Auth accounts for all agents that don\'t have one yet and send each a password-setup email.\n\nContinue?`
+    )) return;
+    setInviteRunning(true);
+    setInviteResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/bulk-invite-agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ dryRun }),
+      });
+      const data = await res.json();
+      setInviteResult(data);
+    } catch (err: any) {
+      setInviteResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setInviteRunning(false);
     }
   }
 
@@ -1108,6 +1141,108 @@ export default function AdminToolsPage() {
                 ? <><CheckCircle2 className="mr-2 h-4 w-4" />Run Again</>
                 : <><KeyRound className="mr-2 h-4 w-4" />Run Agent Login Health Check</>}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Bulk Invite Agents */}
+      <Card className="border-blue-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <Mail className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+              <div>
+                <CardTitle className="text-base">Bulk Invite Agents</CardTitle>
+                <CardDescription className="mt-1 text-sm">
+                  Creates Firebase Auth accounts for all agent profiles that don&apos;t have one yet
+                  and sends each agent a password-setup welcome email. Run the dry run first to
+                  preview which agents will be invited. Agents who already have accounts are skipped.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-blue-300 text-blue-700">Onboarding</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {inviteResult && (
+            <Alert variant={inviteResult.ok ? 'default' : 'destructive'} className={inviteResult.ok ? 'border-blue-200 bg-blue-50' : ''}>
+              {inviteResult.ok ? <CheckCircle2 className="h-4 w-4 text-blue-600" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle className={inviteResult.ok ? 'text-blue-800' : ''}>
+                {inviteResult.ok
+                  ? inviteResult.dryRun ? 'Dry Run Complete — No Changes Made' : 'Bulk Invite Complete'
+                  : 'Bulk Invite Failed'}
+              </AlertTitle>
+              <AlertDescription className={inviteResult.ok ? 'text-blue-700' : ''}>
+                {inviteResult.ok && inviteResult.summary ? (
+                  <>
+                    <p className="text-sm">
+                      {inviteResult.dryRun ? (
+                        <><strong className="text-blue-700">{inviteResult.summary.wouldInvite} agents would be invited</strong> (no accounts yet), <strong>{inviteResult.summary.alreadyExists}</strong> already have accounts, <strong>{inviteResult.summary.skippedNoEmail}</strong> skipped (no email).</>
+                      ) : (
+                        <><strong className="text-green-700">{inviteResult.summary.invited} agents invited</strong> &amp; sent welcome emails, <strong>{inviteResult.summary.alreadyExists}</strong> already had accounts, <strong>{inviteResult.summary.skippedNoEmail}</strong> skipped (no email), <strong className="text-red-700">{inviteResult.summary.errors}</strong> errors.</>
+                      )}
+                    </p>
+                    {inviteResult.dryRun && inviteResult.summary.wouldInvite > 0 && inviteResult.results && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-blue-600 hover:underline">
+                          Agents that would be invited ({inviteResult.results.filter(r => r.status === 'dry_run').length})
+                        </summary>
+                        <ul className="mt-1 space-y-0.5 text-xs font-mono text-muted-foreground">
+                          {inviteResult.results.filter(r => r.status === 'dry_run').map(r => (
+                            <li key={r.profileId} className="text-blue-700">{r.name} — {r.email}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {!inviteResult.dryRun && inviteResult.summary.invited > 0 && inviteResult.results && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-green-600 hover:underline">
+                          Successfully invited ({inviteResult.results.filter(r => r.status === 'invited').length})
+                        </summary>
+                        <ul className="mt-1 space-y-0.5 text-xs font-mono text-muted-foreground">
+                          {inviteResult.results.filter(r => r.status === 'invited').map(r => (
+                            <li key={r.profileId} className="text-green-700">{r.name} — {r.email}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {inviteResult.summary.errors > 0 && inviteResult.results && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-red-600 hover:underline">
+                          Errors ({inviteResult.results.filter(r => r.status.startsWith('error')).length})
+                        </summary>
+                        <ul className="mt-1 space-y-0.5 text-xs font-mono text-muted-foreground">
+                          {inviteResult.results.filter(r => r.status.startsWith('error')).map(r => (
+                            <li key={r.profileId} className="text-red-700">{r.email}: {r.error}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </>
+                ) : inviteResult.error}
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => runBulkInvite(true)}
+              disabled={inviteRunning}
+              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+            >
+              {inviteRunning
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Running&hellip;</>
+                : <><Mail className="mr-2 h-4 w-4" />Dry Run (Preview Only)</>}
+            </Button>
+            <Button
+              onClick={() => runBulkInvite(false)}
+              disabled={inviteRunning}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {inviteRunning
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending Invites&hellip;</>
+                : <><Mail className="mr-2 h-4 w-4" />Invite All Uninvited Agents</>}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
