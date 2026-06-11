@@ -21,6 +21,7 @@ import {
   BarChart3,
   Bell,
   Building,
+  CalendarDays,
   ClipboardList,
   ClipboardPen,
   Gamepad2,
@@ -40,11 +41,24 @@ import {
   Upload,
   UsersRound,
   Wrench,
+  Puzzle,
   MapPin,
   GraduationCap,
   HelpCircle,
   BookUser,
+  type LucideIcon,
 } from 'lucide-react';
+import { useAgentPlugins } from '@/hooks/useAgentPlugins';
+import { Badge } from '@/components/ui/badge';
+
+// Map plugin iconName strings to actual Lucide components
+const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
+  CalendarDays,
+  TrendingUp,
+  BarChart3,
+  Target,
+  GraduationCap,
+};
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 
 // ─── Mobile Bottom Tab Bar ────────────────────────────────────────────────────
@@ -179,6 +193,7 @@ const adminMenuGroups = [
     label: 'System',
     items: [
       { href: '/dashboard/admin/tools', label: 'Admin Tools', icon: Wrench },
+      { href: '/dashboard/admin/plugins', label: 'Plugin Manager', icon: Puzzle },
     ],
   },
 ];
@@ -191,6 +206,7 @@ export function SidebarNav() {
   const { isStaff } = useIsStaff();
   const isTcOnly = isStaff && !showAdminMenu; // tc role only — no full admin menu
   const { isImpersonating } = useImpersonation();
+  const { plugins: agentPlugins } = useAgentPlugins();
   const [branding, setBranding] = useState<BrandingData | null>(null);
 
   // Fetch branding settings (public endpoint, no auth needed)
@@ -310,6 +326,42 @@ export function SidebarNav() {
                   </Link>
                 </SidebarMenuItem>
               ))}
+            </SidebarMenu>
+          </>
+        )}
+
+        {/* Apps / Plugins — shown to all users based on their enabled plugins */}
+        {agentPlugins.length > 0 && (
+          <>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Apps</p>
+              {agentPlugins.map((plugin) => {
+                const IconComponent = PLUGIN_ICON_MAP[plugin.iconName] ?? LayoutGrid;
+                const href = plugin.href ?? `/dashboard/apps/${plugin.id}`;
+                return (
+                  <SidebarMenuItem key={plugin.id}>
+                    <Link href={href}>
+                      <SidebarMenuButton
+                        isActive={pathname === href || pathname.startsWith(`${href}/`)}
+                        tooltip={plugin.name}
+                        className="justify-start"
+                      >
+                        <IconComponent className="h-4 w-4" />
+                        <span className="flex-1">{plugin.name}</span>
+                        {plugin.badge && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-primary/20"
+                          >
+                            {plugin.badge}
+                          </Badge>
+                        )}
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </>
         )}
