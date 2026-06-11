@@ -249,13 +249,18 @@ export async function GET(req: NextRequest) {
     const agentFirebaseUid: string = agentProfileDocId ?? uid;
     // Unwrap to get actual profile fields
     const agentProfile: any = (agentProfileData as any)?.data ?? agentProfileData ?? null;
-    // Write-back: stamp firebaseUid onto the profile doc so future lookups hit Strategy 1 directly.
+    // Write-back: stamp firebaseUid onto the profile doc so future lookups hit Strategy 1 or 4 directly.
+    // Also correct it if it was set to the profile doc ID (a common placeholder that's NOT the real Auth UID).
     // Only do this for direct agent logins (not admin viewAs) to avoid stamping the admin's UID.
     const isViewingAsForWriteback = !!(viewAs && callerIsAdmin);
-    if (agentProfileDocId && agentProfile && !agentProfile.firebaseUid && uid && !isViewingAsForWriteback) {
-      try {
-        await adminDb.collection('agentProfiles').doc(agentProfileDocId).update({ firebaseUid: uid });
-      } catch { /* non-fatal */ }
+    if (agentProfileDocId && agentProfile && uid && !isViewingAsForWriteback) {
+      const existingFirebaseUid = agentProfile.firebaseUid;
+      const needsUpdate = !existingFirebaseUid || existingFirebaseUid === agentProfileDocId;
+      if (needsUpdate) {
+        try {
+          await adminDb.collection('agentProfiles').doc(agentProfileDocId).update({ firebaseUid: uid });
+        } catch { /* non-fatal */ }
+      }
     }
 
     const plan = (planSnap.exists ? (planSnap.data() ?? {}) : {}) as Partial<BusinessPlan>;

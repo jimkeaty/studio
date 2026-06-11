@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     const oldFirebaseUid = profileDoc!.data()?.firebaseUid;
     const newFirebaseUid = authUser.uid;
 
-    if (oldFirebaseUid === newFirebaseUid) {
+        if (oldFirebaseUid === newFirebaseUid) {
       return NextResponse.json({
         ok: true,
         message: 'firebaseUid already correct — no update needed',
@@ -65,8 +65,8 @@ export async function POST(req: NextRequest) {
         firebaseUid: newFirebaseUid,
       });
     }
-
-    // Update the profile
+    // Always overwrite firebaseUid — even if it was already set (it may have been set to the wrong value,
+    // e.g. the profile doc ID was used as a placeholder instead of the real Firebase Auth UID).
     await adminDb.collection('agentProfiles').doc(profileDoc!.id).update({ firebaseUid: newFirebaseUid });
 
     return NextResponse.json({

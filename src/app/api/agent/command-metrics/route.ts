@@ -156,12 +156,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Write-back: if we found the profile via slug/email/firebaseUid but firebaseUid is not
-    // yet stamped on the doc, stamp it now so future lookups hit Strategy 1 or 4 directly.
-    if (profileDocId && profileData && !profileData.firebaseUid && uid) {
-      try {
-        await adminDb.collection('agentProfiles').doc(profileDocId).update({ firebaseUid: uid });
-      } catch { /* non-fatal */ }
+    // Write-back: stamp firebaseUid onto the profile doc so future lookups hit Strategy 1 or 4 directly.
+    // Also correct it if it was set to the profile doc ID (a placeholder, not the real Auth UID).
+    if (profileDocId && profileData && uid) {
+      const existingUid = profileData.firebaseUid;
+      if (!existingUid || existingUid === profileDocId) {
+        try {
+          await adminDb.collection('agentProfiles').doc(profileDocId).update({ firebaseUid: uid });
+        } catch { /* non-fatal */ }
+      }
     }
 
     const profile = profileData ?? null;
