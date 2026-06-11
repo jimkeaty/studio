@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
         const data = d.data();
         const n = (data.name || data.displayName || '').toLowerCase();
         const slug = (data.agentId || '').toLowerCase();
-        return n.includes(name) || slug.includes(name);
+        const docId = d.id.toLowerCase();
+        return n.includes(name) || slug.includes(name) || docId.includes(name);
       })
       .map(d => ({
         docId: d.id,
@@ -36,9 +37,11 @@ export async function GET(req: NextRequest) {
         status: d.data().status,
       }));
 
-    // 2. Find all goals for this year
-    const goalsSnap = await adminDb.collection('brokerCommandGoals')
-      .where('year', '==', year).get();
+    // 2. Find ALL goals for this year and the previous year
+    const [goalsSnap, prevGoalsSnap] = await Promise.all([
+      adminDb.collection('brokerCommandGoals').where('year', '==', year).get(),
+      adminDb.collection('brokerCommandGoals').where('year', '==', year - 1).get(),
+    ]);
     
     // 3. For each matching profile, find goals under all possible segment keys
     const results = matchingProfiles.map(p => {
@@ -47,29 +50,39 @@ export async function GET(req: NextRequest) {
       if (p.agentId) possibleSegments.add(`agent_${p.agentId}`);
       if (p.firebaseUid) possibleSegments.add(`agent_${p.firebaseUid}`);
 
-      const matchingGoals = goalsSnap.docs
-        .filter(d => possibleSegments.has(d.data().segment))
-        .map(d => ({
-          docId: d.id,
-          segment: d.data().segment,
-          month: d.data().month,
-          grossMarginGoal: d.data().grossMarginGoal,
-          volumeGoal: d.data().volumeGoal,
-          salesCountGoal: d.data().salesCountGoal,
-        }));
+      const findGoals = (snap: FirebaseFirestore.QuerySnapshot) =>
+        snap.docs
+          .filter(d => possibleSegments.has(d.data().segment))
+          .map(d => ({
+            docId: d.id,
+            segment: d.data().segment,
+            month: d.data().month,
+            grossMarginGoal: d.data().grossMarginGoal,
+            volumeGoal: d.data().volumeGoal,
+            salesCountGoal: d.data().salesCountGoal,
+          }));
 
       return {
         profile: p,
         possibleSegments: [...possibleSegments],
-        goalsFound: matchingGoals.length,
-        goals: matchingGoals,
+        goalsFoundThisYear: findGoals(goalsSnap).length,
+        goalsThisYear: findGoals(goalsSnap),
+        goalsFoundPrevYear: findGoals(prevGoalsSnap).length,
+        goalsPrevYear: findGoals(prevGoalsSnap),
       };
     });
 
-    // 4. Also list all unique segments in goals for this year
-    const allSegments = [...new Set(goalsSnap.docs.map(d => d.data().segment))].sort();
+    // 4. List all unique segments in goals for this year
+    const allSegmentsThisYear = [...new Set(goalsSnap.docs.map(d => d.data().segment))].sort();
+    const allSegmentsPrevYear = [...new Set(prevGoalsSnap.docs.map(d => d.data().segment))].sort();
 
-    return NextResponse.json({ ok: true, year, results, allSegments });
+    return NextResponse.json({ 
+      ok: true, 
+      year, 
+      results, 
+      allSegmentsThisYear,
+      allSegmentsPrevYear,
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
