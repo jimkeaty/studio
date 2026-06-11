@@ -79,11 +79,23 @@ export async function GET(req: NextRequest) {
       if (profileByIdSnap.exists) {
         const d = profileByIdSnap.data();
         if (d?.agentId) agentIdSet.add(String(d.agentId));
+        if (d?.firebaseUid) agentIdSet.add(String(d.firebaseUid));
       } else {
+        // uid might be a slug
         const profileBySlugSnap = await adminDb.collection('agentProfiles')
           .where('agentId', '==', uid).limit(1).get();
         if (!profileBySlugSnap.empty) {
           agentIdSet.add(profileBySlugSnap.docs[0].id);
+          const d = profileBySlugSnap.docs[0].data();
+          if (d?.firebaseUid) agentIdSet.add(String(d.firebaseUid));
+        }
+        // uid might be a Firebase UID stored in the firebaseUid field
+        const profileByFbUidSnap = await adminDb.collection('agentProfiles')
+          .where('firebaseUid', '==', uid).limit(1).get();
+        if (!profileByFbUidSnap.empty) {
+          agentIdSet.add(profileByFbUidSnap.docs[0].id);
+          const d = profileByFbUidSnap.docs[0].data();
+          if (d?.agentId) agentIdSet.add(String(d.agentId));
         }
       }
     } catch { /* ignore profile lookup errors */ }
