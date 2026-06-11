@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck, KeyRound } from 'lucide-react';
 
 interface MigrationResult {
   ok: boolean;
@@ -45,6 +45,33 @@ export default function AdminToolsPage() {
   // Year 20226 fix
   const [yearFixRunning, setYearFixRunning] = useState(false);
   const [yearFixResult, setYearFixResult] = useState<MigrationResult | null>(null);
+
+  // Agent Login Health Check — stamp firebaseUid onto all profiles
+  const [uidStampRunning, setUidStampRunning] = useState(false);
+  const [uidStampResult, setUidStampResult] = useState<{
+    ok: boolean;
+    summary?: { stamped: number; alreadyDone: number; noAuthUser: number; skipped: number; errors: number; total: number };
+    results?: { profileId: string; email: string; status: string; firebaseUid?: string }[];
+    error?: string;
+  } | null>(null);
+  async function runUidStamp() {
+    if (!user) return;
+    setUidStampRunning(true);
+    setUidStampResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/backfill-agent-uids', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setUidStampResult(data);
+    } catch (err: any) {
+      setUidStampResult({ ok: false, error: err?.message || 'Unknown error' });
+    } finally {
+      setUidStampRunning(false);
+    }
+  }
 
   // Fix All Commission Modes
   const [commFixRunning, setCommFixRunning] = useState(false);
@@ -996,6 +1023,90 @@ export default function AdminToolsPage() {
           )}
           <Button onClick={runMigration} disabled={running} variant={result?.ok && result?.migrated === 0 ? 'outline' : 'default'}>
             {running ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Running…</> : result?.ok ? <><CheckCircle2 className="mr-2 h-4 w-4" />Run Again</> : 'Run Migration'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Agent Login Health Check */}
+      <Card className="border-indigo-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+              <div>
+                <CardTitle className="text-base">Agent Login Health Check</CardTitle>
+                <CardDescription className="mt-1 text-sm">
+                  Scans every agent profile and stamps the agent&apos;s Firebase Auth UID into the
+                  <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">firebaseUid</code>
+                  field. This ensures every agent can log in directly and see their full dashboard,
+                  transactions, goals, and business plan data — even if their profile doc ID is a
+                  slug rather than their Firebase UID. Safe to run multiple times — only updates
+                  profiles that are missing the field. Run this once to fix all agents at once.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-indigo-300 text-indigo-700">Login Fix</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {uidStampResult && (
+            <Alert variant={uidStampResult.ok ? 'default' : 'destructive'} className={uidStampResult.ok ? 'border-green-200 bg-green-50' : ''}>
+              {uidStampResult.ok ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle className={uidStampResult.ok ? 'text-green-800' : ''}>
+                {uidStampResult.ok ? 'Health Check Complete' : 'Health Check Failed'}
+              </AlertTitle>
+              <AlertDescription className={uidStampResult.ok ? 'text-green-700' : ''}>
+                {uidStampResult.ok && uidStampResult.summary ? (
+                  <>
+                    <p className="text-sm">
+                      Scanned <strong>{uidStampResult.summary.total}</strong> agent profiles &mdash;{' '}
+                      <strong className="text-green-700">{uidStampResult.summary.stamped} newly fixed</strong>,{' '}
+                      <strong>{uidStampResult.summary.alreadyDone}</strong> already OK,{' '}
+                      <strong className="text-amber-700">{uidStampResult.summary.noAuthUser}</strong> no Firebase Auth account found,{' '}
+                      <strong>{uidStampResult.summary.skipped}</strong> skipped (no email),{' '}
+                      <strong className="text-red-700">{uidStampResult.summary.errors}</strong> errors.
+                    </p>
+                    {uidStampResult.summary.stamped > 0 && uidStampResult.results && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-muted-foreground hover:underline">
+                          View newly fixed agents ({uidStampResult.results.filter(r => r.status === 'stamped').length})
+                        </summary>
+                        <ul className="mt-1 space-y-0.5 text-xs font-mono text-muted-foreground">
+                          {uidStampResult.results.filter(r => r.status === 'stamped').map(r => (
+                            <li key={r.profileId} className="text-green-700">
+                              {r.email} &rarr; uid: {r.firebaseUid}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {uidStampResult.summary.noAuthUser > 0 && uidStampResult.results && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-amber-600 hover:underline">
+                          Agents with no Firebase Auth account ({uidStampResult.summary.noAuthUser}) — these agents cannot log in yet
+                        </summary>
+                        <ul className="mt-1 space-y-0.5 text-xs font-mono text-muted-foreground">
+                          {uidStampResult.results.filter(r => r.status === 'no_auth_user').map(r => (
+                            <li key={r.profileId} className="text-amber-700">{r.email}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </>
+                ) : uidStampResult.error}
+              </AlertDescription>
+            </Alert>
+          )}
+          <Button
+            onClick={runUidStamp}
+            disabled={uidStampRunning}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            {uidStampRunning
+              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scanning all agents&hellip;</>
+              : uidStampResult?.ok
+                ? <><CheckCircle2 className="mr-2 h-4 w-4" />Run Again</>
+                : <><KeyRound className="mr-2 h-4 w-4" />Run Agent Login Health Check</>}
           </Button>
         </CardContent>
       </Card>
