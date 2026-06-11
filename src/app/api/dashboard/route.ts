@@ -207,17 +207,33 @@ export async function GET(req: NextRequest) {
             return { data: d.data(), docId: d.id };
           }
 
-          // Strategy 3: Match by email from auth token
-          const email = decoded.email || '';
-          if (email) {
-            const profileByEmailSnap = await adminDb.collection('agentProfiles')
-              .where('email', '==', email)
-              .limit(1)
-              .get();
-            if (!profileByEmailSnap.empty) {
-              const d = profileByEmailSnap.docs[0];
-              return { data: d.data(), docId: d.id };
+          // Strategy 3: Match by email from auth token.
+          // IMPORTANT: skip when viewAs is active — decoded.email belongs to the admin caller,
+          // not the agent being viewed. Using it would match the admin's own profile.
+          const isViewingAs = !!(viewAs && callerIsAdmin);
+          if (!isViewingAs) {
+            const email = decoded.email || '';
+            if (email) {
+              const profileByEmailSnap = await adminDb.collection('agentProfiles')
+                .where('email', '==', email)
+                .limit(1)
+                .get();
+              if (!profileByEmailSnap.empty) {
+                const d = profileByEmailSnap.docs[0];
+                return { data: d.data(), docId: d.id };
+              }
             }
+          }
+
+          // Strategy 4: Query by firebaseUid field — handles agents whose profile doc ID is a slug
+          // and whose email may differ from the auth token (e.g. profile email not yet synced).
+          const profileByFirebaseUidSnap = await adminDb.collection('agentProfiles')
+            .where('firebaseUid', '==', uid)
+            .limit(1)
+            .get();
+          if (!profileByFirebaseUidSnap.empty) {
+            const d = profileByFirebaseUidSnap.docs[0];
+            return { data: d.data(), docId: d.id };
           }
 
           return null;
@@ -233,6 +249,14 @@ export async function GET(req: NextRequest) {
     const agentFirebaseUid: string = agentProfileDocId ?? uid;
     // Unwrap to get actual profile fields
     const agentProfile: any = (agentProfileData as any)?.data ?? agentProfileData ?? null;
+    // Write-back: stamp firebaseUid onto the profile doc so future lookups hit Strategy 1 directly.
+    // Only do this for direct agent logins (not admin viewAs) to avoid stamping the admin's UID.
+    const isViewingAsForWriteback = !!(viewAs && callerIsAdmin);
+    if (agentProfileDocId && agentProfile && !agentProfile.firebaseUid && uid && !isViewingAsForWriteback) {
+      try {
+        await adminDb.collection('agentProfiles').doc(agentProfileDocId).update({ firebaseUid: uid });
+      } catch { /* non-fatal */ }
+    }
 
     const plan = (planSnap.exists ? (planSnap.data() ?? {}) : {}) as Partial<BusinessPlan>;
 
