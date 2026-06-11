@@ -2170,10 +2170,41 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         Goals
       </button>
       {isCurrentYear && (
-        <button type="button" onClick={() => setShowProjected(p => !p)}
-          className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
-          📈 Projected
-        </button>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setShowProjected(p => !p)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+            📈 Projected
+          </button>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-amber-100 hover:text-amber-700 transition-colors flex items-center justify-center text-xs font-bold leading-none" aria-label="Projection info">
+                  i
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed p-3">
+                <p className="font-semibold mb-1">📈 How Projections Work</p>
+                <p className="mb-2">
+                  Projected bars show what your remaining months are expected to produce
+                  <strong> based on your current YTD pace and real seasonal patterns</strong> —
+                  not a simple equal split.
+                </p>
+                <p className="mb-2">
+                  <strong>Step 1 — Implied full-year total:</strong> Your YTD actual is divided by
+                  the historical share of the year that Jan–{new Date().toLocaleString('default',{month:'short'})} typically represents,
+                  giving an implied annual total at your current pace.
+                </p>
+                <p className="mb-2">
+                  <strong>Step 2 — Monthly distribution:</strong> Each future month's bar is sized
+                  by its historical weight in the seasonality curve.
+                </p>
+                <p className="text-amber-700 font-medium">
+                  Seasonality source: {projectionLabel.replace(' Projection','').replace(' Projection','')}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       )}
     </div>
   );
