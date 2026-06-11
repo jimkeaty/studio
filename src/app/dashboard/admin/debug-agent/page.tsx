@@ -1,9 +1,9 @@
 'use client';
 import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useUser } from '@/firebase';
 
 export default function DebugAgentPage() {
-  const { user } = useAuth();
+  const { user } = useUser();
   const [name, setName] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(false);
