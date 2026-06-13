@@ -1103,27 +1103,51 @@ function TierProgressCard({ dashboard, isAdmin }: { dashboard: AgentDashboardDat
   const activePalette = TIER_PALETTE[currentTierIndex % TIER_PALETTE.length];
   const remainToNext = nextTierThreshold != null ? Math.max(0, nextTierThreshold - grossGCIYTD) : 0;
 
-  // ── Bar geometry ───────────────────────────────────────────────────────
+    // ── Bar geometry ───────────────────────────────────────────────────────
   // Extend the last (uncapped) tier by 30% beyond current GCI or a minimum buffer
   const lastTier = tiers[tiers.length - 1];
   const lastMax = lastTier.toCompanyDollar
     ?? Math.max(lastTier.fromCompanyDollar * 1.5, grossGCIYTD * 1.25, lastTier.fromCompanyDollar + 25000);
   const totalRange = lastMax;
-
-  // Compute each tier's left% and width%
-  const tierSegments = tiers.map((t, i) => {
+  // Compute raw dollar widths for each tier
+  const rawWidths = tiers.map((t, i) => {
     const from = t.fromCompanyDollar;
-    const to = i < tiers.length - 1 ? (tiers[i + 1].fromCompanyDollar) : lastMax;
-    const leftPct = (from / totalRange) * 100;
-    const widthPct = ((to - from) / totalRange) * 100;
-    return { leftPct, widthPct, from, to };
+    const to = i < tiers.length - 1 ? tiers[i + 1].fromCompanyDollar : lastMax;
+    return { from, to, rawPct: ((to - from) / totalRange) * 100 };
   });
-
+  // Enforce a minimum visual width per tier so no tier gets squeezed out.
+  // Each tier gets at least MIN_TIER_PCT% of the bar; remaining space is
+  // distributed proportionally among tiers that exceed the minimum.
+  const MIN_TIER_PCT = Math.min(15, 90 / tiers.length); // scales down if many tiers
+  const tiersNeedingBoost = rawWidths.filter(w => w.rawPct < MIN_TIER_PCT).length;
+  const boostedTotal = tiersNeedingBoost * MIN_TIER_PCT;
+  const naturalTotal = rawWidths.filter(w => w.rawPct >= MIN_TIER_PCT).reduce((s, w) => s + w.rawPct, 0);
+  const scaleFactor = naturalTotal > 0 ? (100 - boostedTotal) / naturalTotal : 1;
+  let cursor = 0;
+  const tierSegments = rawWidths.map((w) => {
+    const widthPct = w.rawPct < MIN_TIER_PCT ? MIN_TIER_PCT : w.rawPct * scaleFactor;
+    const leftPct = cursor;
+    cursor += widthPct;
+    return { leftPct, widthPct, from: w.from, to: w.to };
+  });
+  // Helper: convert a dollar value to a bar position % using the same visual scaling
+  const dollarToBarPct = (dollars: number): number => {
+    // Find which tier segment this dollar amount falls in
+    for (let i = 0; i < tiers.length; i++) {
+      const seg = tierSegments[i];
+      const raw = rawWidths[i];
+      if (dollars >= raw.from && (i === tiers.length - 1 || dollars < raw.to)) {
+        const withinTier = raw.to > raw.from ? (dollars - raw.from) / (raw.to - raw.from) : 0;
+        return Math.min(seg.leftPct + withinTier * seg.widthPct, 99.5);
+      }
+    }
+    return Math.min((dollars / totalRange) * 100, 99.5);
+  };
   // Position marker for current GCI
-  const markerPct = Math.min((grossGCIYTD / totalRange) * 100, 99.5);
+  const markerPct = dollarToBarPct(grossGCIYTD);
   // Position of pending GCI marker
   const pendingMarkerPct = pendingGrossGCI > 0
-    ? Math.min(((grossGCIYTD + pendingGrossGCI) / totalRange) * 100, 99.5)
+    ? dollarToBarPct(grossGCIYTD + pendingGrossGCI)
     : null;
 
   const hoveredTier = hoveredIdx !== null ? tiers[hoveredIdx] : null;
