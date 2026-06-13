@@ -455,7 +455,7 @@ function AgentDashboardPage() {
   const pendingCount = transactions.filter(t => t.status === 'pending').length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 min-w-0 w-full overflow-x-hidden">
       {/* ═══ SMART PERSONALIZED HEADER (Improvement #1) ══════════════════ */}
       <SmartHeader
         greeting={greeting}
@@ -737,7 +737,7 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricTile title={isAllYears ? 'Total Net Income' : 'Net Income (Closed)'} value={fmtCurrencyCompact(totals.netIncome)} subtitle={isAllYears ? `${fmtNumNull(totals.closedCount)} total closings` : `${fmtNumNull(totals.closedCount)} closings · ${ytdIncomeGoal ? `${gradeVsGoal}% of YTD goal` : 'No goal set'}`} icon={DollarSign} highlight />
           <MetricTile title={isAllYears ? 'Total Closed Volume' : 'Closed Volume'} value={fmtCurrencyCompact(totals.closedVolume, true)} subtitle={isAllYears ? `${fmtNumNull(totals.closedCount)} total sides` : `Pending: ${fmtCurrencyCompact(totals.pendingVolume, true)}`} icon={TrendingUp} />
           <MetricTile title={isAllYears ? 'Total Sales (Sides)' : 'Total Sales'} value={fmtNumNull(totals.closedCount) ?? '0'} subtitle={isAllYears ? `All-time closed sides` : `${fmtNumNull(totals.pendingCount)} pending`} icon={BarChart3} />
@@ -1308,7 +1308,7 @@ function TierProgressCard({ dashboard, isAdmin }: { dashboard: AgentDashboardDat
         </div>
 
         {/* ── PROGRESS STATS ROW ────────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Current Progress</p>
             <p className="text-lg font-bold">{fmtCurrency(grossGCIYTD)}</p>
@@ -2403,7 +2403,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 );
               })()}
               {showProjected && fullYearProjection && (
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                   <div><span className="text-muted-foreground">Projected Full-Year Income</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.netIncome, true)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Volume</span><p className="font-semibold text-amber-600">{fmtCurrencyCompact(fullYearProjection.volume, true)}</p></div>
                   <div><span className="text-muted-foreground">Projected Full-Year Sales</span><p className="font-semibold text-amber-600">{fmtNumNull(fullYearProjection.sales)}</p></div>
@@ -3198,13 +3198,13 @@ function SmartHeader({
   tierProgress?: { grossGCIYTD: number; nextTierThreshold: number | null; currentTierIndex: number; tiers: { fromCompanyDollar: number; toCompanyDollar: number | null; agentSplitPercent: number }[]; capReached?: boolean } | null;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white shadow-xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white shadow-xl min-w-0">
       {/* subtle grid texture */}
       <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-      <div className="relative flex flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5">
+        <div className="relative flex flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5 min-w-0">
         {/* Top row: greeting + Add Deal button */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-0.5">
               {isImpersonating ? 'Viewing as' : greeting + ','}
             </p>
@@ -3219,7 +3219,7 @@ function SmartHeader({
               )}
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-end gap-2 shrink-0">
+          <div className="flex flex-row items-end gap-2 shrink-0 flex-wrap justify-end">
             <a href="/dashboard/transactions/new?type=listing">
               <button className="flex items-center gap-1.5 bg-amber-400/20 hover:bg-amber-400/30 active:bg-amber-400/40 border border-amber-300/40 text-amber-100 text-xs sm:text-sm font-semibold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-colors whitespace-nowrap">
                 <PlusCircle className="h-4 w-4" />
@@ -3307,7 +3307,7 @@ function TodaysFocusCard({ dashboard }: { dashboard: AgentDashboardData }) {
       </div>
       {/* Focus items */}
       <CardContent className="p-0">
-        <div className="grid grid-cols-3 divide-x">
+        <div className="grid grid-cols-1 sm:grid-cols-3 sm:divide-x divide-y sm:divide-y-0">
           {focusItems.map((item) => {
             const pct = item.target > 0 ? Math.min(100, Math.round((item.actual / item.target) * 100)) : 0;
             const isDone = pct >= 100;
@@ -3568,7 +3568,7 @@ function QuickActionBar() {
     { label: 'My Transactions', icon: ChevronsDown, href: '#my-transactions', primary: false },
   ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
       {actions.map(({ label, icon: Icon, href, primary }) => (
         <a key={label} href={href}>
           <div className={cn(
