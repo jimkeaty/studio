@@ -1981,7 +1981,24 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
         {/* Delta + Catch-Up */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-lg border p-2.5 space-y-0.5">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Delta</p>
+            <div className="flex items-center gap-1">
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Delta</p>
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground hover:text-foreground">
+                      <Info className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[220px] text-xs leading-snug">
+                    <p className="font-semibold mb-1">What is Delta?</p>
+                    <p>The difference between where you <strong>should be today</strong> (your prorated YTD goal) and where you <strong>actually are</strong>.</p>
+                    <p className="mt-1">A <span className="text-red-500 font-semibold">negative delta</span> means you&apos;re behind pace. A <span className="text-green-600 font-semibold">positive delta</span> means you&apos;re ahead.</p>
+                    <p className="mt-1 text-muted-foreground">Your YTD goal is prorated daily from your annual business plan goal based on working days elapsed.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <div className="flex items-center gap-1">
               {delta >= 0 ? <ArrowUpRight className="h-3.5 w-3.5 text-green-600" /> : <ArrowDownRight className="h-3.5 w-3.5 text-red-600" />}
               <span className={cn('text-base font-bold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
@@ -1992,7 +2009,24 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
           </div>
 
           <div className="rounded-lg border p-2.5 space-y-0.5">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Catch-Up</p>
+            <div className="flex items-center gap-1">
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Catch-Up</p>
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground hover:text-foreground">
+                      <Info className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px] text-xs leading-snug">
+                    <p className="font-semibold mb-1">What is Catch-Up?</p>
+                    <p>The number of <strong>{unit} per day</strong> you need to hit over the next <strong>{catchUpDays} working days</strong> to get fully back on track with your annual goal.</p>
+                    <p className="mt-1">This includes your normal daily goal <strong>plus</strong> the extra needed to close your gap — spread evenly over the selected window.</p>
+                    <p className="mt-1 text-muted-foreground">Use the dropdown to change how many days to spread the catch-up over (shorter window = higher daily number).</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <span className="text-base font-bold">{fmtNum(dailyCatchUp)}</span>
             <p className="text-[10px] text-muted-foreground">{unit}/day</p>
             <div className="flex items-center gap-1 mt-0.5 pt-0.5 border-t">
