@@ -338,6 +338,12 @@ export interface AgentDashboardData {
     projectedVolumeGoal: number | null;
     projectedDealsGoal: number | null;
     projectedIncomeGoal: number | null;
+    // Annual (full-year) goals
+    annualVolumeGoal?: number | null;
+    annualDealsGoal?: number | null;
+    annualIncomeGoalFromMonthly?: number | null;
+    // Month (1-12) through which the pipeline projection goal is calculated
+    projectedThroughMonth?: number;
   };
 
   // Previous year comparison

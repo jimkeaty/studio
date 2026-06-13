@@ -811,6 +811,12 @@ export async function GET(req: NextRequest) {
       projectedVolumeGoal: projectedVolumeGoal > 0 ? projectedVolumeGoal : null,
       projectedDealsGoal: projectedSalesGoal > 0 ? projectedSalesGoal : null,
       projectedIncomeGoal: projectedIncomeGoal > 0 ? projectedIncomeGoal : null,
+      // Annual (full-year) goals for display in HeroCards
+      annualVolumeGoal: yearlyVolumeGoal > 0 ? Number(yearlyVolumeGoal.toFixed(2)) : null,
+      annualDealsGoal: yearlySalesGoal > 0 ? Number(yearlySalesGoal.toFixed(0)) : null,
+      annualIncomeGoalFromMonthly: yearlyIncomeGoalFromMonthly > 0 ? Number(yearlyIncomeGoalFromMonthly.toFixed(2)) : null,
+      // Which month the pipeline projection extends through (1-based)
+      projectedThroughMonth: projectedMonth,
     };
 
     // ── Tier / Cap progress ──────────────────────────────────────────────

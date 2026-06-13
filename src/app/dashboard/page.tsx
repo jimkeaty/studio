@@ -1467,9 +1467,9 @@ function gradeColorScheme(g: string) {
   }
 }
 
-function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel, icon: Icon, isGracePeriod, infoText }: {
+function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel, annualGoalLabel, icon: Icon, isGracePeriod, infoText }: {
   title: string; grade: string; primary: string; secondary: string;
-  performancePct?: number; goalLabel?: string; icon: React.ElementType; isGracePeriod?: boolean; infoText?: string;
+  performancePct?: number; goalLabel?: string; annualGoalLabel?: string; icon: React.ElementType; isGracePeriod?: boolean; infoText?: string;
 }) {
   const colors = gradeColorScheme(grade);
   const clampedPct = Math.min(performancePct ?? 0, 100);
@@ -1544,6 +1544,14 @@ function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel,
         <p className={cn('text-xs font-medium leading-snug', paceArrow ? paceColorClass : 'text-muted-foreground')}>
           {paceArrow && <span className="mr-0.5">{paceArrow}</span>}{secondary}
         </p>
+
+        {/* Annual goal badge */}
+        {annualGoalLabel && (
+          <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground bg-muted/60 border border-border/60 rounded-full px-2 py-0.5">
+            <Target className="h-2.5 w-2.5 shrink-0" />
+            {annualGoalLabel}
+          </div>
+        )}
 
         {isGracePeriod && (
           <Badge variant="outline" className="text-[10px] border-amber-400/60 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
@@ -1624,6 +1632,16 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
     deltaPct >= 0
       ? `${Math.abs(deltaPct)}% ahead of pace · ${goalStr} YTD goal`
       : `${Math.abs(deltaPct)}% behind pace · ${goalStr} YTD goal`;
+
+  // Annual goals from volumeMetrics (full-year totals)
+  const annualDealsGoal = vm.annualDealsGoal ?? null;
+  const annualVolumeGoal = vm.annualVolumeGoal ?? null;
+  const annualIncomeGoalDisplay = vm.annualIncomeGoalFromMonthly ?? (rcYearlyIncomeGoal > 0 ? rcYearlyIncomeGoal : null);
+
+  // Month names for pipeline label
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const projThroughMonth = vm.projectedThroughMonth ?? null;
+  const projMonthLabel = projThroughMonth ? MONTH_NAMES[projThroughMonth - 1] : null;
 
   // Determine overall status from the primary income grade
   const overallGrade = ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade;
@@ -1733,6 +1751,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
           primary={fmtCurrency(netEarned)}
           performancePct={ytdIncomeGoal > 0 ? incomePct : undefined}
           goalLabel={ytdIncomeGoal > 0 ? fmtCurrency(ytdIncomeGoal) : undefined}
+          annualGoalLabel={annualIncomeGoalDisplay ? `Annual goal: ${fmtCurrency(annualIncomeGoalDisplay)}` : undefined}
           secondary={ytdIncomeGoal > 0 ? paceText(incomeDeltaPct, fmtCurrency(ytdIncomeGoal)) : 'No income goal set'}
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
           infoText="Your net income after broker split on all closed transactions so far this year. The YTD goal is your annual income goal prorated by the number of days elapsed in the year."
@@ -1742,13 +1761,19 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
           grade={ytdIncomeGoal > 0 ? letterGrade(pipelinePct).letter : dashboard.pipelineAdjustedIncome.grade}
           primary={fmtCurrency(ytdTotalPotential)}
           performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
-          goalLabel={ytdIncomeGoal > 0 ? (() => { const g = vm?.projectedIncomeGoal ?? ytdIncomeGoal; return fmtCurrency(g); })() : undefined}
-          infoText="Closed net income plus the estimated net income from all pending transactions. This shows your full earning potential if all pending deals close. Compared against a projected full-year goal using brokerage seasonality."
+          goalLabel={ytdIncomeGoal > 0
+            ? (() => {
+                const g = vm?.projectedIncomeGoal ?? ytdIncomeGoal;
+                return `${fmtCurrency(g)}${projMonthLabel ? ` goal thru ${projMonthLabel}` : ' projected goal'}`;
+              })()
+            : undefined}
+          annualGoalLabel={annualIncomeGoalDisplay ? `Annual goal: ${fmtCurrency(annualIncomeGoalDisplay)}` : undefined}
+          infoText={`Closed net income plus estimated net income from all pending transactions — your full earning potential if all pending deals close. Compared against your goal through ${projMonthLabel ?? 'the latest pending close month'} (the month your last pending deal is expected to close). Annual goal: ${annualIncomeGoalDisplay ? fmtCurrency(annualIncomeGoalDisplay) : 'not set'}.`}
           secondary={ytdIncomeGoal > 0
             ? (() => {
                 const projGoal = vm?.projectedIncomeGoal ?? ytdIncomeGoal;
                 const projPct = projGoal > 0 ? Math.round(((ytdTotalPotential - projGoal) / projGoal) * 100) : 0;
-                return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` · ${fmtCurrency(projGoal)} projected goal · ${fmtCurrency(netPending)} pending`;
+                return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` of ${projMonthLabel ?? 'projected'} goal · ${fmtCurrency(netPending)} pending`;
               })()
             : `${fmtCurrency(netPending)} pending · closed + pipeline`}
           icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
@@ -1762,7 +1787,8 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             grade={vm.dealsGrade}
             primary={`${vm.closedDeals} closed`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.dealsPerformance) : undefined}
-            goalLabel={vm.dealsGoal != null ? `${fmtNum(vm.dealsGoal)} deals goal` : undefined}
+            goalLabel={vm.dealsGoal != null ? `${fmtNum(vm.dealsGoal)} deals YTD goal` : undefined}
+            annualGoalLabel={annualDealsGoal != null ? `Annual goal: ${fmtNum(annualDealsGoal)} deals` : undefined}
             secondary={vm.dealsGoal != null
               ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${fmtNum(vm.dealsGoal)} deals YTD goal · ${vm.pendingDeals} pending`
               : `${vm.pendingDeals} pending · No goal set`}
@@ -1774,12 +1800,18 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             grade={vm.projectedDealsGrade}
             primary={`${vm.closedDeals + vm.pendingDeals} total`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.projectedDealsPerformance) : undefined}
-            goalLabel={vm.dealsGoal != null ? (() => { const g = vm.projectedDealsGoal ?? vm.dealsGoal; return `${fmtNum(g ?? 0)} projected`; })() : undefined}
-            infoText="Closed deals plus all pending transactions. This is your full deal count if everything in your pipeline closes. Compared against a projected full-year goal using brokerage seasonality."
+            goalLabel={vm.dealsGoal != null
+              ? (() => {
+                  const g = vm.projectedDealsGoal ?? vm.dealsGoal;
+                  return `${fmtNum(g ?? 0)}${projMonthLabel ? ` deals goal thru ${projMonthLabel}` : ' projected goal'}`;
+                })()
+              : undefined}
+            annualGoalLabel={annualDealsGoal != null ? `Annual goal: ${fmtNum(annualDealsGoal)} deals` : undefined}
+            infoText={`Closed deals plus all pending transactions — your full deal count if everything in your pipeline closes. Compared against your goal through ${projMonthLabel ?? 'the latest pending close month'} (the month your last pending deal is expected to close), not your full-year goal. Annual goal: ${annualDealsGoal != null ? `${fmtNum(annualDealsGoal)} deals` : 'not set'}.`}
             secondary={vm.dealsGoal != null
               ? (() => {
                   const projDGoal = vm.projectedDealsGoal ?? vm.dealsGoal;
-                  return (vm.projectedDealsPerformance >= 100 ? `${Math.round(vm.projectedDealsPerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedDealsPerformance)}% behind`) + ` · ${fmtNum(projDGoal ?? 0)} projected goal · ${vm.pendingDeals} pending`;
+                  return (vm.projectedDealsPerformance >= 100 ? `${Math.round(vm.projectedDealsPerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedDealsPerformance)}% behind`) + ` of ${projMonthLabel ?? 'projected'} goal · ${fmtNum(projDGoal ?? 0)} deals · ${vm.pendingDeals} pending`;
                 })()
               : `${vm.closedDeals} closed + ${vm.pendingDeals} pending`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
@@ -1789,7 +1821,8 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             grade={vm.volumeGrade}
             primary={fmtCurrency(vm.closedVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.volumePerformance) : undefined}
-            goalLabel={vm.volumeGoal != null ? fmtCurrencyCompact(vm.volumeGoal, true) : undefined}
+            goalLabel={vm.volumeGoal != null ? `${fmtCurrencyCompact(vm.volumeGoal, true)} YTD goal` : undefined}
+            annualGoalLabel={annualVolumeGoal != null ? `Annual goal: ${fmtCurrencyCompact(annualVolumeGoal, true)}` : undefined}
             infoText="Total sales price of all closed transactions this year. The YTD goal is your annual volume goal prorated by days elapsed in the year."
             secondary={vm.volumeGoal != null
               ? (vm.volumePerformance >= 100 ? `${Math.round(vm.volumePerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.volumePerformance)}% behind pace`) + ` · ${fmtCurrency(vm.volumeGoal)} YTD goal`
@@ -1801,12 +1834,18 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             grade={vm.projectedVolumeGrade}
             primary={fmtCurrency(vm.totalVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.projectedVolumePerformance) : undefined}
-            goalLabel={vm.volumeGoal != null ? (() => { const g = vm.projectedVolumeGoal ?? vm.volumeGoal; return fmtCurrencyCompact(g ?? 0, true); })() : undefined}
-            infoText="Closed volume plus the total sales price of all pending transactions. This shows your full volume potential if all pending deals close. Compared against a projected full-year goal using brokerage seasonality. Note: all pending deals are included at full value regardless of expected close date."
+            goalLabel={vm.volumeGoal != null
+              ? (() => {
+                  const g = vm.projectedVolumeGoal ?? vm.volumeGoal;
+                  return `${fmtCurrencyCompact(g ?? 0, true)}${projMonthLabel ? ` goal thru ${projMonthLabel}` : ' projected goal'}`;
+                })()
+              : undefined}
+            annualGoalLabel={annualVolumeGoal != null ? `Annual goal: ${fmtCurrencyCompact(annualVolumeGoal, true)}` : undefined}
+            infoText={`Closed volume plus the total sales price of all pending transactions — your full volume potential if all pending deals close. Compared against your volume goal through ${projMonthLabel ?? 'the latest pending close month'} (the month your last pending deal is expected to close). Annual goal: ${annualVolumeGoal != null ? fmtCurrencyCompact(annualVolumeGoal, true) : 'not set'}.`}
             secondary={vm.volumeGoal != null
               ? (() => {
                   const projVolGoal = vm.projectedVolumeGoal ?? vm.volumeGoal;
-                  return (vm.projectedVolumePerformance >= 100 ? `${Math.round(vm.projectedVolumePerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedVolumePerformance)}% behind`) + ` · ${fmtCurrency(projVolGoal ?? 0)} projected goal · ${fmtCurrency(vm.pendingVolume)} pending`;
+                  return (vm.projectedVolumePerformance >= 100 ? `${Math.round(vm.projectedVolumePerformance - 100)}% ahead` : `${Math.round(100 - vm.projectedVolumePerformance)}% behind`) + ` of ${projMonthLabel ?? 'projected'} goal · ${fmtCurrencyCompact(projVolGoal ?? 0, true)} · ${fmtCurrency(vm.pendingVolume)} pending`;
                 })()
               : `${fmtCurrency(vm.pendingVolume)} pending · Closed + pending volume`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod}
