@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type PipelineStatus = 'active' | 'set' | 'held' | 'ghost' | 'on_hold' | 'trash';
+export type PipelineStatus = 'active' | 'set' | 'held' | 'ghost' | 'on_hold' | 'trash' | 'contract_written' | 'closed';
 export type AppointmentCategory = 'buyer' | 'seller' | 'commercial' | 'hot';
 
 export interface PipelineAppointment {
@@ -29,12 +29,14 @@ export interface PipelineAppointment {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<PipelineStatus, { label: string; color: string; bg: string; dot: string }> = {
-  active:  { label: 'Active',         color: 'text-green-700',  bg: 'bg-green-50 border-green-200',   dot: 'bg-green-500'  },
-  set:     { label: 'Set',            color: 'text-blue-700',   bg: 'bg-blue-50 border-blue-200',     dot: 'bg-blue-500'   },
-  held:    { label: 'Held',           color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200', dot: 'bg-purple-500' },
-  ghost:   { label: 'Ghost / Follow', color: 'text-amber-700',  bg: 'bg-amber-50 border-amber-200',   dot: 'bg-amber-500'  },
-  on_hold: { label: 'On Hold',        color: 'text-gray-600',   bg: 'bg-gray-50 border-gray-200',     dot: 'bg-gray-400'   },
-  trash:   { label: 'Trash',          color: 'text-red-600',    bg: 'bg-red-50 border-red-200',       dot: 'bg-red-400'    },
+  active:           { label: 'Active',           color: 'text-green-700',   bg: 'bg-green-50 border-green-200',    dot: 'bg-green-500'   },
+  set:              { label: 'Set',              color: 'text-blue-700',    bg: 'bg-blue-50 border-blue-200',      dot: 'bg-blue-500'    },
+  held:             { label: 'Held',             color: 'text-purple-700',  bg: 'bg-purple-50 border-purple-200',  dot: 'bg-purple-500'  },
+  contract_written: { label: 'Contract Written', color: 'text-orange-700',  bg: 'bg-orange-50 border-orange-200',  dot: 'bg-orange-500'  },
+  closed:           { label: 'Closed',           color: 'text-teal-700',    bg: 'bg-teal-50 border-teal-200',      dot: 'bg-teal-500'    },
+  ghost:            { label: 'Ghost / Follow',   color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200',    dot: 'bg-amber-500'   },
+  on_hold:          { label: 'On Hold',          color: 'text-gray-600',    bg: 'bg-gray-50 border-gray-200',      dot: 'bg-gray-400'    },
+  trash:            { label: 'Trash',            color: 'text-red-600',     bg: 'bg-red-50 border-red-200',        dot: 'bg-red-400'     },
 };
 
 const CATEGORY_CONFIG: Record<AppointmentCategory, { label: string; color: string }> = {
@@ -44,7 +46,7 @@ const CATEGORY_CONFIG: Record<AppointmentCategory, { label: string; color: strin
   hot:        { label: 'Hot',        color: 'bg-red-100 text-red-700'     },
 };
 
-const STATUS_ORDER: PipelineStatus[] = ['active', 'set', 'held', 'ghost', 'on_hold', 'trash'];
+const STATUS_ORDER: PipelineStatus[] = ['active', 'set', 'held', 'contract_written', 'closed', 'ghost', 'on_hold', 'trash'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

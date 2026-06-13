@@ -1467,9 +1467,9 @@ function gradeColorScheme(g: string) {
   }
 }
 
-function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel, icon: Icon, isGracePeriod }: {
+function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel, icon: Icon, isGracePeriod, infoText }: {
   title: string; grade: string; primary: string; secondary: string;
-  performancePct?: number; goalLabel?: string; icon: React.ElementType; isGracePeriod?: boolean;
+  performancePct?: number; goalLabel?: string; icon: React.ElementType; isGracePeriod?: boolean; infoText?: string;
 }) {
   const colors = gradeColorScheme(grade);
   const clampedPct = Math.min(performancePct ?? 0, 100);
@@ -1494,8 +1494,18 @@ function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel,
           <div className={cn('flex items-center justify-center h-8 w-8 rounded-lg shrink-0', colors.badge)}>
             <Icon className="h-4 w-4" />
           </div>
-          <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground leading-tight">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground leading-tight flex items-center gap-1">
             {title}
+            {infoText && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className="ml-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors" aria-label="More info">
+                    <Info className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">{infoText}</TooltipContent>
+              </Tooltip>
+            )}
           </CardTitle>
         </div>
         {/* Grade ring — SVG progress ring with grade letter */}
@@ -1725,6 +1735,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
           goalLabel={ytdIncomeGoal > 0 ? fmtCurrency(ytdIncomeGoal) : undefined}
           secondary={ytdIncomeGoal > 0 ? paceText(incomeDeltaPct, fmtCurrency(ytdIncomeGoal)) : 'No income goal set'}
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod}
+          infoText="Your net income after broker split on all closed transactions so far this year. The YTD goal is your annual income goal prorated by the number of days elapsed in the year."
         />
         <HeroCard
           title="Pipeline Net Income"
@@ -1732,6 +1743,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
           primary={fmtCurrency(ytdTotalPotential)}
           performancePct={ytdIncomeGoal > 0 ? pipelinePct : undefined}
           goalLabel={ytdIncomeGoal > 0 ? (() => { const g = vm?.projectedIncomeGoal ?? ytdIncomeGoal; return fmtCurrency(g); })() : undefined}
+          infoText="Closed net income plus the estimated net income from all pending transactions. This shows your full earning potential if all pending deals close. Compared against a projected full-year goal using brokerage seasonality."
           secondary={ytdIncomeGoal > 0
             ? (() => {
                 const projGoal = vm?.projectedIncomeGoal ?? ytdIncomeGoal;
@@ -1755,6 +1767,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
               ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${fmtNum(vm.dealsGoal)} deals YTD goal · ${vm.pendingDeals} pending`
               : `${vm.pendingDeals} pending · No goal set`}
             icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod}
+            infoText="The number of transaction sides you have closed so far this year. The YTD goal is your annual closings goal prorated by days elapsed. Each closed transaction counts as one side."
           />
           <HeroCard
             title="Pipeline Sales"
@@ -1762,6 +1775,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             primary={`${vm.closedDeals + vm.pendingDeals} total`}
             performancePct={vm.dealsGoal != null ? Math.round(vm.projectedDealsPerformance) : undefined}
             goalLabel={vm.dealsGoal != null ? (() => { const g = vm.projectedDealsGoal ?? vm.dealsGoal; return `${fmtNum(g ?? 0)} projected`; })() : undefined}
+            infoText="Closed deals plus all pending transactions. This is your full deal count if everything in your pipeline closes. Compared against a projected full-year goal using brokerage seasonality."
             secondary={vm.dealsGoal != null
               ? (() => {
                   const projDGoal = vm.projectedDealsGoal ?? vm.dealsGoal;
@@ -1776,6 +1790,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             primary={fmtCurrency(vm.closedVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.volumePerformance) : undefined}
             goalLabel={vm.volumeGoal != null ? fmtCurrencyCompact(vm.volumeGoal, true) : undefined}
+            infoText="Total sales price of all closed transactions this year. The YTD goal is your annual volume goal prorated by days elapsed in the year."
             secondary={vm.volumeGoal != null
               ? (vm.volumePerformance >= 100 ? `${Math.round(vm.volumePerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.volumePerformance)}% behind pace`) + ` · ${fmtCurrency(vm.volumeGoal)} YTD goal`
               : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
@@ -1787,6 +1802,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
             primary={fmtCurrency(vm.totalVolume)}
             performancePct={vm.volumeGoal != null ? Math.round(vm.projectedVolumePerformance) : undefined}
             goalLabel={vm.volumeGoal != null ? (() => { const g = vm.projectedVolumeGoal ?? vm.volumeGoal; return fmtCurrencyCompact(g ?? 0, true); })() : undefined}
+            infoText="Closed volume plus the total sales price of all pending transactions. This shows your full volume potential if all pending deals close. Compared against a projected full-year goal using brokerage seasonality. Note: all pending deals are included at full value regardless of expected close date."
             secondary={vm.volumeGoal != null
               ? (() => {
                   const projVolGoal = vm.projectedVolumeGoal ?? vm.volumeGoal;
