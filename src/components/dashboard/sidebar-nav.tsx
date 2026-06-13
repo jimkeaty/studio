@@ -25,6 +25,7 @@ import {
   ClipboardList,
   ClipboardPen,
   Gamepad2,
+  Swords,
   LayoutGrid,
   Newspaper,
   Palette,
@@ -67,7 +68,7 @@ const mobileTabItems = [
   { href: '/dashboard',                   label: 'Home',        icon: LayoutGrid },
   { href: '/dashboard/tracker',           label: 'Tracker',     icon: ClipboardPen },
   { href: '/dashboard/transactions/new',  label: 'Add Deal',    icon: Plus },
-  { href: '/dashboard/admin/competitions',label: 'Compete',     icon: Trophy },
+  { href: '/dashboard/competitions',label: 'Compete',     icon: Swords },
   { href: '/leaderboard',                 label: 'Board',       icon: BarChart3 },
 ];
 
@@ -127,7 +128,7 @@ const agentMenuItems = [
 
 // Shown to all users — community & entertainment
 const communityMenuItems = [
-  { href: '/dashboard/admin/competitions', label: 'Competition Center', icon: Gamepad2 },
+  { href: '/dashboard/competitions', label: 'Competition Center', icon: Swords },
 ];
 
 const tvModeMenuItems = [
