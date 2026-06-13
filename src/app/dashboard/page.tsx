@@ -776,9 +776,9 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
                     <TooltipProvider delayDuration={200}>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" />
+                          <Info className="h-3.5 w-3.5 text-blue-500 cursor-help shrink-0" />
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs text-sm">
+                        <TooltipContent side="top" className="max-w-xs text-sm bg-white text-gray-900 border border-gray-200 shadow-lg p-3">
                           <p className="font-semibold mb-1">How this is calculated</p>
                           <p>Your YTD net income is divided by the share of the year that has historically closed by this point, based on <strong>brokerage-wide seasonality</strong> from last year.</p>
                           <p className="mt-1">Example: if the brokerage typically closes 45% of its annual volume by June, and you’ve earned $60K so far, the projection is $60K ÷ 0.45 = <strong>$133K</strong>.</p>
@@ -1499,11 +1499,11 @@ function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel,
             {infoText && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className="ml-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors" aria-label="More info">
-                    <Info className="h-3 w-3" />
+                  <button type="button" className="ml-0.5 text-blue-500 hover:text-blue-700 transition-colors" aria-label="More info">
+                    <Info className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">{infoText}</TooltipContent>
+                <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed bg-white text-gray-900 border border-gray-200 shadow-lg p-3">{infoText}</TooltipContent>
               </Tooltip>
             )}
           </CardTitle>
@@ -2009,11 +2009,11 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
               <TooltipProvider delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" className="text-muted-foreground hover:text-foreground">
-                      <Info className="h-3 w-3" />
+                    <button type="button" className="text-blue-500 hover:text-blue-700">
+                      <Info className="h-3.5 w-3.5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[220px] text-xs leading-snug">
+                  <TooltipContent side="top" className="max-w-[220px] text-xs leading-snug bg-white text-gray-900 border border-gray-200 shadow-lg p-3">
                     <p className="font-semibold mb-1">What is Delta?</p>
                     <p>The difference between where you <strong>should be today</strong> (your prorated YTD goal) and where you <strong>actually are</strong>.</p>
                     <p className="mt-1">A <span className="text-red-500 font-semibold">negative delta</span> means you&apos;re behind pace. A <span className="text-green-600 font-semibold">positive delta</span> means you&apos;re ahead.</p>
@@ -2037,11 +2037,11 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
               <TooltipProvider delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" className="text-muted-foreground hover:text-foreground">
-                      <Info className="h-3 w-3" />
+                    <button type="button" className="text-blue-500 hover:text-blue-700">
+                      <Info className="h-3.5 w-3.5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[240px] text-xs leading-snug">
+                  <TooltipContent side="top" className="max-w-[240px] text-xs leading-snug bg-white text-gray-900 border border-gray-200 shadow-lg p-3">
                     <p className="font-semibold mb-1">What is Catch-Up?</p>
                     <p>The number of <strong>{unit} per day</strong> you need to hit over the next <strong>{catchUpDays} working days</strong> to get fully back on track with your annual goal.</p>
                     <p className="mt-1">This includes your normal daily goal <strong>plus</strong> the extra needed to close your gap — spread evenly over the selected window.</p>
@@ -2258,7 +2258,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                   i
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed p-3">
+              <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed p-3 bg-white text-gray-900 border border-gray-200 shadow-lg">
                 <p className="font-semibold mb-1">📈 How Projections Work</p>
                 <p className="mb-2">
                   Projected bars show what your remaining months are expected to produce

@@ -40,10 +40,24 @@ export default function Home() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPreview, setIsPreview] = useState(false);
+  const [branding, setBranding] = useState<{
+    companyName?: string;
+    tagline?: string;
+    logoUrl?: string | null;
+    animatedLogoUrl?: string | null;
+    useAnimatedLogo?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const currentHostname = window.location.hostname;
     setIsPreview(currentHostname.endsWith('.cloudworkstations.dev'));
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/branding')
+      .then(r => r.json())
+      .then(d => { if (d.ok && d.branding) setBranding(d.branding); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -86,6 +100,12 @@ export default function Home() {
     }
   };
 
+  // Determine which logo URL to use
+  const activeLogo = branding?.useAnimatedLogo && branding?.animatedLogoUrl
+    ? branding.animatedLogoUrl
+    : branding?.logoUrl ?? null;
+  const companyName = branding?.companyName || 'Keaty Real Estate';
+
   if (userLoading || user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -103,10 +123,21 @@ export default function Home() {
       <div className="hidden lg:flex lg:flex-1 flex-col justify-between p-12 bg-gradient-to-br from-slate-900 via-blue-950 to-violet-950 text-white">
         {/* Logo */}
         <div>
-          <div className="text-3xl font-black tracking-tight">
-            Smart Broker <span className="text-blue-400">USA</span>
+          <div className="mb-6">
+            {activeLogo ? (
+              <img
+                src={activeLogo}
+                alt={companyName}
+                className="h-16 w-auto object-contain"
+                style={{ maxWidth: '220px' }}
+              />
+            ) : (
+              <div className="text-3xl font-black tracking-tight">
+                {companyName}
+              </div>
+            )}
           </div>
-          <div className="mt-8 text-2xl font-bold leading-snug text-white/90 max-w-sm">
+          <div className="mt-4 text-2xl font-bold leading-snug text-white/90 max-w-sm">
             The command center for top-producing real estate agents.
           </div>
           <p className="mt-4 text-white/60 text-sm leading-relaxed max-w-xs">
@@ -130,7 +161,7 @@ export default function Home() {
         </div>
 
         <div className="text-xs text-white/30">
-          © {new Date().getFullYear()} Smart Broker USA. All rights reserved.
+          © {new Date().getFullYear()} {companyName}. All rights reserved.
         </div>
       </div>
 
@@ -138,14 +169,21 @@ export default function Home() {
       <div className="flex flex-1 lg:max-w-md flex-col justify-center px-8 py-12 bg-background">
         {/* Mobile logo (only shown on small screens) */}
         <div className="lg:hidden mb-8 text-center">
-          <div className="text-2xl font-black tracking-tight text-foreground">
-            Smart Broker <span className="text-primary">USA</span>
-          </div>
+          {activeLogo ? (
+            <img
+              src={activeLogo}
+              alt={companyName}
+              className="h-14 w-auto object-contain mx-auto"
+              style={{ maxWidth: '200px' }}
+            />
+          ) : (
+            <div className="text-2xl font-black tracking-tight text-foreground">{companyName}</div>
+          )}
         </div>
 
         <div className="max-w-sm w-full mx-auto">
           <h1 className="text-3xl font-black tracking-tight text-foreground mb-1">Welcome back</h1>
-          <p className="text-muted-foreground text-sm mb-8">Sign in to your Smart Broker dashboard</p>
+          <p className="text-muted-foreground text-sm mb-8">Sign in to your {companyName} dashboard</p>
 
           {errorMsg && (
             <Alert variant="destructive" className="mb-6">
