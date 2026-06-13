@@ -751,10 +751,13 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
     let list = [...transactions];
 
     if (yearFilter !== 'all') {
-      const ALWAYS_SHOW = new Set(['active', 'temp_off_market', 'pending']);
+      const currentYear = String(new Date().getFullYear());
+      const isCurrentYear = yearFilter === currentYear;
+      const ACTIVE_PENDING = new Set(['active', 'temp_off_market', 'pending']);
       list = list.filter(t => {
-        // Always show active listings and pending transactions regardless of year
-        if (ALWAYS_SHOW.has(t.status)) return true;
+        // Active/pending deals only show when viewing the current year —
+        // past year views show closed transactions only.
+        if (ACTIVE_PENDING.has(t.status)) return isCurrentYear;
         const year = t.year || (t.closedDate ? new Date(t.closedDate).getFullYear() : null) || (t.contractDate ? new Date(t.contractDate).getFullYear() : null);
         return String(year) === yearFilter;
       });
