@@ -1329,6 +1329,91 @@ export default function AdminToolsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Recalculate Agent Plans */}
+      <RecalculatePlansCard />
     </div>
+  );
+}
+
+function RecalculatePlansCard() {
+  const { user } = useUser();
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  const run = async (dryRun: boolean) => {
+    if (!user) return;
+    setRunning(true);
+    setResult(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/recalculate-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ year: parseInt(year), dryRun }),
+      });
+      const json = await res.json();
+      setResult(json);
+    } catch (e: any) {
+      setResult({ ok: false, error: e?.message });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Card className="border-orange-300">
+      <CardHeader>
+        <div className="flex items-start gap-3">
+          <BarChart2 className="h-6 w-6 text-orange-600 mt-0.5" />
+          <div>
+            <CardTitle className="text-base">Recalculate Agent Plan Goals</CardTitle>
+            <CardDescription className="mt-1 text-sm">
+              Fixes KPI report card goals for Appointments Set, Appointments Held, and Contracts Written.
+              Agents whose plans were saved before the fix have <code>daily: 0</code> stored &mdash; this rewrites
+              those values with the correct fractional daily rates so YTD targets calculate properly.
+              Run Dry Run first to preview, then Apply Fix to update Firestore.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium">Year:</label>
+          <input
+            type="number"
+            value={year}
+            onChange={e => setYear(e.target.value)}
+            className="w-24 rounded border px-2 py-1 text-sm"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => run(true)} disabled={running}>
+            {running ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Running&hellip;</> : 'Dry Run (Preview)'}
+          </Button>
+          <Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={() => run(false)} disabled={running}>
+            {running ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Fixing&hellip;</> : 'Apply Fix to All Agents'}
+          </Button>
+        </div>
+        {result && (
+          <Alert variant={result.ok ? 'default' : 'destructive'}>
+            <AlertTitle>{result.ok ? (result.dryRun ? 'Dry Run Complete' : 'Fix Applied') : 'Error'}</AlertTitle>
+            <AlertDescription>
+              {result.ok ? (
+                <>
+                  <p className="font-medium">{result.summary?.fixed} agents fixed &middot; {result.summary?.skipped} skipped &middot; {result.summary?.errors} errors</p>
+                  {result.results?.filter((r: any) => r.status === 'fixed').map((r: any) => (
+                    <div key={r.agentId} className="mt-1 text-xs">
+                      <span className="font-mono">{r.agentId}</span>: apptSet daily {r.before?.appointmentsSet_daily?.toFixed(4)} &rarr; {r.after?.appointmentsSet_daily?.toFixed(4)}
+                    </div>
+                  ))}
+                </>
+              ) : result.error}
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   );
 }
