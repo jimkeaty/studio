@@ -300,8 +300,16 @@ export async function GET(req: NextRequest) {
       ((annualIncomeGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2)
     );
 
+    // Use yearly goal prorated by workdays — more reliable than daily * elapsed
+    // because yearly is always a whole number saved correctly, while daily may be
+    // 0 on older plans (the bug). Formula: yearly * (elapsed / total).
+    const prorateYearly = (yearly: number) =>
+      totalWorkdaysInYear > 0
+        ? Math.ceil((yearly * elapsedWorkdays) / totalWorkdaysInYear)
+        : 0;
+
     const dailyEngagementTarget = asNumber(plan.calculatedTargets?.engagements?.daily);
-    const engagementGoalToDate = Number((dailyEngagementTarget * elapsedWorkdays).toFixed(2));
+    const engagementGoalToDate = prorateYearly(asNumber(plan.calculatedTargets?.engagements?.yearly));
 
     // ── Phase 2: Fetch transactions, daily activity, and goals in parallel ─
     // Use the resolved Firebase UID (not the slug) for goal segment lookup
@@ -516,12 +524,14 @@ export async function GET(req: NextRequest) {
 
     // Round up all activity targets to whole numbers — fractional goals (e.g. 2.3 appointments)
     // are not actionable and cause confusing decimals on the report card.
-    const callsTarget = Math.ceil(asNumber(plan.calculatedTargets?.calls?.daily) * elapsedWorkdays);
-    const engagementsTarget = Math.ceil(dailyEngagementTarget * elapsedWorkdays);
-    const appointmentsSetTarget = Math.ceil(asNumber(plan.calculatedTargets?.appointmentsSet?.daily) * elapsedWorkdays);
-    const appointmentsHeldTarget = Math.ceil(asNumber(plan.calculatedTargets?.appointmentsHeld?.daily) * elapsedWorkdays);
-    const contractsWrittenTarget = Math.ceil(asNumber(plan.calculatedTargets?.contractsWritten?.daily) * elapsedWorkdays);
-    const closingsTarget = Math.ceil(asNumber(plan.calculatedTargets?.closings?.daily) * elapsedWorkdays);
+    // All targets now use yearly goal prorated by elapsed workdays (same as income goal).
+    // This is immune to the old daily:0 bug and stays in sync with the saved business plan.
+    const callsTarget = prorateYearly(asNumber(plan.calculatedTargets?.calls?.yearly));
+    const engagementsTarget = prorateYearly(asNumber(plan.calculatedTargets?.engagements?.yearly));
+    const appointmentsSetTarget = prorateYearly(asNumber(plan.calculatedTargets?.appointmentsSet?.yearly));
+    const appointmentsHeldTarget = prorateYearly(asNumber(plan.calculatedTargets?.appointmentsHeld?.yearly));
+    const contractsWrittenTarget = prorateYearly(asNumber(plan.calculatedTargets?.contractsWritten?.yearly));
+    const closingsTarget = prorateYearly(asNumber(plan.calculatedTargets?.closings?.yearly));
 
     const engagementDelta = Number((engagementsActual - engagementGoalToDate).toFixed(2));
     const catchUpWindowDays = 20;

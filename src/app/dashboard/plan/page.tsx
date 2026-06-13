@@ -1369,28 +1369,61 @@ export default function BusinessPlanPage() {
         {/* ── SECTION 5: YOUR DAILY TARGETS ───────────────────────────────── */}
         {calculatedPlan && calculatedPlan.closings.yearly > 0 && (
           <div className="space-y-6 animate-in fade-in-50">
-            <Card>
+            <Card className="border-primary/30 bg-primary/5">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Target className="text-primary" /> Your Annual & Monthly Targets
+                  <Target className="text-primary" /> Your Annual Goals Summary
                 </CardTitle>
+                <CardDescription>
+                  All goals derived from your income target and conversion assumptions. These are the numbers your KPI report card tracks throughout the year.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <PlanResultCard
-                  icon={DollarSign}
-                  label="Annual Net Income"
-                  value={new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(
-                    form.getValues("annualIncomeGoal")
-                  )}
-                />
-                <PlanResultCard
-                  icon={DollarSign}
-                  label="Monthly Net Income"
-                  value={new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(
-                    calculatedPlan.monthlyNetIncome
-                  )}
-                />
-                <PlanResultCard icon={Award} label="Required Closings" value={calculatedPlan.closings.yearly} unit="/ year" />
+              <CardContent className="space-y-5">
+                {/* Income row */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Income</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="rounded-lg border bg-background p-3">
+                      <p className="text-xs text-muted-foreground">Annual Net Income</p>
+                      <p className="text-xl font-bold text-primary">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(form.getValues("annualIncomeGoal"))}</p>
+                    </div>
+                    <div className="rounded-lg border bg-background p-3">
+                      <p className="text-xs text-muted-foreground">Monthly Net Income</p>
+                      <p className="text-xl font-bold">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(calculatedPlan.monthlyNetIncome)}</p>
+                    </div>
+                  </div>
+                </div>
+                {/* Activity goals grid */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Required Activity Goals</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {[
+                      { label: 'Calls', icon: Phone, data: calculatedPlan.calls },
+                      { label: 'Engagements', icon: Users, data: calculatedPlan.engagements },
+                      { label: 'Appts Set', icon: Calendar, data: calculatedPlan.appointmentsSet },
+                      { label: 'Appts Held', icon: CalendarCheck, data: calculatedPlan.appointmentsHeld },
+                      { label: 'Contracts', icon: FileText, data: calculatedPlan.contractsWritten },
+                      { label: 'Closings', icon: Award, data: calculatedPlan.closings },
+                    ].map(({ label, icon: Icon, data }) => (
+                      <div key={label} className="rounded-lg border bg-background p-3 text-center">
+                        <Icon className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                        <p className="text-2xl font-bold text-primary">{data.yearly.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">per year</p>
+                        <div className="mt-2 pt-2 border-t grid grid-cols-2 gap-1 text-xs">
+                          <div>
+                            <span className="text-muted-foreground">Mo</span>
+                            <p className="font-semibold">{data.monthly.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Day</span>
+                            <p className="font-semibold">{data.daily === 0 ? '—' : Math.ceil(data.daily).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
