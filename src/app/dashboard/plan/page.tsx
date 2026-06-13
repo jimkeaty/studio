@@ -1404,24 +1404,35 @@ export default function BusinessPlanPage() {
                       { label: 'Appts Held', icon: CalendarCheck, data: calculatedPlan.appointmentsHeld },
                       { label: 'Contracts', icon: FileText, data: calculatedPlan.contractsWritten },
                       { label: 'Closings', icon: Award, data: calculatedPlan.closings },
-                    ].map(({ label, icon: Icon, data }) => (
-                      <div key={label} className="rounded-lg border bg-background p-3 text-center">
-                        <Icon className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                        <p className="text-2xl font-bold text-primary">{data.yearly.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">per year</p>
-                        <div className="mt-2 pt-2 border-t grid grid-cols-2 gap-1 text-xs">
-                          <div>
-                            <span className="text-muted-foreground">Mo</span>
-                            <p className="font-semibold">{data.monthly.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Day</span>
-                            <p className="font-semibold">{data.daily === 0 ? '—' : Math.ceil(data.daily).toLocaleString()}</p>
+                    ].map(({ label, icon: Icon, data }) => {
+                      const rawDaily = data.daily as number;
+                      const isHighFreq = rawDaily >= 1;
+                      const everyXDays = rawDaily > 0 && !isHighFreq ? Math.round(1 / rawDaily) : null;
+                      return (
+                        <div key={label} className="rounded-lg border bg-background p-3 text-center">
+                          <Icon className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                          <p className="text-2xl font-bold text-primary">{data.yearly.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">per year</p>
+                          <div className="mt-2 pt-2 border-t grid grid-cols-2 gap-1 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Mo</span>
+                              <p className="font-semibold">{data.monthly.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">{isHighFreq ? 'Day' : 'Pace'}</span>
+                              <p className="font-semibold">
+                                {isHighFreq
+                                  ? Math.ceil(rawDaily).toLocaleString()
+                                  : everyXDays
+                                    ? `~${everyXDays}d`
+                                    : '—'}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </CardContent>
@@ -1438,8 +1449,9 @@ export default function BusinessPlanPage() {
                 <div className="flex items-start gap-2 mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
                   <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   <span>
-                    <strong>All goals are rounded up to whole numbers</strong> so targets are always clear and actionable.
-                    Your report card compares your actual YTD activity against a prorated target based on the number of working days elapsed since your plan start date — so the goal shown on your dashboard in July reflects exactly how many appointments, calls, and engagements you should have completed by that day.
+                    <strong>High-frequency activities</strong> (calls, engagements, appointments) show daily and weekly goals rounded up to whole numbers.
+                    <strong>Low-frequency activities</strong> (contracts written, closings) show a pace in working days (e.g. &ldquo;every ~8 days&rdquo;) instead of a misleading daily count.
+                    Your report card compares your actual YTD activity against a prorated target based on working days elapsed since your plan start date.
                   </span>
                 </div>
               </CardHeader>
@@ -1451,24 +1463,40 @@ export default function BusinessPlanPage() {
                       <TableHead className="text-right">Yearly</TableHead>
                       <TableHead className="text-right">Monthly</TableHead>
                       <TableHead className="text-right">Weekly</TableHead>
-                      <TableHead className="text-right text-primary font-bold">Daily</TableHead>
+                      <TableHead className="text-right text-primary font-bold">Daily / Pace</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {activityMetrics.map(({ label, icon: Icon, data }) => (
-                      <TableRow key={label}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <Icon className="h-5 w-5 text-muted-foreground" />
-                            {label}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{data.yearly.toLocaleString()}</TableCell>
-                        <TableCell className="text-right tabular-nums">{data.monthly.toLocaleString()}</TableCell>
-                        <TableCell className="text-right tabular-nums">{data.weekly === 0 ? "—" : Math.ceil(data.weekly).toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily === 0 ? "—" : Math.ceil(data.daily).toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
+                    {activityMetrics.map(({ label, icon: Icon, data }) => {
+                      // High-frequency: daily rate >= 1 (calls, engagements, appts set/held)
+                      // Low-frequency: daily rate < 1 (contracts written, closings)
+                      // For low-frequency, show "every X days" instead of rounded-up daily/weekly
+                      const rawDaily = data.daily as number;
+                      const isHighFreq = rawDaily >= 1;
+                      const everyXDays = rawDaily > 0 ? Math.round(1 / rawDaily) : null;
+                      return (
+                        <TableRow key={label}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-5 w-5 text-muted-foreground" />
+                              {label}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{data.yearly.toLocaleString()}</TableCell>
+                          <TableCell className="text-right tabular-nums">{data.monthly.toLocaleString()}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {isHighFreq ? Math.ceil(data.weekly).toLocaleString() : "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-primary font-bold tabular-nums">
+                            {isHighFreq
+                              ? Math.ceil(rawDaily).toLocaleString()
+                              : everyXDays
+                                ? <span className="text-sm font-semibold">every ~{everyXDays} days</span>
+                                : "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </CardContent>
