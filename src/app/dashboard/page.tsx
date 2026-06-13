@@ -684,16 +684,12 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
     if (!isCurrentYearPerf) return null;
     const mn = agentView.monthlyNetIncome;
     const ytdActual = mn.slice(0, currentMonthIdxPerf + 1).reduce((s, v) => s + v, 0);
-    // Use seasonality weights (agent last-year > brokerage > flat) for the pace projection
-    const agentSeason = perfData?.prevYearStats?.seasonality;
+    // Always use brokerage seasonality for consistent projections across all agents.
+    // Agent-level seasonality is intentionally skipped — individual history can be
+    // distorted by incomplete data, merged profiles, or a single unusual year.
     const brokerageSeason = perfData?.brokerageSeasonality;
     let weights: number[] | null = null;
-    if (agentSeason && agentSeason.length === 12) {
-      const vals = agentSeason.map(s => s.grossMarginPct ?? s.volumePct);
-      const total = vals.reduce((a, b) => a + b, 0);
-      if (total > 0) weights = vals.map(v => v / total);
-    }
-    if (!weights && brokerageSeason && brokerageSeason.length === 12) {
+    if (brokerageSeason && brokerageSeason.length === 12) {
       const vals = brokerageSeason.map(s => s.volumePct);
       const total = vals.reduce((a, b) => a + b, 0);
       if (total > 0) weights = vals.map(v => v / total);
@@ -703,9 +699,7 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
     return ytdWeightShare > 0 ? Math.round(ytdActual / ytdWeightShare) : Math.round(ytdActual * 12 / (currentMonthIdxPerf + 1));
   })();
   const projLabel = (() => {
-    const agentSeason = perfData?.prevYearStats?.seasonality;
     const brokerageSeason = perfData?.brokerageSeasonality;
-    if (agentSeason && agentSeason.length === 12 && agentSeason.reduce((s, x) => s + (x.volumePct ?? 0), 0) > 0) return 'Agent Seasonality';
     if (brokerageSeason && brokerageSeason.length === 12) return 'Brokerage Seasonality';
     return 'Straight-Line';
   })();
@@ -777,7 +771,22 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
             <div className={`mt-4 rounded-lg border p-4 ${paceBg}`}>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full-Year Pace ({projLabel})</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Full-Year Pace ({projLabel})</p>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-sm">
+                          <p className="font-semibold mb-1">How this is calculated</p>
+                          <p>Your YTD net income is divided by the share of the year that has historically closed by this point, based on <strong>brokerage-wide seasonality</strong> from last year.</p>
+                          <p className="mt-1">Example: if the brokerage typically closes 45% of its annual volume by June, and you’ve earned $60K so far, the projection is $60K ÷ 0.45 = <strong>$133K</strong>.</p>
+                          <p className="mt-1 text-muted-foreground">Brokerage seasonality is used for all agents to keep projections consistent and avoid distortion from individual data gaps.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="flex items-baseline gap-2">
                     <span className={`text-2xl font-black ${paceColor}`}>{fmtCurrencyCompact(projFull, true)}</span>
                     <span className="text-sm text-muted-foreground">projected vs {fmtCurrencyCompact(yearlyIncomeGoal, true)} goal</span>
@@ -2038,23 +2047,14 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   ): (number | null)[] {
     if (!isCurrentYear) return actualArr.map(() => null);
 
-    // Pick best available seasonality curve: agent last-year > brokerage > flat
-    const agentSeason = perfData?.prevYearStats?.seasonality;
+    // Always use brokerage seasonality for consistent projections across all agents.
+    // Agent-level seasonality is intentionally skipped — individual history can be
+    // distorted by incomplete data, merged profiles, or a single unusual year.
     const brokerageSeason = perfData?.brokerageSeasonality;
-
     // Build a 12-element weights array (index 0 = Jan, index 11 = Dec)
     // Each weight is the % of the full year expected in that month (0–100 scale)
     let weights: number[] | null = null;
-    if (agentSeason && agentSeason.length === 12) {
-      const vals = agentSeason.map(s =>
-        seasonalityKey === 'grossMarginPct' ? (s.grossMarginPct ?? s.volumePct) :
-        seasonalityKey === 'salesPct' ? s.salesPct : s.volumePct
-      );
-      // Only use agent seasonality if it has meaningful variation (agent had data last year)
-      const total = vals.reduce((a, b) => a + b, 0);
-      if (total > 0) weights = vals.map(v => v / total); // normalise to sum=1
-    }
-    if (!weights && brokerageSeason && brokerageSeason.length === 12) {
+    if (brokerageSeason && brokerageSeason.length === 12) {
       const vals = brokerageSeason.map(s =>
         seasonalityKey === 'salesPct' ? s.salesPct : s.volumePct
       );
@@ -2093,14 +2093,9 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const projNetIncome = computeProjection(monthlyNetIncome, incomeGoalArr, 'grossMarginPct');
   const projVolume = computeProjection(months.map(m => m.closedVolume), volumeGoalArr, 'volumePct');
   const projSales = computeProjection(months.map(m => m.closedCount), salesGoalArr, 'salesPct');
-  // Projection label: describe the seasonality source actually used
+  // Projection label: always brokerage seasonality (agent seasonality intentionally skipped)
   const projectionLabel = (() => {
-    const agentSeason = perfData?.prevYearStats?.seasonality;
     const brokerageSeason = perfData?.brokerageSeasonality;
-    if (agentSeason && agentSeason.length === 12) {
-      const total = agentSeason.reduce((s, x) => s + (x.volumePct ?? 0), 0);
-      if (total > 0) return 'Agent Seasonality Projection';
-    }
     if (brokerageSeason && brokerageSeason.length === 12) return 'Brokerage Seasonality Projection';
     return 'Straight-Line Projection';
   })();
