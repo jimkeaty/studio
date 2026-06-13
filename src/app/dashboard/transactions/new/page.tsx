@@ -1274,7 +1274,7 @@ export default function AddTransactionPage() {
           await fetch('/api/contacts', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, upsert: true, ...fields }),
+            body: JSON.stringify({ type, upsert: true, ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}), ...fields }),
           });
         } catch { /* non-fatal */ }
       };

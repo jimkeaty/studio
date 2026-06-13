@@ -92,12 +92,17 @@ export async function POST(req: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
 
+    const callerIsStaff = await isStaff(uid);
+
     const body = await req.json();
-    const { type, upsert = false, ...fields } = body;
+    const { type, upsert = false, viewAs: postViewAs, ...fields } = body;
 
     if (!type || !VALID_TYPES.includes(type as ContactType)) {
       return jsonError(400, `type must be one of: ${VALID_TYPES.join(', ')}`);
     }
+
+    // When admin is saving on behalf of an agent (viewAs), use the agent's UID as createdBy
+    const effectiveCreatedBy = (callerIsStaff && postViewAs) ? postViewAs : uid;
 
     const now = new Date().toISOString();
 
@@ -185,7 +190,7 @@ export async function POST(req: NextRequest) {
 
     // Create new
     contact.createdAt = now;
-    contact.createdBy = uid;
+    contact.createdBy = effectiveCreatedBy;
     contact.usageCount = 1;
     const ref = await adminDb.collection('contacts').add(contact);
     return NextResponse.json({ ok: true, id: ref.id, contact: { id: ref.id, ...contact } });
