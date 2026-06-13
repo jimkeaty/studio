@@ -514,12 +514,14 @@ export async function GET(req: NextRequest) {
     const incomePerformance = performance(netEarned, expectedYTDIncomeGoal);
     const pipelinePerformance = performance(ytdTotalPotential, expectedYTDIncomeGoal);
 
-    const callsTarget = Number((asNumber(plan.calculatedTargets?.calls?.daily) * elapsedWorkdays).toFixed(2));
-    const engagementsTarget = Number((dailyEngagementTarget * elapsedWorkdays).toFixed(2));
-    const appointmentsSetTarget = Number((asNumber(plan.calculatedTargets?.appointmentsSet?.daily) * elapsedWorkdays).toFixed(2));
-    const appointmentsHeldTarget = Number((asNumber(plan.calculatedTargets?.appointmentsHeld?.daily) * elapsedWorkdays).toFixed(2));
-    const contractsWrittenTarget = Number((asNumber(plan.calculatedTargets?.contractsWritten?.daily) * elapsedWorkdays).toFixed(2));
-    const closingsTarget = Number((asNumber(plan.calculatedTargets?.closings?.daily) * elapsedWorkdays).toFixed(2));
+    // Round up all activity targets to whole numbers — fractional goals (e.g. 2.3 appointments)
+    // are not actionable and cause confusing decimals on the report card.
+    const callsTarget = Math.ceil(asNumber(plan.calculatedTargets?.calls?.daily) * elapsedWorkdays);
+    const engagementsTarget = Math.ceil(dailyEngagementTarget * elapsedWorkdays);
+    const appointmentsSetTarget = Math.ceil(asNumber(plan.calculatedTargets?.appointmentsSet?.daily) * elapsedWorkdays);
+    const appointmentsHeldTarget = Math.ceil(asNumber(plan.calculatedTargets?.appointmentsHeld?.daily) * elapsedWorkdays);
+    const contractsWrittenTarget = Math.ceil(asNumber(plan.calculatedTargets?.contractsWritten?.daily) * elapsedWorkdays);
+    const closingsTarget = Math.ceil(asNumber(plan.calculatedTargets?.closings?.daily) * elapsedWorkdays);
 
     const engagementDelta = Number((engagementsActual - engagementGoalToDate).toFixed(2));
     const catchUpWindowDays = 20;

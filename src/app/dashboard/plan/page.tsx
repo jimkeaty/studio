@@ -144,11 +144,15 @@ const calculatePlan = (incomeGoal: number, assumptions: PlanAssumptions): Busine
     const weekly = workingWeeksInYear > 0 ? yearlyValue / workingWeeksInYear : 0;
     const daily = workingDaysInYear > 0 ? yearlyValue / workingDaysInYear : 0;
 
+    // Store raw fractional values for daily/weekly so the dashboard API can multiply
+    // by elapsed workdays and get an accurate YTD target (e.g. 0.228 appts/day × 135 days = 31).
+    // Rounding to whole numbers happens at display time, not here.
+    // yearly and monthly are rounded up for display in the business plan table.
     return {
       yearly: Math.ceil(yearlyValue),
       monthly: Math.ceil(monthly),
-      weekly: weekly < 1 ? 0 : parseFloat(weekly.toFixed(2)),
-      daily: daily < 1 ? 0 : parseFloat(daily.toFixed(2)),
+      weekly: weekly <= 0 ? 0 : weekly,
+      daily: daily <= 0 ? 0 : daily,
     };
   };
 
@@ -1398,6 +1402,13 @@ export default function BusinessPlanPage() {
                 <CardDescription>
                   Based on your assumptions and {form.getValues("workingDaysPerMonth")} working days per month, with {form.getValues("weeksOff")} weeks off.
                 </CardDescription>
+                <div className="flex items-start gap-2 mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
+                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>All goals are rounded up to whole numbers</strong> so targets are always clear and actionable.
+                    Your report card compares your actual YTD activity against a prorated target based on the number of working days elapsed since your plan start date — so the goal shown on your dashboard in July reflects exactly how many appointments, calls, and engagements you should have completed by that day.
+                  </span>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1421,8 +1432,8 @@ export default function BusinessPlanPage() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{data.yearly.toLocaleString()}</TableCell>
                         <TableCell className="text-right tabular-nums">{data.monthly.toLocaleString()}</TableCell>
-                        <TableCell className="text-right tabular-nums">{data.weekly === 0 ? "—" : data.weekly.toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily === 0 ? "—" : data.daily.toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums">{data.weekly === 0 ? "—" : Math.ceil(data.weekly).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-primary font-bold tabular-nums">{data.daily === 0 ? "—" : Math.ceil(data.daily).toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
