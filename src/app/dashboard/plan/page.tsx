@@ -1420,13 +1420,19 @@ export default function BusinessPlanPage() {
                               <p className="font-semibold">{data.monthly.toLocaleString()}</p>
                             </div>
                             <div>
-                              <span className="text-muted-foreground">{isHighFreq ? 'Day' : 'Pace'}</span>
+                              <span className="text-muted-foreground flex items-center justify-center gap-0.5">
+                                {isHighFreq ? 'Day' : 'Pace'}
+                                {!isHighFreq && (
+                                  <span
+                                    className="cursor-help text-blue-400 hover:text-blue-600"
+                                    title={`~${everyXDays}d means you need to complete 1 ${label.toLowerCase()} approximately every ${everyXDays} working days to hit your annual goal of ${data.yearly}.`}
+                                  >&#9432;</span>
+                                )}
+                              </span>
                               <p className="font-semibold">
                                 {isHighFreq
                                   ? Math.ceil(rawDaily).toLocaleString()
-                                  : everyXDays
-                                    ? `~${everyXDays}d`
-                                    : '—'}
+                                  : everyXDays ? `~${everyXDays}d` : '—'}
                               </p>
                             </div>
                           </div>
@@ -1449,8 +1455,7 @@ export default function BusinessPlanPage() {
                 <div className="flex items-start gap-2 mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
                   <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   <span>
-                    <strong>High-frequency activities</strong> (calls, engagements, appointments) show daily and weekly goals rounded up to whole numbers.
-                    <strong>Low-frequency activities</strong> (contracts written, closings) show a pace in working days (e.g. &ldquo;every ~8 days&rdquo;) instead of a misleading daily count.
+                    Weekly and daily goals are shown as whole numbers when the rate is 1 or more per period. If the rate is less than 1 (e.g. contracts or closings), that column is left blank — the monthly goal is the most meaningful target for low-frequency activities.
                     Your report card compares your actual YTD activity against a prorated target based on working days elapsed since your plan start date.
                   </span>
                 </div>
