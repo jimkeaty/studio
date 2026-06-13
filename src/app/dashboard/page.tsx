@@ -1883,6 +1883,7 @@ function KpiSection({ dashboard, plan, manageMode }: { dashboard: AgentDashboard
           const meta = kpiMeta[key] || { label: key, icon: Target, unit: key };
           const dailyTarget = plan?.calculatedTargets?.[key as keyof typeof plan.calculatedTargets];
           const dailyBase = typeof dailyTarget === 'object' && dailyTarget && 'daily' in dailyTarget ? (dailyTarget as any).daily : 0;
+          const annualGoal = typeof dailyTarget === 'object' && dailyTarget && 'yearly' in dailyTarget ? (dailyTarget as any).yearly : null;
           const isHidden = hiddenKpis.has(key);
           return (
             <div key={key} className="relative group">
@@ -1912,6 +1913,7 @@ function KpiSection({ dashboard, plan, manageMode }: { dashboard: AgentDashboard
                   grade={kpi.grade}
                   isGracePeriod={dashboard.isLeadIndicatorGracePeriod}
                   dailyBase={dailyBase}
+                  annualGoal={annualGoal}
                 />
               </div>
             </div>
@@ -1929,10 +1931,10 @@ function KpiSection({ dashboard, plan, manageMode }: { dashboard: AgentDashboard
   );
 }
 
-function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, grade, isGracePeriod, dailyBase }: {
+function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, grade, isGracePeriod, dailyBase, annualGoal }: {
   label: string; icon: React.ElementType; unit: string;
   actual: number; target: number; performance: number; grade: string;
-  isGracePeriod: boolean; dailyBase: number;
+  isGracePeriod: boolean; dailyBase: number; annualGoal?: number | null;
 }) {
   const [catchUpDays, setCatchUpDays] = useState(20);
   const delta = actual - target;
@@ -1976,6 +1978,11 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
               {performance >= 100 ? '✓ Goal Met' : performance >= 90 ? 'On Track' : performance >= 70 ? 'Near Goal' : 'Behind'}
             </span>
           </div>
+          {annualGoal != null && annualGoal > 0 && (
+            <p className="text-[10px] text-muted-foreground pt-0.5">
+              Annual goal: <span className="font-semibold text-foreground">{fmtNum(annualGoal)}</span>
+            </p>
+          )}
         </div>
 
         {/* Delta + Catch-Up */}
