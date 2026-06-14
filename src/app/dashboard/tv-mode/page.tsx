@@ -62,6 +62,7 @@ type TvConfig = {
   communityBoardIntervalSeconds?: number;
   enabledPages: string[];
   communitySections?: string[]; // ordered list of sections shown in the Community Board
+  pinnedCompetitionId?: string | null; // competition to show in the Competition section
 };
 
 const ALL_COMMUNITY_SECTIONS: { id: string; label: string; emoji: string; desc: string }[] = [
@@ -70,6 +71,7 @@ const ALL_COMMUNITY_SECTIONS: { id: string; label: string; emoji: string; desc: 
   { id: 'coming-soon', label: 'Coming Soon',     emoji: '🕐', desc: 'Listings hitting the market soon' },
   { id: 'buyer-needs', label: 'Buyer Needs',     emoji: '🔍', desc: 'Active buyer searches' },
   { id: 'open-houses', label: 'Open Houses',     emoji: '🏠', desc: 'Upcoming open house events' },
+  { id: 'competition', label: 'Competition',     emoji: '🏎️', desc: 'Live competition scoreboard (NASCAR, Golf, etc.)' },
 ];
 
 const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses'];
@@ -93,7 +95,8 @@ export default function TvModePage() {
   const [tab, setTab] = useState<'open-houses' | 'buyer-needs' | 'coming-soon'>('open-houses');
   const [items, setItems] = useState<BoardItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [tvConfig, setTvConfig] = useState<TvConfig>({ rotationIntervalSeconds: 30, communityBoardIntervalSeconds: 30, enabledPages: ['activity', 'leaderboard', 'community'], communitySections: DEFAULT_COMMUNITY_SECTIONS });
+  const [tvConfig, setTvConfig] = useState<TvConfig>({ rotationIntervalSeconds: 30, communityBoardIntervalSeconds: 30, enabledPages: ['activity', 'leaderboard', 'community'], communitySections: DEFAULT_COMMUNITY_SECTIONS, pinnedCompetitionId: null });
+  const [activeCompetitions, setActiveCompetitions] = useState<{ id: string; name: string }[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -136,8 +139,19 @@ export default function TvModePage() {
           communityBoardIntervalSeconds: json.config.communityBoardIntervalSeconds ?? 30,
           enabledPages: json.config.enabledPages ?? ['activity', 'leaderboard', 'community'],
           communitySections: json.config.communitySections ?? DEFAULT_COMMUNITY_SECTIONS,
+          pinnedCompetitionId: json.config.pinnedCompetitionId ?? null,
         });
       }
+      // Load active competitions for the pin selector
+      try {
+        const compRes = await fetch(`/api/competitions?status=active&year=${new Date().getFullYear()}`, {
+          headers: { Authorization: `Bearer ${await user!.getIdToken()}` },
+        });
+        const compJson = await compRes.json();
+        if (compJson.ok) {
+          setActiveCompetitions((compJson.competitions || []).map((c: { id: string; config: { name: string } }) => ({ id: c.id, name: c.config.name })));
+        }
+      } catch {}
     } catch (e) { console.error(e); }
   }, [user]);
 
@@ -722,6 +736,36 @@ export default function TvModePage() {
                 })}
               </div>
             </div>
+
+            {/* Competition Pin */}
+            {(tvConfig.communitySections ?? DEFAULT_COMMUNITY_SECTIONS).includes('competition') && (
+              <div>
+                <Label className="text-gray-300 text-sm font-medium">🏎️ Pin a Competition to the Community Board</Label>
+                <p className="text-gray-500 text-xs mb-2">Select which active competition shows in the Competition rotation slot</p>
+                <Select
+                  value={tvConfig.pinnedCompetitionId ?? 'none'}
+                  onValueChange={(v) => setTvConfig((c) => ({ ...c, pinnedCompetitionId: v === 'none' ? null : v }))}
+                >
+                  <SelectTrigger className="bg-gray-800 border-white/10 text-white">
+                    <SelectValue placeholder="Select a competition..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-white/10 text-white">
+                    <SelectItem value="none">— None (hide competition slot) —</SelectItem>
+                    {activeCompetitions.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                    {activeCompetitions.length === 0 && (
+                      <SelectItem value="none" disabled>No active competitions found</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {tvConfig.pinnedCompetitionId && (
+                  <p className="text-emerald-400 text-xs mt-1.5 flex items-center gap-1">
+                    ✓ Competition scoreboard will auto-scroll and refresh every 30 seconds
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" className="text-gray-400" onClick={() => setShowSettings(false)}>Cancel</Button>

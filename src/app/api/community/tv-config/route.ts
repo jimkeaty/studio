@@ -8,6 +8,7 @@ const DEFAULT_CONFIG = {
   rotationIntervalSeconds: 30,
   communityBoardIntervalSeconds: 30,
   enabledPages: ['activity', 'leaderboard', 'community'],
+  pinnedCompetitionId: null as string | null,
 };
 
 function bearer(req: NextRequest) {

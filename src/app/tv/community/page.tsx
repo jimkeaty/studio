@@ -56,13 +56,14 @@ type LeaderRow = {
   agentNetCommission: number;
 };
 
-// All 5 possible sections
+// All 6 possible sections
 const ALL_SECTION_DEFS: Record<string, { label: string; color: string; dot: string; bgColor: string }> = {
   'activity':     { label: 'Activity Board',  color: 'bg-emerald-500',  dot: 'bg-emerald-400',  bgColor: 'from-emerald-900/30' },
   'leaderboard':  { label: 'Leaderboard',     color: 'bg-yellow-500',   dot: 'bg-yellow-400',   bgColor: 'from-yellow-900/30' },
   'coming-soon':  { label: 'Coming Soon',     color: 'bg-purple-500',   dot: 'bg-purple-400',   bgColor: 'from-purple-900/30' },
   'buyer-needs':  { label: 'Buyer Needs',     color: 'bg-blue-500',     dot: 'bg-blue-400',     bgColor: 'from-blue-900/30' },
   'open-houses':  { label: 'Open Houses',     color: 'bg-orange-500',   dot: 'bg-orange-400',   bgColor: 'from-orange-900/30' },
+  'competition':  { label: 'Competition',     color: 'bg-red-500',      dot: 'bg-red-400',      bgColor: 'from-red-900/30' },
 };
 
 const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses'];
@@ -157,6 +158,97 @@ function useAutoScroll(items: any[], active: boolean) {
   return { containerRef, innerRef };
 }
 
+// ─── Activity Column Card (standalone so refs are stable) ────────────────────
+
+function ActivityColCard({
+  title, items, accentColor, icon: Icon, active,
+}: {
+  title: string; items: ActivityItem[]; accentColor: string;
+  icon: React.ElementType; active: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef<number | null>(null);
+  const posRef = useRef(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const inner = innerRef.current;
+    if (!container || !inner || items.length === 0 || !active) return;
+
+    posRef.current = 0;
+    container.scrollTop = 0;
+
+    const SPEED = 28;
+    let lastTime: number | null = null;
+    let pauseUntil = 0;
+
+    const step = (ts: number) => {
+      if (!container || !inner) return;
+      if (lastTime === null) lastTime = ts;
+      const dt = (ts - lastTime) / 1000;
+      lastTime = ts;
+
+      const contentH = inner.scrollHeight / 2;
+      const containerH = container.clientHeight;
+
+      if (contentH <= containerH) {
+        posRef.current = 0;
+        container.scrollTop = 0;
+        animRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      if (ts < pauseUntil) {
+        animRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      posRef.current += SPEED * dt;
+
+      if (posRef.current >= contentH) {
+        posRef.current = 0;
+        pauseUntil = ts + 2000;
+      }
+
+      container.scrollTop = posRef.current;
+      animRef.current = requestAnimationFrame(step);
+    };
+
+    animRef.current = requestAnimationFrame(step);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [items, active]);
+
+  const doubled = [...items, ...items];
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 bg-gray-900 border border-white/10 rounded-2xl overflow-hidden">
+      <div className={`flex items-center gap-2 px-4 py-3 border-b border-white/10`}>
+        <Icon className={`h-5 w-5 ${accentColor}`} />
+        <span className="font-bold text-base text-white">{title}</span>
+        <span className="ml-auto text-sm text-gray-500">{items.length}</span>
+      </div>
+      <div ref={containerRef} className="flex-1 overflow-hidden" style={{ scrollBehavior: 'auto' }}>
+        {items.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-gray-600 text-lg">No activity yet</div>
+        ) : (
+          <div ref={innerRef}>
+            {doubled.map((item, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-semibold text-sm truncate">{item.addressShort}</div>
+                  <div className="text-gray-400 text-xs">{item.agentDisplayName} · {fmtShortDate(item.date)}</div>
+                </div>
+                <div className={`text-sm font-bold flex-shrink-0 ${accentColor}`}>{fmtCompact(item.price)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Activity Board Section ───────────────────────────────────────────────────
 
 function ActivityBoardSection({ active }: { active: boolean }) {
@@ -165,10 +257,6 @@ function ActivityBoardSection({ active }: { active: boolean }) {
   const [recentSold, setRecentSold] = useState<ActivityItem[]>([]);
   const [ytd, setYtd] = useState<YtdTotals | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const nlScroll = useAutoScroll(newListings, active);
-  const ucScroll = useAutoScroll(underContract, active);
-  const rsScroll = useAutoScroll(recentSold, active);
 
   useEffect(() => {
     const year = new Date().getFullYear();
@@ -186,40 +274,6 @@ function ActivityBoardSection({ active }: { active: boolean }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const ColCard = ({
-    title, items, accentColor, icon: Icon, scrollRefs,
-  }: {
-    title: string; items: ActivityItem[]; accentColor: string;
-    icon: React.ElementType; scrollRefs: { containerRef: React.RefObject<HTMLDivElement | null>; innerRef: React.RefObject<HTMLDivElement | null> };
-  }) => (
-    <div className="flex flex-col flex-1 min-h-0 bg-gray-900 border border-white/10 rounded-2xl overflow-hidden">
-      <div className={`flex items-center gap-2 px-4 py-3 border-b border-white/10 ${accentColor} bg-opacity-20`}>
-        <Icon className="h-5 w-5" />
-        <span className="font-bold text-base">{title}</span>
-        <span className="ml-auto text-sm opacity-70">{items.length}</span>
-      </div>
-      <div ref={scrollRefs.containerRef} className="flex-1 overflow-hidden" style={{ scrollBehavior: 'auto' }}>
-        {loading ? (
-          <div className="flex items-center justify-center h-full text-gray-500 text-lg animate-pulse">Loading…</div>
-        ) : items.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-600 text-lg">No activity yet</div>
-        ) : (
-          <div ref={scrollRefs.innerRef}>
-            {[...items, ...items].map((item, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-white/5 hover:bg-white/5">
-                <div className="flex-1 min-w-0">
-                  <div className="text-white font-semibold text-sm truncate">{item.addressShort}</div>
-                  <div className="text-gray-400 text-xs">{item.agentDisplayName} · {fmtShortDate(item.date)}</div>
-                </div>
-                <div className={`text-sm font-bold flex-shrink-0 ${accentColor}`}>{fmtCompact(item.price)}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -231,7 +285,9 @@ function ActivityBoardSection({ active }: { active: boolean }) {
           <h2 className="text-3xl font-extrabold text-white tracking-tight">Activity Board</h2>
           <p className="text-gray-400 text-sm">New listings, under contract & recent closings</p>
         </div>
-        {ytd && (
+        {loading ? (
+          <div className="ml-auto text-gray-500 text-sm animate-pulse">Loading…</div>
+        ) : ytd ? (
           <div className="ml-auto flex items-center gap-6">
             <div className="text-center">
               <div className="text-2xl font-black text-white">{ytd.totalSales}</div>
@@ -246,14 +302,14 @@ function ActivityBoardSection({ active }: { active: boolean }) {
               <div className="text-xs text-gray-400">YTD Commissions</div>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
-      {/* Three columns */}
+      {/* Three columns — each is a stable component with its own scroll loop */}
       <div className="flex-1 flex gap-4 px-8 py-5 min-h-0">
-        <ColCard title="New Listings" items={newListings} accentColor="text-blue-400" icon={Home} scrollRefs={nlScroll} />
-        <ColCard title="Under Contract" items={underContract} accentColor="text-amber-400" icon={Calendar} scrollRefs={ucScroll} />
-        <ColCard title="Recent Sold" items={recentSold} accentColor="text-emerald-400" icon={DollarSign} scrollRefs={rsScroll} />
+        <ActivityColCard title="New Listings" items={newListings} accentColor="text-blue-400" icon={Home} active={active} />
+        <ActivityColCard title="Under Contract" items={underContract} accentColor="text-amber-400" icon={Calendar} active={active} />
+        <ActivityColCard title="Recent Sold" items={recentSold} accentColor="text-emerald-400" icon={DollarSign} active={active} />
       </div>
     </div>
   );
@@ -601,6 +657,169 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
   );
 }
 
+// ─── Competition Section (embeds the public competition scoreboard) ──────────
+
+type CompStanding = {
+  agentId: string; displayName: string; position: number;
+  totalScore: number; todayScore: number; scoreLabel: string;
+  color: string; metricTotal: number; metricToday: number;
+  distanceFromLeader: number; movement: number; streak: number;
+  bonusesApplied: { label: string; score: number }[];
+  groupId?: string;
+};
+
+type CompConfig = {
+  name: string; theme: 'nascar' | 'golf' | 'horse_race';
+  status: string; startDate: string; endDate: string;
+  metric: string; metricLabel?: string; scoringStrategy: string;
+  rankingDirection: 'asc' | 'desc';
+  prizes?: { place: number; label: string; amount: number }[];
+  autoRefreshSeconds?: number; showTopN?: number;
+};
+
+const COMP_THEME = {
+  nascar:     { icon: '🏎️', accent: 'text-red-400',     accentBg: 'bg-red-500/20',     header: 'from-red-900/40 to-gray-900' },
+  golf:       { icon: '⛳',  accent: 'text-emerald-400', accentBg: 'bg-emerald-500/20', header: 'from-emerald-900/40 to-gray-900' },
+  horse_race: { icon: '🐎',  accent: 'text-purple-400',  accentBg: 'bg-purple-500/20',  header: 'from-purple-900/40 to-gray-900' },
+};
+
+const COMP_GRAD = ['from-yellow-400 to-orange-500','from-blue-400 to-violet-600','from-emerald-400 to-cyan-500','from-rose-400 to-pink-600','from-amber-400 to-red-500','from-indigo-400 to-purple-600'];
+
+function CompetitionSection({ competitionId, active }: { competitionId: string | null; active: boolean }) {
+  const [standings, setStandings] = useState<CompStanding[]>([]);
+  const [config, setConfig] = useState<CompConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const cContainerRef = useRef<HTMLDivElement>(null);
+  const cInnerRef = useRef<HTMLDivElement>(null);
+  const cAnimRef = useRef<number | null>(null);
+  const cPosRef = useRef(0);
+
+  const loadComp = useCallback(async () => {
+    if (!competitionId) { setLoading(false); return; }
+    try {
+      const res = await fetch(`/api/competitions/${competitionId}/standings?public=true`);
+      const json = await res.json();
+      if (json.ok) { setConfig(json.competition.config); setStandings(json.standings || []); }
+    } catch {}
+    finally { setLoading(false); }
+  }, [competitionId]);
+
+  useEffect(() => { loadComp(); }, [loadComp]);
+
+  useEffect(() => {
+    if (!competitionId) return;
+    const t = setInterval(loadComp, (config?.autoRefreshSeconds ?? 30) * 1000);
+    return () => clearInterval(t);
+  }, [competitionId, config?.autoRefreshSeconds, loadComp]);
+
+  useEffect(() => {
+    const container = cContainerRef.current;
+    const inner = cInnerRef.current;
+    if (!container || !inner || standings.length === 0 || !active) return;
+    cPosRef.current = 0;
+    container.scrollTop = 0;
+    const SPEED = 25;
+    let lastTime: number | null = null;
+    let pauseUntil = 0;
+    const step = (ts: number) => {
+      if (!container || !inner) return;
+      if (lastTime === null) lastTime = ts;
+      const dt = (ts - lastTime) / 1000; lastTime = ts;
+      const contentH = inner.scrollHeight / 2;
+      const containerH = container.clientHeight;
+      if (contentH <= containerH) { cPosRef.current = 0; container.scrollTop = 0; cAnimRef.current = requestAnimationFrame(step); return; }
+      if (ts < pauseUntil) { cAnimRef.current = requestAnimationFrame(step); return; }
+      cPosRef.current += SPEED * dt;
+      if (cPosRef.current >= contentH) { cPosRef.current = 0; pauseUntil = ts + 3000; }
+      container.scrollTop = cPosRef.current;
+      cAnimRef.current = requestAnimationFrame(step);
+    };
+    cAnimRef.current = requestAnimationFrame(step);
+    return () => { if (cAnimRef.current) cancelAnimationFrame(cAnimRef.current); };
+  }, [standings, active]);
+
+  if (!competitionId || (!loading && !config)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 bg-gray-950">
+        <div className="text-6xl">🏆</div>
+        <h2 className="text-4xl font-black text-white">No Competition Pinned</h2>
+        <p className="text-gray-400 text-xl">Go to TV Settings to pin an active competition.</p>
+      </div>
+    );
+  }
+
+  const theme = COMP_THEME[config?.theme ?? 'nascar'];
+  const isGolf = config?.theme === 'golf';
+  const showTopN = config?.showTopN ?? 20;
+  const visible = standings.slice(0, showTopN);
+  const doubled = [...visible, ...visible];
+  const fmtScore = (s: number) => isGolf ? (s === 0 ? 'E' : s > 0 ? `+${s}` : `${s}`) : s.toLocaleString();
+
+  return (
+    <div className="flex flex-col h-full bg-gray-950">
+      <div className={`flex-shrink-0 flex items-center gap-4 px-8 py-5 border-b border-white/10 bg-gradient-to-r ${theme.header}`}>
+        <div className={`w-14 h-14 rounded-2xl ${theme.accentBg} flex items-center justify-center text-3xl`}>{theme.icon}</div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-3xl font-extrabold text-white tracking-tight truncate">{config?.name ?? 'Competition'}</h2>
+          <p className="text-gray-400 text-sm">{config?.metricLabel || config?.metric} · {standings.length} participants</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {standings.slice(0, 3).map((s, i) => (
+            <div key={s.agentId} className={`text-center px-3 py-2 rounded-xl border ${
+              i === 0 ? 'border-yellow-400/30 bg-yellow-500/10' : i === 1 ? 'border-slate-400/20 bg-white/5' : 'border-amber-700/20 bg-white/5'
+            }`}>
+              <div className="text-xs text-gray-400 mb-0.5">{['🥇','🥈','🥉'][i]}</div>
+              <div className="text-white text-sm font-bold truncate max-w-[80px]">{s.displayName.split(' ')[0]}</div>
+              <div className={`text-sm font-black ${i === 0 ? 'text-yellow-400' : theme.accent}`}>{fmtScore(s.totalScore)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div ref={cContainerRef} className="flex-1 overflow-hidden" style={{ scrollBehavior: 'auto' }}>
+        {loading ? (
+          <div className="flex items-center justify-center h-full text-gray-400 text-2xl animate-pulse">Loading standings…</div>
+        ) : standings.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <Trophy className="h-20 w-20 text-gray-700" />
+            <p className="text-gray-500 text-3xl font-semibold">No standings yet</p>
+          </div>
+        ) : (
+          <div ref={cInnerRef} className="px-8 py-4 space-y-2">
+            {doubled.map((s, i) => {
+              const idx = i % visible.length;
+              const isTop = idx === 0;
+              return (
+                <div key={`${s.agentId}-${i}`} className={`flex items-center gap-4 px-6 py-4 rounded-2xl border ${
+                  isTop ? 'border-yellow-400/40 bg-yellow-500/8' : 'border-white/6 bg-white/2'
+                }`}>
+                  <div className="w-10 flex-shrink-0 text-center">
+                    {isTop ? <Crown className="h-7 w-7 mx-auto text-yellow-400" /> : <span className="text-xl font-bold text-gray-500">#{s.position}</span>}
+                  </div>
+                  <div className={`w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xl bg-gradient-to-br ${COMP_GRAD[idx % COMP_GRAD.length]}`}>
+                    {s.displayName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white font-bold text-lg truncate">{s.displayName}</div>
+                    <div className="text-gray-400 text-xs">{config?.metricLabel || config?.metric}: {s.metricTotal}</div>
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <div className={`text-2xl font-black ${isTop ? 'text-yellow-400' : theme.accent}`}>{fmtScore(s.totalScore)}</div>
+                    {s.movement !== 0 && (
+                      <div className={`text-xs font-bold ${s.movement > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {s.movement > 0 ? '↑' : '↓'}{Math.abs(s.movement)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Community Board ─────────────────────────────────────────────────────
 
 export default function CommunityBoardPage() {
@@ -619,13 +838,14 @@ export default function CommunityBoardPage() {
   const [intervalSec, setIntervalSec] = useState(30);
   const [now, setNow] = useState(new Date());
   const [showControls, setShowControls] = useState(false);
+  const [pinnedCompetitionId, setPinnedCompetitionId] = useState<string | null>(null);
 
   const progressRef = useRef(0);
   const startTimeRef = useRef(Date.now());
   const animRef = useRef<number | null>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load TV config — interval + community section list
+  // Load TV config — interval + community section list + pinned competition
   useEffect(() => {
     fetch('/api/community/tv-config')
       .then((r) => r.json())
@@ -638,6 +858,7 @@ export default function CommunityBoardPage() {
         if (Array.isArray(cfg.communitySections) && cfg.communitySections.length > 0) {
           setSections(cfg.communitySections);
         }
+        if (cfg.pinnedCompetitionId) setPinnedCompetitionId(cfg.pinnedCompetitionId);
       })
       .catch(() => {});
   }, []);
@@ -721,6 +942,7 @@ export default function CommunityBoardPage() {
         {activeSectionId === 'coming-soon' && <ComingSoonSection items={comingSoon} loading={loadingCS} active={activeSectionId === 'coming-soon'} />}
         {activeSectionId === 'buyer-needs' && <BuyerNeedsSection items={buyerNeeds} loading={loadingBN} active={activeSectionId === 'buyer-needs'} />}
         {activeSectionId === 'open-houses' && <OpenHousesSection items={openHouses} loading={loadingOH} active={activeSectionId === 'open-houses'} />}
+        {activeSectionId === 'competition' && <CompetitionSection competitionId={pinnedCompetitionId} active={activeSectionId === 'competition'} />}
       </div>
 
       {/* Bottom: section dots + clock */}
