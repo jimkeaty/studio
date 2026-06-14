@@ -13,16 +13,21 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  AlertTriangle, CheckCircle2, Clock, XCircle, Eye, RefreshCw, ClipboardList, MapPin, Tag,
+  AlertTriangle, CheckCircle2, Clock, XCircle, Eye, RefreshCw, ClipboardList,
+  MapPin, Home, ArrowRightLeft, Plus, Mail, MailCheck, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+
+/* ─── Types ─────────────────────────────────────────────────────────────────── */
 
 type QueueStatus = 'pending_review' | 'in_progress' | 'completed' | 'dismissed';
-type ActionType = 'new_listing' | 'status_change' | 'update' | 'closed_buyer';
+type ActionType = 'new_listing' | 'status_change' | 'update' | 'closed_buyer' | 'open_house';
 
 type StaffQueueItem = {
   id: string;
@@ -55,6 +60,25 @@ type StaffQueueItem = {
   closedDate?: string | null;
 };
 
+type OpenHouseSubmission = {
+  id: string;
+  agentId: string;
+  agentName: string;
+  agentPhone?: string;
+  propertyAddress?: string;
+  mlsNumber?: string;
+  openHouseDate: string;
+  startTime: string;
+  endTime: string;
+  specialNotes?: string;
+  status: 'pending' | 'email_sent' | 'cancelled';
+  createdAt: string;
+  emailSentAt?: string;
+  staffQueueId?: string;
+};
+
+/* ─── Helpers ────────────────────────────────────────────────────────────────── */
+
 const formatDate = (s?: string | null) => {
   if (!s) return '—';
   try { return format(parseISO(s), 'MMM d, yyyy h:mm a'); } catch { return s; }
@@ -66,33 +90,16 @@ const formatDateShort = (s?: string | null) => {
 };
 
 const STATUS_CONFIG: Record<QueueStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  pending_review: {
-    label: 'Pending Review',
-    color: 'bg-amber-500/80 text-white',
-    icon: <Clock className="h-3 w-3" />,
-  },
-  in_progress: {
-    label: 'In Progress',
-    color: 'bg-blue-500/80 text-white',
-    icon: <Eye className="h-3 w-3" />,
-  },
-  completed: {
-    label: 'Completed',
-    color: 'bg-green-600/80 text-white',
-    icon: <CheckCircle2 className="h-3 w-3" />,
-  },
-  dismissed: {
-    label: 'Dismissed',
-    color: 'bg-gray-500/80 text-white',
-    icon: <XCircle className="h-3 w-3" />,
-  },
+  pending_review: { label: 'Pending Review', color: 'bg-amber-500/80 text-white', icon: <Clock className="h-3 w-3" /> },
+  in_progress:    { label: 'In Progress',    color: 'bg-blue-500/80 text-white',   icon: <Eye className="h-3 w-3" /> },
+  completed:      { label: 'Completed',      color: 'bg-green-600/80 text-white',  icon: <CheckCircle2 className="h-3 w-3" /> },
+  dismissed:      { label: 'Dismissed',      color: 'bg-gray-500/80 text-white',   icon: <XCircle className="h-3 w-3" /> },
 };
 
-const ACTION_CONFIG: Record<ActionType, { label: string; color: string }> = {
-  new_listing: { label: 'New Listing', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  status_change: { label: 'Status Change', color: 'bg-purple-100 text-purple-800 border-purple-200' },
-  update: { label: 'Update', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-  closed_buyer: { label: 'Closed Buyer', color: 'bg-amber-100 text-amber-800 border-amber-200' },
+const OH_STATUS_CONFIG = {
+  pending:    { label: 'Pending Review', color: 'bg-amber-500/80 text-white' },
+  email_sent: { label: 'Email Sent ✓',  color: 'bg-green-600/80 text-white' },
+  cancelled:  { label: 'Cancelled',     color: 'bg-red-500/80 text-white' },
 };
 
 const TX_STATUS_LABELS: Record<string, string> = {
@@ -102,34 +109,40 @@ const TX_STATUS_LABELS: Record<string, string> = {
 };
 
 const CLOSING_TYPE_LABEL: Record<string, string> = {
-  buyers_agent: "Buyer's Agent",
-  listing_agent: 'Listing Agent',
-  dual_agent: 'Dual Agent',
-  referral: 'Referral',
-  rental: 'Rental',
+  buyer: "Buyer", listing: 'Listing', dual: 'Dual Agent',
+  buyers_agent: "Buyer's Agent", listing_agent: 'Listing Agent', dual_agent: 'Dual Agent', referral: 'Referral', rental: 'Rental',
 };
 
 const DEAL_TYPE_LABEL: Record<string, string> = {
-  residential: 'Residential',
-  commercial: 'Commercial',
-  land: 'Land',
-  rental: 'Rental',
-  referral: 'Referral',
+  residential: 'Residential', residential_sale: 'Residential', commercial: 'Commercial',
+  commercial_sale: 'Commercial', land: 'Land', rental: 'Rental', referral: 'Referral',
 };
 
 const formatCurrency = (v?: number | null) =>
   v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
+/* ─── Main Component ─────────────────────────────────────────────────────────── */
+
 export default function StaffQueuePage() {
   const { user, loading: userLoading } = useUser();
   const { isStaff, loading: staffLoading } = useIsStaff();
+  const { toast } = useToast();
 
+  // Transaction queue items
   const [items, setItems] = useState<StaffQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('active');
   const [search, setSearch] = useState('');
-  const [actionFilter, setActionFilter] = useState<string>('all');
+
+  // Open house submissions
+  const [ohItems, setOhItems] = useState<OpenHouseSubmission[]>([]);
+  const [ohLoading, setOhLoading] = useState(true);
+  const [ohError, setOhError] = useState<string | null>(null);
+  const [ohStatusFilter, setOhStatusFilter] = useState<string>('pending');
+  const [markingEmailSent, setMarkingEmailSent] = useState<string | null>(null);
+
+  /* ─── Fetch transaction queue ─────────────────────────────────────────── */
 
   const fetchItems = useCallback(async () => {
     if (!user) return;
@@ -156,24 +169,75 @@ export default function StaffQueuePage() {
     }
   }, [user, statusFilter]);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  /* ─── Fetch open house submissions ───────────────────────────────────── */
 
-  const filtered = items.filter((item) => {
+  const fetchOhItems = useCallback(async () => {
+    if (!user) return;
+    setOhLoading(true);
+    setOhError(null);
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams();
+      if (ohStatusFilter !== 'all') params.set('status', ohStatusFilter);
+      const res = await fetch(`/api/admin/open-house-submissions?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
+      setOhItems(data.items || []);
+    } catch (err: any) {
+      setOhError(err.message || 'Failed to load open house submissions');
+    } finally {
+      setOhLoading(false);
+    }
+  }, [user, ohStatusFilter]);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+  useEffect(() => { fetchOhItems(); }, [fetchOhItems]);
+
+  /* ─── Mark email sent ─────────────────────────────────────────────────── */
+
+  const handleMarkEmailSent = async (submissionId: string) => {
+    if (!user) return;
+    setMarkingEmailSent(submissionId);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/open-house-submissions/${submissionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'mark_email_sent' }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+      toast({ title: '✅ Email Marked Sent', description: 'Agent has been notified to update Boomtown and MLS.' });
+      fetchOhItems();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setMarkingEmailSent(null);
+    }
+  };
+
+  /* ─── Derived data ────────────────────────────────────────────────────── */
+
+  const filteredItems = items.filter((item) => {
     const q = search.toLowerCase();
     const displayAddr = item.transactionAddress || item.address || '';
-    const matchSearch =
+    return (
       !q ||
       displayAddr.toLowerCase().includes(q) ||
       item.agentName?.toLowerCase().includes(q) ||
-      item.submittedByName?.toLowerCase().includes(q);
-    const matchAction = actionFilter === 'all' || item.actionType === actionFilter;
-    return matchSearch && matchAction;
+      item.submittedByName?.toLowerCase().includes(q)
+    );
   });
 
-  const pendingCount = items.filter((i) => i.status === 'pending_review').length;
-  const inProgressCount = items.filter((i) => i.status === 'in_progress').length;
-  const completedCount = items.filter((i) => i.status === 'completed').length;
-  const dismissedCount = items.filter((i) => i.status === 'dismissed').length;
+  const statusChanges = filteredItems.filter(i => i.actionType === 'status_change' || i.actionType === 'closed_buyer' || i.actionType === 'update');
+  const newListings = filteredItems.filter(i => i.actionType === 'new_listing');
+
+  const pendingOhCount = ohItems.filter(i => i.status === 'pending').length;
+  const pendingTxCount = items.filter(i => i.status === 'pending_review').length;
+
+  /* ─── Loading / auth guards ───────────────────────────────────────────── */
 
   if (userLoading || staffLoading) {
     return (
@@ -195,6 +259,8 @@ export default function StaffQueuePage() {
     );
   }
 
+  /* ─── Render ──────────────────────────────────────────────────────────── */
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
@@ -205,44 +271,266 @@ export default function StaffQueuePage() {
             Staff Queue
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            MLS updates, new listings, and status changes requiring staff action
+            Open house submissions, MLS updates, new listings, and status changes
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchItems} disabled={loading}>
-          <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
+        <Button variant="outline" size="sm" onClick={() => { fetchItems(); fetchOhItems(); }} disabled={loading || ohLoading}>
+          <RefreshCw className={cn('h-4 w-4 mr-2', (loading || ohLoading) && 'animate-spin')} />
           Refresh
         </Button>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[
-          { label: 'Pending Review', value: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
-          { label: 'In Progress', value: inProgressCount, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
-          { label: 'Completed', value: completedCount, color: 'text-green-600', bg: 'bg-green-50 border-green-200' },
-          { label: 'Dismissed', value: dismissedCount, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200' },
-          { label: 'Total (filtered)', value: filtered.length, color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200' },
-        ].map((c) => (
-          <Card key={c.label} className={cn('border', c.bg)}>
-            <CardContent className="p-4">
-              <div className={cn('text-2xl font-bold', c.color)}>{c.value}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{c.label}</div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-amber-600">{pendingOhCount}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Open Houses Pending</div>
+          </CardContent>
+        </Card>
+        <Card className="border-purple-200 bg-purple-50">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-purple-600">{statusChanges.filter(i => i.status === 'pending_review').length}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Status Changes Pending</div>
+          </CardContent>
+        </Card>
+        <Card className="border-emerald-200 bg-emerald-50">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-emerald-600">{newListings.filter(i => i.status === 'pending_review').length}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">New Listings Pending</div>
+          </CardContent>
+        </Card>
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-blue-600">{pendingTxCount}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Total Pending Review</div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Alert for pending items */}
-      {pendingCount > 0 && (
-        <Alert className="border-amber-300 bg-amber-50">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
-          <AlertTitle className="text-amber-800">Action Required</AlertTitle>
-          <AlertDescription className="text-amber-700">
-            {pendingCount} item{pendingCount !== 1 ? 's' : ''} pending review — please update MLS and mark as completed.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* Tabs */}
+      <Tabs defaultValue="open-houses">
+        <TabsList className="grid w-full grid-cols-3 max-w-lg">
+          <TabsTrigger value="open-houses" className="flex items-center gap-1.5">
+            <Home className="h-3.5 w-3.5" />
+            Open Houses
+            {pendingOhCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                {pendingOhCount}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="status-changes" className="flex items-center gap-1.5">
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+            Status Changes
+            {statusChanges.filter(i => i.status === 'pending_review').length > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-bold">
+                {statusChanges.filter(i => i.status === 'pending_review').length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="new-listings" className="flex items-center gap-1.5">
+            <Plus className="h-3.5 w-3.5" />
+            New Listings
+            {newListings.filter(i => i.status === 'pending_review').length > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-bold">
+                {newListings.filter(i => i.status === 'pending_review').length}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
+        {/* ── Open Houses Tab ─────────────────────────────────────────────── */}
+        <TabsContent value="open-houses" className="mt-4 space-y-4">
+          {pendingOhCount > 0 && (
+            <Alert className="border-amber-300 bg-amber-50">
+              <Home className="h-4 w-4 text-amber-600" />
+              <AlertTitle className="text-amber-800">Open House Submissions Pending</AlertTitle>
+              <AlertDescription className="text-amber-700">
+                {pendingOhCount} open house{pendingOhCount !== 1 ? 's' : ''} submitted — add to email blast, then click "Mark Email Sent" for each.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Select value={ohStatusFilter} onValueChange={setOhStatusFilter}>
+                  <SelectTrigger className="sm:w-52">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending Review</SelectItem>
+                    <SelectItem value="email_sent">Email Sent</SelectItem>
+                    <SelectItem value="all">All Submissions</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{ohItems.length} submission{ohItems.length !== 1 ? 's' : ''}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {ohLoading ? (
+                <div className="p-6 space-y-3">
+                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : ohError ? (
+                <div className="p-6">
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{ohError}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : ohItems.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">
+                  <Home className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium">No open house submissions</p>
+                  <p className="text-sm mt-1">
+                    {ohStatusFilter === 'pending' ? 'No pending submissions — all caught up!' : 'Try changing the filter.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Agent</TableHead>
+                        <TableHead>Open House Date</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Address / MLS</TableHead>
+                        <TableHead>Special Notes</TableHead>
+                        <TableHead>Submitted</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ohItems.map((item) => {
+                        const sc = OH_STATUS_CONFIG[item.status] ?? OH_STATUS_CONFIG.pending;
+                        return (
+                          <TableRow key={item.id} className="hover:bg-muted/40">
+                            <TableCell>
+                              <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap', sc.color)}>
+                                {sc.label}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium text-sm">{item.agentName}</div>
+                              {item.agentPhone && <div className="text-xs text-muted-foreground">{item.agentPhone}</div>}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap font-medium text-sm">
+                              {item.openHouseDate ? format(parseISO(item.openHouseDate), 'EEE, MMM d, yyyy') : '—'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm">
+                              {item.startTime} – {item.endTime}
+                            </TableCell>
+                            <TableCell>
+                              {item.propertyAddress && <div className="text-sm font-medium">{item.propertyAddress}</div>}
+                              {item.mlsNumber && <div className="text-xs text-muted-foreground">MLS# {item.mlsNumber}</div>}
+                              {!item.propertyAddress && !item.mlsNumber && <span className="text-xs text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="max-w-[200px]">
+                              {item.specialNotes ? (
+                                <p className="text-xs text-muted-foreground truncate" title={item.specialNotes}>{item.specialNotes}</p>
+                              ) : <span className="text-xs text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDateShort(item.createdAt)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {item.status === 'pending' ? (
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs gap-1.5 bg-green-600 hover:bg-green-700"
+                                  onClick={() => handleMarkEmailSent(item.id)}
+                                  disabled={markingEmailSent === item.id}
+                                >
+                                  {markingEmailSent === item.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <MailCheck className="h-3 w-3" />
+                                  )}
+                                  Mark Email Sent
+                                </Button>
+                              ) : item.status === 'email_sent' ? (
+                                <span className="text-xs text-green-700 font-medium flex items-center gap-1 justify-end">
+                                  <MailCheck className="h-3.5 w-3.5" />
+                                  Sent {item.emailSentAt ? formatDateShort(item.emailSentAt) : ''}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Status Changes Tab ──────────────────────────────────────────── */}
+        <TabsContent value="status-changes" className="mt-4 space-y-4">
+          <TransactionQueueSection
+            items={statusChanges}
+            loading={loading}
+            error={error}
+            search={search}
+            setSearch={setSearch}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            emptyMessage="No status change items found."
+            emptySubMessage={statusFilter === 'active' ? 'All caught up — no pending status changes.' : 'Try adjusting your filters.'}
+          />
+        </TabsContent>
+
+        {/* ── New Listings Tab ────────────────────────────────────────────── */}
+        <TabsContent value="new-listings" className="mt-4 space-y-4">
+          <TransactionQueueSection
+            items={newListings}
+            loading={loading}
+            error={error}
+            search={search}
+            setSearch={setSearch}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            emptyMessage="No new listing items found."
+            emptySubMessage={statusFilter === 'active' ? 'All caught up — no pending new listings.' : 'Try adjusting your filters.'}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/* ─── Shared Transaction Queue Section ──────────────────────────────────────── */
+
+type TxSectionProps = {
+  items: StaffQueueItem[];
+  loading: boolean;
+  error: string | null;
+  search: string;
+  setSearch: (v: string) => void;
+  statusFilter: string;
+  setStatusFilter: (v: string) => void;
+  emptyMessage: string;
+  emptySubMessage: string;
+};
+
+function TransactionQueueSection({
+  items, loading, error, search, setSearch, statusFilter, setStatusFilter,
+  emptyMessage, emptySubMessage,
+}: TxSectionProps) {
+  return (
+    <div className="space-y-4">
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
@@ -254,7 +542,7 @@ export default function StaffQueuePage() {
               className="sm:max-w-xs"
             />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="sm:w-44">
+              <SelectTrigger className="sm:w-52">
                 <SelectValue placeholder="Queue Status" />
               </SelectTrigger>
               <SelectContent>
@@ -266,18 +554,6 @@ export default function StaffQueuePage() {
                 <SelectItem value="dismissed">Dismissed</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={actionFilter} onValueChange={setActionFilter}>
-              <SelectTrigger className="sm:w-44">
-                <SelectValue placeholder="Action Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="new_listing">New Listing</SelectItem>
-                <SelectItem value="status_change">Status Change</SelectItem>
-                <SelectItem value="closed_buyer">Closed Buyer</SelectItem>
-                <SelectItem value="update">Update</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -285,9 +561,7 @@ export default function StaffQueuePage() {
       {/* Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            {filtered.length} item{filtered.length !== 1 ? 's' : ''}
-          </CardTitle>
+          <CardTitle className="text-base">{items.length} item{items.length !== 1 ? 's' : ''}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -302,13 +576,11 @@ export default function StaffQueuePage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">
               <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">No items found</p>
-              <p className="text-sm mt-1">
-                {statusFilter === 'active' ? 'All caught up — no pending or in-progress items.' : 'Try adjusting your filters.'}
-              </p>
+              <p className="font-medium">{emptyMessage}</p>
+              <p className="text-sm mt-1">{emptySubMessage}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -316,7 +588,6 @@ export default function StaffQueuePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="whitespace-nowrap">Queue Status</TableHead>
-                    <TableHead className="whitespace-nowrap">Action Type</TableHead>
                     <TableHead className="whitespace-nowrap min-w-[200px]">Address</TableHead>
                     <TableHead className="whitespace-nowrap">Agent</TableHead>
                     <TableHead className="whitespace-nowrap">Side</TableHead>
@@ -324,26 +595,20 @@ export default function StaffQueuePage() {
                     <TableHead className="whitespace-nowrap">Contract Date</TableHead>
                     <TableHead className="whitespace-nowrap">Close Date</TableHead>
                     <TableHead className="whitespace-nowrap text-right">Sale Price</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">GCI</TableHead>
                     <TableHead className="whitespace-nowrap">Status Change</TableHead>
+                    <TableHead className="whitespace-nowrap">Notes</TableHead>
                     <TableHead className="whitespace-nowrap">Submitted</TableHead>
                     <TableHead className="whitespace-nowrap w-[100px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((item) => {
+                  {items.map((item) => {
                     const sc = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending_review;
-                    const ac = ACTION_CONFIG[item.actionType] ?? ACTION_CONFIG.update;
                     return (
                       <TableRow key={item.id} className="hover:bg-muted/40">
                         <TableCell>
                           <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap', sc.color)}>
                             {sc.icon}{sc.label}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className={cn('inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border whitespace-nowrap', ac.color)}>
-                            {ac.label}
                           </span>
                         </TableCell>
                         <TableCell className="min-w-[200px]">
@@ -352,7 +617,7 @@ export default function StaffQueuePage() {
                             <span className="text-[10px] text-indigo-600 font-medium">Working with TC</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm font-medium whitespace-nowrap">{item.agentName || item.submittedByName || '—'}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">{item.agentName}</TableCell>
                         <TableCell className="whitespace-nowrap">
                           {item.closingType ? (
                             <Badge variant="outline" className="text-xs">
@@ -367,9 +632,6 @@ export default function StaffQueuePage() {
                         <TableCell className="text-sm whitespace-nowrap">{formatDateShort(item.closedDate)}</TableCell>
                         <TableCell className="text-right font-medium whitespace-nowrap">
                           {formatCurrency(item.salePrice)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium whitespace-nowrap">
-                          {formatCurrency(item.gci)}
                         </TableCell>
                         <TableCell>
                           {(item.actionType === 'status_change' || item.actionType === 'closed_buyer') && (item.previousStatus || item.newStatus) ? (
@@ -387,6 +649,11 @@ export default function StaffQueuePage() {
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                        <TableCell className="max-w-[180px]">
+                          {item.notes ? (
+                            <p className="text-xs text-muted-foreground truncate" title={item.notes}>{item.notes}</p>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {formatDateShort(item.createdAt)}

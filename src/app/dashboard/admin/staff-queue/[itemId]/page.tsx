@@ -33,7 +33,7 @@ import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, ExternalLink,
   ClipboardList, UserCheck, Activity, Archive, Trash2,
   Phone, Mail, Building2, User, Users, RefreshCw, AlertTriangle, FileText, Paperclip,
-  UploadCloud, X,
+  UploadCloud, X, DollarSign, Banknote,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -240,6 +240,13 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
   const [documents, setDocuments] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Commission processing state
+  const [commissionOpen, setCommissionOpen] = useState(false);
+  const [commissionMethod, setCommissionMethod] = useState<'check_front_desk' | 'direct_deposit'>('check_front_desk');
+  const [commissionAmount, setCommissionAmount] = useState<string>('');
+  const [commissionStaffNotes, setCommissionStaffNotes] = useState('');
+  const [processingCommission, setProcessingCommission] = useState(false);
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
 
@@ -537,6 +544,37 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
     }
   };
 
+  const handleProcessCommission = async () => {
+    if (!user) return;
+    setProcessingCommission(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/staff-queue/${itemId}/commission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          commissionMethod,
+          commissionAmount: commissionAmount ? parseFloat(commissionAmount) : undefined,
+          staffNotes: commissionStaffNotes || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to process commission');
+      toast({
+        title: '🎉 Commission Processed!',
+        description: commissionMethod === 'direct_deposit'
+          ? 'Agent notified — commission sent via direct deposit.'
+          : 'Agent notified — check is waiting at the front desk.',
+      });
+      setItem((prev: any) => ({ ...prev, status: 'completed', commissionProcessed: true }));
+      setCommissionOpen(false);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setProcessingCommission(false);
+    }
+  };
+
   const assignStaff = async (profileId: string | null) => {
     try {
       const token = await getToken();
@@ -739,6 +777,34 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <XCircle className="mr-2 h-4 w-4" /> Dismiss
               </Button>
             </div>
+            {/* Commission processing — shown for closed/closing transactions */}
+            {(item.newStatus === 'closed' || item.actionType === 'closed_buyer' || transaction?.status === 'closed') && !item.commissionProcessed && (
+              <>
+                <Separator />
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm font-semibold text-amber-800 flex items-center gap-2 mb-2">
+                    <DollarSign className="h-4 w-4" /> Commission Ready to Process
+                  </p>
+                  <p className="text-xs text-amber-700 mb-3">
+                    This is a closed transaction. Once you have processed the commission, click below to notify the agent.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={() => setCommissionOpen(true)}
+                    disabled={acting}
+                  >
+                    <Banknote className="mr-2 h-4 w-4" /> Process Commission
+                  </Button>
+                </div>
+              </>
+            )}
+            {item.commissionProcessed && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3 flex items-center gap-2 text-sm text-green-800">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                Commission processed and agent notified.
+              </div>
+            )}
             <Separator />
             <div className="flex flex-wrap gap-3">
               <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)} disabled={acting}>
@@ -1460,6 +1526,86 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
             <Button variant="outline" onClick={() => setRemoveOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleRemove} disabled={acting}>
               <Trash2 className="mr-2 h-4 w-4" /> Permanently Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Commission Processing Dialog ──────────────────────────────────── */}
+      <Dialog open={commissionOpen} onOpenChange={setCommissionOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-amber-600" /> Process Commission
+            </DialogTitle>
+            <DialogDescription>
+              Mark this commission as processed and notify the agent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium block mb-2">Commission Amount (optional)</label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder={`e.g. ${item?.gci ? Number(item.gci).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '5,000.00'}`}
+                value={commissionAmount}
+                onChange={(e) => setCommissionAmount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Leave blank to use the GCI on file.</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-2">Payment Method</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCommissionMethod('check_front_desk')}
+                  className={cn(
+                    'flex flex-col items-center gap-2 rounded-lg border-2 p-4 text-sm font-medium transition-colors',
+                    commissionMethod === 'check_front_desk'
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-border hover:border-muted-foreground'
+                  )}
+                >
+                  <Banknote className="h-6 w-6" />
+                  Check at Front Desk
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCommissionMethod('direct_deposit')}
+                  className={cn(
+                    'flex flex-col items-center gap-2 rounded-lg border-2 p-4 text-sm font-medium transition-colors',
+                    commissionMethod === 'direct_deposit'
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-border hover:border-muted-foreground'
+                  )}
+                >
+                  <DollarSign className="h-6 w-6" />
+                  Direct Deposit
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-2">Staff Notes (optional)</label>
+              <Textarea
+                placeholder="Any notes for the agent or internal record..."
+                className="min-h-[80px]"
+                value={commissionStaffNotes}
+                onChange={(e) => setCommissionStaffNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCommissionOpen(false)} disabled={processingCommission}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={handleProcessCommission}
+              disabled={processingCommission}
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              {processingCommission ? 'Processing...' : 'Confirm & Notify Agent'}
             </Button>
           </DialogFooter>
         </DialogContent>

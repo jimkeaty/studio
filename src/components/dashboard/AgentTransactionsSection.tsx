@@ -666,6 +666,13 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
   const [pendingModalTx, setPendingModalTx] = useState<AgentTx | null>(null);
   const [pendingModalToken, setPendingModalToken] = useState('');
 
+  // Cancellation / temp-off-market reason dialog
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelDialogTx, setCancelDialogTx] = useState<AgentTx | null>(null);
+  const [cancelDialogStatus, setCancelDialogStatus] = useState<string>('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelSaving, setCancelSaving] = useState(false);
+
   // Drafts
   type DraftSummary = { draftId: string; label: string | null; address: string | null; clientName: string | null; salePrice: number | null; savedAt: string | null };
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
@@ -805,19 +812,54 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
       setPendingModalOpen(true);
       return;
     }
+    // Cancelled / temp_off_market → prompt for reason
+    const needsReason = (newStatus === 'cancelled' || newStatus === 'temp_off_market') && tx.status !== newStatus;
+    if (needsReason) {
+      setCancelDialogTx(tx);
+      setCancelDialogStatus(newStatus);
+      setCancelReason('');
+      setCancelDialogOpen(true);
+      return;
+    }
     try {
       const token = await user.getIdToken();
       const resubmitToTc = newStatus === 'pending' && tx.status !== 'pending';
       const res = await fetch(`/api/agent/transactions/${tx.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status: newStatus, resubmitToTc }),
+        body: JSON.stringify({ status: newStatus, resubmitToTc, notifyStaffQueue: true }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
       setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: newStatus } : t));
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  const handleCancelReasonSubmit = async () => {
+    if (!user || !cancelDialogTx) return;
+    setCancelSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/agent/transactions/${cancelDialogTx.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          status: cancelDialogStatus,
+          notes: cancelReason ? `[${cancelDialogStatus === 'cancelled' ? 'Cancellation' : 'Temp Off Market'} Reason] ${cancelReason}` : undefined,
+          notifyStaffQueue: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+      setTransactions(prev => prev.map(t => t.id === cancelDialogTx.id ? { ...t, status: cancelDialogStatus } : t));
+      setCancelDialogOpen(false);
+      setCancelDialogTx(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCancelSaving(false);
     }
   };
 
@@ -1340,6 +1382,54 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
           onSkip={handlePendingContractSkip}
         />
       )}
+
+      {/* Cancellation / Temp Off Market reason dialog */}
+      <Dialog open={cancelDialogOpen} onOpenChange={(v) => { if (!v && !cancelSaving) { setCancelDialogOpen(false); setCancelDialogTx(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {cancelDialogStatus === 'cancelled' ? '❌ Cancel Listing' : '⏸️ Temp Off Market'}
+            </DialogTitle>
+            <DialogDescription>
+              {cancelDialogStatus === 'cancelled'
+                ? 'Please provide a reason for cancelling this listing. This will be sent to the Staff Queue.'
+                : 'Please provide a reason for temporarily taking this listing off market. Staff will update MLS.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="cancel-reason" className="text-sm font-medium">
+                {cancelDialogStatus === 'cancelled' ? 'Cancellation Reason' : 'Reason for Temp Off Market'}
+              </Label>
+              <Textarea
+                id="cancel-reason"
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                placeholder={cancelDialogStatus === 'cancelled'
+                  ? 'e.g. Seller decided not to sell at this time'
+                  : 'e.g. Seller wanted to take off market while remodeling'}
+                rows={3}
+                className="resize-none"
+              />
+              <p className="text-[11px] text-muted-foreground">Optional but helpful for staff. You can also leave this blank.</p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setCancelDialogOpen(false); setCancelDialogTx(null); }} disabled={cancelSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCancelReasonSubmit}
+              disabled={cancelSaving}
+              variant={cancelDialogStatus === 'cancelled' ? 'destructive' : 'default'}
+            >
+              {cancelSaving ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : (
+                cancelDialogStatus === 'cancelled' ? 'Confirm Cancellation' : 'Confirm Temp Off Market'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -48,6 +48,7 @@ import {
   GraduationCap,
   HelpCircle,
   BookUser,
+  Home,
   Info,
   Monitor,
   Wifi,
@@ -134,6 +135,7 @@ const agentMenuItems = [
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
   { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
+  { href: '/dashboard/open-house', label: 'Submit Open House', icon: Home },
   { href: '/dashboard/training', label: 'Training & Help', icon: GraduationCap },
 ];
 
