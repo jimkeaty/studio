@@ -141,7 +141,7 @@ export default function CompetitionDetailPage() {
   const [prizes, setPrizes] = useState<any[]>([]);
   const [totalPot, setTotalPot] = useState(0);
   const [showAddPrize, setShowAddPrize] = useState(false);
-  const [prizeForm, setPrizeForm] = useState({ description: '', amount: '', place: '', donorName: '', donorType: 'agent' });
+  const [prizeForm, setPrizeForm] = useState({ description: '', amount: '', place: 'any', donorName: '', donorType: 'agent' });
   const [addingPrize, setAddingPrize] = useState(false);
   const [prizeError, setPrizeError] = useState<string | null>(null);
 
@@ -216,7 +216,7 @@ export default function CompetitionDetailPage() {
         body: JSON.stringify({
           description: prizeForm.description.trim(),
           amount: Number(prizeForm.amount) || 0,
-          place: prizeForm.place ? Number(prizeForm.place) : null,
+          place: (prizeForm.place && prizeForm.place !== 'any') ? Number(prizeForm.place) : null,
           donorName: prizeForm.donorName.trim() || undefined,
           donorType: prizeForm.donorType,
         }),
@@ -887,7 +887,7 @@ export default function CompetitionDetailPage() {
                 <Select value={prizeForm.place} onValueChange={v => setPrizeForm(f => ({ ...f, place: v }))}>
                   <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any / General Pot</SelectItem>
+                    <SelectItem value="any">Any / General Pot</SelectItem>
                     <SelectItem value="1">🥇 1st Place</SelectItem>
                     <SelectItem value="2">🥈 2nd Place</SelectItem>
                     <SelectItem value="3">🥉 3rd Place</SelectItem>
