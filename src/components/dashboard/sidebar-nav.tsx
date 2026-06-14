@@ -48,10 +48,21 @@ import {
   GraduationCap,
   HelpCircle,
   BookUser,
+  Info,
+  Monitor,
+  Wifi,
+  Tv,
   type LucideIcon,
 } from 'lucide-react';
 import { useAgentPlugins } from '@/hooks/useAgentPlugins';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 // Map plugin iconName strings to actual Lucide components
 const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
@@ -210,6 +221,7 @@ export function SidebarNav() {
   const { isImpersonating } = useImpersonation();
   const { plugins: agentPlugins } = useAgentPlugins();
   const [branding, setBranding] = useState<BrandingData | null>(null);
+  const [showTvHelp, setShowTvHelp] = useState(false);
 
   // Fetch branding settings (public endpoint, no auth needed)
   useEffect(() => {
@@ -295,15 +307,27 @@ export function SidebarNav() {
           ))}
           {tvModeMenuItems.map((item) => (
             <SidebarMenuItem key={item.href}>
-              <Link href={item.href} target="_blank">
-                <SidebarMenuButton
-                  tooltip={item.label}
-                  className="justify-start"
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </SidebarMenuButton>
-              </Link>
+              <div className="flex items-center w-full group">
+                <Link href={item.href} target="_blank" className="flex-1">
+                  <SidebarMenuButton
+                    tooltip={item.label}
+                    className="justify-start w-full"
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </SidebarMenuButton>
+                </Link>
+                {item.href === '/new-activity' && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTvHelp(true); }}
+                    className="flex-shrink-0 p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    title="How to display on a TV"
+                    aria-label="How to display on a TV"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
@@ -455,6 +479,62 @@ export function SidebarNav() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      {/* TV Display Instructions Dialog */}
+      <Dialog open={showTvHelp} onOpenChange={setShowTvHelp}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tv className="h-5 w-5 text-primary" />
+              How to Display on a TV
+            </DialogTitle>
+            <DialogDescription>
+              The Activity Board TV is a full-screen, no-scroll display designed for office TVs. It auto-refreshes every 5 minutes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <div className="flex gap-3 p-3 rounded-lg bg-muted">
+              <Monitor className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-1">Option 1 — Chromecast / Google TV (easiest)</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li>Open Chrome on a laptop or phone on the same WiFi as your TV</li>
+                  <li>Click &ldquo;Activity Board TV&rdquo; to open it in a new tab</li>
+                  <li>Click the <strong>⋮ menu → Cast → Cast tab</strong></li>
+                  <li>Select your Chromecast or Google TV device</li>
+                </ol>
+              </div>
+            </div>
+            <div className="flex gap-3 p-3 rounded-lg bg-muted">
+              <Tv className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-1">Option 2 — Smart TV built-in browser</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li>Open your TV&rsquo;s browser app (Samsung, LG, Sony all have one)</li>
+                  <li>Navigate to the URL below</li>
+                  <li>Press the TV&rsquo;s fullscreen button to fill the screen</li>
+                </ol>
+              </div>
+            </div>
+            <div className="flex gap-3 p-3 rounded-lg bg-muted">
+              <Wifi className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-1">Option 3 — Amazon Fire Stick / Roku</p>
+                <p className="text-muted-foreground">Install the <strong>Silk Browser</strong> (Fire Stick) or <strong>web browser channel</strong> (Roku), navigate to the URL, and go fullscreen.</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <p className="font-semibold text-primary mb-1">Activity Board TV URL</p>
+              <code className="text-xs break-all text-muted-foreground">
+                https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app/new-activity
+              </code>
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 <strong>Tip:</strong> Bookmark this URL on the TV browser so you can open it with one click each morning. It stays live all day automatically.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Sidebar>
   );
 }
