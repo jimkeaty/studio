@@ -6,7 +6,8 @@ const COL = 'appConfig';
 
 const DEFAULT_CONFIG = {
   rotationIntervalSeconds: 30,
-  enabledPages: ['activity', 'leaderboard', 'open-houses', 'buyer-needs', 'coming-soon'],
+  communityBoardIntervalSeconds: 30,
+  enabledPages: ['activity', 'leaderboard', 'community'],
 };
 
 function bearer(req: NextRequest) {

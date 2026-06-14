@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Crown, Rocket, Zap, AlertCircle, BarChart, CalendarDays, DollarSign, TrendingUp, Users, Clock } from 'lucide-react';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -110,18 +110,22 @@ type DisplayConfig = {
   showGCI: boolean;
   showVolume: boolean;
   showSales: boolean;
+  showAgentNet: boolean;    // Agent net commission paid out
+  showPending: boolean;     // Pending contracts
   showCalls: boolean;
   showAppointments: boolean;
   showEngagements: boolean;
   showTopN: number;
 };
 const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
-  showGCI: false,
+  showGCI: true,
   showVolume: true,
   showSales: true,
-  showCalls: true,
-  showAppointments: true,
-  showEngagements: true,
+  showAgentNet: true,       // ON by default — shows total paid out to agents
+  showPending: true,
+  showCalls: false,         // OFF by default
+  showAppointments: false,  // OFF by default
+  showEngagements: false,   // OFF by default
   showTopN: 50,
 };
 
@@ -139,6 +143,12 @@ export default function LeaderboardPage() {
   const [quarter, setQuarter] = useState(() => Math.ceil((new Date().getMonth() + 1) / 3));
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
 
+  // Auto-scroll refs for TV mode
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollInnerRef = useRef<HTMLDivElement>(null);
+  const scrollAnimRef = useRef<number | null>(null);
+  const scrollPosRef = useRef(0);
+
   // Load board config (display toggles) once on mount
   useEffect(() => {
     fetch('/api/board-config?board=leaderboard')
@@ -147,12 +157,14 @@ export default function LeaderboardPage() {
         if (json.ok && json.config) {
           const cfg = json.config;
           setDisplayConfig({
-            showGCI: cfg.showGCI === true,
+            showGCI: cfg.showGCI !== false,
             showVolume: cfg.showVolume !== false,
             showSales: cfg.showSales !== false,
-            showCalls: cfg.showCalls !== false,
-            showAppointments: cfg.showAppointments !== false,
-            showEngagements: cfg.showEngagements !== false,
+            showAgentNet: cfg.showAgentNet !== false,  // default ON
+            showPending: cfg.showPending !== false,    // default ON
+            showCalls: cfg.showCalls === true,         // default OFF
+            showAppointments: cfg.showAppointments === true, // default OFF
+            showEngagements: cfg.showEngagements === true,   // default OFF
             showTopN: typeof cfg.showTopN === 'number' && cfg.showTopN > 0 ? cfg.showTopN : 50,
           });
         }
@@ -195,6 +207,54 @@ export default function LeaderboardPage() {
   );
 
   const leaderScore = visibleRows.length > 0 ? visibleRows[0].closed : 0;
+
+  // Auto-scroll effect — runs after visibleRows is computed
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const inner = scrollInnerRef.current;
+    if (!container || !inner || visibleRows.length === 0) return;
+
+    const SPEED = 30; // px per second
+    let lastTime: number | null = null;
+    let pauseUntil = 0;
+
+    const step = (ts: number) => {
+      if (!container || !inner) return;
+      if (lastTime === null) lastTime = ts;
+      const dt = (ts - lastTime) / 1000;
+      lastTime = ts;
+
+      const contentH = inner.scrollHeight / 2;
+      const containerH = container.clientHeight;
+
+      if (contentH <= containerH) {
+        scrollPosRef.current = 0;
+        container.scrollTop = 0;
+        scrollAnimRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      if (ts < pauseUntil) {
+        scrollAnimRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      scrollPosRef.current += SPEED * dt;
+
+      if (scrollPosRef.current >= contentH) {
+        scrollPosRef.current = 0;
+        pauseUntil = ts + 3000;
+      }
+
+      container.scrollTop = scrollPosRef.current;
+      scrollAnimRef.current = requestAnimationFrame(step);
+    };
+
+    scrollAnimRef.current = requestAnimationFrame(step);
+    return () => {
+      if (scrollAnimRef.current) cancelAnimationFrame(scrollAnimRef.current);
+    };
+  }, [visibleRows]);
 
   const periodLabel = period === 'yearly'
     ? `${year}`
@@ -290,11 +350,18 @@ export default function LeaderboardPage() {
             <p className="text-sm text-gray-500">Leaderboard data for {periodLabel} is not yet available.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {visibleRows.map((agent, index) => {
+          <div
+            ref={scrollContainerRef}
+            className="overflow-hidden"
+            style={{ maxHeight: 'calc(100vh - 320px)', scrollBehavior: 'auto' }}
+          >
+            <div ref={scrollInnerRef}>
+            {/* Render rows twice for seamless loop */}
+            {[...visibleRows, ...visibleRows].map((agent, index) => {
+              const realIndex = index % visibleRows.length;
               const progress = leaderScore > 0 ? (agent.closed / leaderScore) * 100 : 0;
-              const rankStyle = RANK_STYLES[index] ?? { border: 'border-white/10', rankColor: 'text-slate-500', shadow: '' };
-              const gradientClass = AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length];
+              const rankStyle = RANK_STYLES[realIndex] ?? { border: 'border-white/10', rankColor: 'text-slate-500', shadow: '' };
+              const gradientClass = AVATAR_GRADIENTS[realIndex % AVATAR_GRADIENTS.length];
               const initials = (agent.displayName ?? '?').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
               return (
                 <div
@@ -347,10 +414,15 @@ export default function LeaderboardPage() {
                     </div>
                     {/* Stats row */}
                     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-white/50">
-                      {displayConfig.showVolume && (
+                      {displayConfig.showVolume && agent.closedVolume > 0 && (
                         <span>Vol: <span className="text-white/80 font-semibold">{fmtCurrency(agent.closedVolume)}</span></span>
                       )}
-                      {agent.pending > 0 && <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>}
+                      {displayConfig.showAgentNet && agent.agentNetCommission > 0 && (
+                        <span>💵 Paid Out: <span className="text-emerald-400 font-semibold">{fmtCurrency(agent.agentNetCommission)}</span></span>
+                      )}
+                      {displayConfig.showPending && agent.pending > 0 && (
+                        <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>
+                      )}
                       {displayConfig.showCalls && agent.totalCalls > 0 && (
                         <span>📞 <span className="text-white/80 font-semibold">{fmtNum(agent.totalCalls)}</span> calls</span>
                       )}
@@ -373,6 +445,7 @@ export default function LeaderboardPage() {
                 </div>
               );
             })}
+            </div>
           </div>
         )}
 

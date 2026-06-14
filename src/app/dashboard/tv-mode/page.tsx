@@ -59,6 +59,7 @@ type BoardItem = {
 
 type TvConfig = {
   rotationIntervalSeconds: number;
+  communityBoardIntervalSeconds?: number;
   enabledPages: string[];
 };
 
@@ -81,7 +82,7 @@ export default function TvModePage() {
   const [tab, setTab] = useState<'open-houses' | 'buyer-needs' | 'coming-soon'>('open-houses');
   const [items, setItems] = useState<BoardItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [tvConfig, setTvConfig] = useState<TvConfig>({ rotationIntervalSeconds: 30, enabledPages: ['activity', 'leaderboard', 'open-houses', 'buyer-needs', 'coming-soon'] });
+  const [tvConfig, setTvConfig] = useState<TvConfig>({ rotationIntervalSeconds: 30, communityBoardIntervalSeconds: 30, enabledPages: ['activity', 'leaderboard', 'community'] });
   const [showSettings, setShowSettings] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -107,7 +108,7 @@ export default function TvModePage() {
     } finally {
       setLoading(false);
     }
-  }, [apiPath, getIdToken]);
+  }, [apiPath, user]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
 
@@ -120,7 +121,7 @@ export default function TvModePage() {
       const json = await res.json();
       if (json.ok && json.config) setTvConfig(json.config);
     } catch (e) { console.error(e); }
-  }, [getIdToken]);
+  }, [user]);
 
   useEffect(() => { loadTvConfig(); }, [loadTvConfig]);
 
@@ -234,23 +235,22 @@ export default function TvModePage() {
       </div>
 
       {/* TV Mode quick links */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-6">
         {[
-          { label: 'Activity Board', path: '/new-activity', icon: '📊' },
-          { label: 'Leaderboard', path: '/leaderboard', icon: '🏆' },
-          { label: 'Open Houses', path: '/tv/open-houses', icon: '🏠' },
-          { label: 'Buyer Needs', path: '/tv/buyer-needs', icon: '🔍' },
-          { label: 'Coming Soon', path: '/tv/coming-soon', icon: '⏰' },
+          { label: 'Activity Board', path: '/new-activity', icon: '📊', desc: 'New listings, pendings & sold' },
+          { label: 'Leaderboard', path: '/leaderboard', icon: '🏆', desc: 'Production rankings' },
+          { label: 'Community Board', path: '/tv/community', icon: '🏡', desc: 'Coming Soon · Buyer Needs · Open Houses' },
         ].map((page) => (
           <button
             key={page.path}
             onClick={() => window.open(page.path, '_blank')}
-            className="bg-gray-900 border border-white/10 rounded-xl p-3 text-center hover:bg-gray-800 transition-colors"
+            className="bg-gray-900 border border-white/10 rounded-xl p-4 text-center hover:bg-gray-800 transition-colors"
           >
-            <div className="text-2xl mb-1">{page.icon}</div>
-            <div className="text-xs text-gray-400 font-medium">{page.label}</div>
-            <div className="text-xs text-orange-400 mt-1 flex items-center justify-center gap-1">
-              <ExternalLink className="h-3 w-3" />TV View
+            <div className="text-3xl mb-2">{page.icon}</div>
+            <div className="text-sm text-white font-semibold">{page.label}</div>
+            {'desc' in page && <div className="text-xs text-gray-500 mt-1">{(page as any).desc}</div>}
+            <div className="text-xs text-orange-400 mt-2 flex items-center justify-center gap-1">
+              <ExternalLink className="h-3 w-3" />Open TV View
             </div>
           </button>
         ))}
@@ -591,18 +591,41 @@ export default function TvModePage() {
             </div>
 
             <div>
-              <Label className="text-gray-300 text-sm font-medium">Pages to Include in Rotation</Label>
-              <p className="text-gray-500 text-xs mb-3">Toggle which pages appear in the TV rotation</p>
+              <Label className="text-gray-300 text-sm font-medium">Community Board — Section Rotation Timer</Label>
+              <p className="text-gray-500 text-xs mb-2">How long each section (Coming Soon, Buyer Needs, Open Houses) shows before rotating</p>
+              <Select
+                value={String(tvConfig.communityBoardIntervalSeconds ?? 30)}
+                onValueChange={(v) => setTvConfig((c) => ({ ...c, communityBoardIntervalSeconds: Number(v) }))}
+              >
+                <SelectTrigger className="bg-gray-800 border-white/10 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-white/10 text-white">
+                  <SelectItem value="15">15 seconds</SelectItem>
+                  <SelectItem value="20">20 seconds</SelectItem>
+                  <SelectItem value="30">30 seconds</SelectItem>
+                  <SelectItem value="45">45 seconds</SelectItem>
+                  <SelectItem value="60">60 seconds</SelectItem>
+                  <SelectItem value="90">90 seconds</SelectItem>
+                  <SelectItem value="120">2 minutes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-gray-300 text-sm font-medium">TV Screens to Enable</Label>
+              <p className="text-gray-500 text-xs mb-3">Toggle which screens appear in the TV hub</p>
               <div className="space-y-2">
                 {[
-                  { id: 'activity', label: '📊 Activity Board', path: '/new-activity' },
-                  { id: 'leaderboard', label: '🏆 Leaderboard', path: '/leaderboard' },
-                  { id: 'open-houses', label: '🏠 Open Houses', path: '/tv/open-houses' },
-                  { id: 'buyer-needs', label: '🔍 Buyer Needs', path: '/tv/buyer-needs' },
-                  { id: 'coming-soon', label: '⏰ Coming Soon', path: '/tv/coming-soon' },
+                  { id: 'activity', label: '📊 Activity Board', desc: 'New listings, pendings & sold' },
+                  { id: 'leaderboard', label: '🏆 Leaderboard', desc: 'Production rankings with auto-scroll' },
+                  { id: 'community', label: '🏡 Community Board', desc: 'Coming Soon · Buyer Needs · Open Houses' },
                 ].map((page) => (
                   <label key={page.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg cursor-pointer">
-                    <span className="text-gray-300 text-sm">{page.label}</span>
+                    <div>
+                      <div className="text-gray-300 text-sm">{page.label}</div>
+                      <div className="text-gray-500 text-xs">{page.desc}</div>
+                    </div>
                     <Switch
                       checked={tvConfig.enabledPages.includes(page.id)}
                       onCheckedChange={() => togglePage(page.id)}

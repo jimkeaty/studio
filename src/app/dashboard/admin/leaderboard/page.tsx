@@ -23,10 +23,16 @@ const leaderboardConfigSchema = z.object({
   title: z.string().min(1, 'Title is required.'),
   subtitle: z.string().optional().default(''),
   primaryMetricKey: z.custom<LeaderboardMetricKey>(),
-  showTopN: z.coerce.number().min(1).max(50),
-  showGCI: z.boolean().default(true),
-  showVolume: z.boolean().default(true),
+  showTopN: z.coerce.number().min(1).max(100),
+  // Column visibility
   showSales: z.boolean().default(true),
+  showVolume: z.boolean().default(true),
+  showGCI: z.boolean().default(true),
+  showAgentNet: z.boolean().default(true),
+  showPending: z.boolean().default(true),
+  showCalls: z.boolean().default(false),
+  showAppointments: z.boolean().default(false),
+  showEngagements: z.boolean().default(false),
 });
 
 type LeaderboardConfigFormValues = z.infer<typeof leaderboardConfigSchema>;
@@ -38,9 +44,14 @@ const DEFAULTS: LeaderboardConfigFormValues = {
   subtitle: '',
   primaryMetricKey: 'closed',
   showTopN: 10,
-  showGCI: true,
-  showVolume: true,
   showSales: true,
+  showVolume: true,
+  showGCI: true,
+  showAgentNet: true,
+  showPending: true,
+  showCalls: false,
+  showAppointments: false,
+  showEngagements: false,
 };
 
 export default function LeaderboardAdminPage() {
@@ -60,7 +71,7 @@ export default function LeaderboardAdminPage() {
       .then((r) => r.json())
       .then((json) => {
         if (json.ok && json.config) {
-          const cfg = json.config as LeaderboardConfig;
+          const cfg = json.config as LeaderboardConfig & Record<string, any>;
           form.reset({
             year: cfg.year ?? DEFAULTS.year,
             periodType: cfg.periodType ?? DEFAULTS.periodType,
@@ -68,9 +79,14 @@ export default function LeaderboardAdminPage() {
             subtitle: cfg.subtitle ?? DEFAULTS.subtitle,
             primaryMetricKey: cfg.primaryMetricKey ?? DEFAULTS.primaryMetricKey,
             showTopN: cfg.showTopN ?? DEFAULTS.showTopN,
-            showGCI: cfg.showGCI !== false,
-            showVolume: cfg.showVolume !== false,
             showSales: cfg.showSales !== false,
+            showVolume: cfg.showVolume !== false,
+            showGCI: cfg.showGCI !== false,
+            showAgentNet: cfg.showAgentNet !== false,
+            showPending: cfg.showPending !== false,
+            showCalls: cfg.showCalls === true,
+            showAppointments: cfg.showAppointments === true,
+            showEngagements: cfg.showEngagements === true,
           });
         }
       })
@@ -105,7 +121,46 @@ export default function LeaderboardAdminPage() {
     }
   }
 
-    return (
+  // Helper to render a toggle row
+  const ToggleField = ({
+    name,
+    label,
+    description,
+    badge,
+  }: {
+    name: keyof LeaderboardConfigFormValues;
+    label: string;
+    description: string;
+    badge?: string;
+  }) => (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+          <div className="space-y-0.5 flex-1 pr-4">
+            <div className="flex items-center gap-2">
+              <FormLabel className="text-base">{label}</FormLabel>
+              {badge && (
+                <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+                  {badge}
+                </span>
+              )}
+            </div>
+            <FormDescription>{description}</FormDescription>
+          </div>
+          <FormControl>
+            <Switch
+              checked={field.value as boolean}
+              onCheckedChange={field.onChange}
+            />
+          </FormControl>
+        </FormItem>
+      )}
+    />
+  );
+
+  return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
@@ -128,7 +183,8 @@ export default function LeaderboardAdminPage() {
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* ── Period & Year ────────────────────────────────────────────────────────────────── */}
+
+            {/* ── Period & Year ──────────────────────────────────────────── */}
             <Card>
               <CardHeader>
                 <CardTitle>Active Period Settings</CardTitle>
@@ -252,7 +308,7 @@ export default function LeaderboardAdminPage() {
                       <FormItem>
                         <FormLabel>Number of Agents to Show</FormLabel>
                         <FormControl>
-                          <Input type="number" {...field} />
+                          <Input type="number" min={1} max={100} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -262,74 +318,61 @@ export default function LeaderboardAdminPage() {
               </CardContent>
             </Card>
 
-            {/* ── TV Display Toggles ───────────────────────────────────────────────────────────────── */}
+            {/* ── TV Display Columns ─────────────────────────────────────── */}
             <Card>
               <CardHeader>
-                <CardTitle>TV Display Options</CardTitle>
+                <CardTitle>TV Display Columns</CardTitle>
                 <CardDescription>
-                  Control which columns and stats are visible on the public TV leaderboard.
+                  Choose which stats appear under each agent's name on the TV leaderboard. Toggle on only what you want agents and visitors to see.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-5">
-                <FormField
-                  control={form.control}
-                  name="showGCI"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Show GCI Column</FormLabel>
-                        <FormDescription>
-                          Display the Gross Commission Income column on the public leaderboard. Turn off to hide commission figures from public view.
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="showVolume"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Show Closed Volume</FormLabel>
-                        <FormDescription>
-                          Display the total closed sales volume (in dollars) for each agent.
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
+              <CardContent className="space-y-3">
+
+                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide pb-1">Production Stats</p>
+
+                <ToggleField
                   name="showSales"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Show Closed Sales Count</FormLabel>
-                        <FormDescription>
-                          Display the number of closed transactions for each agent.
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
+                  label="Closed Transactions Count"
+                  description="Show the number of closed deals (the large number on the right side of each row)."
+                />
+                <ToggleField
+                  name="showVolume"
+                  label="Closed Volume"
+                  description="Show total closed sales volume in dollars (e.g., Vol: $4.2M)."
+                />
+                <ToggleField
+                  name="showGCI"
+                  label="Gross Commission Income (GCI)"
+                  description="Show total gross commission earned. Turn off to hide commission figures from public view."
+                />
+                <ToggleField
+                  name="showAgentNet"
+                  label="Agent Net Commission Paid Out"
+                  description="Show how much the brokerage has paid out to each agent after splits. Displayed as '💵 Paid Out: $XX,XXX'."
+                  badge="New"
+                />
+                <ToggleField
+                  name="showPending"
+                  label="Pending Contracts"
+                  description="Show the number of transactions currently under contract / pending."
+                />
+
+                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide pb-1 pt-3">Activity Stats (from Daily Activity Log)</p>
+
+                <ToggleField
+                  name="showCalls"
+                  label="Total Calls"
+                  description="Show total call count logged in the daily activity tracker."
+                />
+                <ToggleField
+                  name="showAppointments"
+                  label="Total Appointments Held"
+                  description="Show total appointments held logged in the daily activity tracker."
+                />
+                <ToggleField
+                  name="showEngagements"
+                  label="Total Engagements"
+                  description="Show total engagements logged in the daily activity tracker."
                 />
               </CardContent>
               <CardFooter>

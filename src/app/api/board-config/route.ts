@@ -24,9 +24,15 @@ const LEADERBOARD_DEFAULTS = {
   periodType: 'yearly',
   primaryMetricKey: 'closed',
   showTopN: 10,
-  showGCI: true,
-  showVolume: true,
-  showSales: true,
+  // Column visibility toggles
+  showSales: true,        // Closed transactions count
+  showVolume: true,       // Closed volume (dollar)
+  showGCI: true,          // Gross Commission Income
+  showAgentNet: true,     // Agent net commission paid out
+  showPending: true,      // Pending contracts count
+  showCalls: false,       // Total calls (from daily_activity)
+  showAppointments: false,// Total appointments held
+  showEngagements: false, // Total engagements
 };
 
 // ── GET ────────────────────────────────────────────────────────────────────────
