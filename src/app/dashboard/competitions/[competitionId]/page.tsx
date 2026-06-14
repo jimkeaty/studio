@@ -125,6 +125,10 @@ export default function CompetitionDetailPage() {
 
   const [comp, setComp] = useState<any | null>(null);
   const [standings, setStandings] = useState<any[]>([]);
+  const [teamStandings, setTeamStandings] = useState<any[]>([]);
+  const [isTeamComp, setIsTeamComp] = useState(false);
+  const [teamScoringMethod, setTeamScoringMethod] = useState<string>('');
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
   const [summary, setSummary] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -170,6 +174,9 @@ export default function CompetitionDetailPage() {
       if (standingsData.ok) {
         setComp(standingsData.competition);
         setStandings(standingsData.standings || []);
+        setTeamStandings(standingsData.teamStandings || []);
+        setIsTeamComp(standingsData.isTeamCompetition || false);
+        setTeamScoringMethod(standingsData.teamScoringMethod || '');
         setSummary(standingsData.summary);
         setLastUpdated(new Date());
         setError(null);
@@ -290,10 +297,17 @@ export default function CompetitionDetailPage() {
   const isLive = comp.status === 'active' && comp.endDate >= today;
   const isEnded = comp.endDate < today;
   const { label: daysLeftLabel, urgent: daysLeftUrgent } = daysLeft(comp.endDate);
-  const topTotal = standings[0]?.total || 0;
+  const topTotal = isTeamComp && teamStandings.length > 0 ? (teamStandings[0]?.total || 0) : (standings[0]?.total || 0);
+  const myTeamStanding = isTeamComp ? teamStandings.find(t => t.memberIds?.includes(myProfileId)) : null;
   const myStanding = standings.find(s => s.agentId === myProfileId);
   const isCreator = comp.createdBy === myProfileId;
   const participantNames: Record<string, string> = comp.participantNames || {};
+
+  // Team scoring method label
+  const teamScoringLabel = teamScoringMethod === 'scramble' ? '⛳ Scramble (best ball)'
+    : teamScoringMethod === 'combined' ? '➕ Combined (sum of team)'
+    : teamScoringMethod === 'average' ? '📊 Average of team'
+    : '';
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5">
@@ -352,7 +366,24 @@ export default function CompetitionDetailPage() {
           </div>
 
           {/* My position callout */}
-          {myStanding && (
+          {isTeamComp && myTeamStanding ? (
+            <div className={`mt-4 rounded-xl px-4 py-3 flex items-center justify-between ${myTeamStanding.position === 1 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-primary/5'}`}>
+              <div className="flex items-center gap-2">
+                {positionIcon(myTeamStanding.position)}
+                <div>
+                  <span className="font-semibold text-sm">
+                    {myTeamStanding.position === 1 ? `🏆 ${myTeamStanding.teamName} is leading!` : `${myTeamStanding.teamName} is in ${myTeamStanding.position}${ordinal(myTeamStanding.position)} place`}
+                  </span>
+                  {myTeamStanding.mascot && <span className="ml-1.5 text-base">{myTeamStanding.mascot}</span>}
+                  <div className="text-xs text-muted-foreground">{teamScoringLabel}</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-black text-lg" style={{ color: myTeamStanding.teamColor || undefined }}>{fmtVal(myTeamStanding.total, meta.isCurrency)}</div>
+                <div className="text-xs text-muted-foreground">Your contribution: {fmtVal(myStanding?.total || 0, meta.isCurrency)}</div>
+              </div>
+            </div>
+          ) : myStanding ? (
             <div className={`mt-4 rounded-xl px-4 py-3 flex items-center justify-between ${myStanding.position === 1 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-primary/5'}`}>
               <div className="flex items-center gap-2">
                 {positionIcon(myStanding.position)}
@@ -365,7 +396,7 @@ export default function CompetitionDetailPage() {
                 <div className="text-xs text-muted-foreground">Today: {fmtVal(myStanding.todayValue || 0, meta.isCurrency)}</div>
               </div>
             </div>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 
@@ -503,6 +534,92 @@ export default function CompetitionDetailPage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* ── Team Leaderboard ──────────────────────────────────────────────── */}
+      {isTeamComp && teamStandings.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-base flex items-center gap-2">
+              <Users className="h-4 w-4 text-blue-500" />
+              Team Leaderboard
+              {teamScoringLabel && <span className="text-xs text-muted-foreground font-normal">{teamScoringLabel}</span>}
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {teamStandings.map((team: any, idx: number) => {
+              const isMyTeam = team.memberIds?.includes(myProfileId);
+              const pct = topTotal > 0 ? (team.total / topTotal) * 100 : 0;
+              const gapFromLeader = idx > 0 ? teamStandings[0].total - team.total : 0;
+              const expanded = expandedTeam === team.teamId;
+              return (
+                <Card key={team.teamId} className={['border transition-all', positionBg(team.position), isMyTeam ? 'ring-2 ring-primary ring-offset-1' : ''].join(' ')}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-8 flex-shrink-0">{positionIcon(team.position)}</div>
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 shadow-sm border-2"
+                        style={{ backgroundColor: (team.teamColor || '#6366f1') + '20', borderColor: team.teamColor || '#6366f1' }}
+                      >
+                        {team.mascot || team.teamName?.charAt(0) || '🏆'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`font-bold text-sm truncate ${isMyTeam ? 'text-primary' : ''}`}>
+                            {team.teamName}{isMyTeam && <span className="text-xs font-normal text-muted-foreground ml-1">(your team)</span>}
+                          </span>
+                          {team.position === 1 && <Flame className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />}
+                          <span className="text-xs text-muted-foreground ml-auto">{team.memberIds?.length || 0} members</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(pct, team.total > 0 ? 3 : 0)}%`, backgroundColor: team.teamColor || '#6366f1' }} />
+                        </div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedTeam(expanded ? null : team.teamId)}
+                            className="text-[10px] text-blue-500 hover:text-blue-700 font-medium"
+                          >
+                            {expanded ? '▲ Hide members' : '▼ Show members'}
+                          </button>
+                          {idx > 0 && gapFromLeader > 0 && (
+                            <span className="text-[10px] text-muted-foreground">-{fmtVal(gapFromLeader, meta.isCurrency)} behind</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <div className="font-black text-xl" style={{ color: team.teamColor || '#6366f1' }}>{fmtVal(team.total, meta.isCurrency)}</div>
+                        {idx === 0 && teamStandings.length > 1 && <div className="text-xs text-amber-600 font-medium">Leading!</div>}
+                      </div>
+                    </div>
+
+                    {/* Member drill-down */}
+                    {expanded && team.memberSummaries && team.memberSummaries.length > 0 && (
+                      <div className="mt-3 pt-3 border-t space-y-1.5">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Team Members</p>
+                        {team.memberSummaries.map((member: any) => {
+                          const isMe = member.agentId === myProfileId;
+                          return (
+                            <div key={member.agentId} className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm ${isMe ? 'bg-primary/5 font-medium' : 'bg-muted/30'}`}>
+                              <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: team.teamColor || '#6366f1' }}>
+                                {member.displayName?.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="flex-1 truncate">{member.displayName}{isMe && <span className="text-xs font-normal text-muted-foreground ml-1">(you)</span>}</span>
+                              <span className="font-bold" style={{ color: team.teamColor || '#6366f1' }}>{fmtVal(member.total, meta.isCurrency)}</span>
+                              {member.todayValue > 0 && (
+                                <span className="text-[10px] text-green-600">+{fmtVal(member.todayValue, meta.isCurrency)} today</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* ── Golf Scorecard ────────────────────────────────────────────────── */}

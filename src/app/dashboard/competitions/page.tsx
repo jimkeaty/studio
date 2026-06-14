@@ -211,6 +211,20 @@ export default function CompetitionsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [showAdvancedRules, setShowAdvancedRules] = useState(false);
 
+  // Team competition state
+  const [isTeamComp, setIsTeamComp] = useState(false);
+  const [teamFormation, setTeamFormation] = useState<'creator_assigned' | 'self_selected'>('creator_assigned');
+  const [teamScoringMethod, setTeamScoringMethod] = useState<'scramble' | 'combined' | 'average'>('combined');
+  // For creator_assigned: list of teams, each with name, mascot, color, memberIds
+  const [teams, setTeams] = useState<{ teamId: string; teamName: string; mascot: string; color: string; memberIds: string[] }[]>([
+    { teamId: 'team1', teamName: 'Team 1', mascot: '🦁', color: '#3b82f6', memberIds: [] },
+    { teamId: 'team2', teamName: 'Team 2', mascot: '🐯', color: '#ef4444', memberIds: [] },
+  ]);
+  // Creator's own team identity (for self_selected or individual comps)
+  const [creatorTeamName, setCreatorTeamName] = useState('');
+  const [creatorMascot, setCreatorMascot] = useState('');
+  const [creatorTeamColor, setCreatorTeamColor] = useState('#3b82f6');
+
   const fetchCompetitions = useCallback(async () => {
     if (!user) return;
     try {
@@ -309,6 +323,16 @@ export default function CompetitionsPage() {
     setCreateError(null);
     setCreateStep(1);
     setShowAdvancedRules(false);
+    setIsTeamComp(false);
+    setTeamFormation('creator_assigned');
+    setTeamScoringMethod('combined');
+    setTeams([
+      { teamId: 'team1', teamName: 'Team 1', mascot: '🦁', color: '#3b82f6', memberIds: [] },
+      { teamId: 'team2', teamName: 'Team 2', mascot: '🐯', color: '#ef4444', memberIds: [] },
+    ]);
+    setCreatorTeamName('');
+    setCreatorMascot('');
+    setCreatorTeamColor('#3b82f6');
     setShowCreate(true);
   };
 
@@ -327,16 +351,31 @@ export default function CompetitionsPage() {
     setCreateError(null);
     try {
       const token = await user.getIdToken();
+      // For team competitions, collect all participant IDs from team assignments
+      let allParticipantIds = [...selectedAgents];
+      if (isTeamComp && teamFormation === 'creator_assigned') {
+        const teamMemberIds = teams.flatMap(t => t.memberIds);
+        allParticipantIds = Array.from(new Set([...selectedAgents, ...teamMemberIds]));
+      }
+
       const body: any = {
         name: form.name.trim(),
         metric: form.metric,
         metricLabel: kpiLabel(form.metric),
         startDate: form.startDate,
         endDate: form.endDate,
-        participantIds: selectedAgents,
+        participantIds: allParticipantIds,
         format: form.format,
         prizeDescription: form.prizeDescription || null,
         buyInAmount: form.buyInAmount || 0,
+        // Team competition fields
+        isTeamCompetition: isTeamComp,
+        teamFormation: isTeamComp ? teamFormation : null,
+        teamScoringMethod: isTeamComp ? teamScoringMethod : null,
+        teams: isTeamComp && teamFormation === 'creator_assigned' ? teams : [],
+        creatorTeamName: creatorTeamName || null,
+        creatorMascot: creatorMascot || null,
+        creatorTeamColor: creatorTeamColor || null,
       };
       if (form.format === 'golf') {
         body.thresholdRules = form.thresholdRules;
@@ -646,6 +685,109 @@ export default function CompetitionsPage() {
                 </p>
               )}
 
+              {/* Team Competition Toggle */}
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setIsTeamComp(v => !v)}
+                  className="w-full flex items-center justify-between text-sm font-medium"
+                >
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-500" />
+                    <span>Team Competition</span>
+                    <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+                  </div>
+                  <div className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${isTeamComp ? 'bg-blue-500' : 'bg-muted-foreground/30'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${isTeamComp ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </div>
+                </button>
+
+                {isTeamComp && (
+                  <div className="space-y-3 pt-1 border-t">
+                    {/* Team Scoring Method */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Team Scoring Method</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { value: 'scramble', label: '⛳ Scramble', desc: 'Best individual score each day wins for the team' },
+                          { value: 'combined', label: '➕ Combined', desc: 'Sum of all team members\' scores' },
+                          { value: 'average', label: '📊 Average', desc: 'Average of all team members\' scores' },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setTeamScoringMethod(opt.value as any)}
+                            className={`flex flex-col gap-0.5 px-2 py-2 rounded-lg border text-xs text-left transition-all ${
+                              teamScoringMethod === opt.value ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700' : 'border-border hover:border-blue-300'
+                            }`}
+                          >
+                            <span className="font-semibold">{opt.label}</span>
+                            <span className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Team Formation */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">How are teams formed?</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { value: 'creator_assigned', label: '🎯 I assign teams', desc: 'You pick who is on each team' },
+                          { value: 'self_selected', label: '🤝 Agents pick', desc: 'Each agent sets their own team name when they join' },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setTeamFormation(opt.value as any)}
+                            className={`flex flex-col gap-0.5 px-2 py-2 rounded-lg border text-xs text-left transition-all ${
+                              teamFormation === opt.value ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700' : 'border-border hover:border-blue-300'
+                            }`}
+                          >
+                            <span className="font-semibold">{opt.label}</span>
+                            <span className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Creator's own team identity */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        {teamFormation === 'self_selected' ? 'Your Team Identity' : 'Your Identity'}
+                      </Label>
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+                        <div>
+                          <Input
+                            placeholder={teamFormation === 'self_selected' ? 'Your team name...' : 'Your name/team...'}
+                            value={creatorTeamName}
+                            onChange={e => setCreatorTeamName(e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            placeholder="Mascot emoji"
+                            value={creatorMascot}
+                            onChange={e => setCreatorMascot(e.target.value)}
+                            className="h-8 text-sm w-24"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <label className="text-[10px] text-muted-foreground">Color</label>
+                          <input
+                            type="color"
+                            value={creatorTeamColor}
+                            onChange={e => setCreatorTeamColor(e.target.value)}
+                            className="h-8 w-10 rounded cursor-pointer border border-border"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {createError && (
                 <Alert variant="destructive" className="py-2">
                   <AlertCircle className="h-3.5 w-3.5" />
@@ -884,47 +1026,175 @@ export default function CompetitionsPage() {
                 </div>
               </div>
 
-              {/* Invite agents */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 text-blue-500" />
-                  Invite Teammates
-                </Label>
-                {agentList.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Loading agents...</p>
-                ) : (
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                    {agentList.map(agent => {
-                      const selected = selectedAgents.includes(agent.id);
-                      return (
-                        <button
-                          key={agent.id}
-                          type="button"
-                          onClick={() => toggleAgent(agent.id)}
-                          className={[
-                            'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm transition-all text-left',
-                            selected ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-border hover:border-primary/30 hover:bg-muted/40',
-                          ].join(' ')}
-                        >
-                          <div className={[
-                            'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                            selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
-                          ].join(' ')}>
-                            {agent.displayName.charAt(0).toUpperCase()}
-                          </div>
-                          {agent.displayName}
-                          {selected && <Zap className="h-3.5 w-3.5 ml-auto text-primary" />}
-                        </button>
-                      );
-                    })}
+              {/* Invite / Team Builder */}
+              {isTeamComp && teamFormation === 'creator_assigned' ? (
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-blue-500" />
+                    Build Your Teams
+                    <span className="text-xs text-muted-foreground font-normal ml-1">— drag agents into teams</span>
+                  </Label>
+                  {/* Unassigned agents pool */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">Available Agents (click to select, then assign to a team)</p>
+                    <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                      {agentList.map(agent => {
+                        const assignedTeamIdx = teams.findIndex(t => t.memberIds.includes(agent.id));
+                        const isAssigned = assignedTeamIdx >= 0;
+                        const selected = selectedAgents.includes(agent.id);
+                        return (
+                          <button
+                            key={agent.id}
+                            type="button"
+                            onClick={() => toggleAgent(agent.id)}
+                            className={[
+                              'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-sm transition-all text-left',
+                              isAssigned ? 'border-blue-200 bg-blue-50 dark:bg-blue-950/20 opacity-60' :
+                              selected ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-border hover:border-primary/30 hover:bg-muted/40',
+                            ].join(' ')}
+                          >
+                            <div className={[
+                              'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+                              selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+                            ].join(' ')}>
+                              {agent.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="flex-1">{agent.displayName}</span>
+                            {isAssigned && <span className="text-[10px] text-blue-600">{teams[assignedTeamIdx].mascot} {teams[assignedTeamIdx].teamName}</span>}
+                            {selected && !isAssigned && <Zap className="h-3.5 w-3.5 ml-auto text-primary" />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
-                {selectedAgents.length > 0 && (
-                  <p className="text-xs text-primary font-medium">
-                    {selectedAgents.length} agent{selectedAgents.length !== 1 ? 's' : ''} invited
-                  </p>
-                )}
-              </div>
+
+                  {/* Team slots */}
+                  <div className="space-y-2">
+                    {teams.map((team, ti) => (
+                      <div key={team.teamId} className="rounded-lg border p-3 space-y-2" style={{ borderColor: team.color + '60' }}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Input
+                            value={team.mascot}
+                            onChange={e => setTeams(prev => prev.map((t, i) => i === ti ? { ...t, mascot: e.target.value } : t))}
+                            placeholder="🏆"
+                            className="h-7 w-14 text-center text-sm"
+                          />
+                          <Input
+                            value={team.teamName}
+                            onChange={e => setTeams(prev => prev.map((t, i) => i === ti ? { ...t, teamName: e.target.value } : t))}
+                            placeholder={`Team ${ti + 1}`}
+                            className="h-7 flex-1 text-sm"
+                          />
+                          <input
+                            type="color"
+                            value={team.color}
+                            onChange={e => setTeams(prev => prev.map((t, i) => i === ti ? { ...t, color: e.target.value } : t))}
+                            className="h-7 w-10 rounded cursor-pointer border border-border"
+                          />
+                          {teams.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => setTeams(prev => prev.filter((_, i) => i !== ti))}
+                              className="text-xs text-red-500 hover:text-red-700 px-1"
+                            >✕</button>
+                          )}
+                        </div>
+                        {/* Members in this team */}
+                        <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                          {team.memberIds.map(mid => {
+                            const agent = agentList.find(a => a.id === mid);
+                            return agent ? (
+                              <span
+                                key={mid}
+                                className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full text-white"
+                                style={{ backgroundColor: team.color }}
+                              >
+                                {agent.displayName}
+                                <button
+                                  type="button"
+                                  onClick={() => setTeams(prev => prev.map((t, i) => i === ti ? { ...t, memberIds: t.memberIds.filter(id => id !== mid) } : t))}
+                                  className="ml-0.5 opacity-70 hover:opacity-100"
+                                >✕</button>
+                              </span>
+                            ) : null;
+                          })}
+                          {team.memberIds.length === 0 && (
+                            <span className="text-[10px] text-muted-foreground italic">No members yet</span>
+                          )}
+                        </div>
+                        {/* Add selected agents to this team */}
+                        {selectedAgents.filter(id => !teams.some(t => t.memberIds.includes(id))).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const unassigned = selectedAgents.filter(id => !teams.some(t => t.memberIds.includes(id)));
+                              setTeams(prev => prev.map((t, i) => i === ti ? { ...t, memberIds: [...t.memberIds, ...unassigned] } : t));
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            + Add selected agents to {team.teamName}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setTeams(prev => [...prev, {
+                        teamId: `team${prev.length + 1}`,
+                        teamName: `Team ${prev.length + 1}`,
+                        mascot: '⭐',
+                        color: '#10b981',
+                        memberIds: [],
+                      }])}
+                      className="w-full text-xs text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-lg py-2 font-medium"
+                    >
+                      + Add Another Team
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-blue-500" />
+                    {isTeamComp ? 'Invite Participants' : 'Invite Teammates'}
+                    {isTeamComp && <span className="text-xs text-muted-foreground font-normal">(each agent picks their own team)</span>}
+                  </Label>
+                  {agentList.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Loading agents...</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                      {agentList.map(agent => {
+                        const selected = selectedAgents.includes(agent.id);
+                        return (
+                          <button
+                            key={agent.id}
+                            type="button"
+                            onClick={() => toggleAgent(agent.id)}
+                            className={[
+                              'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm transition-all text-left',
+                              selected ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-border hover:border-primary/30 hover:bg-muted/40',
+                            ].join(' ')}
+                          >
+                            <div className={[
+                              'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+                              selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+                            ].join(' ')}>
+                              {agent.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            {agent.displayName}
+                            {selected && <Zap className="h-3.5 w-3.5 ml-auto text-primary" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {selectedAgents.length > 0 && (
+                    <p className="text-xs text-primary font-medium">
+                      {selectedAgents.length} agent{selectedAgents.length !== 1 ? 's' : ''} invited
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Summary */}
               <div className="rounded-lg border bg-muted/30 p-3 space-y-1 text-sm">

@@ -95,6 +95,15 @@ export async function POST(req: NextRequest) {
       // Vendor/sponsor info
       vendorName,      // If creator is a vendor
       vendorType,      // 'vendor' | 'sponsor'
+      // Team competition fields
+      isTeamCompetition,   // boolean
+      teamFormation,       // 'creator_assigned' | 'self_selected'
+      teamScoringMethod,   // 'scramble' | 'combined' | 'average'
+      teams,               // [{ teamId, teamName, mascot, color, memberIds }] for creator_assigned
+      // Individual team identity (for creator in self_selected or individual comps)
+      creatorTeamName,
+      creatorMascot,
+      creatorTeamColor,
     } = body;
 
     // Validate
@@ -175,6 +184,19 @@ export async function POST(req: NextRequest) {
       // Vendor
       vendorName: vendorName || null,
       vendorType: vendorType || null,
+      // Team competition
+      isTeamCompetition: !!isTeamCompetition,
+      teamFormation: isTeamCompetition ? (teamFormation || 'creator_assigned') : null,
+      teamScoringMethod: isTeamCompetition ? (teamScoringMethod || 'combined') : null,
+      teams: isTeamCompetition && Array.isArray(teams) ? teams : [],
+      // Team identities keyed by agentProfileId (for self_selected or individual comps)
+      teamIdentities: {
+        [agentProfileId]: {
+          teamName: creatorTeamName || null,
+          mascot: creatorMascot || null,
+          color: creatorTeamColor || null,
+        },
+      },
       // March Madness bracket (initialized separately)
       ...(resolvedFormat === 'march_madness' ? { rounds: [], bracket: null, championId: null } : {}),
     };
