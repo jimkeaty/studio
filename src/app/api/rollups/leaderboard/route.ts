@@ -84,10 +84,28 @@ export async function GET(req: NextRequest) {
 
 // ── Yearly (from rollups) ──────────────────────────────────────────────────
 async function handleYearly(db: any, year: number, includeInactive: boolean) {
-  const [rollups, demoSnap] = await Promise.all([
+  const [rollups, demoSnap, activitySnap] = await Promise.all([
     getEffectiveRollups(db, year),
     db.collection('agentProfiles').where('isDemoAccount', '==', true).get(),
+    db.collection('daily_activity')
+      .where('date', '>=', `${year}-01-01`)
+      .where('date', '<=', `${year}-12-31`)
+      .get()
+      .catch(() => ({ docs: [] })),
   ]);
+  // Aggregate activity by agentId
+  const activityMap = new Map<string, { calls: number; engagements: number; appointmentsSet: number; appointmentsHeld: number }>();
+  for (const doc of (activitySnap as any).docs) {
+    const a = doc.data() as any;
+    const aid = String(a.agentId || '').trim();
+    if (!aid) continue;
+    if (!activityMap.has(aid)) activityMap.set(aid, { calls: 0, engagements: 0, appointmentsSet: 0, appointmentsHeld: 0 });
+    const agg = activityMap.get(aid)!;
+    agg.calls += num(a.callsCount);
+    agg.engagements += num(a.engagementsCount);
+    agg.appointmentsSet += num(a.appointmentsSetCount);
+    agg.appointmentsHeld += num(a.appointmentsHeldCount);
+  }
   const demoAgentIds = new Set<string>(
     demoSnap.docs.map((d: any) => String(d.data().agentId || d.id || '').trim()).filter(Boolean)
   );
@@ -153,6 +171,10 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
       companyDollar: num(r.companyDollar),
       isCorrected: r._overrideApplied ?? false,
       correctionReason: r.correctionReason ?? "",
+      totalCalls: activityMap.get(String(r.agentId || '').trim())?.calls ?? 0,
+      totalEngagements: activityMap.get(String(r.agentId || '').trim())?.engagements ?? 0,
+      totalAppointmentsSet: activityMap.get(String(r.agentId || '').trim())?.appointmentsSet ?? 0,
+      totalAppointmentsHeld: activityMap.get(String(r.agentId || '').trim())?.appointmentsHeld ?? 0,
     }));
 
   rows.sort((a: any, b: any) => {
@@ -211,11 +233,29 @@ async function handlePeriod(
   const rangeStart = new Date(Date.UTC(year, startMonth, 1));
   const rangeEnd = new Date(Date.UTC(year, endMonth + 1, 0, 23, 59, 59, 999));
 
-  // Fetch all transactions for the year + agent profiles (for status + demo filtering)
-  const [snap, profileSnap] = await Promise.all([
+  // Fetch all transactions for the year + agent profiles + activity data
+  const [snap, profileSnap, activitySnap] = await Promise.all([
     db.collection("transactions").where("year", "==", year).get(),
     db.collection("agentProfiles").get(),
+    db.collection('daily_activity')
+      .where('date', '>=', `${year}-${String(startMonth + 1).padStart(2, '0')}-01`)
+      .where('date', '<=', `${year}-${String(endMonth + 1).padStart(2, '0')}-${endMonth === startMonth ? new Date(year, endMonth + 1, 0).getDate() : 31}`)
+      .get()
+      .catch(() => ({ docs: [] })),
   ]);
+  // Aggregate activity by agentId for the period
+  const activityMap = new Map<string, { calls: number; engagements: number; appointmentsSet: number; appointmentsHeld: number }>();
+  for (const doc of (activitySnap as any).docs) {
+    const a = doc.data() as any;
+    const aid = String(a.agentId || '').trim();
+    if (!aid) continue;
+    if (!activityMap.has(aid)) activityMap.set(aid, { calls: 0, engagements: 0, appointmentsSet: 0, appointmentsHeld: 0 });
+    const agg = activityMap.get(aid)!;
+    agg.calls += num(a.callsCount);
+    agg.engagements += num(a.engagementsCount);
+    agg.appointmentsSet += num(a.appointmentsSetCount);
+    agg.appointmentsHeld += num(a.appointmentsHeldCount);
+  }
   const profileMap = new Map<string, any>();
   const demoAgentIds = new Set<string>();
   for (const doc of profileSnap.docs) {
@@ -311,6 +351,10 @@ async function handlePeriod(
         listings: 0,
         isCorrected: false,
         correctionReason: "",
+        totalCalls: activityMap.get(agentId)?.calls ?? 0,
+        totalEngagements: activityMap.get(agentId)?.engagements ?? 0,
+        totalAppointmentsSet: activityMap.get(agentId)?.appointmentsSet ?? 0,
+        totalAppointmentsHeld: activityMap.get(agentId)?.appointmentsHeld ?? 0,
       };
     });
 

@@ -25,6 +25,10 @@ type LeaderRow = {
   companyDollar: number;
   isCorrected: boolean;
   correctionReason: string;
+  totalCalls: number;
+  totalEngagements: number;
+  totalAppointmentsSet: number;
+  totalAppointmentsHeld: number;
 };
 
 type TeamTotals = {
@@ -106,13 +110,18 @@ type DisplayConfig = {
   showGCI: boolean;
   showVolume: boolean;
   showSales: boolean;
+  showCalls: boolean;
+  showAppointments: boolean;
+  showEngagements: boolean;
   showTopN: number;
 };
-
 const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
-  showGCI: true,
+  showGCI: false,
   showVolume: true,
   showSales: true,
+  showCalls: true,
+  showAppointments: true,
+  showEngagements: true,
   showTopN: 50,
 };
 
@@ -138,9 +147,12 @@ export default function LeaderboardPage() {
         if (json.ok && json.config) {
           const cfg = json.config;
           setDisplayConfig({
-            showGCI: cfg.showGCI !== false,
+            showGCI: cfg.showGCI === true,
             showVolume: cfg.showVolume !== false,
             showSales: cfg.showSales !== false,
+            showCalls: cfg.showCalls !== false,
+            showAppointments: cfg.showAppointments !== false,
+            showEngagements: cfg.showEngagements !== false,
             showTopN: typeof cfg.showTopN === 'number' && cfg.showTopN > 0 ? cfg.showTopN : 50,
           });
         }
@@ -201,13 +213,12 @@ export default function LeaderboardPage() {
 
       {/* ── YTD Team Totals ─────────────────────────────────────────── */}
       {teamTotals && !loading && (
-        <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
           <TotalCard icon={DollarSign} label="Team Volume" value={fmtCurrency(teamTotals.totalVolume)} />
           <TotalCard icon={BarChart} label="Total Sales" value={fmtNum(teamTotals.totalSales)} />
-          <TotalCard icon={TrendingUp} label="Total GCI" value={fmtCurrency(teamTotals.totalGCI)} />
-          <TotalCard icon={Users} label="Agent Commissions" value={fmtCurrency(teamTotals.totalAgentNet)} />
           <TotalCard icon={Clock} label="Pending" value={fmtNum(teamTotals.totalPending)} />
-          <TotalCard icon={CalendarDays} label="Active Listings" value={fmtNum(teamTotals.totalListings)} />
+          <TotalCard icon={Zap} label="Total Calls" value={fmtNum(rows.reduce((s, r) => s + (r.totalCalls || 0), 0))} />
+          <TotalCard icon={Users} label="Total Appts" value={fmtNum(rows.reduce((s, r) => s + (r.totalAppointmentsHeld || 0), 0))} />
         </div>
       )}
 
@@ -334,30 +345,29 @@ export default function LeaderboardPage() {
                         style={{ width: `${progress}%` }}
                       />
                     </div>
-                    {/* Stats row — conditionally shown based on config */}
+                    {/* Stats row */}
                     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-white/50">
                       {displayConfig.showVolume && (
                         <span>Vol: <span className="text-white/80 font-semibold">{fmtCurrency(agent.closedVolume)}</span></span>
                       )}
-                      {agent.listings > 0 && <span>Listings: <span className="text-white/80 font-semibold">{agent.listings}</span></span>}
                       {agent.pending > 0 && <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>}
+                      {displayConfig.showCalls && agent.totalCalls > 0 && (
+                        <span>📞 <span className="text-white/80 font-semibold">{fmtNum(agent.totalCalls)}</span> calls</span>
+                      )}
+                      {displayConfig.showAppointments && agent.totalAppointmentsHeld > 0 && (
+                        <span>📅 <span className="text-white/80 font-semibold">{fmtNum(agent.totalAppointmentsHeld)}</span> appts</span>
+                      )}
+                      {displayConfig.showEngagements && agent.totalEngagements > 0 && (
+                        <span>💬 <span className="text-white/80 font-semibold">{fmtNum(agent.totalEngagements)}</span> engagements</span>
+                      )}
                     </div>
                   </div>
 
-                  {/* GCI + Closed — conditionally shown based on config */}
-                  {(displayConfig.showGCI || displayConfig.showSales) && (
+                  {/* Closed count — primary right-side metric */}
+                  {displayConfig.showSales && (
                     <div className="flex-shrink-0 text-right">
-                      {displayConfig.showGCI && (
-                        <>
-                          <div className="text-xl sm:text-2xl font-black text-emerald-400 tabular-nums">{fmtCurrency(agent.totalGCI)}</div>
-                          <div className="text-xs text-white/50 mt-0.5">GCI</div>
-                        </>
-                      )}
-                      {displayConfig.showSales && (
-                        <div className={cn('font-bold text-white', displayConfig.showGCI ? 'text-sm mt-1' : 'text-xl sm:text-2xl')}>
-                          {agent.closed} <span className="text-white/50 font-normal text-sm">closed</span>
-                        </div>
-                      )}
+                      <div className="text-xl sm:text-2xl font-black text-white tabular-nums">{agent.closed}</div>
+                      <div className="text-xs text-white/50 mt-0.5">closed</div>
                     </div>
                   )}
                 </div>
