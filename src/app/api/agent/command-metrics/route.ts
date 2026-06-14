@@ -584,24 +584,38 @@ export async function GET(req: NextRequest) {
           addToSide(sideBreakdown.closed, getSideKey(t), dealValue, agentNet);
         }
       } else if (t.status === 'pending' || t.status === 'under_contract') {
-        // Use projectedCloseDate to bucket pending transactions into the month
-        // they are expected to close — not the month they went under contract.
-        // If no projected close date is set, exclude from monthly chart but
-        // still count in totals so the pipeline summary is accurate.
-        const projectedDate = parseDate((t as any).projectedCloseDate) ||
+        // Use projectedCloseDate to bucket pending transactions into the month they are
+        // expected to close — not the month they went under contract.
+        //
+        // Fall-back chain so pending bars ALWAYS appear on the monthly chart:
+        //   1. projectedCloseDate / projectedClosingDate / projectedClose  (preferred)
+        //   2. closedDate or closingDate  (set on some imports even when still pending)
+        //   3. contractDate  (when contract was signed)
+        //   4. Current calendar month  (last resort — deal has no date at all)
+        //
+        // Without this fallback, deals with no projected close date were silently excluded
+        // from the chart bars while still counting in the totals, causing the intermittent
+        // "pending bar missing" issue.
+        const projectedDate =
+          parseDate((t as any).projectedCloseDate) ||
           parseDate((t as any).projectedClosingDate) ||
-          parseDate((t as any).projectedClose);
-        const mi = projectedDate && projectedDate.getFullYear() === year ? projectedDate.getMonth() : null;
+          parseDate((t as any).projectedClose) ||
+          parseDate((t as any).closedDate) ||
+          parseDate((t as any).closingDate) ||
+          parseDate((t as any).contractDate);
+        // If the resolved date falls in the selected year, use its month.
+        // Otherwise fall back to the current calendar month so the bar always appears.
+        const mi: number = (projectedDate && projectedDate.getFullYear() === year)
+          ? projectedDate.getMonth()
+          : currentCalMonth;
 
         totals.pendingVolume += dealValue;
         totals.pendingCount += sideCount;
         totals.pendingNetIncome += agentNet;
 
-        if (mi !== null) {
-          months[mi].pendingVolume += dealValue;
-          months[mi].pendingCount += sideCount;
-          monthlyPendingNetIncome[mi] += agentNet;
-        }
+        months[mi].pendingVolume += dealValue;
+        months[mi].pendingCount += sideCount;
+        monthlyPendingNetIncome[mi] += agentNet;
 
         categoryBreakdown.pending[catKey].count += sideCount;
         categoryBreakdown.pending[catKey].netRevenue += agentNet;

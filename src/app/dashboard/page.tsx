@@ -2124,6 +2124,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
 }) {
   const [showProjected, setShowProjected] = useState(false);
   const [showGoals, setShowGoals] = useState(true);
+  const [showPending, setShowPending] = useState(true);
 
   if (perfLoading) return <Skeleton className="h-80" />;
   if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Failed to load performance data</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
@@ -2284,6 +2285,10 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showGoals ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
         Goals
       </button>
+      <button type="button" onClick={() => setShowPending(p => !p)}
+        className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPending ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+        ⏳ Pending
+      </button>
       {isCurrentYear && (
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => setShowProjected(p => !p)}
@@ -2381,7 +2386,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 label: m.label,
                 netIncome: (!isFuture && !isPartial) ? income : null,
                 partialNetIncome: isPartial ? income : null,
-                pendingNetIncome: isFuture ? null : (monthlyPendingNetIncome[i] || 0),
+                pendingNetIncome: (showPending && !isFuture) ? (monthlyPendingNetIncome[i] || 0) : null,
                 incomeGoal: showGoals ? (isFuture ? null : m.grossMarginGoal) : null,
                 compareIncome: compareYear ? (perfData.comparisonData?.months?.[i]?.netIncome ?? null) : null,
                 projectedNetIncome: showProjected ? (projNetIncome[i] ?? null) : null,
@@ -2403,7 +2408,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               <Bar dataKey="netIncome" fill="var(--color-netIncome)" radius={[4, 4, 0, 0]} name={`${year}`} />
               {isCurrentYear && <Bar dataKey="partialNetIncome" fill={AGENT_PARTIAL_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareIncome" fill="var(--color-compareIncome)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              <Bar dataKey="pendingNetIncome" fill="var(--color-pendingNetIncome)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
+              {showPending && <Bar dataKey="pendingNetIncome" fill="var(--color-pendingNetIncome)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
               {showGoals && <Bar dataKey="incomeGoal" fill="var(--color-incomeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
               {showProjected && <Bar dataKey="projectedNetIncome" fill="var(--color-projectedNetIncome)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
@@ -2501,7 +2506,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 ...m,
                 closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
                 partialClosedVolume: isPartial ? m.closedVolume : null,
-                pendingVolume: isFuture ? null : m.pendingVolume,
+                pendingVolume: (showPending && !isFuture) ? m.pendingVolume : null,
                 volumeGoal: showGoals ? (isFuture ? null : m.volumeGoal) : null,
                 compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
                 projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
@@ -2523,7 +2528,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               <Bar dataKey="closedVolume" fill="var(--color-closedVolume)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
               {isCurrentYear && <Bar dataKey="partialClosedVolume" fill={AGENT_PARTIAL_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareVolume" fill="var(--color-compareVolume)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
+              {showPending && <Bar dataKey="pendingVolume" fill="var(--color-pendingVolume)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
               {showGoals && <Bar dataKey="volumeGoal" fill="var(--color-volumeGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
               {showProjected && <Bar dataKey="projectedVolume" fill="var(--color-projectedVolume)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
@@ -2621,7 +2626,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 ...m,
                 closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
                 partialClosedCount: isPartial ? m.closedCount : null,
-                pendingCount: isFuture ? null : m.pendingCount,
+                pendingCount: (showPending && !isFuture) ? m.pendingCount : null,
                 salesCountGoal: showGoals ? (isFuture ? null : m.salesCountGoal) : null,
                 compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
                 projectedCount: showProjected ? (projSales[i] ?? null) : null,
@@ -2643,7 +2648,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
               <Bar dataKey="closedCount" fill="var(--color-closedCount)" radius={[4, 4, 0, 0]} name={`${year} Closed`} />
               {isCurrentYear && <Bar dataKey="partialClosedCount" fill={AGENT_PARTIAL_COLOR} radius={[4, 4, 0, 0]} name={`${year} (partial)`} />}
               {compareYear && <Bar dataKey="compareCount" fill="var(--color-compareCount)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear}`} />}
-              <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />
+              {showPending && <Bar dataKey="pendingCount" fill="var(--color-pendingCount)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending" />}
               {showGoals && <Bar dataKey="salesCountGoal" fill="var(--color-salesCountGoal)" radius={[4, 4, 0, 0]} opacity={0.35} name="Goal" />}
               {showProjected && <Bar dataKey="projectedCount" fill="var(--color-projectedCount)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected" />}
             </BarChart>
