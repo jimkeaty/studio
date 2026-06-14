@@ -30,17 +30,17 @@ export async function GET(req: NextRequest) {
       ? (decoded.name || decoded.email || uid)
       : (profileByUid.docs[0].data().displayName || profileByUid.docs[0].data().name || uid);
 
-    // Fetch competitions where this agent is a participant OR creator
+    // Fetch competitions where this agent is a participant OR creator.
+    // NOTE: No .orderBy() here — combining array-contains/equality filter with orderBy
+    // on a different field requires a composite Firestore index. We sort in memory instead.
     const [asParticipant, asCreator] = await Promise.all([
       adminDb
         .collection('agentCompetitions')
         .where('participantIds', 'array-contains', agentProfileId)
-        .orderBy('createdAt', 'desc')
         .get(),
       adminDb
         .collection('agentCompetitions')
         .where('createdBy', '==', agentProfileId)
-        .orderBy('createdAt', 'desc')
         .get(),
     ]);
 
