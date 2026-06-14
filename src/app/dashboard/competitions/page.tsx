@@ -1,10 +1,9 @@
 'use client';
 export const dynamic = 'force-dynamic';
-
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -16,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import {
   Trophy, Plus, Users, Calendar, Zap, TrendingUp, Phone, MessageSquare,
   CalendarCheck, FileSignature, CheckCircle2, DollarSign, Home, BarChart3,
-  Clock, ChevronRight, Trash2, AlertCircle, Swords,
+  Clock, ChevronRight, Trash2, AlertCircle, Swords, Building2, Star,
 } from 'lucide-react';
 import { useUser } from '@/firebase';
 
@@ -63,7 +62,7 @@ function fmtDate(d: string) {
   const dt = new Date(d + 'T00:00:00Z');
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
-function statusBadge(status: string, endDate: string) {
+function peerStatusBadge(status: string, endDate: string) {
   const now = new Date().toISOString().slice(0, 10);
   if (status === 'completed' || endDate < now) {
     return <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs">Completed</Badge>;
@@ -72,6 +71,19 @@ function statusBadge(status: string, endDate: string) {
     return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs">🔴 Live</Badge>;
   }
   return <Badge variant="outline" className="text-xs">Draft</Badge>;
+}
+function officeStatusBadge(status: string, endDate: string) {
+  const now = new Date().toISOString().slice(0, 10);
+  if (status === 'archived' || endDate < now) {
+    return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-xs">Ended</Badge>;
+  }
+  if (status === 'active') {
+    return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs">🔴 Live</Badge>;
+  }
+  if (status === 'draft') {
+    return <Badge variant="outline" className="text-xs">Coming Soon</Badge>;
+  }
+  return <Badge variant="outline" className="text-xs capitalize">{status}</Badge>;
 }
 function kpiIcon(metric: string) {
   const opt = KPI_OPTIONS.find(k => k.value === metric);
@@ -95,11 +107,18 @@ export default function CompetitionsPage() {
   const router = useRouter();
   const { user, loading: userLoading } = useUser();
 
+  // Peer competitions (agent-created)
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [myProfileId, setMyProfileId] = useState<string>('');
   const [myName, setMyName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Office competitions (admin-created)
+  const [officeComps, setOfficeComps] = useState<any[]>([]);
+  const [officeLoading, setOfficeLoading] = useState(true);
+
+  // Create dialog
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -140,6 +159,43 @@ export default function CompetitionsPage() {
     }
   }, [user]);
 
+  const fetchOfficeCompetitions = useCallback(async () => {
+    if (!user) return;
+    try {
+      setOfficeLoading(true);
+      const token = await user.getIdToken();
+      // Fetch active + draft office competitions (not archived)
+      const [activeRes, draftRes] = await Promise.all([
+        fetch('/api/competitions?status=active', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/competitions?status=draft', { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const [activeData, draftData] = await Promise.all([activeRes.json(), draftRes.json()]);
+      const all: any[] = [];
+      if (activeData.ok) all.push(...(activeData.competitions || []));
+      if (draftData.ok) all.push(...(draftData.competitions || []));
+      // Also fetch completed ones from current year
+      const yearRes = await fetch(`/api/competitions?year=${new Date().getFullYear()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const yearData = await yearRes.json();
+      if (yearData.ok) {
+        for (const c of (yearData.competitions || [])) {
+          if (!all.find((x: any) => x.id === c.id)) all.push(c);
+        }
+      }
+      // Sort: active first, then by start date desc
+      all.sort((a, b) => {
+        const statusOrder: Record<string, number> = { active: 0, draft: 1, completed: 2, archived: 3 };
+        const sa = statusOrder[a.config?.status] ?? 4;
+        const sb = statusOrder[b.config?.status] ?? 4;
+        if (sa !== sb) return sa - sb;
+        return (b.config?.startDate || '').localeCompare(a.config?.startDate || '');
+      });
+      setOfficeComps(all);
+    } catch {}
+    finally { setOfficeLoading(false); }
+  }, [user]);
+
   const fetchAgents = useCallback(async () => {
     if (!user) return;
     try {
@@ -155,9 +211,10 @@ export default function CompetitionsPage() {
   useEffect(() => {
     if (!userLoading && user) {
       fetchCompetitions();
+      fetchOfficeCompetitions();
       fetchAgents();
     }
-  }, [user, userLoading, fetchCompetitions, fetchAgents]);
+  }, [user, userLoading, fetchCompetitions, fetchOfficeCompetitions, fetchAgents]);
 
   // When duration preset changes, update dates
   useEffect(() => {
@@ -242,12 +299,17 @@ export default function CompetitionsPage() {
     );
   }
 
-  const activeComps = competitions.filter(c => c.status === 'active' && c.endDate >= new Date().toISOString().slice(0, 10));
-  const pastComps = competitions.filter(c => c.status !== 'active' || c.endDate < new Date().toISOString().slice(0, 10));
+  const today = new Date().toISOString().slice(0, 10);
+  const activeComps = competitions.filter(c => c.status === 'active' && c.endDate >= today);
+  const pastComps = competitions.filter(c => c.status !== 'active' || c.endDate < today);
+
+  const activeOffice = officeComps.filter(c => c.config?.status === 'active' && (c.config?.endDate || '') >= today);
+  const otherOffice = officeComps.filter(c => c.config?.status !== 'active' || (c.config?.endDate || '') < today);
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-8">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm">
@@ -271,57 +333,118 @@ export default function CompetitionsPage() {
         </Alert>
       )}
 
-      {/* Empty state */}
-      {competitions.length === 0 && (
-        <Card className="border-dashed border-2">
-          <CardContent className="py-16 text-center">
-            <Trophy className="h-12 w-12 text-amber-400 mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">No competitions yet</h2>
-            <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">
-              Create your first competition and challenge your teammates on any KPI — calls, closings, volume, and more.
-            </p>
-            <Button onClick={openCreate} className="gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0">
-              <Plus className="h-4 w-4" />
-              Start a Competition
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Active competitions */}
-      {activeComps.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+      {/* ── OFFICE COMPETITIONS ─────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-amber-500" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Office Competitions</h2>
+          {activeOffice.length > 0 && (
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
-            Active Now ({activeComps.length})
-          </h2>
-          {activeComps.map(comp => (
-            <CompetitionCard
-              key={comp.id}
-              comp={comp}
-              myProfileId={myProfileId}
-              onDelete={() => setDeleteTarget(comp)}
-            />
-          ))}
+          )}
         </div>
-      )}
 
-      {/* Past competitions */}
-      {pastComps.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Past Competitions ({pastComps.length})
-          </h2>
-          {pastComps.map(comp => (
-            <CompetitionCard
-              key={comp.id}
-              comp={comp}
-              myProfileId={myProfileId}
-              onDelete={() => setDeleteTarget(comp)}
-            />
-          ))}
+        {officeLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        ) : officeComps.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-8 text-center">
+              <Trophy className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No office competitions running right now.</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Check back soon — your broker will post competitions here.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {activeOffice.length > 0 && (
+              <>
+                <p className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                  Live Now ({activeOffice.length})
+                </p>
+                {activeOffice.map(comp => (
+                  <OfficeCompetitionCard key={comp.id} comp={comp} />
+                ))}
+              </>
+            )}
+            {otherOffice.length > 0 && (
+              <>
+                <p className="text-xs font-medium text-muted-foreground mt-2">
+                  {activeOffice.length > 0 ? 'Other' : 'All'} Office Competitions ({otherOffice.length})
+                </p>
+                {otherOffice.map(comp => (
+                  <OfficeCompetitionCard key={comp.id} comp={comp} />
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── PEER COMPETITIONS ───────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Swords className="h-4 w-4 text-orange-500" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">My Competitions</h2>
+          {activeComps.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+          )}
         </div>
-      )}
+
+        {/* Empty state */}
+        {competitions.length === 0 && (
+          <Card className="border-dashed border-2">
+            <CardContent className="py-12 text-center">
+              <Swords className="h-10 w-10 text-amber-400 mx-auto mb-3" />
+              <h2 className="text-lg font-bold mb-2">No peer competitions yet</h2>
+              <p className="text-muted-foreground text-sm mb-5 max-w-sm mx-auto">
+                Create a competition and challenge your teammates on any KPI — calls, closings, volume, and more.
+              </p>
+              <Button onClick={openCreate} className="gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0">
+                <Plus className="h-4 w-4" />
+                Start a Competition
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Active peer competitions */}
+        {activeComps.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+              Live Now ({activeComps.length})
+            </p>
+            {activeComps.map(comp => (
+              <PeerCompetitionCard
+                key={comp.id}
+                comp={comp}
+                myProfileId={myProfileId}
+                onDelete={() => setDeleteTarget(comp)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Past peer competitions */}
+        {pastComps.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Past ({pastComps.length})
+            </p>
+            {pastComps.map(comp => (
+              <PeerCompetitionCard
+                key={comp.id}
+                comp={comp}
+                myProfileId={myProfileId}
+                onDelete={() => setDeleteTarget(comp)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Create Competition Dialog ─────────────────────────────────────── */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -361,14 +484,14 @@ export default function CompetitionsPage() {
                       type="button"
                       onClick={() => setForm(f => ({ ...f, metric: opt.value }))}
                       className={[
-                        'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-all text-left',
+                        'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all text-left',
                         selected
-                          ? 'border-primary bg-primary/5 text-foreground'
-                          : 'border-border bg-card hover:border-primary/50 text-muted-foreground hover:text-foreground',
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'border-border hover:border-primary/40 hover:bg-muted/50',
                       ].join(' ')}
                     >
-                      <Icon className={`h-4 w-4 flex-shrink-0 ${selected ? opt.color : 'text-muted-foreground'}`} />
-                      <span>{opt.label}</span>
+                      <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-primary' : opt.color}`} />
+                      {opt.label}
                     </button>
                   );
                 })}
@@ -378,63 +501,47 @@ export default function CompetitionsPage() {
             {/* Duration */}
             <div className="space-y-1.5">
               <Label>Duration</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { value: 'today', label: 'Today' },
-                  { value: 'week', label: 'This Week' },
-                  { value: 'month', label: 'This Month' },
-                  { value: 'custom', label: 'Custom' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, duration: opt.value }))}
-                    className={[
-                      'px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all',
-                      form.duration === opt.value
-                        ? 'border-primary bg-primary/5 text-foreground'
-                        : 'border-border bg-card hover:border-primary/50 text-muted-foreground',
-                    ].join(' ')}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {form.duration === 'custom' && (
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Start Date</Label>
-                    <Input
-                      type="date"
-                      value={form.startDate}
-                      onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">End Date</Label>
-                    <Input
-                      type="date"
-                      value={form.endDate}
-                      onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              )}
-              {form.startDate && form.endDate && form.duration !== 'custom' && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {fmtDate(form.startDate)} — {fmtDate(form.endDate)}
-                </p>
-              )}
+              <Select value={form.duration} onValueChange={v => setForm(f => ({ ...f, duration: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">This Week</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Agent picker */}
-            <div className="space-y-1.5">
-              <Label>Invite Agents</Label>
-              <p className="text-xs text-muted-foreground">You are automatically included. Select who else to challenge.</p>
-              <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
-                {agentList
-                  .filter(a => a.id !== myProfileId)
-                  .map(agent => {
+            {/* Custom date range */}
+            {form.duration === 'custom' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Start Date</Label>
+                  <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>End Date</Label>
+                  <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
+                </div>
+              </div>
+            )}
+            {form.duration !== 'custom' && form.startDate && (
+              <p className="text-xs text-muted-foreground">
+                <Calendar className="h-3 w-3 inline mr-1" />
+                {fmtDate(form.startDate)} – {fmtDate(form.endDate)}
+              </p>
+            )}
+
+            {/* Invite agents */}
+            <div className="space-y-2">
+              <Label>Invite Teammates</Label>
+              {agentList.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Loading agents...</p>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {agentList.map(agent => {
                     const selected = selectedAgents.includes(agent.id);
                     return (
                       <button
@@ -442,51 +549,48 @@ export default function CompetitionsPage() {
                         type="button"
                         onClick={() => toggleAgent(agent.id)}
                         className={[
-                          'w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left transition-colors',
-                          selected ? 'bg-primary/5' : 'hover:bg-muted/50',
+                          'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm transition-all text-left',
+                          selected
+                            ? 'border-primary bg-primary/5 text-primary font-medium'
+                            : 'border-border hover:border-primary/30 hover:bg-muted/40',
                         ].join(' ')}
                       >
                         <div className={[
-                          'w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors',
-                          selected ? 'border-primary bg-primary' : 'border-border',
+                          'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+                          selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
                         ].join(' ')}>
-                          {selected && <span className="text-white text-xs font-bold">✓</span>}
-                        </div>
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                           {agent.displayName.charAt(0).toUpperCase()}
                         </div>
-                        <span className={selected ? 'font-semibold text-foreground' : 'text-foreground'}>
-                          {agent.displayName}
-                        </span>
+                        {agent.displayName}
+                        {selected && <Zap className="h-3.5 w-3.5 ml-auto text-primary" />}
                       </button>
                     );
                   })}
-              </div>
+                </div>
+              )}
               {selectedAgents.length > 0 && (
                 <p className="text-xs text-primary font-medium">
-                  {selectedAgents.length} agent{selectedAgents.length !== 1 ? 's' : ''} selected + you = {selectedAgents.length + 1} total
+                  {selectedAgents.length} agent{selectedAgents.length !== 1 ? 's' : ''} invited
                 </p>
               )}
             </div>
 
             {createError && (
               <Alert variant="destructive" className="py-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription className="text-sm">{createError}</AlertDescription>
+                <AlertCircle className="h-3.5 w-3.5" />
+                <AlertDescription className="text-xs">{createError}</AlertDescription>
               </Alert>
             )}
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowCreate(false)} disabled={creating}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setShowCreate(false)} disabled={creating}>Cancel</Button>
             <Button
               onClick={handleCreate}
               disabled={creating}
               className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
             >
-              {creating ? 'Creating...' : '🏆 Start Competition'}
+              {creating ? 'Creating...' : 'Start Competition'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -513,8 +617,79 @@ export default function CompetitionsPage() {
   );
 }
 
-// ── Competition card component ───────────────────────────────────────────────
-function CompetitionCard({
+// ── Office Competition Card ──────────────────────────────────────────────────
+function OfficeCompetitionCard({ comp }: { comp: any }) {
+  const cfg = comp.config || {};
+  const today = new Date().toISOString().slice(0, 10);
+  const isLive = cfg.status === 'active' && (cfg.endDate || '') >= today;
+  const metricDisplay = cfg.metricLabel || cfg.metric || '';
+
+  return (
+    <Link href={`/competitions/${comp.id}`} className="block group" target="_blank" rel="noopener noreferrer">
+      <Card className={[
+        'transition-all hover:shadow-md hover:border-amber-300/50 cursor-pointer',
+        isLive
+          ? 'border-amber-200 bg-gradient-to-r from-amber-50/40 to-transparent dark:from-amber-950/20'
+          : 'border-border',
+      ].join(' ')}>
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              {/* Office icon */}
+              <div className={[
+                'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
+                isLive ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-muted',
+              ].join(' ')}>
+                {isLive
+                  ? <Trophy className="h-5 w-5 text-amber-500" />
+                  : <Building2 className="h-4 w-4 text-muted-foreground" />
+                }
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-base truncate">{cfg.name || 'Office Competition'}</h3>
+                  {officeStatusBadge(cfg.status || 'draft', cfg.endDate || '')}
+                  <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30">
+                    <Star className="h-2.5 w-2.5 mr-1" />Office
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                  {metricDisplay && (
+                    <span className="flex items-center gap-1">
+                      <BarChart3 className="h-3 w-3" />
+                      {metricDisplay}
+                    </span>
+                  )}
+                  {cfg.startDate && cfg.endDate && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {fmtDate(cfg.startDate)} – {fmtDate(cfg.endDate)}
+                    </span>
+                  )}
+                  {isLive && (
+                    <span className="flex items-center gap-1 text-amber-600 font-medium">
+                      <Clock className="h-3 w-3" />
+                      {daysLeft(cfg.endDate)}
+                    </span>
+                  )}
+                </div>
+                {cfg.description && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{cfg.description}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+// ── Peer Competition Card ────────────────────────────────────────────────────
+function PeerCompetitionCard({
   comp,
   myProfileId,
   onDelete,
@@ -547,7 +722,7 @@ function CompetitionCard({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-bold text-base truncate">{comp.name}</h3>
-                  {statusBadge(comp.status, comp.endDate)}
+                  {peerStatusBadge(comp.status, comp.endDate)}
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1">
