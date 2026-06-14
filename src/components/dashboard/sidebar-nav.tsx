@@ -140,11 +140,7 @@ const agentMenuItems = [
 // Shown to all users — community & entertainment
 const communityMenuItems = [
   { href: '/dashboard/competitions', label: 'Competition Center', icon: Swords },
-];
-
-const tvModeMenuItems = [
-  { href: '/leaderboard', label: 'Leaderboard TV', icon: BarChart3 },
-  { href: '/new-activity', label: 'Activity Board TV', icon: Newspaper },
+  { href: '/dashboard/tv-mode', label: 'TV Mode', icon: Tv },
 ];
 
 // Settings items shown to non-admin users only (admins get these inside their Settings group)
@@ -305,31 +301,7 @@ export function SidebarNav() {
               </Link>
             </SidebarMenuItem>
           ))}
-          {tvModeMenuItems.map((item) => (
-            <SidebarMenuItem key={item.href}>
-              <div className="flex items-center w-full group">
-                <Link href={item.href} target="_blank" className="flex-1">
-                  <SidebarMenuButton
-                    tooltip={item.label}
-                    className="justify-start w-full"
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </Link>
-                {item.href === '/new-activity' && (
-                  <button
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTvHelp(true); }}
-                    className="flex-shrink-0 p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                    title="How to display on a TV"
-                    aria-label="How to display on a TV"
-                  >
-                    <Info className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </SidebarMenuItem>
-          ))}
+
         </SidebarMenu>
 
         {/* Settings — shown to non-admin users only (admins get it in their Settings group) */}
