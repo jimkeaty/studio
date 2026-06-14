@@ -61,7 +61,18 @@ type TvConfig = {
   rotationIntervalSeconds: number;
   communityBoardIntervalSeconds?: number;
   enabledPages: string[];
+  communitySections?: string[]; // ordered list of sections shown in the Community Board
 };
+
+const ALL_COMMUNITY_SECTIONS: { id: string; label: string; emoji: string; desc: string }[] = [
+  { id: 'activity',    label: 'Activity Board',  emoji: '📊', desc: 'New listings, under contract & recent sold' },
+  { id: 'leaderboard', label: 'Leaderboard',     emoji: '🏆', desc: 'Production rankings with auto-scroll' },
+  { id: 'coming-soon', label: 'Coming Soon',     emoji: '🕐', desc: 'Listings hitting the market soon' },
+  { id: 'buyer-needs', label: 'Buyer Needs',     emoji: '🔍', desc: 'Active buyer searches' },
+  { id: 'open-houses', label: 'Open Houses',     emoji: '🏠', desc: 'Upcoming open house events' },
+];
+
+const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses'];
 
 function fmt$(n?: number | null) {
   if (!n) return null;
@@ -82,7 +93,7 @@ export default function TvModePage() {
   const [tab, setTab] = useState<'open-houses' | 'buyer-needs' | 'coming-soon'>('open-houses');
   const [items, setItems] = useState<BoardItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [tvConfig, setTvConfig] = useState<TvConfig>({ rotationIntervalSeconds: 30, communityBoardIntervalSeconds: 30, enabledPages: ['activity', 'leaderboard', 'community'] });
+  const [tvConfig, setTvConfig] = useState<TvConfig>({ rotationIntervalSeconds: 30, communityBoardIntervalSeconds: 30, enabledPages: ['activity', 'leaderboard', 'community'], communitySections: DEFAULT_COMMUNITY_SECTIONS });
   const [showSettings, setShowSettings] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -119,7 +130,14 @@ export default function TvModePage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
-      if (json.ok && json.config) setTvConfig(json.config);
+      if (json.ok && json.config) {
+        setTvConfig({
+          rotationIntervalSeconds: json.config.rotationIntervalSeconds ?? 30,
+          communityBoardIntervalSeconds: json.config.communityBoardIntervalSeconds ?? 30,
+          enabledPages: json.config.enabledPages ?? ['activity', 'leaderboard', 'community'],
+          communitySections: json.config.communitySections ?? DEFAULT_COMMUNITY_SECTIONS,
+        });
+      }
     } catch (e) { console.error(e); }
   }, [user]);
 
@@ -192,6 +210,28 @@ export default function TvModePage() {
         ? prev.enabledPages.filter((p) => p !== page)
         : [...prev.enabledPages, page],
     }));
+  };
+
+  const toggleCommunitySection = (sectionId: string) => {
+    setTvConfig((prev) => {
+      const current = prev.communitySections ?? DEFAULT_COMMUNITY_SECTIONS;
+      const next = current.includes(sectionId)
+        ? current.filter((s) => s !== sectionId)
+        : [...current, sectionId];
+      return { ...prev, communitySections: next.length > 0 ? next : current }; // prevent empty list
+    });
+  };
+
+  const moveCommunitySection = (sectionId: string, dir: 'up' | 'down') => {
+    setTvConfig((prev) => {
+      const current = [...(prev.communitySections ?? DEFAULT_COMMUNITY_SECTIONS)];
+      const idx = current.indexOf(sectionId);
+      if (idx < 0) return prev;
+      const newIdx = dir === 'up' ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= current.length) return prev;
+      [current[idx], current[newIdx]] = [current[newIdx], current[idx]];
+      return { ...prev, communitySections: current };
+    });
   };
 
   const tabConfig = {
@@ -614,12 +654,12 @@ export default function TvModePage() {
 
             <div>
               <Label className="text-gray-300 text-sm font-medium">TV Screens to Enable</Label>
-              <p className="text-gray-500 text-xs mb-3">Toggle which screens appear in the TV hub</p>
+              <p className="text-gray-500 text-xs mb-3">Toggle which standalone screens appear in the TV hub</p>
               <div className="space-y-2">
                 {[
                   { id: 'activity', label: '📊 Activity Board', desc: 'New listings, pendings & sold' },
                   { id: 'leaderboard', label: '🏆 Leaderboard', desc: 'Production rankings with auto-scroll' },
-                  { id: 'community', label: '🏡 Community Board', desc: 'Coming Soon · Buyer Needs · Open Houses' },
+                  { id: 'community', label: '🏡 Community Board', desc: 'All 5 sections rotating automatically' },
                 ].map((page) => (
                   <label key={page.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg cursor-pointer">
                     <div>
@@ -632,6 +672,54 @@ export default function TvModePage() {
                     />
                   </label>
                 ))}
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-gray-300 text-sm font-medium">Community Board — Sections &amp; Order</Label>
+              <p className="text-gray-500 text-xs mb-3">Choose which sections rotate inside the Community Board and drag to reorder. Use the arrows to change order.</p>
+              <div className="space-y-2">
+                {ALL_COMMUNITY_SECTIONS.map((sec) => {
+                  const isActive = (tvConfig.communitySections ?? DEFAULT_COMMUNITY_SECTIONS).includes(sec.id);
+                  const activeList = tvConfig.communitySections ?? DEFAULT_COMMUNITY_SECTIONS;
+                  const pos = activeList.indexOf(sec.id);
+                  return (
+                    <div key={sec.id} className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                      isActive ? 'bg-gray-800 border-white/10' : 'bg-gray-900 border-white/5 opacity-50'
+                    }`}>
+                      {/* Order position badge */}
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                        isActive ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-500'
+                      }`}>
+                        {isActive ? pos + 1 : '–'}
+                      </div>
+                      <span className="text-lg">{sec.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-gray-300 text-sm font-medium">{sec.label}</div>
+                        <div className="text-gray-500 text-xs">{sec.desc}</div>
+                      </div>
+                      {/* Up/down arrows */}
+                      {isActive && (
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            onClick={() => moveCommunitySection(sec.id, 'up')}
+                            disabled={pos === 0}
+                            className="p-0.5 text-gray-400 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+                          >▲</button>
+                          <button
+                            onClick={() => moveCommunitySection(sec.id, 'down')}
+                            disabled={pos === activeList.length - 1}
+                            className="p-0.5 text-gray-400 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+                          >▼</button>
+                        </div>
+                      )}
+                      <Switch
+                        checked={isActive}
+                        onCheckedChange={() => toggleCommunitySection(sec.id)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

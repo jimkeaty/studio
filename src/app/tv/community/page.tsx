@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Clock, Users, Home, MapPin, Phone, Bed, Bath, Square,
   DollarSign, Droplets, Zap, Building2, Calendar, ChevronLeft, ChevronRight,
+  BarChart2, Trophy, Crown, Rocket,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,7 +32,40 @@ type OpenHouseListing = {
   openHouseDate?: string | null; openHouseTime?: string; openHouseEndTime?: string;
 };
 
-type TvConfig = { rotationIntervalSeconds: number; enabledPages: string[] };
+type ActivityItem = {
+  agentDisplayName: string;
+  date: string;
+  price: number;
+  addressShort: string;
+};
+
+type YtdTotals = {
+  totalVolume: number;
+  totalSales: number;
+  totalAgentCommissions: number;
+};
+
+type LeaderRow = {
+  agentId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  closed: number;
+  pending: number;
+  closedVolume: number;
+  totalGCI: number;
+  agentNetCommission: number;
+};
+
+// All 5 possible sections
+const ALL_SECTION_DEFS: Record<string, { label: string; color: string; dot: string; bgColor: string }> = {
+  'activity':     { label: 'Activity Board',  color: 'bg-emerald-500',  dot: 'bg-emerald-400',  bgColor: 'from-emerald-900/30' },
+  'leaderboard':  { label: 'Leaderboard',     color: 'bg-yellow-500',   dot: 'bg-yellow-400',   bgColor: 'from-yellow-900/30' },
+  'coming-soon':  { label: 'Coming Soon',     color: 'bg-purple-500',   dot: 'bg-purple-400',   bgColor: 'from-purple-900/30' },
+  'buyer-needs':  { label: 'Buyer Needs',     color: 'bg-blue-500',     dot: 'bg-blue-400',     bgColor: 'from-blue-900/30' },
+  'open-houses':  { label: 'Open Houses',     color: 'bg-orange-500',   dot: 'bg-orange-400',   bgColor: 'from-orange-900/30' },
+};
+
+const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,11 +74,29 @@ function fmt$(n?: number | null) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
+function fmtCompact(n: number) {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
 function fmtDate(d?: string | null) {
   if (!d) return null;
   try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
   catch { return d; }
 }
+
+function fmtShortDate(d: string) {
+  if (!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+const AVATAR_GRADIENTS = [
+  'from-blue-500 to-violet-600', 'from-violet-500 to-pink-600',
+  'from-amber-500 to-red-500', 'from-emerald-500 to-blue-500',
+  'from-cyan-500 to-indigo-600', 'from-rose-500 to-orange-500',
+];
 
 // ─── Auto-scroll hook ─────────────────────────────────────────────────────────
 
@@ -88,9 +140,10 @@ function useAutoScroll(items: any[], active: boolean) {
       }
 
       posRef.current += SPEED * dt;
+
       if (posRef.current >= contentH) {
         posRef.current = 0;
-        pauseUntil = ts + 3000;
+        pauseUntil = ts + 2000;
       }
 
       container.scrollTop = posRef.current;
@@ -104,11 +157,228 @@ function useAutoScroll(items: any[], active: boolean) {
   return { containerRef, innerRef };
 }
 
-// ─── Section Components ───────────────────────────────────────────────────────
+// ─── Activity Board Section ───────────────────────────────────────────────────
+
+function ActivityBoardSection({ active }: { active: boolean }) {
+  const [newListings, setNewListings] = useState<ActivityItem[]>([]);
+  const [underContract, setUnderContract] = useState<ActivityItem[]>([]);
+  const [recentSold, setRecentSold] = useState<ActivityItem[]>([]);
+  const [ytd, setYtd] = useState<YtdTotals | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const nlScroll = useAutoScroll(newListings, active);
+  const ucScroll = useAutoScroll(underContract, active);
+  const rsScroll = useAutoScroll(recentSold, active);
+
+  useEffect(() => {
+    const year = new Date().getFullYear();
+    fetch(`/api/rollups/new-activity?year=${year}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          setNewListings(d.newActiveListings || []);
+          setUnderContract(d.underContracts || []);
+          setRecentSold(d.recentSold || []);
+          setYtd(d.ytdTotals || null);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const ColCard = ({
+    title, items, accentColor, icon: Icon, scrollRefs,
+  }: {
+    title: string; items: ActivityItem[]; accentColor: string;
+    icon: React.ElementType; scrollRefs: { containerRef: React.RefObject<HTMLDivElement | null>; innerRef: React.RefObject<HTMLDivElement | null> };
+  }) => (
+    <div className="flex flex-col flex-1 min-h-0 bg-gray-900 border border-white/10 rounded-2xl overflow-hidden">
+      <div className={`flex items-center gap-2 px-4 py-3 border-b border-white/10 ${accentColor} bg-opacity-20`}>
+        <Icon className="h-5 w-5" />
+        <span className="font-bold text-base">{title}</span>
+        <span className="ml-auto text-sm opacity-70">{items.length}</span>
+      </div>
+      <div ref={scrollRefs.containerRef} className="flex-1 overflow-hidden" style={{ scrollBehavior: 'auto' }}>
+        {loading ? (
+          <div className="flex items-center justify-center h-full text-gray-500 text-lg animate-pulse">Loading…</div>
+        ) : items.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-gray-600 text-lg">No activity yet</div>
+        ) : (
+          <div ref={scrollRefs.innerRef}>
+            {[...items, ...items].map((item, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-white/5 hover:bg-white/5">
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-semibold text-sm truncate">{item.addressShort}</div>
+                  <div className="text-gray-400 text-xs">{item.agentDisplayName} · {fmtShortDate(item.date)}</div>
+                </div>
+                <div className={`text-sm font-bold flex-shrink-0 ${accentColor}`}>{fmtCompact(item.price)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-8 py-5 bg-gray-900 border-b border-white/10">
+        <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center">
+          <BarChart2 className="h-6 w-6 text-emerald-400" />
+        </div>
+        <div>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Activity Board</h2>
+          <p className="text-gray-400 text-sm">New listings, under contract & recent closings</p>
+        </div>
+        {ytd && (
+          <div className="ml-auto flex items-center gap-6">
+            <div className="text-center">
+              <div className="text-2xl font-black text-white">{ytd.totalSales}</div>
+              <div className="text-xs text-gray-400">YTD Closed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-black text-emerald-400">{fmtCompact(ytd.totalVolume)}</div>
+              <div className="text-xs text-gray-400">YTD Volume</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-black text-blue-400">{fmtCompact(ytd.totalAgentCommissions)}</div>
+              <div className="text-xs text-gray-400">YTD Commissions</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Three columns */}
+      <div className="flex-1 flex gap-4 px-8 py-5 min-h-0">
+        <ColCard title="New Listings" items={newListings} accentColor="text-blue-400" icon={Home} scrollRefs={nlScroll} />
+        <ColCard title="Under Contract" items={underContract} accentColor="text-amber-400" icon={Calendar} scrollRefs={ucScroll} />
+        <ColCard title="Recent Sold" items={recentSold} accentColor="text-emerald-400" icon={DollarSign} scrollRefs={rsScroll} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Leaderboard Section ──────────────────────────────────────────────────────
+
+function LeaderboardSection({ active }: { active: boolean }) {
+  const [rows, setRows] = useState<LeaderRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { containerRef, innerRef } = useAutoScroll(rows, active);
+
+  useEffect(() => {
+    const year = new Date().getFullYear();
+    fetch(`/api/rollups/leaderboard?year=${year}&period=yearly`)
+      .then(r => r.json())
+      .then(d => { if (d.ok) setRows((d.rows || []).slice(0, 25)); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalPaidOut = rows.reduce((s, r) => s + r.agentNetCommission, 0);
+  const totalClosed = rows.reduce((s, r) => s + r.closed, 0);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-8 py-5 bg-gray-900 border-b border-white/10">
+        <div className="w-12 h-12 rounded-2xl bg-yellow-500/20 flex items-center justify-center">
+          <Trophy className="h-6 w-6 text-yellow-400" />
+        </div>
+        <div>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Production Leaderboard</h2>
+          <p className="text-gray-400 text-sm">{new Date().getFullYear()} Year-to-Date Rankings</p>
+        </div>
+        <div className="ml-auto flex items-center gap-6">
+          <div className="text-center">
+            <div className="text-2xl font-black text-white">{totalClosed}</div>
+            <div className="text-xs text-gray-400">Team Closings</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-black text-yellow-400">{fmtCompact(totalPaidOut)}</div>
+            <div className="text-xs text-gray-400">Total Paid Out</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scrolling rows */}
+      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-4" style={{ scrollBehavior: 'auto' }}>
+        {loading ? (
+          <div className="flex items-center justify-center h-full text-gray-400 text-2xl animate-pulse">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-gray-600 text-2xl">No data yet</div>
+        ) : (
+          <div ref={innerRef}>
+            <div className="space-y-3">
+              {[...rows, ...rows].map((agent, i) => {
+                const realIndex = i % rows.length;
+                const leaderClosed = rows[0]?.closed || 1;
+                const progress = Math.round((agent.closed / leaderClosed) * 100);
+                const isTop = realIndex === 0;
+                const isSecond = realIndex === 1;
+                const isThird = realIndex === 2;
+
+                return (
+                  <div
+                    key={`${agent.agentId}-${i}`}
+                    className={`flex items-center gap-4 p-4 rounded-2xl border ${
+                      isTop ? 'border-yellow-400/50 bg-yellow-500/5' :
+                      isSecond ? 'border-slate-400/30 bg-white/3' :
+                      isThird ? 'border-amber-700/30 bg-white/3' :
+                      'border-white/8 bg-white/3'
+                    }`}
+                  >
+                    {/* Rank */}
+                    <div className={`w-10 text-center font-black text-xl flex-shrink-0 ${
+                      isTop ? 'text-yellow-400' : isSecond ? 'text-slate-300' : isThird ? 'text-amber-600' : 'text-gray-500'
+                    }`}>
+                      {isTop ? <Crown className="h-7 w-7 mx-auto text-yellow-400" /> :
+                       isSecond ? <Rocket className="h-6 w-6 mx-auto text-slate-300" /> :
+                       <span>#{realIndex + 1}</span>}
+                    </div>
+
+                    {/* Avatar */}
+                    <div className={`w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-lg bg-gradient-to-br ${AVATAR_GRADIENTS[realIndex % AVATAR_GRADIENTS.length]}`}>
+                      {agent.displayName.charAt(0).toUpperCase()}
+                    </div>
+
+                    {/* Name + progress */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-bold text-lg truncate">{agent.displayName}</div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-white/50 mt-0.5">
+                        {agent.closedVolume > 0 && <span>Vol: <span className="text-white/80 font-semibold">{fmtCompact(agent.closedVolume)}</span></span>}
+                        {agent.agentNetCommission > 0 && <span>💵 Paid Out: <span className="text-emerald-400 font-semibold">{fmtCompact(agent.agentNetCommission)}</span></span>}
+                        {agent.pending > 0 && <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>}
+                      </div>
+                      <div className="mt-1.5 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full bg-gradient-to-r ${isTop ? 'from-yellow-400 to-orange-400' : 'from-blue-500 to-emerald-400'}`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Closed count */}
+                    <div className="flex-shrink-0 text-right">
+                      <div className="text-2xl font-black text-white tabular-nums">{agent.closed}</div>
+                      <div className="text-xs text-white/50">closed</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Coming Soon Section ──────────────────────────────────────────────────────
 
 function ComingSoonSection({ items, loading, active }: { items: ComingSoonListing[]; loading: boolean; active: boolean }) {
   const { containerRef, innerRef } = useAutoScroll(items, active);
-  const cards = [...items, ...items]; // duplicate for seamless loop
+  const cards = [...items, ...items];
 
   return (
     <div className="flex flex-col h-full">
@@ -124,12 +394,9 @@ function ComingSoonSection({ items, loading, active }: { items: ComingSoonListin
           {items.length} listing{items.length !== 1 ? 's' : ''}
         </div>
       </div>
-
       <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6" style={{ scrollBehavior: 'auto' }}>
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-gray-400 text-2xl animate-pulse">Loading…</div>
-          </div>
+          <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-2xl animate-pulse">Loading…</div></div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Clock className="h-20 w-20 text-gray-700" />
@@ -146,16 +413,12 @@ function ComingSoonSection({ items, loading, active }: { items: ComingSoonListin
                       <div className="flex items-center gap-2 text-purple-400 font-bold text-xl">
                         <MapPin className="h-5 w-5" />{item.address || item.area}
                       </div>
-                      {item.address && item.address !== item.area && (
-                        <div className="text-gray-400 text-sm mt-0.5">{item.area}</div>
-                      )}
+                      {item.address && item.address !== item.area && <div className="text-gray-400 text-sm mt-0.5">{item.area}</div>}
                       {item.price && <div className="text-white text-3xl font-bold mt-1">{fmt$(item.price)}</div>}
                     </div>
                     <div className="flex-shrink-0 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-2 text-center">
                       <div className="text-purple-400 text-xs font-semibold uppercase">Coming Soon</div>
-                      {item.expectedDate
-                        ? <div className="text-white font-bold text-sm">{fmtDate(item.expectedDate)}</div>
-                        : <div className="text-gray-400 text-sm">TBD</div>}
+                      {item.expectedDate ? <div className="text-white font-bold text-sm">{fmtDate(item.expectedDate)}</div> : <div className="text-gray-400 text-sm">TBD</div>}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-gray-300 text-sm">
@@ -186,9 +449,18 @@ function ComingSoonSection({ items, loading, active }: { items: ComingSoonListin
   );
 }
 
+// ─── Buyer Needs Section ──────────────────────────────────────────────────────
+
 function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loading: boolean; active: boolean }) {
   const { containerRef, innerRef } = useAutoScroll(items, active);
   const cards = [...items, ...items];
+
+  const fmtRange = (min?: number | null, max?: number | null) => {
+    if (min && max) return `${fmt$(min)} – ${fmt$(max)}`;
+    if (min) return `${fmt$(min)}+`;
+    if (max) return `Up to ${fmt$(max)}`;
+    return null;
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -198,22 +470,19 @@ function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loa
         </div>
         <div>
           <h2 className="text-3xl font-extrabold text-white tracking-tight">Buyer Needs</h2>
-          <p className="text-gray-400 text-sm">Active buyers looking for properties — contact agent to match</p>
+          <p className="text-gray-400 text-sm">Active buyers looking for their perfect home</p>
         </div>
         <div className="ml-auto bg-blue-500/20 text-blue-300 text-sm font-bold px-3 py-1 rounded-full">
-          {items.length} active buyer{items.length !== 1 ? 's' : ''}
+          {items.length} buyer{items.length !== 1 ? 's' : ''}
         </div>
       </div>
-
       <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6" style={{ scrollBehavior: 'auto' }}>
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-gray-400 text-2xl animate-pulse">Loading…</div>
-          </div>
+          <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-2xl animate-pulse">Loading…</div></div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Users className="h-20 w-20 text-gray-700" />
-            <p className="text-gray-500 text-3xl font-semibold">No Buyer Needs Posted</p>
+            <p className="text-gray-500 text-3xl font-semibold">No Active Buyer Needs</p>
             <p className="text-gray-600 text-lg">Post a buyer need from the dashboard</p>
           </div>
         ) : (
@@ -223,31 +492,27 @@ function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loa
                 <div key={`${item.id}-${i}`} className="bg-gray-900 border border-white/10 rounded-2xl p-5 flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="flex items-center gap-2 text-blue-400 font-bold text-xl"><MapPin className="h-5 w-5" />{item.area}</div>
-                      {(item.minPrice || item.maxPrice) && (
-                        <div className="text-white text-2xl font-bold mt-1">
-                          {item.minPrice && item.maxPrice
-                            ? `${fmt$(item.minPrice)} – ${fmt$(item.maxPrice)}`
-                            : item.maxPrice ? `Up to ${fmt$(item.maxPrice)}` : `From ${fmt$(item.minPrice)}`}
-                        </div>
+                      <div className="flex items-center gap-2 text-blue-400 font-bold text-xl">
+                        <MapPin className="h-5 w-5" />{item.area}
+                      </div>
+                      {fmtRange(item.minPrice, item.maxPrice) && (
+                        <div className="text-white text-3xl font-bold mt-1">{fmtRange(item.minPrice, item.maxPrice)}</div>
                       )}
                     </div>
                     <div className="flex-shrink-0 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-2 text-center">
-                      <div className="text-blue-400 text-xs font-semibold uppercase">Buyer</div>
-                      <div className="text-white font-bold text-sm">Active</div>
+                      <div className="text-blue-400 text-xs font-semibold uppercase">Buyer Need</div>
+                      <div className="text-white font-bold text-sm mt-0.5">Active</div>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-gray-300 text-sm">
                     {item.beds && <span className="flex items-center gap-1"><Bed className="h-4 w-4 text-gray-500" />{item.beds}+ bd</span>}
                     {item.baths && <span className="flex items-center gap-1"><Bath className="h-4 w-4 text-gray-500" />{item.baths}+ ba</span>}
-                    {(item.minAcreage || item.maxAcreage) && (
-                      <span className="text-gray-400">🌿 {item.minAcreage && item.maxAcreage ? `${item.minAcreage}–${item.maxAcreage} ac` : item.maxAcreage ? `Up to ${item.maxAcreage} ac` : `${item.minAcreage}+ ac`}</span>
-                    )}
+                    {(item.minAcreage || item.maxAcreage) && <span className="text-gray-400">🌿 {item.minAcreage || 0}–{item.maxAcreage || '+'} ac</span>}
                     {item.stories && <span className="flex items-center gap-1"><Building2 className="h-4 w-4 text-gray-500" />{item.stories} story</span>}
                     {item.pool && <span className="flex items-center gap-1 bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full text-xs font-semibold"><Droplets className="h-3 w-3" />Pool</span>}
                     {item.generator && <span className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full text-xs font-semibold"><Zap className="h-3 w-3" />Generator</span>}
                   </div>
-                  {item.otherAmenities && <p className="text-gray-400 text-sm">Other: {item.otherAmenities}</p>}
+                  {item.otherAmenities && <p className="text-gray-400 text-sm">Needs: {item.otherAmenities}</p>}
                   {item.notes && <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-base">{item.agentName.charAt(0)}</div>
@@ -266,6 +531,8 @@ function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loa
   );
 }
 
+// ─── Open Houses Section ──────────────────────────────────────────────────────
+
 function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing[]; loading: boolean; active: boolean }) {
   const { containerRef, innerRef } = useAutoScroll(items, active);
   const cards = [...items, ...items];
@@ -277,24 +544,21 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
           <Home className="h-6 w-6 text-orange-400" />
         </div>
         <div>
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">Open House Opportunities</h2>
-          <p className="text-gray-400 text-sm">Available for agents to host — contact listing agent to schedule</p>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Open Houses</h2>
+          <p className="text-gray-400 text-sm">Upcoming open house events — come see these homes!</p>
         </div>
         <div className="ml-auto bg-orange-500/20 text-orange-300 text-sm font-bold px-3 py-1 rounded-full">
           {items.length} open house{items.length !== 1 ? 's' : ''}
         </div>
       </div>
-
       <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6" style={{ scrollBehavior: 'auto' }}>
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-gray-400 text-2xl animate-pulse">Loading…</div>
-          </div>
+          <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-2xl animate-pulse">Loading…</div></div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Home className="h-20 w-20 text-gray-700" />
-            <p className="text-gray-500 text-3xl font-semibold">No Open Houses Posted</p>
-            <p className="text-gray-600 text-lg">Check back soon or post one from the dashboard</p>
+            <p className="text-gray-500 text-3xl font-semibold">No Open Houses Scheduled</p>
+            <p className="text-gray-600 text-lg">Submit an open house from the dashboard</p>
           </div>
         ) : (
           <div ref={innerRef}>
@@ -303,20 +567,18 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
                 <div key={`${item.id}-${i}`} className="bg-gray-900 border border-white/10 rounded-2xl p-5 flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-orange-400 font-bold text-xl leading-tight">{item.address}</div>
+                      <div className="flex items-center gap-2 text-orange-400 font-bold text-xl">
+                        <MapPin className="h-5 w-5" />{item.address}
+                      </div>
                       {item.price && <div className="text-white text-3xl font-bold mt-1">{fmt$(item.price)}</div>}
                     </div>
-                    {item.openHouseDate && (
-                      <div className="flex-shrink-0 bg-orange-500/20 border border-orange-500/30 rounded-xl px-4 py-2 text-center">
-                        <div className="text-orange-400 text-xs font-semibold uppercase">Open House</div>
-                        <div className="text-white font-bold text-sm">{fmtDate(item.openHouseDate)}</div>
-                        {item.openHouseTime && (
-                          <div className="text-orange-300 text-xs">{item.openHouseTime}{item.openHouseEndTime ? ` – ${item.openHouseEndTime}` : ''}</div>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex-shrink-0 bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-center">
+                      <div className="text-orange-400 text-xs font-semibold uppercase">Open House</div>
+                      {item.openHouseDate && <div className="text-white font-bold text-sm">{fmtDate(item.openHouseDate)}</div>}
+                      {item.openHouseTime && <div className="text-gray-300 text-xs">{item.openHouseTime}{item.openHouseEndTime ? ` – ${item.openHouseEndTime}` : ''}</div>}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4 text-gray-300 text-sm">
+                  <div className="flex flex-wrap items-center gap-3 text-gray-300 text-sm">
                     {item.beds && <span className="flex items-center gap-1"><Bed className="h-4 w-4 text-gray-500" />{item.beds} bd</span>}
                     {item.baths && <span className="flex items-center gap-1"><Bath className="h-4 w-4 text-gray-500" />{item.baths} ba</span>}
                     {item.sqft && <span className="flex items-center gap-1"><Square className="h-4 w-4 text-gray-500" />{item.sqft.toLocaleString()} sqft</span>}
@@ -341,12 +603,6 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
 
 // ─── Main Community Board ─────────────────────────────────────────────────────
 
-const SECTIONS = [
-  { id: 'coming-soon', label: 'Coming Soon', color: 'bg-purple-500', dot: 'bg-purple-400' },
-  { id: 'buyer-needs', label: 'Buyer Needs', color: 'bg-blue-500', dot: 'bg-blue-400' },
-  { id: 'open-houses', label: 'Open Houses', color: 'bg-orange-500', dot: 'bg-orange-400' },
-];
-
 export default function CommunityBoardPage() {
   const [comingSoon, setComingSoon] = useState<ComingSoonListing[]>([]);
   const [buyerNeeds, setBuyerNeeds] = useState<BuyerNeed[]>([]);
@@ -355,6 +611,8 @@ export default function CommunityBoardPage() {
   const [loadingBN, setLoadingBN] = useState(true);
   const [loadingOH, setLoadingOH] = useState(true);
 
+  // Active sections list (from admin config)
+  const [sections, setSections] = useState<string[]>(DEFAULT_COMMUNITY_SECTIONS);
   const [currentSection, setCurrentSection] = useState(0);
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -367,21 +625,24 @@ export default function CommunityBoardPage() {
   const animRef = useRef<number | null>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load TV config for interval
+  // Load TV config — interval + community section list
   useEffect(() => {
     fetch('/api/community/tv-config')
       .then((r) => r.json())
       .then((json) => {
-        if (json.ok && json.config?.communityBoardIntervalSeconds) {
-          setIntervalSec(json.config.communityBoardIntervalSeconds);
-        } else if (json.ok && json.config?.rotationIntervalSeconds) {
-          setIntervalSec(json.config.rotationIntervalSeconds);
+        if (!json.ok) return;
+        const cfg = json.config || {};
+        if (cfg.communityBoardIntervalSeconds) setIntervalSec(cfg.communityBoardIntervalSeconds);
+        else if (cfg.rotationIntervalSeconds) setIntervalSec(cfg.rotationIntervalSeconds);
+        // communitySections is the ordered list of section IDs to show
+        if (Array.isArray(cfg.communitySections) && cfg.communitySections.length > 0) {
+          setSections(cfg.communitySections);
         }
       })
       .catch(() => {});
   }, []);
 
-  // Load data
+  // Load community data
   useEffect(() => {
     const loadAll = () => {
       fetch('/api/community/coming-soon').then(r => r.json()).then(d => { if (d.ok) setComingSoon(d.items || []); }).catch(() => {}).finally(() => setLoadingCS(false));
@@ -403,23 +664,22 @@ export default function CommunityBoardPage() {
   const intervalMs = intervalSec * 1000;
 
   const goNext = useCallback(() => {
-    setCurrentSection(i => (i + 1) % SECTIONS.length);
+    setCurrentSection(i => (i + 1) % sections.length);
     startTimeRef.current = Date.now();
     progressRef.current = 0;
     setProgress(0);
-  }, []);
+  }, [sections.length]);
 
   const goPrev = useCallback(() => {
-    setCurrentSection(i => (i - 1 + SECTIONS.length) % SECTIONS.length);
+    setCurrentSection(i => (i - 1 + sections.length) % sections.length);
     startTimeRef.current = Date.now();
     progressRef.current = 0;
     setProgress(0);
-  }, []);
+  }, [sections.length]);
 
   useEffect(() => {
     if (paused) return;
     startTimeRef.current = Date.now();
-
     const tick = () => {
       const elapsed = Date.now() - startTimeRef.current;
       const pct = Math.min((elapsed / intervalMs) * 100, 100);
@@ -437,6 +697,9 @@ export default function CommunityBoardPage() {
     controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
   };
 
+  const activeSectionId = sections[currentSection] ?? 'activity';
+  const activeDef = ALL_SECTION_DEFS[activeSectionId] ?? ALL_SECTION_DEFS['activity'];
+
   return (
     <div
       className="relative bg-gray-950 text-white"
@@ -446,36 +709,41 @@ export default function CommunityBoardPage() {
       {/* Progress bar */}
       <div className="absolute top-0 left-0 right-0 h-1.5 bg-white/10 z-50">
         <div
-          className={`h-full transition-none ${SECTIONS[currentSection].color}`}
+          className={`h-full transition-none ${activeDef.color}`}
           style={{ width: `${progress}%` }}
         />
       </div>
 
-      {/* Section content — fade transition */}
+      {/* Section content */}
       <div className="w-full h-full">
-        {currentSection === 0 && <ComingSoonSection items={comingSoon} loading={loadingCS} active={currentSection === 0} />}
-        {currentSection === 1 && <BuyerNeedsSection items={buyerNeeds} loading={loadingBN} active={currentSection === 1} />}
-        {currentSection === 2 && <OpenHousesSection items={openHouses} loading={loadingOH} active={currentSection === 2} />}
+        {activeSectionId === 'activity'    && <ActivityBoardSection active={activeSectionId === 'activity'} />}
+        {activeSectionId === 'leaderboard' && <LeaderboardSection active={activeSectionId === 'leaderboard'} />}
+        {activeSectionId === 'coming-soon' && <ComingSoonSection items={comingSoon} loading={loadingCS} active={activeSectionId === 'coming-soon'} />}
+        {activeSectionId === 'buyer-needs' && <BuyerNeedsSection items={buyerNeeds} loading={loadingBN} active={activeSectionId === 'buyer-needs'} />}
+        {activeSectionId === 'open-houses' && <OpenHousesSection items={openHouses} loading={loadingOH} active={activeSectionId === 'open-houses'} />}
       </div>
 
       {/* Bottom: section dots + clock */}
       <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-8 py-3 bg-gray-900/80 backdrop-blur-sm border-t border-white/10 z-40">
-        {/* Section dots */}
-        <div className="flex items-center gap-4">
-          {SECTIONS.map((s, i) => (
-            <button
-              key={s.id}
-              onClick={() => { setCurrentSection(i); startTimeRef.current = Date.now(); setProgress(0); }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${
-                i === currentSection
-                  ? `${s.color} text-white shadow-lg`
-                  : 'bg-white/10 text-white/50 hover:bg-white/20 hover:text-white'
-              }`}
-            >
-              <div className={`w-2 h-2 rounded-full ${i === currentSection ? 'bg-white' : s.dot}`} />
-              {s.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          {sections.map((sId, i) => {
+            const def = ALL_SECTION_DEFS[sId];
+            if (!def) return null;
+            return (
+              <button
+                key={sId}
+                onClick={() => { setCurrentSection(i); startTimeRef.current = Date.now(); setProgress(0); }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${
+                  i === currentSection
+                    ? `${def.color} text-white shadow-lg`
+                    : 'bg-white/10 text-white/50 hover:bg-white/20 hover:text-white'
+                }`}
+              >
+                <div className={`w-2 h-2 rounded-full ${i === currentSection ? 'bg-white' : def.dot}`} />
+                {def.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Clock */}
@@ -491,7 +759,6 @@ export default function CommunityBoardPage() {
 
       {/* Controls overlay */}
       <div className={`absolute inset-0 z-40 pointer-events-none transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-        {/* Left/right arrows */}
         <button
           onClick={goPrev}
           className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors pointer-events-auto"
@@ -504,8 +771,6 @@ export default function CommunityBoardPage() {
         >
           <ChevronRight className="h-7 w-7" />
         </button>
-
-        {/* Pause/resume */}
         <button
           onClick={() => setPaused(p => !p)}
           className="absolute top-4 right-4 px-4 py-2 rounded-full bg-black/50 hover:bg-black/70 text-white text-sm font-semibold transition-colors pointer-events-auto flex items-center gap-2"
