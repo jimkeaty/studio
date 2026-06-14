@@ -24,6 +24,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { RecruitingIncentiveConfig } from '@/lib/types/recruitingConfig';
 import { DEFAULT_RECRUITING_CONFIG } from '@/lib/types/recruitingConfig';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 const fmt = (n: number | null | undefined, compact = false) => {
@@ -435,6 +437,30 @@ function AgentPerformanceRoster({ year }: { year: number }) {
   const [filterTeamGroup, setFilterTeamGroup] = useState<string>('all');
   const [filterGrace, setFilterGrace] = useState<string>('all');
   const [view, setView] = useState<'table' | 'cards'>('table');
+  const [resetTarget, setResetTarget] = useState<{ agentId: string; name: string } | null>(null);
+  const [resetNote, setResetNote] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const { toast } = useToast();
+
+  const handleResetPlan = async () => {
+    if (!user || !resetTarget) return;
+    setResetting(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/plan/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ agentId: resetTarget.agentId, note: resetNote }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Reset failed'); }
+      toast({ title: 'Plan Reset', description: `${resetTarget.name}'s business plan has been reset to today.` });
+      setResetTarget(null);
+      setResetNote('');
+      fetchRoster();
+    } catch (e: any) {
+      toast({ title: 'Reset Failed', description: e.message, variant: 'destructive' });
+    } finally { setResetting(false); }
+  };
 
   const fetchRoster = useCallback(async () => {
     if (!user) return;
@@ -523,10 +549,16 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
   const fmtCurrency = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(0)}k` : `$${n.toFixed(0)}`;
 
-  // Separate grace period agents for the tracker
-  const graceAgents = agents.filter((a: any) => a.isGracePeriod || a.graceStatus === 'grace_passed');
-  // No Deals Yet agents — established (past grace) with zero closed and zero pending
-  const noDealsYetAgents = agents.filter((a: any) => !a.isGracePeriod && a.closedDeals === 0 && a.pendingDeals === 0);
+  // First-year tracker agents: grace period + first-year (day 0-365), sorted by trackerPriority
+  const firstYearTrackerAgents = agents
+    .filter((a: any) => a.isFirstYearAgent === true)
+    .sort((a: any, b: any) => {
+      // Primary: trackerPriority (lower = more urgent)
+      const pDiff = (a.trackerPriority ?? 99) - (b.trackerPriority ?? 99);
+      if (pDiff !== 0) return pDiff;
+      // Secondary: days since start descending (more days = more urgent within same priority)
+      return (b.daysSinceStart ?? 0) - (a.daysSinceStart ?? 0);
+    });
 
   return (
     <div className="space-y-4">
@@ -599,186 +631,220 @@ function AgentPerformanceRoster({ year }: { year: number }) {
         </div>
       )}
 
-      {/* ── New Agent Grace Period Tracker ──────────────────────────────── */}
-      {summary.totalInGrace > 0 && (
+      {/* ── Block 1: New Agent 90-Day + First-Year Tracker ──────────────── */}
+      {firstYearTrackerAgents.length > 0 && (
         <Card className="border-2 border-amber-200">
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-amber-600" />
-                <CardTitle className="text-lg">New Agent 90-Day Tracker</CardTitle>
+                <CardTitle className="text-lg">New Agent 90-Day + First-Year Tracker</CardTitle>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
-                  {summary.totalInGrace} agent{summary.totalInGrace !== 1 ? 's' : ''} in grace period
-                </Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                {summary.firstYearCritical > 0 && (
+                  <Badge className="bg-red-100 text-red-800 border border-red-300">
+                    🚨 {summary.firstYearCritical} Critical
+                  </Badge>
+                )}
+                {summary.firstYearNeedAttention > 0 && (
+                  <Badge className="bg-amber-100 text-amber-800 border border-amber-300">
+                    ⚠️ {summary.firstYearNeedAttention} Need Attention
+                  </Badge>
+                )}
+                {summary.firstYearSlipped > 0 && (
+                  <Badge className="bg-orange-100 text-orange-800 border border-orange-300">
+                    ⏰ {summary.firstYearSlipped} Slipped
+                  </Badge>
+                )}
+                {summary.firstYearOnTrack > 0 && (
+                  <Badge className="bg-green-100 text-green-800 border border-green-300">
+                    ✓ {summary.firstYearOnTrack} On Track
+                  </Badge>
+                )}
+                {summary.firstYearProducing > 0 && (
+                  <Badge className="bg-blue-100 text-blue-800 border border-blue-300">
+                    🏆 {summary.firstYearProducing} Producing
+                  </Badge>
+                )}
               </div>
             </div>
             <CardDescription>
-              Standard: at least 1 deal under contract or closed by month 3. Agents are tracked from their start date.
+              Goal: every new agent closes a deal by day 90. Something under contract by day 60. First-year agents (day 0–365) only. Sorted by urgency.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Grace period summary mini-cards */}
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="border rounded-lg p-3 text-center bg-green-50/50 border-green-200">
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <span className="text-sm font-semibold text-green-700">On Track</span>
-                </div>
-                <p className="text-2xl font-bold text-green-700">{summary.graceOnTrack}</p>
-                <p className="text-[10px] text-muted-foreground">Have a deal</p>
-              </div>
-              <div className="border rounded-lg p-3 text-center bg-amber-50/50 border-amber-200">
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <Clock className="h-4 w-4 text-amber-600" />
-                  <span className="text-sm font-semibold text-amber-700">No Deal Yet</span>
-                </div>
-                <p className="text-2xl font-bold text-amber-700">{summary.graceNoDeal}</p>
-                <p className="text-[10px] text-muted-foreground">Month 1-2, still time</p>
-              </div>
-              <div className="border rounded-lg p-3 text-center bg-red-50/50 border-red-200">
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <ShieldAlert className="h-4 w-4 text-red-600" />
-                  <span className="text-sm font-semibold text-red-700">At Risk</span>
-                </div>
-                <p className="text-2xl font-bold text-red-700">{summary.graceAtRisk}</p>
-                <p className="text-[10px] text-muted-foreground">Month 3, no deal</p>
-              </div>
-            </div>
-
-            {/* Grace period agent list */}
             <div className="space-y-2">
-              {graceAgents
-                .sort((a: any, b: any) => {
-                  // At risk first, then no deal, then on track, then passed
-                  const order: Record<string, number> = { grace_at_risk: 0, in_grace: 1, grace_on_track: 2, grace_passed: 3 };
-                  return (order[a.graceStatus] ?? 4) - (order[b.graceStatus] ?? 4);
-                })
-                .map((a: any) => {
-                  const progressPct = a.gracePeriodDaysElapsed != null ? Math.min(100, (a.gracePeriodDaysElapsed / 90) * 100) : 0;
-                  const barColor = a.graceStatus === 'grace_on_track' ? 'bg-green-500'
-                    : a.graceStatus === 'grace_at_risk' ? 'bg-red-500'
-                    : a.graceStatus === 'grace_passed' ? 'bg-gray-400'
-                    : 'bg-amber-500';
-                  const rowBg = a.graceStatus === 'grace_at_risk' ? 'bg-red-50/50 border-red-200'
-                    : a.graceStatus === 'grace_on_track' ? 'bg-green-50/30 border-green-200'
-                    : a.graceStatus === 'grace_passed' ? 'bg-gray-50/50 border-gray-200'
-                    : 'bg-amber-50/30 border-amber-200';
+              {firstYearTrackerAgents.map((a: any) => {
+                const isInGrace = a.isGracePeriod;
+                const days = a.daysSinceStart ?? 0;
+                const progressPct = Math.min(100, (days / 365) * 100);
+                const gracePct = Math.min(100, (days / 90) * 100);
 
-                  return (
-                    <div key={a.agentId} className={`flex items-center gap-4 border rounded-lg p-3 ${rowBg}`}>
-                      {/* Name & Team Group */}
-                      <div className="min-w-[140px]">
-                        <p className="text-sm font-medium">{a.displayName}</p>
+                // Row color by priority
+                const rowBg =
+                  a.trackerPriority === 0 ? 'bg-red-50/60 border-red-300'
+                  : a.trackerPriority === 1 ? 'bg-amber-50/50 border-amber-200'
+                  : a.trackerPriority === 2 ? 'bg-orange-50/50 border-orange-200'
+                  : a.trackerPriority === 3 ? 'bg-green-50/30 border-green-200'
+                  : 'bg-blue-50/20 border-blue-200';
+
+                const priorityLabel =
+                  a.trackerPriority === 0 ? { text: '🚨 Critical', cls: 'bg-red-100 text-red-800 border-red-300' }
+                  : a.trackerPriority === 1 ? { text: '⚠️ Needs Attention', cls: 'bg-amber-100 text-amber-800 border-amber-300' }
+                  : a.trackerPriority === 2 ? { text: '⏰ Slipped', cls: 'bg-orange-100 text-orange-800 border-orange-300' }
+                  : a.trackerPriority === 3 ? { text: '✓ On Track', cls: 'bg-green-100 text-green-800 border-green-300' }
+                  : { text: '🏆 Producing', cls: 'bg-blue-100 text-blue-800 border-blue-300' };
+
+                return (
+                  <div key={a.agentId} className={`border rounded-lg p-3 ${rowBg}`}>
+                    <div className="flex items-start gap-4 flex-wrap">
+                      {/* Name & Team */}
+                      <div className="min-w-[150px]">
+                        <p className="text-sm font-semibold">{a.displayName}</p>
                         <TeamGroupBadge teamGroup={a.teamGroup} />
+                        <div className="mt-1">
+                          <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border ${priorityLabel.cls}`}>
+                            {priorityLabel.text}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Grace Status Badge */}
-                      <div className="min-w-[100px]">
-                        <GraceStatusBadge status={a.graceStatus} daysRemaining={a.gracePeriodDaysRemaining} month={a.gracePeriodMonth} hasFirstDeal={a.hasFirstDeal} />
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="flex-1 min-w-[120px]">
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                          <span>Day {a.gracePeriodDaysElapsed ?? '?'} / 90</span>
+                      {/* Progress bars */}
+                      <div className="flex-1 min-w-[160px]">
+                        {/* Year progress */}
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-0.5">
+                          <span>Day {days} / 365</span>
                           {a.startDate && <span>Started {a.startDate}</span>}
                         </div>
-                        <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden relative">
-                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${progressPct}%` }} />
-                          {/* Month markers */}
-                          <div className="absolute top-0 left-[33.3%] w-px h-full bg-gray-400/50" />
-                          <div className="absolute top-0 left-[66.6%] w-px h-full bg-gray-400/50" />
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden relative mb-1">
+                          <div className="h-full rounded-full bg-gray-400 transition-all" style={{ width: `${progressPct}%` }} />
+                          {/* 90-day marker */}
+                          <div className="absolute top-0 left-[24.6%] w-px h-full bg-amber-500/70" />
                         </div>
-                        <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
-                          <span>M1</span><span>M2</span><span>M3</span>
+                        {/* 90-day grace bar (if still in grace) */}
+                        {isInGrace && (
+                          <>
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-0.5">
+                              <span>Grace: Day {days} / 90</span>
+                              {a.gracePeriodDaysRemaining != null && <span>{a.gracePeriodDaysRemaining}d left</span>}
+                            </div>
+                            <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden relative">
+                              <div className={`h-full rounded-full transition-all ${
+                                a.graceStatus === 'grace_on_track' ? 'bg-green-500'
+                                : a.graceStatus === 'grace_at_risk' ? 'bg-red-500'
+                                : 'bg-amber-500'
+                              }`} style={{ width: `${gracePct}%` }} />
+                              <div className="absolute top-0 left-[33.3%] w-px h-full bg-gray-400/50" />
+                              <div className="absolute top-0 left-[66.6%] w-px h-full bg-gray-400/50" />
+                            </div>
+                            <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
+                              <span>M1</span><span>M2</span><span>M3</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Milestone Warnings */}
+                      <div className="flex flex-col gap-1 min-w-[120px]">
+                        <div className={`text-[10px] px-2 py-1 rounded border font-medium ${
+                          a.warn60DayNoPending
+                            ? 'bg-red-100 text-red-700 border-red-300'
+                            : (a.pendingDeals > 0 || a.closedDeals > 0)
+                              ? 'bg-green-100 text-green-700 border-green-300'
+                              : 'bg-gray-100 text-gray-500 border-gray-200'
+                        }`}>
+                          {a.warn60DayNoPending ? '⚠️ 60-day: no pending' : (a.pendingDeals > 0 || a.closedDeals > 0) ? '✓ Has deal in pipeline' : `Day ${days < 60 ? 60 - days : 0} until 60-day check`}
+                        </div>
+                        <div className={`text-[10px] px-2 py-1 rounded border font-medium ${
+                          a.warn90DayNoClose
+                            ? 'bg-red-100 text-red-700 border-red-300'
+                            : a.closedDeals > 0
+                              ? 'bg-green-100 text-green-700 border-green-300'
+                              : 'bg-gray-100 text-gray-500 border-gray-200'
+                        }`}>
+                          {a.warn90DayNoClose ? '🚨 90-day: no close' : a.closedDeals > 0 ? '✓ Has closed deal' : `Day ${days < 90 ? 90 - days : 0} until 90-day check`}
                         </div>
                       </div>
 
-                      {/* Deals */}
-                      <div className="text-center min-w-[60px]">
-                        <p className="text-xs text-muted-foreground">Deals</p>
-                        <p className="text-sm font-bold">
-                          {a.closedDeals + a.pendingDeals > 0 ? (
-                            <span className="text-green-600">{a.closedDeals}c / {a.pendingDeals}p</span>
-                          ) : (
-                            <span className="text-red-600">0</span>
-                          )}
-                        </p>
+                      {/* Deals & Engagements */}
+                      <div className="flex items-center gap-4">
+                        <div className="text-center min-w-[55px]">
+                          <p className="text-[10px] text-muted-foreground">Closed</p>
+                          <p className={`text-sm font-bold ${a.closedDeals > 0 ? 'text-green-600' : 'text-red-500'}`}>{a.closedDeals}</p>
+                        </div>
+                        <div className="text-center min-w-[55px]">
+                          <p className="text-[10px] text-muted-foreground">Pending</p>
+                          <p className={`text-sm font-bold ${a.pendingDeals > 0 ? 'text-blue-600' : 'text-muted-foreground'}`}>{a.pendingDeals}</p>
+                        </div>
+                        <div className="text-center min-w-[55px]">
+                          <p className="text-[10px] text-muted-foreground">Eng.</p>
+                          <p className="text-sm font-medium">{a.engagementsActual}</p>
+                        </div>
+                        <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                          <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button>
+                        </Link>
                       </div>
-
-                      {/* Engagements */}
-                      <div className="text-center min-w-[50px]">
-                        <p className="text-xs text-muted-foreground">Eng.</p>
-                        <p className="text-sm font-medium">{a.engagementsActual}</p>
-                      </div>
-
-                      {/* View button */}
-                      <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
-                        <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button>
-                      </Link>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* ── No Deals Yet Tracker ─────────────────────────────────────── */}
-      {noDealsYetAgents.length > 0 && (
-        <Card className="border-2 border-amber-200">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
-                <CardTitle className="text-lg">Active — No Deals Yet</CardTitle>
+      {/* ── Block 2: Active — No Deals Yet (all tenures) ─────────────── */}
+      {(() => {
+        const noDealsYetAgents = agents.filter((a: any) =>
+          a.closedDeals === 0 && a.pendingDeals === 0
+        ).sort((a: any, b: any) => {
+          const aDate = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+          const bDate = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+          return aDate - bDate;
+        });
+        if (noDealsYetAgents.length === 0) return null;
+        return (
+          <Card className="border-2 border-amber-200">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  <CardTitle className="text-lg">Active — No Deals Yet This Year</CardTitle>
+                </div>
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                  {noDealsYetAgents.length} agent{noDealsYetAgents.length !== 1 ? 's' : ''} need attention
+                </Badge>
               </div>
-              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
-                {noDealsYetAgents.length} agent{noDealsYetAgents.length !== 1 ? 's' : ''} need attention
-              </Badge>
-            </div>
-            <CardDescription>
-              These agents are past their 90-day grace period and have not yet closed or gone under contract on any deal this year. Prioritize outreach to get them into production.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {noDealsYetAgents
-                .sort((a: any, b: any) => {
-                  // Sort by start date ascending (longest without a deal first)
-                  const aDate = a.startDate ? new Date(a.startDate).getTime() : Infinity;
-                  const bDate = b.startDate ? new Date(b.startDate).getTime() : Infinity;
-                  return aDate - bDate;
-                })
-                .map((a: any) => (
+              <CardDescription>
+                All active agents with zero closed and zero pending deals so far this year. Includes all tenures.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {noDealsYetAgents.map((a: any) => (
                   <div key={a.agentId} className="flex items-center gap-3 p-3 rounded-lg border bg-amber-50/30 border-amber-200">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{a.displayName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {a.teamName || a.teamGroup || 'No Team'}
+                        {TEAM_GROUP_LABELS[a.teamGroup] || a.teamGroup || 'No Team'}
                         {a.startDate && ` · Started ${a.startDate}`}
+                        {a.daysSinceStart != null && ` · Day ${a.daysSinceStart}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <div className="text-center min-w-[60px]">
-                        <p className="text-xs text-muted-foreground">Engagements</p>
+                    <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                      <div className="text-center min-w-[55px]">
+                        <p className="text-[10px] text-muted-foreground">Engagements</p>
                         <p className="text-sm font-medium">{a.engagementsActual}</p>
+                        <Delta value={a.engagementsDelta} />
                       </div>
-                      <div className="text-center min-w-[60px]">
-                        <p className="text-xs text-muted-foreground">Appts Held</p>
+                      <div className="text-center min-w-[55px]">
+                        <p className="text-[10px] text-muted-foreground">Appts Held</p>
                         <p className="text-sm font-medium">{a.appointmentsHeldActual}</p>
+                        <Delta value={a.appointmentsDelta} />
                       </div>
-                      <div className="text-center min-w-[60px]">
-                        <p className="text-xs text-muted-foreground">Income Grade</p>
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${
-                          a.incomeGrade === 'A' ? 'bg-green-100 text-green-700'
-                          : a.incomeGrade === 'B' ? 'bg-blue-100 text-blue-700'
-                          : a.incomeGrade === 'C' ? 'bg-yellow-100 text-yellow-700'
-                          : a.incomeGrade === 'D' ? 'bg-orange-100 text-orange-700'
-                          : 'bg-red-100 text-red-700'
-                        }`}>{a.incomeGrade}</span>
+                      <div className="text-center min-w-[55px]">
+                        <p className="text-[10px] text-muted-foreground">Eng. Grade</p>
+                        <GradeBadge grade={a.engagementsGrade} />
                       </div>
                       <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
                         <Button variant="outline" size="sm" className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-50">
@@ -788,10 +854,33 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                     </div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* ── Block 3: Director's Live Scorecard ───────────────────── */}
+      <Card className="border-2 border-blue-200">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-blue-600" />
+              <CardTitle className="text-lg">Director’s Live Scorecard</CardTitle>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">F {summary.gradeDistribution['F'] || 0}</Badge>
+              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">D {summary.gradeDistribution['D'] || 0}</Badge>
+              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">C {summary.gradeDistribution['C'] || 0}</Badge>
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">B {summary.gradeDistribution['B'] || 0}</Badge>
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">A {summary.gradeDistribution['A'] || 0}</Badge>
+            </div>
+          </div>
+          <CardDescription>
+            Live engagement, appointment, and income scorecard for all agents. Struggling agents (D/F) shown first. Use the “Reset Plan” button to restart an agent’s business plan from today.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
 
       {/* Grade Distribution Bar */}
       <div className="flex items-center gap-2 text-sm">
@@ -954,11 +1043,16 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                         {a.pendingVolume > 0 && <p className="text-[10px] text-muted-foreground">+{fmtCurrency(a.pendingVolume)} pending</p>}
                       </TableCell>
 
-                      {/* View */}
+                      {/* View + Reset */}
                       <TableCell>
-                        <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Eye className="h-3.5 w-3.5" /></Button>
-                        </Link>
+                        <div className="flex items-center gap-1">
+                          <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="View Dashboard"><Eye className="h-3.5 w-3.5" /></Button>
+                          </Link>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50" title="Reset Business Plan" onClick={() => { setResetTarget({ agentId: a.agentId, name: a.displayName }); setResetNote(''); }}>
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1062,11 +1156,65 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                   <span className="text-muted-foreground">Income vs Goal</span>
                   <Delta value={a.incomeDelta} isCurrency />
                 </div>
+
+                {/* Card Actions */}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                    <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View Dashboard</Button>
+                  </Link>
+                  <Button variant="outline" size="sm" className="h-7 text-xs text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => { setResetTarget({ agentId: a.agentId, name: a.displayName }); setResetNote(''); }}>
+                    <RefreshCw className="h-3 w-3 mr-1" />Reset Plan
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+        </CardContent>
+      </Card>
+
+      {/* Reset Plan Confirmation Dialog */}
+      <Dialog open={!!resetTarget} onOpenChange={open => { if (!open) { setResetTarget(null); setResetNote(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-orange-600" />
+              Reset Business Plan
+            </DialogTitle>
+            <DialogDescription>
+              This will reset <strong>{resetTarget?.name}</strong>&apos;s business plan start date to <strong>today</strong>. Their existing goals and targets stay the same — only the start date changes, so all YTD calculations will prorate from today forward.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm text-orange-800">
+              <p className="font-medium">What this does:</p>
+              <ul className="mt-1 space-y-1 text-xs list-disc list-inside">
+                <li>Sets a new plan start date to today</li>
+                <li>All engagement, appointment, and income goals remain unchanged</li>
+                <li>YTD progress calculations restart from today</li>
+                <li>The agent will receive an in-app notification</li>
+              </ul>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">Note to Agent (optional)</Label>
+              <Textarea
+                placeholder="e.g. We met today and agreed to reset your plan. New targets start fresh from today — let's hit that first deal in 30 days!"
+                value={resetNote}
+                onChange={e => setResetNote(e.target.value)}
+                rows={3}
+                className="text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetTarget(null); setResetNote(''); }}>Cancel</Button>
+            <Button onClick={handleResetPlan} disabled={resetting} className="bg-orange-600 hover:bg-orange-700 text-white">
+              {resetting ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Resetting...</> : <><RefreshCw className="h-4 w-4 mr-2" />Reset Plan from Today</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

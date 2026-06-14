@@ -121,6 +121,15 @@ export interface AgentRosterRow {
   closedVolume: number;
   pendingVolume: number;
   annualIncomeGoal: number;
+
+  // First-year tracking (days 0-365 since start)
+  isFirstYearAgent: boolean;          // true if startDate is within last 365 days
+  daysSinceStart: number | null;      // total days since start date
+  // Milestone warnings
+  warn60DayNoPending: boolean;        // day 60+ with no pending/under-contract deal
+  warn90DayNoClose: boolean;          // day 90+ with no closed deal
+  // Priority sort key for 90-day tracker (lower = higher priority / more urgent)
+  trackerPriority: number;
 }
 
 export async function GET(req: NextRequest) {
@@ -191,6 +200,13 @@ export async function GET(req: NextRequest) {
     const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
     const demoIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
     for (const id of demoIds) profileMap.delete(id);
+
+    // Safety net: also exclude by known demo display names (in case isDemoAccount flag is missing)
+    const DEMO_DISPLAY_NAMES = new Set(['Kevin Keaty', 'kevin keaty']);
+    for (const [id, profile] of profileMap.entries()) {
+      const name = String(profile.displayName || profile.name || '').trim();
+      if (DEMO_DISPLAY_NAMES.has(name)) profileMap.delete(id);
+    }
 
     const agents = [...profileMap.values()];
     if (agents.length === 0) {
@@ -386,6 +402,37 @@ export async function GET(req: NextRequest) {
         graceStatus = 'grace_passed'; // was new, now past 90 days
       }
 
+      // First-year tracking
+      const daysSinceStart = gracePeriodDaysElapsed; // same field — days since startDate
+      const isFirstYearAgent = daysSinceStart !== null && daysSinceStart <= 365;
+
+      // Milestone warnings
+      // 60-day pending warning: day 60+ and no pending OR closed deal
+      const warn60DayNoPending = daysSinceStart !== null && daysSinceStart >= 60 && pendingUnits === 0 && closedUnits === 0;
+      // 90-day close warning: day 90+ and no closed deal yet
+      const warn90DayNoClose = daysSinceStart !== null && daysSinceStart >= 90 && closedUnits === 0;
+
+      // Tracker priority sort key (lower = more urgent / shown first)
+      // 0: in grace, day 60+, no pending AND no closed (critical — must act now)
+      // 1: in grace, day 0-59, no deal (needs attention)
+      // 2: past grace (day 91-365), no closed deal (slipped through)
+      // 3: in grace, has pending or closed (on track — show progress)
+      // 4: past grace (day 91-365), has closed (graduated and producing)
+      let trackerPriority = 99; // default: not a first-year agent
+      if (isFirstYearAgent) {
+        if (isGracePeriod && warn60DayNoPending) {
+          trackerPriority = 0; // critical: grace period, day 60+, nothing in pipeline
+        } else if (isGracePeriod && !hasFirstDeal) {
+          trackerPriority = 1; // needs attention: in grace, no deal yet
+        } else if (!isGracePeriod && closedUnits === 0) {
+          trackerPriority = 2; // slipped through: past grace, still no closed deal
+        } else if (isGracePeriod && hasFirstDeal) {
+          trackerPriority = 3; // on track: in grace with a deal
+        } else {
+          trackerPriority = 4; // graduated and producing
+        }
+      }
+
       // Grades
       const engPerf = perf(activity.engagements, engTarget);
       const apptPerf = perf(activity.apptHeld, apptHeldTarget);
@@ -436,6 +483,12 @@ export async function GET(req: NextRequest) {
         closedVolume: Number(closedVolume.toFixed(2)),
         pendingVolume: Number(pendingVolume.toFixed(2)),
         annualIncomeGoal,
+
+        isFirstYearAgent,
+        daysSinceStart,
+        warn60DayNoPending,
+        warn90DayNoClose,
+        trackerPriority,
       });
     }
 
@@ -462,6 +515,14 @@ export async function GET(req: NextRequest) {
 
     // No Deals Yet — established agents (past grace) with zero closed and zero pending
     const noDealsYet = rows.filter(r => !r.isGracePeriod && r.closedDeals === 0 && r.pendingDeals === 0).length;
+
+    // First-year tracker summary
+    const firstYearAgents = rows.filter(r => r.isFirstYearAgent);
+    const firstYearCritical = firstYearAgents.filter(r => r.trackerPriority === 0).length; // grace, 60+ days, no pipeline
+    const firstYearNeedAttention = firstYearAgents.filter(r => r.trackerPriority === 1).length; // grace, no deal
+    const firstYearSlipped = firstYearAgents.filter(r => r.trackerPriority === 2).length; // past grace, no close
+    const firstYearOnTrack = firstYearAgents.filter(r => r.trackerPriority === 3).length; // grace, has deal
+    const firstYearProducing = firstYearAgents.filter(r => r.trackerPriority === 4).length; // past grace, has closed
     // Team Group breakdown
     const teamGroupBreakdown: Record<string, number> = {};
     for (const r of rows) {
@@ -497,6 +558,13 @@ export async function GET(req: NextRequest) {
         // New breakdowns
         teamGroupBreakdown,
         statusBreakdown,
+        // First-year tracker summary
+        totalFirstYear: firstYearAgents.length,
+        firstYearCritical,
+        firstYearNeedAttention,
+        firstYearSlipped,
+        firstYearOnTrack,
+        firstYearProducing,
       },
     });
   } catch (err: any) {

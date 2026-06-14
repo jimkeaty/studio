@@ -87,8 +87,15 @@ export async function GET(req: NextRequest) {
         .filter(d => d.data().isDemoAccount === true)
         .map(d => String(d.data().agentId || d.id))
     );
+    // Safety net: also exclude by known demo display names
+    const DEMO_DISPLAY_NAMES = new Set(['Kevin Keaty', 'kevin keaty']);
     let agents = agentSnap.docs
-      .filter(d => d.data().isDemoAccount !== true)
+      .filter(d => {
+        if (d.data().isDemoAccount === true) return false;
+        const name = String(d.data().displayName || d.data().name || '').trim();
+        if (DEMO_DISPLAY_NAMES.has(name)) return false;
+        return true;
+      })
       .map(d => ({ id: d.id, ...d.data() } as any));
 
     // Apply team group filter if specified

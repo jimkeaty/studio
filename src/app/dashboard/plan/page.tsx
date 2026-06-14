@@ -37,11 +37,14 @@ import {
   ChevronUp,
   UserPlus,
   Layers,
+  RefreshCw,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
@@ -241,6 +244,30 @@ export default function BusinessPlanPage() {
   const [year, setYear] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetNote, setResetNote] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleSelfReset = async () => {
+    if (!user) return;
+    setIsResetting(true);
+    try {
+      const token = await user.getIdToken();
+      const body: Record<string, string> = {};
+      if (resetNote) body.note = resetNote;
+      const res = await fetch('/api/plan/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Reset failed'); }
+      toast({ title: 'Plan Reset', description: 'Your business plan has been reset to start from today. Your goals remain the same.' });
+      setShowResetDialog(false);
+      setResetNote('');
+    } catch (e: any) {
+      toast({ title: 'Reset Failed', description: e.message, variant: 'destructive' });
+    } finally { setIsResetting(false); }
+  };
   const [calculatedPlan, setCalculatedPlan] = useState<BusinessPlan["calculatedTargets"] | null>(null);
   const [historicalStats, setHistoricalStats] = useState<HistoricalStats | null>(null);
   const [histLoading, setHistLoading] = useState(false);
@@ -749,10 +776,56 @@ export default function BusinessPlanPage() {
             <h1 className="text-3xl font-bold tracking-tight">Business Plan Engine</h1>
             <p className="text-muted-foreground">Set your goal and build your path to success for {year}.</p>
           </div>
-          {isImpersonating && impersonatedAgent && (
-            <span className="text-sm text-amber-600 font-medium">Viewing: {impersonatedAgent.name}</span>
-          )}
+          <div className="flex items-center gap-2">
+            {isImpersonating && impersonatedAgent && (
+              <span className="text-sm text-amber-600 font-medium">Viewing: {impersonatedAgent.name}</span>
+            )}
+            <Button variant="outline" size="sm" className="text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => setShowResetDialog(true)}>
+              <RefreshCw className="h-4 w-4 mr-2" />Reset Plan from Today
+            </Button>
+          </div>
         </div>
+
+        {/* Reset Plan Dialog */}
+        <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-orange-600" />
+                Reset Business Plan
+              </DialogTitle>
+              <DialogDescription>
+                This will reset your plan start date to <strong>today</strong>. Your existing goals and targets stay exactly the same — only the start date changes, so all your YTD progress calculations restart from today.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm text-orange-800">
+                <p className="font-medium">What this does:</p>
+                <ul className="mt-1 space-y-1 text-xs list-disc list-inside">
+                  <li>Sets your plan start date to today</li>
+                  <li>All your income, engagement, and appointment goals remain unchanged</li>
+                  <li>YTD progress calculations restart from today forward</li>
+                </ul>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Note (optional)</Label>
+                <Textarea
+                  placeholder="e.g. Met with director today — resetting to build fresh momentum."
+                  value={resetNote}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setResetNote(e.target.value)}
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowResetDialog(false)}>Cancel</Button>
+              <Button onClick={handleSelfReset} disabled={isResetting} className="bg-orange-600 hover:bg-orange-700 text-white">
+                {isResetting ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Resetting...</> : <><RefreshCw className="h-4 w-4 mr-2" />Reset from Today</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ── SECTION 1: PRIOR YEAR ACTUALS REFERENCE ─────────────────── */}
         {histLoading ? (
