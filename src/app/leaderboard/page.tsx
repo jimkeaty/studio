@@ -277,7 +277,7 @@ export default function LeaderboardPage() {
           <TotalCard icon={DollarSign} label="Team Volume" value={fmtCurrency(teamTotals.totalVolume)} />
           <TotalCard icon={BarChart} label="Total Sales" value={fmtNum(teamTotals.totalSales)} />
           <TotalCard icon={Clock} label="Pending" value={fmtNum(teamTotals.totalPending)} />
-          <TotalCard icon={Zap} label="Total Calls" value={fmtNum(rows.reduce((s, r) => s + (r.totalCalls || 0), 0))} />
+          <TotalCard icon={TrendingUp} label={`${new Date().getFullYear()} Paid Out to Agents`} value={fmtCurrency(teamTotals.totalAgentNet)} />
           <TotalCard icon={Users} label="Total Appts" value={fmtNum(rows.reduce((s, r) => s + (r.totalAppointmentsHeld || 0), 0))} />
         </div>
       )}

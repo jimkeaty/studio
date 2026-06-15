@@ -333,6 +333,7 @@ function LeaderboardSection({ active }: { active: boolean }) {
 
   const totalVolume = rows.reduce((s, r) => s + r.closedVolume, 0);
   const totalClosed = rows.reduce((s, r) => s + r.closed, 0);
+  const totalPaidOut = rows.reduce((s, r) => s + r.agentNetCommission, 0);
 
   return (
     <div className="flex flex-col h-full">
@@ -354,6 +355,12 @@ function LeaderboardSection({ active }: { active: boolean }) {
             <div className="text-2xl font-black text-emerald-400">{fmtCompact(totalVolume)}</div>
             <div className="text-xs text-gray-400">Team Volume</div>
           </div>
+          {totalPaidOut > 0 && (
+            <div className="text-center">
+              <div className="text-2xl font-black text-yellow-400">{fmtCompact(totalPaidOut)}</div>
+              <div className="text-xs text-gray-400">{new Date().getFullYear()} Paid Out to Agents</div>
+            </div>
+          )}
         </div>
       </div>
 
