@@ -417,9 +417,7 @@ export default function LeaderboardPage() {
                       {displayConfig.showVolume && agent.closedVolume > 0 && (
                         <span>Vol: <span className="text-white/80 font-semibold">{fmtCurrency(agent.closedVolume)}</span></span>
                       )}
-                      {displayConfig.showAgentNet && agent.agentNetCommission > 0 && (
-                        <span>💵 Paid Out: <span className="text-emerald-400 font-semibold">{fmtCurrency(agent.agentNetCommission)}</span></span>
-                      )}
+
                       {displayConfig.showPending && agent.pending > 0 && (
                         <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>
                       )}

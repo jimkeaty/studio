@@ -298,8 +298,8 @@ function ActivityBoardSection({ active }: { active: boolean }) {
               <div className="text-xs text-gray-400">YTD Volume</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-black text-blue-400">{fmtCompact(ytd.totalAgentCommissions)}</div>
-              <div className="text-xs text-gray-400">YTD Commissions</div>
+              <div className="text-2xl font-black text-blue-400">{ytd.totalSales}</div>
+              <div className="text-xs text-gray-400">YTD Closings</div>
             </div>
           </div>
         ) : null}
@@ -331,7 +331,7 @@ function LeaderboardSection({ active }: { active: boolean }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const totalPaidOut = rows.reduce((s, r) => s + r.agentNetCommission, 0);
+  const totalVolume = rows.reduce((s, r) => s + r.closedVolume, 0);
   const totalClosed = rows.reduce((s, r) => s + r.closed, 0);
 
   return (
@@ -351,8 +351,8 @@ function LeaderboardSection({ active }: { active: boolean }) {
             <div className="text-xs text-gray-400">Team Closings</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-black text-yellow-400">{fmtCompact(totalPaidOut)}</div>
-            <div className="text-xs text-gray-400">Total Paid Out</div>
+            <div className="text-2xl font-black text-emerald-400">{fmtCompact(totalVolume)}</div>
+            <div className="text-xs text-gray-400">Team Volume</div>
           </div>
         </div>
       </div>
@@ -403,7 +403,6 @@ function LeaderboardSection({ active }: { active: boolean }) {
                       <div className="text-white font-bold text-lg truncate">{agent.displayName}</div>
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-white/50 mt-0.5">
                         {agent.closedVolume > 0 && <span>Vol: <span className="text-white/80 font-semibold">{fmtCompact(agent.closedVolume)}</span></span>}
-                        {agent.agentNetCommission > 0 && <span>💵 Paid Out: <span className="text-emerald-400 font-semibold">{fmtCompact(agent.agentNetCommission)}</span></span>}
                         {agent.pending > 0 && <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>}
                       </div>
                       <div className="mt-1.5 h-1.5 bg-white/10 rounded-full overflow-hidden">
