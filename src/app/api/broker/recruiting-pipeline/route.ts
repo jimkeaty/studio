@@ -41,8 +41,10 @@ export async function POST(req: NextRequest) {
     const {
       name, source, recruiter, status, expectedStartDate,
       phone, email, currentBrokerage, notes,
+      followUpDate, followUpAction,
     } = body;
     if (!name?.trim()) return jsonError(400, 'name is required');
+    const now = new Date().toISOString();
     const doc = {
       name: name.trim(),
       source: source?.trim() || null,
@@ -53,8 +55,12 @@ export async function POST(req: NextRequest) {
       email: email?.trim() || null,
       currentBrokerage: currentBrokerage?.trim() || null,
       notes: notes?.trim() || null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      followUpDate: followUpDate?.trim() || null,
+      followUpAction: followUpAction?.trim() || null,
+      lastContactedAt: null,
+      stageEnteredAt: now,
+      createdAt: now,
+      updatedAt: now,
       createdBy: decoded.uid,
     };
     const ref = await adminDb.collection('recruitingPipeline').add(doc);
@@ -74,10 +80,31 @@ export async function PATCH(req: NextRequest) {
     const ref = adminDb.collection('recruitingPipeline').doc(id);
     const snap = await ref.get();
     if (!snap.exists) return jsonError(404, 'Candidate not found');
-    const cleaned: Record<string, any> = { updatedAt: new Date().toISOString() };
-    const allowed = ['name','source','recruiter','status','expectedStartDate','phone','email','currentBrokerage','notes'];
+    const now = new Date().toISOString();
+    const cleaned: Record<string, any> = { updatedAt: now };
+    const allowed = [
+      'name','source','recruiter','status','expectedStartDate','phone','email','currentBrokerage','notes',
+      'followUpDate','followUpAction','lastContactedAt',
+    ];
     for (const key of allowed) {
       if (key in updates) cleaned[key] = updates[key] ?? null;
+    }
+    // If status changed, record when they entered the new stage
+    const prevData = snap.data();
+    if (updates.status && updates.status !== prevData?.status) {
+      cleaned.stageEnteredAt = now;
+      // Auto-log a stage change activity
+      await adminDb.collection('recruitingPipelineActivity').add({
+        candidateId: id,
+        type: 'stage_change',
+        summary: `Stage changed: ${prevData?.status || 'unknown'} → ${updates.status}`,
+        notes: null,
+        authorUid: decoded.uid,
+        authorName: 'System',
+        followUpDate: null,
+        followUpAction: null,
+        createdAt: now,
+      });
     }
     await ref.update(cleaned);
     return NextResponse.json({ ok: true });

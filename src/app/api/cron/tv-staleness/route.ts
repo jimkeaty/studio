@@ -34,7 +34,10 @@ async function sendInAppNotification(agentProfileId: string, title: string, body
 async function sendEmailNotification(email: string, agentName: string, itemLabel: string, itemDescription: string, confirmUrl: string) {
   // Uses the existing email utility if available, otherwise logs
   try {
-    const { sendEmail } = await import('@/lib/email').catch(() => ({ sendEmail: null }));
+    // Dynamic import — module may not exist in all deployments
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const emailMod: any = await import('@/lib/email' as string).catch(() => null);
+    const sendEmail: ((opts: { to: string; subject: string; html: string }) => Promise<void>) | null = emailMod?.sendEmail ?? null;
     if (sendEmail) {
       await sendEmail({
         to: email,

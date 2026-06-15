@@ -3,13 +3,15 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Flame, Send, Trash2, Activity } from 'lucide-react';
 import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ComposedChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/firebase';
 import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsChart';
 import { RecruitingPipelinePanel } from '@/components/dashboard/broker/RecruitingPipelinePanel';
+import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
+import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -440,7 +442,60 @@ function AgentPerformanceRoster({ year }: { year: number }) {
   const [resetTarget, setResetTarget] = useState<{ agentId: string; name: string } | null>(null);
   const [resetNote, setResetNote] = useState('');
   const [resetting, setResetting] = useState(false);
+  // Coaching notes state
+  const [notesTarget, setNotesTarget] = useState<{ agentId: string; name: string } | null>(null);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const { toast } = useToast();
+
+  const openNotesPanel = async (agentId: string, name: string) => {
+    if (!user) return;
+    setNotesTarget({ agentId, name });
+    setNotesLoading(true);
+    setNotes([]);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/agent/coaching-notes?agentId=${agentId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) { const d = await res.json(); setNotes(d.notes || []); }
+    } catch { /* ignore */ }
+    finally { setNotesLoading(false); }
+  };
+
+  const handleAddNote = async () => {
+    if (!user || !notesTarget || !newNote.trim()) return;
+    setSavingNote(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/agent/coaching-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ agentId: notesTarget.agentId, note: newNote.trim() }),
+      });
+      if (!res.ok) throw new Error('Failed to save note');
+      const d = await res.json();
+      setNotes(prev => [d.note, ...prev]);
+      setNewNote('');
+      toast({ title: 'Note Saved', description: `Coaching note added for ${notesTarget.name}.` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally { setSavingNote(false); }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/agent/coaching-notes?id=${noteId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+    } catch { /* ignore */ }
+  };
 
   const handleResetPlan = async () => {
     if (!user || !resetTarget) return;
@@ -767,22 +822,43 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                       </div>
 
                       {/* Deals & Engagements */}
-                      <div className="flex items-center gap-4">
-                        <div className="text-center min-w-[55px]">
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <div className="text-center min-w-[45px]">
                           <p className="text-[10px] text-muted-foreground">Closed</p>
                           <p className={`text-sm font-bold ${a.closedDeals > 0 ? 'text-green-600' : 'text-red-500'}`}>{a.closedDeals}</p>
                         </div>
-                        <div className="text-center min-w-[55px]">
+                        <div className="text-center min-w-[45px]">
                           <p className="text-[10px] text-muted-foreground">Pending</p>
                           <p className={`text-sm font-bold ${a.pendingDeals > 0 ? 'text-blue-600' : 'text-muted-foreground'}`}>{a.pendingDeals}</p>
                         </div>
-                        <div className="text-center min-w-[55px]">
+                        <div className="text-center min-w-[45px]">
                           <p className="text-[10px] text-muted-foreground">Eng.</p>
                           <p className="text-sm font-medium">{a.engagementsActual}</p>
                         </div>
-                        <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
-                          <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button>
-                        </Link>
+                        {/* Last Activity */}
+                        <div className="text-center min-w-[55px]">
+                          <p className="text-[10px] text-muted-foreground">Last Active</p>
+                          <p className={`text-xs font-semibold ${
+                            !a.lastActivityDate ? 'text-red-500'
+                            : a.daysSinceLastActivity === 0 ? 'text-green-600'
+                            : a.daysSinceLastActivity <= 3 ? 'text-green-500'
+                            : a.daysSinceLastActivity <= 7 ? 'text-amber-600'
+                            : 'text-red-600'
+                          }`}>
+                            {!a.lastActivityDate ? 'Never'
+                              : a.daysSinceLastActivity === 0 ? 'Today'
+                              : a.daysSinceLastActivity === 1 ? 'Yesterday'
+                              : `${a.daysSinceLastActivity}d ago`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
+                            <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View</Button>
+                          </Link>
+                          <Button variant="outline" size="sm" className="h-7 text-xs text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => openNotesPanel(a.agentId, a.displayName)}>
+                            <MessageSquare className="h-3 w-3 mr-1" />Notes
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -961,6 +1037,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                     </TableHead>
                     <TableHead className="text-center">Deals</TableHead>
                     <TableHead className="text-right">Volume</TableHead>
+                    <TableHead className="text-center"><div className="flex items-center justify-center gap-1"><Activity className="h-3 w-3" />Last Active</div></TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1043,12 +1120,44 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                         {a.pendingVolume > 0 && <p className="text-[10px] text-muted-foreground">+{fmtCurrency(a.pendingVolume)} pending</p>}
                       </TableCell>
 
-                      {/* View + Reset */}
+                      {/* Last Activity */}
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          {a.retentionRisk && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-red-100 text-red-700 border border-red-300">
+                              <Flame className="h-2.5 w-2.5" />At Risk
+                            </span>
+                          )}
+                          {a.lastActivityDate ? (
+                            <>
+                              <span className={`text-xs font-medium ${
+                                a.daysSinceLastActivity === 0 ? 'text-green-600'
+                                : a.daysSinceLastActivity <= 3 ? 'text-green-500'
+                                : a.daysSinceLastActivity <= 7 ? 'text-amber-600'
+                                : a.daysSinceLastActivity <= 14 ? 'text-orange-600'
+                                : 'text-red-600'
+                              }`}>
+                                {a.daysSinceLastActivity === 0 ? 'Today'
+                                  : a.daysSinceLastActivity === 1 ? 'Yesterday'
+                                  : `${a.daysSinceLastActivity}d ago`}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">{a.lastActivityDate}</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-red-500 font-medium">No activity</span>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      {/* View + Reset + Notes */}
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
                             <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="View Dashboard"><Eye className="h-3.5 w-3.5" /></Button>
                           </Link>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50" title="Coaching Notes" onClick={() => openNotesPanel(a.agentId, a.displayName)}>
+                            <MessageSquare className="h-3.5 w-3.5" />
+                          </Button>
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50" title="Reset Business Plan" onClick={() => { setResetTarget({ agentId: a.agentId, name: a.displayName }); setResetNote(''); }}>
                             <RefreshCw className="h-3.5 w-3.5" />
                           </Button>
@@ -1157,14 +1266,38 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                   <Delta value={a.incomeDelta} isCurrency />
                 </div>
 
+                {/* Last Activity */}
+                <div className="flex items-center justify-between pt-2 border-t text-xs">
+                  <span className="text-muted-foreground flex items-center gap-1"><Activity className="h-3 w-3" />Last Active</span>
+                  <div className="flex items-center gap-1.5">
+                    {a.retentionRisk && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-red-100 text-red-700 border border-red-300"><Flame className="h-2.5 w-2.5" />At Risk</span>}
+                    <span className={`font-medium ${
+                      !a.lastActivityDate ? 'text-red-500'
+                      : a.daysSinceLastActivity === 0 ? 'text-green-600'
+                      : a.daysSinceLastActivity <= 7 ? 'text-amber-600'
+                      : 'text-red-600'
+                    }`}>
+                      {!a.lastActivityDate ? 'No activity logged'
+                        : a.daysSinceLastActivity === 0 ? 'Today'
+                        : a.daysSinceLastActivity === 1 ? 'Yesterday'
+                        : `${a.daysSinceLastActivity} days ago`}
+                    </span>
+                  </div>
+                </div>
+
                 {/* Card Actions */}
                 <div className="flex items-center justify-between pt-2 border-t">
                   <Link href={`/dashboard?viewAs=${a.agentId}&viewAsName=${encodeURIComponent(a.displayName)}`}>
                     <Button variant="outline" size="sm" className="h-7 text-xs"><Eye className="h-3 w-3 mr-1" />View Dashboard</Button>
                   </Link>
-                  <Button variant="outline" size="sm" className="h-7 text-xs text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => { setResetTarget({ agentId: a.agentId, name: a.displayName }); setResetNote(''); }}>
-                    <RefreshCw className="h-3 w-3 mr-1" />Reset Plan
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button variant="outline" size="sm" className="h-7 text-xs text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => openNotesPanel(a.agentId, a.displayName)}>
+                      <MessageSquare className="h-3 w-3 mr-1" />Notes
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => { setResetTarget({ agentId: a.agentId, name: a.displayName }); setResetNote(''); }}>
+                      <RefreshCw className="h-3 w-3 mr-1" />Reset Plan
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1173,6 +1306,55 @@ function AgentPerformanceRoster({ year }: { year: number }) {
       )}
         </CardContent>
       </Card>
+
+      {/* Coaching Notes Dialog */}
+      <Dialog open={!!notesTarget} onOpenChange={open => { if (!open) { setNotesTarget(null); setNotes([]); setNewNote(''); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-blue-600" />
+              Coaching Notes — {notesTarget?.name}
+            </DialogTitle>
+            <DialogDescription>Notes are visible to the agent and Director of Agent Development.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {/* Add new note */}
+            <div className="space-y-2">
+              <Textarea
+                placeholder="Add a coaching note... (e.g. Met today, discussed prospecting strategy, reset plan)"
+                value={newNote}
+                onChange={e => setNewNote(e.target.value)}
+                rows={3}
+                className="text-sm"
+              />
+              <Button onClick={handleAddNote} disabled={savingNote || !newNote.trim()} size="sm" className="w-full">
+                {savingNote ? 'Saving...' : <><Send className="h-3.5 w-3.5 mr-1.5" />Add Note</>}
+              </Button>
+            </div>
+            {/* Notes list */}
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {notesLoading && <p className="text-sm text-muted-foreground text-center py-4">Loading notes...</p>}
+              {!notesLoading && notes.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No coaching notes yet. Add the first one above.</p>
+              )}
+              {notes.map((n: any) => (
+                <div key={n.id} className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="flex-1 text-sm">{n.note}</p>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-red-600 flex-shrink-0" onClick={() => handleDeleteNote(n.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1.5">{n.authorName} · {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setNotesTarget(null); setNotes([]); setNewNote(''); }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Plan Confirmation Dialog */}
       <Dialog open={!!resetTarget} onOpenChange={open => { if (!open) { setResetTarget(null); setResetNote(''); } }}>
@@ -1273,6 +1455,9 @@ export default function RecruitingDashboardPage() {
         </Select>
       </div>
 
+      {/* ── Recruiter & DAD To-Do Board ──────────────────────────────── */}
+      <RecruiterTodoBoard />
+
       <Tabs defaultValue="roster" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
@@ -1283,6 +1468,7 @@ export default function RecruitingDashboardPage() {
         {/* ── TAB 1: Agent Performance Roster ─────────────────────────────── */}
         <TabsContent value="roster" className="space-y-6 mt-6">
           <AgentPerformanceRoster year={year} />
+          <OneOnOneScheduler agents={[]} />
         </TabsContent>
 
         {/* ── TAB 2: Recruiting Pipeline (existing content) ───────────────── */}

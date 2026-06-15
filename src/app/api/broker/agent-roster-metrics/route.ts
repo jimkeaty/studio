@@ -130,6 +130,10 @@ export interface AgentRosterRow {
   warn90DayNoClose: boolean;          // day 90+ with no closed deal
   // Priority sort key for 90-day tracker (lower = higher priority / more urgent)
   trackerPriority: number;
+  // Last activity tracking
+  lastActivityDate: string | null;
+  daysSinceLastActivity: number | null;
+  retentionRisk: boolean;
 }
 
 export async function GET(req: NextRequest) {
@@ -243,18 +247,23 @@ export async function GET(req: NextRequest) {
       .where('date', '<=', endYmd)
       .get();
 
-    const actByAgent = new Map<string, { calls: number; engagements: number; apptSet: number; apptHeld: number; contracts: number }>();
+    const actByAgent = new Map<string, { calls: number; engagements: number; apptSet: number; apptHeld: number; contracts: number; lastActivityDate: string | null }>();
     for (const doc of actSnap.docs) {
       const a = doc.data();
       const aid = a.agentId;
       if (!aid) continue;
-      if (!actByAgent.has(aid)) actByAgent.set(aid, { calls: 0, engagements: 0, apptSet: 0, apptHeld: 0, contracts: 0 });
+      if (!actByAgent.has(aid)) actByAgent.set(aid, { calls: 0, engagements: 0, apptSet: 0, apptHeld: 0, contracts: 0, lastActivityDate: null });
       const bucket = actByAgent.get(aid)!;
       bucket.calls += asNumber(a.callsCount);
       bucket.engagements += asNumber(a.engagementsCount);
       bucket.apptSet += asNumber(a.appointmentsSetCount);
       bucket.apptHeld += asNumber(a.appointmentsHeldCount);
       bucket.contracts += asNumber(a.contractsWrittenCount);
+      // Track most recent activity date
+      const hasActivity = asNumber(a.callsCount) + asNumber(a.engagementsCount) + asNumber(a.appointmentsHeldCount) > 0;
+      if (hasActivity && a.date && (!bucket.lastActivityDate || a.date > bucket.lastActivityDate)) {
+        bucket.lastActivityDate = a.date as string;
+      }
     }
 
     // ── 5. Batch-fetch all business plans for the year ────────────────────
@@ -300,7 +309,7 @@ export async function GET(req: NextRequest) {
     for (const agent of agents) {
       const uid = agent.agentId || agent.id;
       const plan = planByAgent.get(uid) || {};
-      const activity = actByAgent.get(uid) || { calls: 0, engagements: 0, apptSet: 0, apptHeld: 0, contracts: 0 };
+      const activity = actByAgent.get(uid) || { calls: 0, engagements: 0, apptSet: 0, apptHeld: 0, contracts: 0, lastActivityDate: null as string | null };
       const transactions = txByAgent.get(uid) || [];
 
       // Grace period check — enhanced tracking
@@ -489,6 +498,22 @@ export async function GET(req: NextRequest) {
         warn60DayNoPending,
         warn90DayNoClose,
         trackerPriority,
+
+        // Last activity tracking
+        lastActivityDate: activity.lastActivityDate || null,
+        daysSinceLastActivity: (() => {
+          if (!activity.lastActivityDate) return null;
+          const last = new Date(activity.lastActivityDate + 'T00:00:00');
+          return Math.floor((todayUtc.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
+        })(),
+        // Retention risk: D/F grade AND no activity logged in 30+ days
+        retentionRisk: (() => {
+          const grade = isGracePeriod ? 'A' : gradeFromPerformance(perf(netEarned, expectedYTDIncome));
+          const daysInactive = activity.lastActivityDate
+            ? Math.floor((todayUtc.getTime() - new Date(activity.lastActivityDate + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
+            : null;
+          return (grade === 'D' || grade === 'F') && (daysInactive === null || daysInactive >= 30);
+        })(),
       });
     }
 

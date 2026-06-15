@@ -35,6 +35,7 @@ import {
   TrendingDown, Award, Star, Info, User, Building2, EyeOff, Eye, SlidersHorizontal,
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
+import { CoachingNotesWidget } from '@/components/dashboard/agent/CoachingNotesWidget';
 import { TeamLeaderDashboard } from '@/components/dashboard/TeamLeaderDashboard';
 import { AppointmentsPipeline } from '@/components/dashboard/AppointmentsPipeline';
 import { AgentTransactionsSection } from '@/components/dashboard/AgentTransactionsSection';
@@ -628,7 +629,14 @@ function AgentDashboardPage() {
       )}
 
       {/* ════════════════════════════════════════════════════════════════
-          9. RECRUITING INCENTIVE TRACKER
+          9. COACHING NOTES & 1:1 MEETINGS
+         ════════════════════════════════════════════════════════════════ */}
+      {(!isTeamLeader || perfView !== 'team') && (
+        <CoachingNotesWidget agentId={viewAs ?? undefined} />
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          10. RECRUITING INCENTIVE TRACKER
          ════════════════════════════════════════════════════════════════ */}
       {(!isTeamLeader || perfView !== 'team') && <RecruitingIncentiveTracker />}
     </div>

@@ -4,6 +4,7 @@ import { use, useState } from 'react';
 import { useUser } from '@/firebase';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import AgentProfileEditor from '@/components/admin/agents/AgentProfileEditor';
+import { CoachingNotesWidget } from '@/components/dashboard/agent/CoachingNotesWidget';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -100,6 +101,9 @@ export default function AgentDetailPage({ params }: AgentPageProps) {
         </div>
       </div>
       <AgentProfileEditor agentId={agentId} />
+      <div className="mt-6">
+        <CoachingNotesWidget agentId={agentId} />
+      </div>
     </main>
   );
 }
