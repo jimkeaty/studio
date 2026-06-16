@@ -437,10 +437,42 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               .get();
             if (!bySlugFieldSnap.empty) {
               agentId = bySlugFieldSnap.docs[0].id;
+            } else {
+              // Last resort: fuzzy name match against displayName.
+              // This handles cases where the intake stored a display name string
+              // (e.g. 'Ashley Lombas') instead of a slug (e.g. 'ashley-lombas'),
+              // or where the slug has a minor typo / spacing difference.
+              const agentIdAsName = agentId.replace(/-/g, ' ').toLowerCase();
+              const allProfilesSnap = await adminDb.collection('agentProfiles').get();
+              let bestDocId = '';
+              let bestScore = 0;
+              for (const profileDoc of allProfilesSnap.docs) {
+                const profileData = profileDoc.data();
+                const profileName = String(profileData.displayName || profileDoc.id)
+                  .replace(/-/g, ' ')
+                  .toLowerCase();
+                // Simple similarity: count matching words
+                const aWords = new Set(agentIdAsName.split(/\s+/).filter(Boolean));
+                const bWords = profileName.split(/\s+/).filter(Boolean);
+                const matches = bWords.filter(w => aWords.has(w)).length;
+                const score = aWords.size > 0 ? matches / Math.max(aWords.size, bWords.length) : 0;
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestDocId = profileDoc.id;
+                }
+              }
+              if (bestDocId && bestScore >= 0.5) {
+                console.warn(
+                  `[tc approve] Fuzzy matched agentId '${agentId}' → '${bestDocId}' (score: ${bestScore.toFixed(2)})`
+                );
+                agentId = bestDocId;
+              }
             }
           }
         }
-      } catch { /* non-fatal — proceed with original agentId */ }
+      } catch (normErr: any) {
+        console.warn('[tc approve] agentId normalization error (non-fatal):', normErr?.message);
+        /* non-fatal — proceed with original agentId */ }
 
       // Determine GCI for split calculation
       const rawGci = resolveGCI({
@@ -539,10 +571,43 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // Outbound referral fee — deducted from each agent's share before broker/agent split
         const referralFeeData = intake.outboundReferralFee as Record<string, any> | null | undefined;
         const referralPct = referralFeeData ? Number(referralFeeData.referralPercent ?? 0) : 0;
-        const calc = await resolveTransactionCalculation({
-          agentId, agentDisplayName, commission: primaryShare, transactionDate: txDate,
-          referralFeePercent: referralPct > 0 ? referralPct : null,
-        });
+        let calc: Awaited<ReturnType<typeof resolveTransactionCalculation>>;
+        try {
+          calc = await resolveTransactionCalculation({
+            agentId, agentDisplayName, commission: primaryShare, transactionDate: txDate,
+            referralFeePercent: referralPct > 0 ? referralPct : null,
+          });
+        } catch (calcErr: any) {
+          // Commission profile not found — fall back to a zero-split snapshot so
+          // the approval can still proceed. The broker can set a commission override
+          // after approval if needed.
+          console.warn(
+            `[tc approve] resolveTransactionCalculation failed for '${agentId}': ${calcErr?.message}. Using zero-split fallback.`
+          );
+          calc = {
+            splitSnapshot: {
+              primaryTeamId: null, teamPlanId: null, memberPlanId: null,
+              grossCommission: primaryShare,
+              agentSplitPercent: null, companySplitPercent: null,
+              agentNetCommission: 0,
+              leaderStructurePercent: null, leaderStructureGross: null,
+              memberPercentOfLeaderSide: null, memberPaid: null,
+              leaderRetainedAfterMember: null,
+              companyRetained: 0,
+              commissionProfileMissing: true,
+            },
+            creditSnapshot: {
+              leaderboardAgentId: agentId,
+              leaderboardAgentDisplayName: agentDisplayName,
+              progressionMemberAgentId: null,
+              progressionLeaderAgentId: null,
+              progressionTeamId: null,
+              progressionCompanyDollarCredit: 0,
+            },
+            agentType: 'independent' as const,
+            calculationModel: 'individual' as const,
+          } as any;
+        }
         splitSnapshot = calc.splitSnapshot as any;
         creditSnapshot = calc.creditSnapshot as any;
         agentType = calc.agentType;
