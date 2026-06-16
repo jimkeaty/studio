@@ -80,6 +80,16 @@ export async function splitCoAgentTransaction(
   const primaryFee = totalTxFee > 0 ? round2(totalTxFee * (primarySplitPct / 100)) : null;
   const coFee = totalTxFee > 0 ? round2(totalTxFee * (coSplitPct / 100)) : null;
 
+  // dealValue drives Dollar Volume on leaderboards — must be split proportionally
+  const totalDealValue = Number(tx.dealValue ?? totalSalePrice ?? 0);
+  const primaryDealValue = round2(totalDealValue * (primarySplitPct / 100));
+  const coDealValue = round2(totalDealValue * (coSplitPct / 100));
+
+  // brokerProfit split proportionally
+  const totalBrokerProfit = Number(tx.brokerProfit ?? 0);
+  const primaryBrokerProfit = totalBrokerProfit > 0 ? round2(totalBrokerProfit * (primarySplitPct / 100)) : null;
+  const coBrokerProfit = totalBrokerProfit > 0 ? round2(totalBrokerProfit * (coSplitPct / 100)) : null;
+
   // ── Commission tier lookups ──────────────────────────────────────────────────
   const primaryAgentId = String(tx.agentId || '').trim();
   const primaryAgentDisplayName = String(tx.agentDisplayName || '').trim();
@@ -235,12 +245,24 @@ export async function splitCoAgentTransaction(
     agentType: primaryCalc?.agentType ?? tx.agentType ?? null,
     calculationModel: primaryCalc?.calculationModel ?? tx.calculationModel ?? null,
     salePrice: primarySalePrice,
+    dealValue: primaryDealValue,
     commissionBasePrice: primarySalePrice,
     commission: primaryGci,
     gci: primaryGci,
     txComplianceFeeAmount: primaryFee,
+    ...(primaryBrokerProfit !== null ? { brokerProfit: primaryBrokerProfit } : {}),
     splitSnapshot: primaryCalc?.splitSnapshot ?? null,
     creditSnapshot: primaryCalc?.creditSnapshot ?? null,
+    // Store the split context so agents can see what the original deal was
+    coSplitContext: {
+      originalTxId,
+      totalSalePrice,
+      totalGci,
+      primarySplitPct,
+      coSplitPct,
+      coAgentId,
+      coAgentDisplayName,
+    },
   };
 
   // ── Co-agent transaction ─────────────────────────────────────────────────────
@@ -251,12 +273,24 @@ export async function splitCoAgentTransaction(
     agentType: coCalc?.agentType ?? null,
     calculationModel: coCalc?.calculationModel ?? null,
     salePrice: coSalePrice,
+    dealValue: coDealValue,
     commissionBasePrice: coSalePrice,
     commission: coGci,
     gci: coGci,
     txComplianceFeeAmount: coFee,
+    ...(coBrokerProfit !== null ? { brokerProfit: coBrokerProfit } : {}),
     splitSnapshot: coCalc?.splitSnapshot ?? null,
     creditSnapshot: coCalc?.creditSnapshot ?? null,
+    // Store the split context so agents can see what the original deal was
+    coSplitContext: {
+      originalTxId,
+      totalSalePrice,
+      totalGci,
+      primarySplitPct,
+      coSplitPct,
+      primaryAgentId,
+      primaryAgentDisplayName,
+    },
   };
 
   // ── Write to Firestore ───────────────────────────────────────────────────────

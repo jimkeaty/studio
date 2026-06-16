@@ -2155,6 +2155,41 @@ export default function AddTransactionPage() {
                   </div>
                 </div>
 
+                {/* Live split preview */}
+                {(() => {
+                  const gci = Number(form.watch('gci') || 0);
+                  const sp = Number(form.watch('salePrice') || 0);
+                  const primaryName = form.watch('agentDisplayName') || 'Primary Agent';
+                  const coName = form.watch('coAgentDisplayName') || 'Co-Agent';
+                  const pPct = watchedPrimaryPct;
+                  const cPct = watchedCoPct;
+                  const fmt = (n: number) => n > 0 ? '$' + Math.round(n).toLocaleString() : '—';
+                  if (gci <= 0 && sp <= 0) return null;
+                  return (
+                    <div className="rounded-lg border border-blue-300 bg-white p-3 space-y-2">
+                      <p className="text-xs font-bold text-blue-800">Live Split Preview</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-md bg-blue-50 border border-blue-200 p-2 text-center">
+                          <p className="text-[10px] font-semibold text-blue-600 truncate">{primaryName}</p>
+                          <p className="text-sm font-bold text-gray-900">{pPct}%</p>
+                          {sp > 0 && <p className="text-[10px] text-gray-500">Vol: {fmt(sp * pPct / 100)}</p>}
+                          {gci > 0 && <p className="text-[10px] text-green-700 font-semibold">GCI: {fmt(gci * pPct / 100)}</p>}
+                        </div>
+                        <div className="rounded-md bg-indigo-50 border border-indigo-200 p-2 text-center">
+                          <p className="text-[10px] font-semibold text-indigo-600 truncate">{coName}</p>
+                          <p className="text-sm font-bold text-gray-900">{cPct}%</p>
+                          {sp > 0 && <p className="text-[10px] text-gray-500">Vol: {fmt(sp * cPct / 100)}</p>}
+                          {gci > 0 && <p className="text-[10px] text-green-700 font-semibold">GCI: {fmt(gci * cPct / 100)}</p>}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-blue-600 italic">
+                        ✓ Sale price, volume, and GCI will be split automatically when the transaction is marked Closed.
+                        Each agent gets their own transaction with their individual commission tier applied to their share.
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 {/* Hidden field for co-agent display name */}
                 <input type="hidden" {...form.register('coAgentDisplayName')} />
               </div>
