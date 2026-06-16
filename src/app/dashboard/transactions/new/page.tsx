@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type ChangeEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -165,7 +165,11 @@ function formatCurrencyDisplay(raw: string | number | undefined): string {
   // Preserve decimal places from the raw input
   const decimalMatch = str.match(/\.(\d+)$/);
   const decimals = decimalMatch ? decimalMatch[1].length : 0;
-  return num.toLocaleString('en-US', {
+  // Round to the number of decimal places the user typed to eliminate floating-point
+  // drift (e.g. parseFloat('500000') → 499999.99... or parseFloat('3') → 2.9999...).
+  // We round to at most 6 significant decimal places so we never silently lose precision.
+  const rounded = parseFloat(num.toFixed(Math.min(decimals, 6)));
+  return rounded.toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: Math.max(decimals, 2),
   });
@@ -174,6 +178,84 @@ function formatCurrencyDisplay(raw: string | number | undefined): string {
 /** Strip commas to get the clean numeric string for the form value */
 function parseCurrencyInput(val: string): string {
   return val.replace(/,/g, '');
+}
+
+/**
+ * Round a numeric string to eliminate floating-point drift.
+ * Strategy: round to the number of decimal places the user typed, capped at maxDecimals.
+ * e.g. roundNumericString('2.9999999') → '3'  (0 user decimals → round to 0)
+ *      roundNumericString('3.00')      → '3'  (2 user decimals → round to 2 → '3.00' → strip trailing zeros)
+ *      roundNumericString('2.995')     → '2.995' (3 user decimals → round to 3)
+ */
+function roundNumericString(str: string, maxDecimals = 6): string {
+  const n = parseFloat(str);
+  if (isNaN(n)) return str;
+  // Detect how many decimal places the user typed
+  const decMatch = str.match(/\.(\d+)$/);
+  const userDecimals = decMatch ? decMatch[1].length : 0;
+  const places = Math.min(userDecimals, maxDecimals);
+  // toFixed eliminates float drift (2.9999999 → '3.00' when places=2)
+  const fixed = n.toFixed(places);
+  // Strip unnecessary trailing zeros after decimal (e.g. '3.00' → '3', '3.50' → '3.5')
+  return fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed;
+}
+
+/** A percent input that avoids browser type=number float drift (3 → 2.9999...) */
+function PercentInput({
+  value,
+  onChange,
+  placeholder,
+  step = '0.01',
+  min = '0',
+  max = '100',
+  className,
+  disabled,
+}: {
+  value: string | number | undefined;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  step?: string;
+  min?: string;
+  max?: string;
+  className?: string;
+  disabled?: boolean;
+}) {
+  const [displayVal, setDisplayVal] = useState(() =>
+    value !== undefined && value !== '' && value !== null ? String(value) : ''
+  );
+
+  // Sync when form value changes externally
+  useEffect(() => {
+    const v = value !== undefined && value !== '' && value !== null ? String(value) : '';
+    setDisplayVal(v);
+  }, [value]);
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      disabled={disabled}
+      className={className}
+      value={displayVal}
+      onChange={(e) => {
+        // Allow free typing (digits, dot, minus)
+        const raw = e.target.value.replace(/[^0-9.-]/g, '');
+        setDisplayVal(e.target.value);
+        // Fire a synthetic event so existing field.onChange(e) callers work
+        const synth = { ...e, target: { ...e.target, value: raw } } as ChangeEvent<HTMLInputElement>;
+        onChange(synth);
+      }}
+      onBlur={(e) => {
+        // On blur, snap to clean rounded value to eliminate float drift
+        const raw = displayVal.replace(/[^0-9.-]/g, '');
+        const rounded = roundNumericString(raw, 4);
+        setDisplayVal(rounded);
+        const synth = { ...e, target: { ...e.target, value: rounded } } as ChangeEvent<HTMLInputElement>;
+        onChange(synth);
+      }}
+    />
+  );
 }
 
 /** A currency input that displays with commas but stores as a plain number string */
@@ -1875,7 +1957,7 @@ export default function AddTransactionPage() {
                               <FormLabel>Commission %</FormLabel>
                               <FormControl>
                                 <div className="relative">
-                                  <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                                  <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="3" />
                                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                                 </div>
                               </FormControl>
@@ -2030,13 +2112,9 @@ export default function AddTransactionPage() {
                       <FormItem>
                         <FormLabel>Primary Agent Split %</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.5}
+                          <PercentInput
+                            value={field.value as any}
                             placeholder="50"
-                            {...field}
                             onChange={(e) => {
                               field.onChange(e);
                               const p = Number(e.target.value || 0);
@@ -2051,13 +2129,9 @@ export default function AddTransactionPage() {
                       <FormItem>
                         <FormLabel>Co-Agent Split %</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.5}
+                          <PercentInput
+                            value={field.value as any}
                             placeholder="50"
-                            {...field}
                             onChange={(e) => {
                               field.onChange(e);
                               const c = Number(e.target.value || 0);
@@ -2118,9 +2192,9 @@ export default function AddTransactionPage() {
                         <FormItem>
                           <FormLabel>Referral % <span className="text-destructive">*</span></FormLabel>
                           <FormControl>
-                            <Input
-                              type="number" min={0} max={100} step={0.5} placeholder="e.g. 25"
-                              {...field}
+                            <PercentInput
+                              value={field.value as any}
+                              placeholder="e.g. 25"
                               onChange={(e) => {
                                 field.onChange(e);
                                 const pct = Number(e.target.value) || 0;
@@ -2482,10 +2556,9 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Referral Fee %</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number" step="0.01" min="0" max="100"
+                        <PercentInput
+                          value={field.value as any}
                           placeholder="25"
-                          {...field}
                           onChange={(e) => {
                             field.onChange(e);
                             const pct = parseFloat(e.target.value) || 0;
@@ -2622,7 +2695,7 @@ export default function AddTransactionPage() {
                   <FormItem>
                     <FormLabel>Referral Fee % (optional)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" min="0" max="100" placeholder="25" {...field} />
+                      <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="25" />
                     </FormControl>
                     <FormDescription className="text-xs">Typical range: 25–40%</FormDescription>
                   </FormItem>
@@ -3466,7 +3539,7 @@ export default function AddTransactionPage() {
                           />
                         ) : (
                           <div className="relative">
-                            <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                            <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="3" />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                           </div>
                         )}
@@ -3503,7 +3576,7 @@ export default function AddTransactionPage() {
                         />
                       ) : (
                         <div className="relative">
-                          <Input type="number" step="0.01" min="0" max="100" placeholder="3" {...field} />
+                          <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="3" />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                         </div>
                       )}
@@ -3584,9 +3657,9 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Gross Commission %</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number" inputMode="decimal" step="0.01" placeholder="3"
-                          {...field}
+                        <PercentInput
+                          value={field.value as any}
+                          placeholder="3"
                           onChange={(e) => {
                             commPctManuallyEdited.current = true;
                             field.onChange(e);
@@ -3708,7 +3781,9 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Broker %</FormLabel>
                       <FormControl>
-                        <Input type="number" inputMode="decimal" step="0.01" placeholder="30" {...field}
+                        <PercentInput
+                          value={field.value as any}
+                          placeholder="30"
                           onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
                         />
                       </FormControl>
@@ -3730,7 +3805,9 @@ export default function AddTransactionPage() {
                     <FormItem>
                       <FormLabel>Agent %</FormLabel>
                       <FormControl>
-                        <Input type="number" inputMode="decimal" step="0.01" placeholder="70" {...field}
+                        <PercentInput
+                          value={field.value as any}
+                          placeholder="70"
                           onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
                         />
                       </FormControl>
