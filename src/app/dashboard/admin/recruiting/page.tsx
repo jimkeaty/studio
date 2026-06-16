@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useUser } from '@/firebase';
 import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsChart';
 import { RecruitingPipelinePanel } from '@/components/dashboard/broker/RecruitingPipelinePanel';
+import { RecruiterReportCard } from '@/components/dashboard/broker/RecruiterReportCard';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -127,6 +128,8 @@ function KPI({ title, value, sub, icon: Icon, tooltip }: { title: string; value:
 // ── Monthly Tracking Form ───────────────────────────────────────────────────
 
 function TrackingForm({ months, year, onSaved }: { months: any[]; year: number; onSaved: () => void }) {
+  // Fields that are auto-populated from live data (departures from endDate, inTraining from grace period)
+  const AUTO_FIELDS = new Set(['departures', 'inTraining']);
   const { user } = useUser();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -182,8 +185,8 @@ function TrackingForm({ months, year, onSaved }: { months: any[]; year: number; 
   const fields = [
     { key: 'activeAgents', label: 'Active Agents' },
     { key: 'newHires', label: 'New Hires' },
-    { key: 'departures', label: 'Departures' },
-    { key: 'inTraining', label: 'In Training' },
+    { key: 'departures', label: 'Departures*' },
+    { key: 'inTraining', label: 'In Training*' },
     { key: 'committed', label: 'Committed' },
     { key: 'interviewsHeld', label: 'Interviews Held' },
     { key: 'interviewsSet', label: 'Interviews Set' },
@@ -203,7 +206,10 @@ function TrackingForm({ months, year, onSaved }: { months: any[]; year: number; 
               {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
             </Button>
           </CollapsibleTrigger>
-          <CardDescription>Enter monthly recruiting activity data for each month.</CardDescription>
+          <CardDescription>
+            Enter monthly recruiting activity data for each month.
+            <span className="text-amber-700 font-medium"> * Departures and In Training are auto-populated from agent profiles (endDate and grace period). Enter a value to override.</span>
+          </CardDescription>
         </CardHeader>
         <CollapsibleContent>
           <CardContent>
@@ -221,12 +227,23 @@ function TrackingForm({ months, year, onSaved }: { months: any[]; year: number; 
                     return (
                       <tr key={m} className="border-b last:border-0">
                         <td className="py-1 pr-2 font-medium sticky left-0 bg-background">{months.find(md => md.month === m)?.label || m}</td>
-                        {fields.map(f => (
-                          <td key={f.key} className="py-1 px-1">
-                            <Input type="number" value={d[f.key] || ''} onChange={e => update(m, f.key, e.target.value)}
-                              className="h-7 w-16 text-xs" placeholder="0" />
-                          </td>
-                        ))}
+                        {fields.map(f => {
+                          const isAuto = AUTO_FIELDS.has(f.key);
+                          const autoVal = f.key === 'departures' ? (months.find(md => md.month === m)?.autoDepartures ?? 0) : f.key === 'inTraining' ? (months.find(md => md.month === m)?.autoInTraining ?? 0) : null;
+                          return (
+                            <td key={f.key} className="py-1 px-1">
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  value={d[f.key] || ''}
+                                  onChange={e => update(m, f.key, e.target.value)}
+                                  className={`h-7 w-16 text-xs ${isAuto && !d[f.key] ? 'bg-amber-50 border-amber-200 text-amber-700' : ''}`}
+                                  placeholder={isAuto && autoVal != null ? String(autoVal) : '0'}
+                                />
+                              </div>
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}
@@ -1441,6 +1458,7 @@ export default function RecruitingDashboardPage() {
   const [activeAgentsData, setActiveAgentsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reportCardOpen, setReportCardOpen] = useState(true);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -1542,6 +1560,24 @@ export default function RecruitingDashboardPage() {
 
         {/* ── TAB 2: Recruiting Pipeline (existing content) ───────────────── */}
         <TabsContent value="recruiting" className="space-y-8 mt-6">
+
+      {/* ── Recruiter Report Card ────────────────────────────────────────── */}
+      <RecruiterReportCard
+        activeAgents={realActiveAgents}
+        ytdNewHires={realYtdNewHires}
+        ytdDepartures={realYtdDepartures}
+        avgDealsPerAgent={avgDealsPerAgentYTD}
+        ytdInterviewsHeld={totals.totalInterviews}
+        ytdProspectCalls={totals.totalProspectCalls}
+        yearlyActiveAgentsGoal={plan.yearlyActiveAgentsGoal ?? null}
+        yearlyNewHiresGoal={plan.yearlyNewHiresGoal ?? null}
+        yearlyInterviewsGoal={funnelTargets?.yearly?.interviewsHeld ?? null}
+        yearlyProspectCallsGoal={funnelTargets?.yearly?.calls ?? null}
+        monthsElapsed={monthsElapsed}
+        isCurrentYear={new Date().getFullYear() === year}
+        open={reportCardOpen}
+        onToggle={() => setReportCardOpen(v => !v)}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

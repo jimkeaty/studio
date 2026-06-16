@@ -94,6 +94,14 @@ const salesChartConfig: ChartConfig = {
   projectedCount: { label: 'Projected', color: 'hsl(38 92% 50%)' },
 };
 
+const gciChartConfig: ChartConfig = {
+  totalGCI: { label: 'Gross Commission Income', color: 'hsl(271 81% 56%)' },
+  partialGCI: { label: 'GCI (partial month)', color: PARTIAL_MONTH_COLOR },
+  pendingGciBar: { label: 'Pending GCI', color: 'hsl(var(--chart-4))' },
+  compareGCI: { label: 'Comparison Year GCI', color: 'hsl(var(--chart-5))' },
+  projectedGCI: { label: 'Projected GCI', color: 'hsl(38 92% 50%)' },
+};
+
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
 const BrokerDashboardSkeleton = () => (
@@ -1766,6 +1774,110 @@ export function BrokerDashboardInner() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── CHART 0: Monthly GCI ──────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle>Monthly GCI</CardTitle>
+              <CardDescription>
+                Total Gross Commission Income (agent + company) — {year}
+                {compareYear ? ` vs ${compareYear}` : ''}
+                {showProjected ? ' + Projected' : ''}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={compareYear ? String(compareYear) : 'none'} onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}>
+                <SelectTrigger className="w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Year: None</SelectItem>
+                  {(data.availableYears ?? []).map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {isCurrentYear && (
+                <button type="button" onClick={() => setShowProjected(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showProjected ? 'bg-amber-500 text-white border-amber-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                  📈 Projected
+                </button>
+              )}
+              <button type="button" onClick={() => setShowPendingGM(p => !p)} className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${showPendingGM ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                Pending
+              </button>
+            </div>
+          </div>
+          {/* YTD GCI summary bar */}
+          {(() => {
+            const ytdGCI = totals.totalGCI;
+            const ytdGCILabel = isCurrentYear ? 'YTD GCI' : 'Full Year GCI';
+            return (
+              <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border mx-0 mt-3">
+                <div className="space-y-0.5">
+                  <p className="text-xs font-medium text-muted-foreground">{ytdGCILabel}</p>
+                  <p className="text-sm font-semibold">{formatCurrency(ytdGCI)}</p>
+                  {compareYear && data.comparisonData && (() => {
+                    const compGCI = data.comparisonData.months.slice(0, isCurrentYear ? currentMonthIdx + 1 : 12).reduce((s: number, m: any) => s + (m.totalGCI ?? 0), 0);
+                    const diff = ytdGCI - compGCI;
+                    const pct = compGCI > 0 ? (diff / compGCI * 100) : 0;
+                    return <p className={`text-xs ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>vs {compareYear} YTD: {diff >= 0 ? '+' : ''}{formatCurrency(diff, true)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)</p>;
+                  })()}
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-black text-purple-600">{formatCurrency(ytdGCI, true)}</p>
+                  <p className="text-xs text-muted-foreground">Gross Commission Income</p>
+                </div>
+              </div>
+            );
+          })()}
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={gciChartConfig} className="h-[350px] w-full">
+            <BarChart
+              data={months.map((m, i) => {
+                const isFuture = isCurrentYear && i > currentMonthIdx;
+                const isPartial = isCurrentYear && i === currentMonthIdx;
+                return {
+                  ...m,
+                  totalGCI: (!isFuture && !isPartial) ? m.totalGCI : null,
+                  partialGCI: isPartial ? m.totalGCI : null,
+                  pendingGciBar: (!showPendingGM || isFuture) ? null : (m.pendingGci ?? 0),
+                  compareGCI: compareYear ? (data.comparisonData?.months?.[i]?.totalGCI ?? null) : null,
+                  // projectedGCI: use margin projection as proxy (GCI = margin / marginPct)
+                  projectedGCI: showProjected ? (() => {
+                    const projMargin = projectedMonthData?.margin?.[i];
+                    if (projMargin == null) return null;
+                    // Estimate GCI from projected margin using current-year GCI/margin ratio
+                    const ytdMargin = totals.grossMargin;
+                    const ytdGCI = totals.totalGCI;
+                    const ratio = (ytdMargin > 0 && ytdGCI > 0) ? ytdGCI / ytdMargin : 1;
+                    return Math.round(projMargin * ratio);
+                  })() : null,
+                };
+              })}
+              margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
+            >
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={val => formatCurrency(val, true)} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => {
+                const labels: Record<string, string> = {
+                  totalGCI: `${year} GCI`,
+                  partialGCI: `${year} GCI (thru day ${months[currentMonthIdx]?.partialDayOfMonth ?? ''})`,
+                  pendingGciBar: 'Pending GCI',
+                  compareGCI: `${compareYear} GCI`,
+                  projectedGCI: 'Projected GCI',
+                };
+                return [formatCurrency(Number(value)), labels[name as string] ?? name];
+              }} />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="totalGCI" fill="var(--color-totalGCI)" radius={[4, 4, 0, 0]} name={`${year} GCI`} />
+              {isCurrentYear && <Bar dataKey="partialGCI" fill={PARTIAL_MONTH_COLOR} radius={[4, 4, 0, 0]} name={`${year} GCI (partial)`} />}
+              {compareYear && <Bar dataKey="compareGCI" fill="var(--color-compareGCI)" radius={[4, 4, 0, 0]} opacity={0.6} name={`${compareYear} GCI`} />}
+              {showPendingGM && <Bar dataKey="pendingGciBar" fill="var(--color-pendingGciBar)" radius={[4, 4, 0, 0]} opacity={0.5} name="Pending GCI" />}
+              {showProjected && <Bar dataKey="projectedGCI" fill="var(--color-projectedGCI)" radius={[4, 4, 0, 0]} opacity={0.7} name="Projected GCI" />}
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
 
       {/* ── CHART 1: Gross Margin ─────────────────────────────────────────── */}
       <Card>

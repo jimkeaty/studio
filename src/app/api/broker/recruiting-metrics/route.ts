@@ -4,7 +4,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
-import { format } from 'date-fns';
+import { format, addMonths } from 'date-fns';
+import type admin from 'firebase-admin';
 
 
 function jsonError(s: number, e: string) {
@@ -102,6 +103,58 @@ export async function GET(req: NextRequest) {
     const availableYears = [...new Set(yearsSnap.docs.map(d => d.data().year as number))]
       .filter(y => y !== year).sort((a, b) => b - a);
 
+    // 5b. Fetch agent profiles to compute real monthly departures and in-training counts
+    function parseAgentDate(raw: admin.firestore.Timestamp | string | undefined | null): Date | null {
+      if (!raw) return null;
+      if (typeof (raw as any).toDate === 'function') return (raw as admin.firestore.Timestamp).toDate();
+      if (typeof raw === 'string') {
+        const d = new Date(raw + 'T00:00:00');
+        return isNaN(d.getTime()) ? null : d;
+      }
+      return null;
+    }
+    function toYM(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+
+    const agentSnap = await adminDb.collection('agentProfiles').get();
+    const INACTIVE_STATUSES_RM = new Set(['inactive', 'out', 'terminated', 'churned']);
+    // Monthly departure counts: month 1-12 → count of agents whose endDate falls in that month of `year`
+    const monthlyDepartures: number[] = new Array(12).fill(0);
+    // Monthly in-training counts: agents in grace period (startDate + 3 months > today) for each month
+    const monthlyInTraining: number[] = new Array(12).fill(0);
+
+    for (const doc of agentSnap.docs) {
+      const a = doc.data() as any;
+      if (a.isDemoAccount) continue;
+
+      // Departures: use endDate field
+      const endDate = parseAgentDate(a.endDate);
+      if (endDate && endDate.getFullYear() === year) {
+        const m = endDate.getMonth(); // 0-indexed
+        monthlyDepartures[m] += 1;
+      } else if (!endDate && INACTIVE_STATUSES_RM.has(String(a.status || a.agentStatus || '').toLowerCase())) {
+        // No endDate but marked inactive — count in current month of current year
+        const now = new Date();
+        if (now.getFullYear() === year) {
+          monthlyDepartures[now.getMonth()] += 1;
+        }
+      }
+
+      // In-training: agents whose grace period (startDate + 3 months) hasn't ended yet for that month
+      const startDate = parseAgentDate(a.startDate);
+      if (startDate) {
+        const graceEnd = addMonths(startDate, 3);
+        const startYM = toYM(startDate);
+        const graceEndYM = toYM(graceEnd);
+        for (let m = 0; m < 12; m++) {
+          const ym = `${year}-${String(m + 1).padStart(2, '0')}`;
+          // Agent is in training in month m if: they started before or during that month AND grace hasn't ended yet
+          if (startYM <= ym && graceEndYM > ym) {
+            monthlyInTraining[m] += 1;
+          }
+        }
+      }
+    }
+
     // 6. Build 12-month response
     const months = Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
@@ -112,6 +165,12 @@ export async function GET(req: NextRequest) {
       const activeAgents = tracking.activeAgents ?? 0;
       const deals = monthlyDeals[i];
       const dealsPerAgent = activeAgents > 0 ? Math.round((deals / activeAgents) * 100) / 100 : 0;
+      // Auto-computed from agent profiles (override manual tracking if 0)
+      const autoDepartures = monthlyDepartures[i];
+      const autoInTraining = monthlyInTraining[i];
+      // Use manual tracking value if explicitly entered (> 0), otherwise fall back to auto-computed
+      const departures = (tracking.departures != null && tracking.departures > 0) ? tracking.departures : autoDepartures;
+      const inTraining = (tracking.inTraining != null && tracking.inTraining > 0) ? tracking.inTraining : autoInTraining;
 
       return {
         month: m,
@@ -119,8 +178,10 @@ export async function GET(req: NextRequest) {
         // Current year actuals
         activeAgents,
         newHires: tracking.newHires ?? 0,
-        departures: tracking.departures ?? 0,
-        inTraining: tracking.inTraining ?? 0,
+        departures,
+        inTraining,
+        autoDepartures,
+        autoInTraining,
         committed: tracking.committed ?? 0,
         interviewsHeld: tracking.interviewsHeld ?? 0,
         interviewsSet: tracking.interviewsSet ?? 0,
