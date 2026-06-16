@@ -21,6 +21,14 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMounted(true);
 
+    // Register the custom service worker (replaces the old Workbox-generated one).
+    // The new sw.js clears all old Workbox caches and never intercepts '/' or auth routes.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
+        console.warn('[SW] Registration failed:', err);
+      });
+    }
+
     // Process Google redirect sign-in result.
     // This is a no-op if the user did not arrive via signInWithRedirect.
     // MUST await before allowing the login page to render its sign-in button,
