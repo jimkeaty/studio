@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Flame, Send, Trash2, Activity } from 'lucide-react';
+import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Flame, Send, Trash2, Activity, Info } from 'lucide-react';
 import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ComposedChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -29,6 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const fmt = (n: number | null | undefined, compact = false) => {
   if (n == null) return '—';
@@ -41,7 +42,12 @@ const agentChartConfig: ChartConfig = {
   activeAgents: { label: 'Active Agents', color: 'hsl(var(--chart-1))' },
   activeAgentsGoal: { label: 'Goal', color: 'hsl(var(--chart-3))' },
   compareActiveAgents: { label: 'Comparison Year', color: 'hsl(var(--chart-5))' },
+  projected: { label: 'Projected', color: 'hsl(var(--chart-4))' },
+};
+
+const dealsPerAgentChartConfig: ChartConfig = {
   dealsPerAgent: { label: 'Deals/Agent', color: 'hsl(var(--chart-2))' },
+  dealsGoal: { label: 'Goal (1/agent/mo)', color: 'hsl(var(--chart-3))' },
 };
 
 const hiringChartConfig: ChartConfig = {
@@ -60,9 +66,9 @@ const pipelineChartConfig: ChartConfig = {
   hotProspects: { label: 'Hot Prospects', color: 'hsl(0 84% 60%)' },
 };
 
-function GradeCard({ label, grade, actual, goal, pct }: { label: string; grade: string; actual: number; goal: number; pct: number }) {
-  const color = grade === 'A' ? 'text-green-600' : grade === 'B' ? 'text-blue-600' : grade === 'C' ? 'text-yellow-600' : 'text-red-600';
-  const bg = grade === 'A' ? 'bg-green-50 border-green-200' : grade === 'B' ? 'bg-blue-50 border-blue-200' : grade === 'C' ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200';
+function GradeCard({ label, grade, actual, goal, pct, yearlyGoal, monthsElapsed: mo }: { label: string; grade: string; actual: number; goal: number; pct: number; yearlyGoal?: number; monthsElapsed?: number }) {
+  const color = grade === 'A' ? 'text-green-600' : grade === 'B' ? 'text-blue-600' : grade === 'C' ? 'text-yellow-600' : grade === 'D' ? 'text-orange-600' : 'text-red-600';
+  const bg = grade === 'A' ? 'bg-green-50 border-green-200' : grade === 'B' ? 'bg-blue-50 border-blue-200' : grade === 'C' ? 'bg-yellow-50 border-yellow-200' : grade === 'D' ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200';
   return (
     <div className={`border rounded-lg p-4 ${bg}`}>
       <div className="flex items-center justify-between mb-1">
@@ -70,20 +76,44 @@ function GradeCard({ label, grade, actual, goal, pct }: { label: string; grade: 
         <span className={`text-2xl font-bold ${color}`}>{grade}</span>
       </div>
       <div className="text-sm text-muted-foreground">
-        {fmt(actual)} / {fmt(goal)} ({fmtPct(pct)})
+        {typeof actual === 'number' && actual % 1 !== 0 ? actual.toFixed(2) : fmt(actual)} / {typeof goal === 'number' && goal % 1 !== 0 ? goal.toFixed(2) : fmt(goal)} ({fmtPct(pct)})
       </div>
+      {mo && yearlyGoal && (
+        <div className="text-xs text-muted-foreground mt-0.5">
+          YTD goal ({mo} of 12 mo): {typeof goal === 'number' && goal % 1 !== 0 ? goal.toFixed(2) : fmt(goal)} of {fmt(yearlyGoal)} yearly
+        </div>
+      )}
       <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: grade === 'A' ? '#22c55e' : grade === 'B' ? '#3b82f6' : grade === 'C' ? '#eab308' : '#ef4444' }} />
+        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: grade === 'A' ? '#22c55e' : grade === 'B' ? '#3b82f6' : grade === 'C' ? '#eab308' : grade === 'D' ? '#f97316' : '#ef4444' }} />
       </div>
     </div>
   );
 }
 
-function KPI({ title, value, sub, icon: Icon }: { title: string; value: string; sub: string; icon: React.ElementType }) {
+function KPI({ title, value, sub, icon: Icon, tooltip }: { title: string; value: string; sub: string; icon: React.ElementType; tooltip?: { what: string; how: string } }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <div className="flex items-center gap-1.5">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          {tooltip && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help flex-shrink-0" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px] text-xs space-y-1.5">
+                  <p className="font-semibold text-foreground">{title}</p>
+                  <p className="text-muted-foreground leading-relaxed">{tooltip.what}</p>
+                  <div className="border-t pt-1.5">
+                    <p className="font-medium text-foreground/80 mb-0.5">How it&apos;s calculated:</p>
+                    <p className="text-muted-foreground leading-relaxed">{tooltip.how}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
         <Icon className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
@@ -1408,6 +1438,7 @@ export default function RecruitingDashboardPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [compareYear, setCompareYear] = useState<number | null>(null);
   const [data, setData] = useState<any>(null);
+  const [activeAgentsData, setActiveAgentsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1419,11 +1450,15 @@ export default function RecruitingDashboardPage() {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(year) });
       if (compareYear) params.set('compareYear', String(compareYear));
-      const res = await fetch(`/api/broker/recruiting-metrics?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-      setData(await res.json());
+      // Fetch both recruiting metrics and real active agent data in parallel
+      const [metricsRes, activeRes] = await Promise.all([
+        fetch(`/api/broker/recruiting-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/broker/active-agents?${params}`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (!metricsRes.ok) { const e = await metricsRes.json(); throw new Error(e.error); }
+      const [metricsData, activeData] = await Promise.all([metricsRes.json(), activeRes.ok ? activeRes.json() : null]);
+      setData(metricsData);
+      setActiveAgentsData(activeData);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }, [user, year, compareYear]);
@@ -1438,6 +1473,40 @@ export default function RecruitingDashboardPage() {
   if (!data) return null;
 
   const { months, totals, plan, funnelTargets, grades, availableYears } = data;
+
+  // Real active agent data from the authoritative active-agents API
+  const realActiveAgents = activeAgentsData?.kpi?.currentActive ?? totals.activeAgents;
+  const realYtdNewHires = activeAgentsData?.kpi?.ytdNewHires ?? totals.newHires;
+  const realYtdDepartures = activeAgentsData?.kpi?.ytdDepartures ?? totals.departures;
+  const realYtdDealsPerAgent = activeAgentsData?.kpi?.ytdDealsPerAgent ?? totals.avgDealsPerAgent;
+  const realPipelineCount = activeAgentsData?.kpi?.pipelineCount ?? 0;
+
+  // Build chart data for Active Agents chart (from real active-agents API)
+  const activeAgentChartData = (activeAgentsData?.months ?? months).map((m: any) => {
+    const proj = activeAgentsData?.projection?.find((p: any) => p.month === m.month);
+    return {
+      ...m,
+      activeAgents: m.totalActive ?? m.activeAgents ?? 0,
+      activeAgentsGoal: m.goal ?? null,
+      projected: proj?.projected ?? null,
+    };
+  });
+
+  // Build chart data for Deals/Agent chart (from real active-agents API)
+  const dealsPerAgentChartData = (activeAgentsData?.months ?? months).map((m: any) => ({
+    ...m,
+    dealsPerAgent: m.dealsPerAgent ?? 0,
+    dealsGoal: 1, // goal = 1 deal per agent per month
+  }));
+
+  // Correct avg deals/agent: average of monthly ratios YTD
+  const currentMonthNum = new Date().getFullYear() === year ? new Date().getMonth() + 1 : 12;
+  const monthsElapsed = totals.monthsElapsed ?? currentMonthNum;
+  const monthlyRatiosYTD = (activeAgentsData?.months ?? []).slice(0, monthsElapsed).filter((m: any) => (m.totalActive ?? m.activeAgents ?? 0) > 0).map((m: any) => m.dealsPerAgent ?? 0);
+  const avgDealsPerAgentYTD = monthlyRatiosYTD.length > 0
+    ? Math.round((monthlyRatiosYTD.reduce((s: number, r: number) => s + r, 0) / monthlyRatiosYTD.length) * 100) / 100
+    : totals.avgDealsPerAgent;
+  const ytdDealsGoal = monthsElapsed; // 1 deal/agent/month × months elapsed
 
   return (
     <div className="space-y-8">
@@ -1476,21 +1545,72 @@ export default function RecruitingDashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPI title="Active Agents" value={fmt(totals.activeAgents)} sub={plan.yearlyActiveAgentsGoal ? `Goal: ${plan.yearlyActiveAgentsGoal}` : 'No goal set'} icon={Users} />
-        <KPI title="New Hires YTD" value={fmt(totals.newHires)} sub={`${fmt(totals.departures)} departures · Net: ${fmt(totals.newHires - totals.departures)}`} icon={UserPlus} />
-        <KPI title="Avg Deals/Agent" value={String(totals.avgDealsPerAgent)} sub={`${fmt(totals.totalDeals)} total deals`} icon={BarChart3} />
-        <KPI title="Interviews YTD" value={fmt(totals.totalInterviews)} sub={`${fmt(totals.totalProspectCalls)} prospect calls`} icon={Phone} />
+        <KPI
+          title="Active Agents"
+          value={fmt(realActiveAgents)}
+          sub={plan.yearlyActiveAgentsGoal ? `Goal: ${plan.yearlyActiveAgentsGoal} · Pipeline: ${realPipelineCount}` : `Pipeline: ${realPipelineCount} in pipeline`}
+          icon={Users}
+          tooltip={{
+            what: 'Total agents currently active at the brokerage — agents who have closed at least 1 deal, or have been with the brokerage 3+ months.',
+            how: 'Pulled live from agent profiles. Excludes demo accounts. Counts agents activated by first deal date or 3-month tenure, whichever comes first.',
+          }}
+        />
+        <KPI
+          title="New Hires YTD"
+          value={fmt(realYtdNewHires)}
+          sub={`${fmt(realYtdDepartures)} departures · Net: ${fmt(realYtdNewHires - realYtdDepartures)}`}
+          icon={UserPlus}
+          tooltip={{
+            what: 'Number of new agents who became active (activated) so far this year.',
+            how: 'An agent is counted as a new hire in the month they first activate — either their first closed deal or 3 months after their start date, whichever is earlier.',
+          }}
+        />
+        <KPI
+          title="Avg Deals/Agent"
+          value={`${avgDealsPerAgentYTD}`}
+          sub={`YTD goal: ${ytdDealsGoal} deals/agent (${monthsElapsed} mo × 1/mo)`}
+          icon={BarChart3}
+          tooltip={{
+            what: `Average deals per active agent per month, averaged across all ${monthsElapsed} months elapsed YTD. Goal is 1 deal per agent per month.`,
+            how: `Calculated as: sum of monthly (deals ÷ active agents) ratios ÷ ${monthsElapsed} months elapsed. YTD goal = ${ytdDealsGoal} deals/agent (1 per month × ${monthsElapsed} months). A score of ${ytdDealsGoal}+ = A grade.`,
+          }}
+        />
+        <KPI
+          title="Interviews YTD"
+          value={fmt(totals.totalInterviews)}
+          sub={`${fmt(totals.totalProspectCalls)} prospect calls`}
+          icon={Phone}
+          tooltip={{
+            what: 'Total recruiting interviews held year-to-date, as entered in the Monthly Recruiting Data Entry form.',
+            how: 'Graded against the YTD prorated funnel target. If the yearly goal is 24 interviews and it is June, the YTD goal is 12 (24 × 6/12).',
+          }}
+        />
       </div>
 
       {/* Grade Cards */}
       {grades && Object.keys(grades).length > 0 && (
         <div>
           <h2 className="text-xl font-bold mb-3">Recruiting Lead Indicator Grades</h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            Graded on YTD actual vs YTD prorated goal ({monthsElapsed} of 12 months elapsed).
+            A = 100%+ · B = 85–99% · C = 70–84% · D = 50–69% · F = below 50%
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {grades.prospectCalls && <GradeCard label="Prospect Calls" {...grades.prospectCalls} />}
-            {grades.interviewsHeld && <GradeCard label="Interviews Held" {...grades.interviewsHeld} />}
-            {grades.newHires && <GradeCard label="New Hires" {...grades.newHires} />}
-            {grades.activeAgents && <GradeCard label="Active Agents" {...grades.activeAgents} />}
+            {grades.prospectCalls && <GradeCard label="Prospect Calls" {...grades.prospectCalls} yearlyGoal={grades.prospectCalls.yearlyGoal} monthsElapsed={grades.prospectCalls.monthsElapsed} />}
+            {grades.interviewsHeld && <GradeCard label="Interviews Held" {...grades.interviewsHeld} yearlyGoal={grades.interviewsHeld.yearlyGoal} monthsElapsed={grades.interviewsHeld.monthsElapsed} />}
+            {grades.newHires && <GradeCard label="New Hires" {...grades.newHires} yearlyGoal={grades.newHires.yearlyGoal} monthsElapsed={grades.newHires.monthsElapsed} />}
+            {grades.activeAgents && <GradeCard label="Active Agents" {...grades.activeAgents} yearlyGoal={grades.activeAgents.yearlyGoal} monthsElapsed={grades.activeAgents.monthsElapsed} />}
+            {grades.dealsPerAgent && (
+              <GradeCard
+                label="Avg Deals/Agent"
+                actual={grades.dealsPerAgent.actual}
+                goal={grades.dealsPerAgent.goal}
+                pct={grades.dealsPerAgent.pct}
+                grade={grades.dealsPerAgent.grade}
+                yearlyGoal={12}
+                monthsElapsed={monthsElapsed}
+              />
+            )}
           </div>
         </div>
       )}
@@ -1523,13 +1643,13 @@ export default function RecruitingDashboardPage() {
         </Card>
       )}
 
-      {/* ── CHART 1: Active Agents + Deals Per Agent ─────────────────────── */}
+      {/* ── CHART 1: Active Agents Count ──────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <CardTitle>Active Agents & Deals Per Agent</CardTitle>
-              <CardDescription>Monthly agent count vs goal, with deals per agent overlay — {year}</CardDescription>
+              <CardTitle>Active Agent Count</CardTitle>
+              <CardDescription>Monthly active agent count vs goal and pipeline — {year}</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Compare to:</span>
@@ -1544,18 +1664,41 @@ export default function RecruitingDashboardPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={agentChartConfig} className="h-[350px] w-full">
-            <ComposedChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+          <ChartContainer config={agentChartConfig} className="h-[300px] w-full">
+            <ComposedChart data={activeAgentChartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis yAxisId="left" allowDecimals={false} />
-              <YAxis yAxisId="right" orientation="right" tickFormatter={v => v.toFixed(1)} />
+              <YAxis allowDecimals={false} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar yAxisId="left" dataKey="activeAgents" fill="var(--color-activeAgents)" radius={[4, 4, 0, 0]} name={`${year} Active`} />
-              {compareYear && <Bar yAxisId="left" dataKey="compareActiveAgents" fill="var(--color-compareActiveAgents)" radius={[4, 4, 0, 0]} opacity={0.5} name={`${compareYear}`} />}
-              <Bar yAxisId="left" dataKey="activeAgentsGoal" fill="var(--color-activeAgentsGoal)" radius={[4, 4, 0, 0]} opacity={0.3} name="Goal" />
-              <Line yAxisId="right" dataKey="dealsPerAgent" type="monotone" stroke="var(--color-dealsPerAgent)" strokeWidth={2} dot={{ r: 3 }} name="Deals/Agent" />
+              <Bar dataKey="activeAgents" fill="var(--color-activeAgents)" radius={[4, 4, 0, 0]} name={`${year} Active`} />
+              {compareYear && <Bar dataKey="compareActiveAgents" fill="var(--color-compareActiveAgents)" radius={[4, 4, 0, 0]} opacity={0.5} name={`${compareYear}`} />}
+              <Line dataKey="activeAgentsGoal" type="monotone" stroke="var(--color-activeAgentsGoal)" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Goal" />
+              <Line dataKey="projected" type="monotone" stroke="hsl(var(--chart-4))" strokeWidth={1.5} strokeDasharray="3 3" dot={false} name="Projected" />
+            </ComposedChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      {/* ── CHART 1b: Avg Deals Per Agent ────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Avg Deals Per Agent (Monthly)</CardTitle>
+          <CardDescription>
+            Deals closed ÷ active agents per month. Goal = 1 deal/agent/month.
+            YTD avg: <strong>{avgDealsPerAgentYTD}</strong> vs goal of <strong>{ytdDealsGoal}</strong> ({monthsElapsed} months × 1/mo)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={dealsPerAgentChartConfig} className="h-[280px] w-full">
+            <ComposedChart data={dealsPerAgentChartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={v => v.toFixed(1)} domain={[0, 'auto']} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="dealsPerAgent" fill="var(--color-dealsPerAgent)" radius={[4, 4, 0, 0]} name="Deals/Agent" />
+              <Line dataKey="dealsGoal" type="monotone" stroke="var(--color-dealsGoal)" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Goal (1/mo)" />
             </ComposedChart>
           </ChartContainer>
         </CardContent>

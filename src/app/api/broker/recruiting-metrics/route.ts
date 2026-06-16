@@ -144,11 +144,24 @@ export async function GET(req: NextRequest) {
     });
 
     // 7. Yearly totals
+    // Months elapsed YTD (up to current month, capped at 12)
+    const currentMonth = new Date().getFullYear() === year ? new Date().getMonth() + 1 : 12;
+    const monthsElapsed = Math.min(currentMonth, 12);
+
     const totalActiveAgents = months.length > 0 ? months[months.length - 1].activeAgents : 0; // latest month
     const totalNewHires = months.reduce((s, m) => s + m.newHires, 0);
     const totalDepartures = months.reduce((s, m) => s + m.departures, 0);
     const totalDeals = months.reduce((s, m) => s + m.closedDeals, 0);
-    const avgDealsPerAgent = totalActiveAgents > 0 ? Math.round((totalDeals / totalActiveAgents) * 100) / 100 : 0;
+    // Avg Deals/Agent = average of monthly (deals/agents) ratios for months elapsed YTD
+    // Goal: 1 deal per agent per month, so YTD goal = monthsElapsed deals/agent
+    const monthlyRatios = months
+      .slice(0, monthsElapsed)
+      .filter(m => m.activeAgents > 0)
+      .map(m => m.dealsPerAgent);
+    const avgDealsPerAgent = monthlyRatios.length > 0
+      ? Math.round((monthlyRatios.reduce((s, r) => s + r, 0) / monthlyRatios.length) * 100) / 100
+      : 0;
+    const ytdDealsPerAgentGoal = monthsElapsed; // 1 deal/agent/month × months elapsed
     const totalInterviews = months.reduce((s, m) => s + m.interviewsHeld, 0);
     const totalProspectCalls = months.reduce((s, m) => s + m.prospectCalls, 0);
 
@@ -194,26 +207,38 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    // Grade each lead indicator
-    const grades: Record<string, { actual: number; goal: number; pct: number; grade: string }> = {};
-    if (funnelTargets) {
-      const calcGrade = (actual: number, goal: number) => {
-        const pct = goal > 0 ? Math.round((actual / goal) * 100) : 0;
-        let grade = 'F';
-        if (pct >= 100) grade = 'A';
-        else if (pct >= 85) grade = 'B';
-        else if (pct >= 70) grade = 'C';
-        else if (pct >= 50) grade = 'D';
-        return { actual, goal, pct, grade };
-      };
+    // Grade each lead indicator — based on YTD actual vs YTD prorated goal
+    // YTD goal = yearly goal × (monthsElapsed / 12)
+    const grades: Record<string, { actual: number; goal: number; pct: number; grade: string; ytdGoal: number; monthsElapsed: number; yearlyGoal: number }> = {};
+    const calcGrade = (actual: number, yearlyGoal: number) => {
+      const ytdGoal = Math.round(yearlyGoal * monthsElapsed / 12);
+      const pct = ytdGoal > 0 ? Math.round((actual / ytdGoal) * 100) : 0;
+      let grade = 'F';
+      if (pct >= 100) grade = 'A';
+      else if (pct >= 85) grade = 'B';
+      else if (pct >= 70) grade = 'C';
+      else if (pct >= 50) grade = 'D';
+      return { actual, goal: ytdGoal, yearlyGoal, pct, grade, ytdGoal, monthsElapsed };
+    };
 
+    if (funnelTargets) {
       grades.prospectCalls = calcGrade(totalProspectCalls, funnelTargets.yearly.calls);
       grades.interviewsHeld = calcGrade(totalInterviews, funnelTargets.yearly.interviewsHeld);
       grades.newHires = calcGrade(totalNewHires, funnelTargets.yearly.onboarded);
-      if (yearlyActiveAgentsGoal) {
-        grades.activeAgents = calcGrade(totalActiveAgents, yearlyActiveAgentsGoal);
-      }
     }
+    if (yearlyActiveAgentsGoal) {
+      grades.activeAgents = calcGrade(totalActiveAgents, yearlyActiveAgentsGoal);
+    }
+    // Avg Deals/Agent grade: actual YTD avg vs monthsElapsed (goal = 1/agent/month)
+    grades.dealsPerAgent = (() => {
+      const pct = ytdDealsPerAgentGoal > 0 ? Math.round((avgDealsPerAgent / ytdDealsPerAgentGoal) * 100) : 0;
+      let grade = 'F';
+      if (pct >= 100) grade = 'A';
+      else if (pct >= 85) grade = 'B';
+      else if (pct >= 70) grade = 'C';
+      else if (pct >= 50) grade = 'D';
+      return { actual: avgDealsPerAgent, goal: ytdDealsPerAgentGoal, yearlyGoal: 12, pct, grade, ytdGoal: ytdDealsPerAgentGoal, monthsElapsed };
+    })();
 
     return NextResponse.json({
       ok: true,
@@ -225,6 +250,8 @@ export async function GET(req: NextRequest) {
         departures: totalDepartures,
         totalDeals,
         avgDealsPerAgent,
+        ytdDealsPerAgentGoal,
+        monthsElapsed,
         totalInterviews,
         totalProspectCalls,
       },
