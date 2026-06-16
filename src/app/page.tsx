@@ -73,17 +73,57 @@ export default function Home() {
       const provider = new GoogleAuthProvider();
       const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
       const isCloudworkstations = hostname.endsWith('.cloudworkstations.dev');
+
+      // Always use redirect on cloudworkstations preview
       if (isCloudworkstations) {
         await setPersistence(auth, browserSessionPersistence);
         await signInWithRedirect(auth, provider);
         return;
       }
+
+      // Detect mobile browsers — popups are blocked by many mobile browsers,
+      // office WiFi firewalls, and iOS Safari in certain network configurations.
+      // Redirect is more reliable across all environments.
+      const isMobile = typeof window !== 'undefined' &&
+        /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
+
+      // Also detect if running as a PWA (standalone mode)
+      const isPWA = typeof window !== 'undefined' &&
+        (window.matchMedia('(display-mode: standalone)').matches ||
+         (window.navigator as any).standalone === true);
+
       await setPersistence(auth, browserLocalPersistence);
-      await signInWithPopup(auth, provider);
-      setIsSigningIn(false);
+
+      if (isMobile || isPWA) {
+        // Use redirect on mobile/PWA — avoids popup-blocked errors on office
+        // WiFi, corporate firewalls, and iOS Safari popup restrictions
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
+      // Desktop: try popup first, fall back to redirect if blocked
+      try {
+        await signInWithPopup(auth, provider);
+        setIsSigningIn(false);
+      } catch (popupError: any) {
+        const code = popupError?.code ?? '';
+        if (
+          code === 'auth/popup-blocked' ||
+          code === 'auth/popup-closed-by-user' ||
+          code === 'auth/cancelled-popup-request'
+        ) {
+          // Popup was blocked (firewall, browser setting, etc.) — silently
+          // fall back to redirect which works in all network environments
+          console.warn('Popup blocked, falling back to redirect sign-in:', code);
+          await signInWithRedirect(auth, provider);
+          // signInWithRedirect navigates away, no need to setIsSigningIn(false)
+        } else {
+          throw popupError;
+        }
+      }
     } catch (error: any) {
-      console.error('Sign-in initiation error:', error);
-      setErrorMsg(error?.message ?? 'Failed to sign in');
+      console.error('Sign-in error:', error);
+      setErrorMsg(error?.message ?? 'Failed to sign in. Please try again.');
       setIsSigningIn(false);
     }
   };
