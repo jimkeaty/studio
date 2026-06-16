@@ -108,7 +108,13 @@ export default function Home() {
 
   if (userLoading || user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        className="flex min-h-[100dvh] items-center justify-center bg-background"
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
+      >
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-muted-foreground">Authenticating...</p>
@@ -118,8 +124,8 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* ── Left panel: Brand story ───────────────────────────────────────── */}
+    <div className="flex min-h-[100dvh]">
+      {/* ── Left panel: Brand story (desktop only) ───────────────────────── */}
       <div className="hidden lg:flex lg:flex-1 flex-col justify-between p-12 bg-gradient-to-br from-slate-900 via-blue-950 to-violet-950 text-white">
         {/* Logo */}
         <div>
@@ -165,10 +171,28 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── Right panel: Sign-in ──────────────────────────────────────────── */}
-      <div className="flex flex-1 lg:max-w-md flex-col justify-center px-8 py-12 bg-background">
-        {/* Mobile logo (only shown on small screens) */}
-        <div className="lg:hidden mb-8 text-center">
+      {/*
+        ── Right panel / Mobile full-screen sign-in ──────────────────────────
+        On mobile (including iPhone PWA), this is the ONLY panel visible.
+        We use:
+          - min-h-[100dvh]  → full dynamic viewport height (respects iOS bars)
+          - pt-[env(safe-area-inset-top)]  → push content below the iPhone
+            status bar / notch when launched as a home-screen PWA
+          - pb-[env(safe-area-inset-bottom)] → clear the home indicator
+          - justify-center  → vertically center the sign-in card
+        On desktop it sits beside the brand panel (max-w-md).
+      */}
+      <div
+        className="flex flex-1 lg:max-w-md flex-col justify-center items-center bg-background"
+        style={{
+          paddingTop: 'max(2rem, env(safe-area-inset-top))',
+          paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
+          paddingLeft: 'max(2rem, env(safe-area-inset-left))',
+          paddingRight: 'max(2rem, env(safe-area-inset-right))',
+        }}
+      >
+        {/* Logo — always shown on mobile, hidden on desktop (desktop has left panel) */}
+        <div className="lg:hidden mb-8 text-center w-full">
           {activeLogo ? (
             <img
               src={activeLogo}
@@ -181,7 +205,7 @@ export default function Home() {
           )}
         </div>
 
-        <div className="max-w-sm w-full mx-auto">
+        <div className="max-w-sm w-full">
           <h1 className="text-3xl font-black tracking-tight text-foreground mb-1">Welcome back</h1>
           <p className="text-muted-foreground text-sm mb-8">Sign in to your {companyName} dashboard</p>
 

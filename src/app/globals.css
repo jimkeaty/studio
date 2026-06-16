@@ -6,6 +6,17 @@ body {
   font-family: var(--font-body), sans-serif;
 }
 
+/* iOS PWA safe-area support — ensures content never hides behind the
+   iPhone status bar, notch, or home indicator when saved to home screen.
+   The viewport-fit=cover meta tag (set in layout.tsx) enables env() values.
+   Individual pages that need full-bleed backgrounds apply their own padding. */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-top    { padding-top:    env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-left   { padding-left:   env(safe-area-inset-left); }
+  .safe-right  { padding-right:  env(safe-area-inset-right); }
+}
+
 @layer base {
   :root {
     --background: 220 20% 97%;       /* Near-white — cards pop against this */
