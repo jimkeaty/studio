@@ -33,6 +33,13 @@ const BRAND_STATS = [
   { icon: Zap, value: '94%', label: 'Agents who hit their annual goal', color: 'text-blue-400' },
 ];
 
+// Popup-blocked error codes from Firebase Auth
+const POPUP_BLOCKED_CODES = new Set([
+  'auth/popup-blocked',
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+]);
+
 export default function Home() {
   const router = useRouter();
   const auth = useAuth();
@@ -74,49 +81,44 @@ export default function Home() {
       const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
       const isCloudworkstations = hostname.endsWith('.cloudworkstations.dev');
 
-      // Always use redirect on cloudworkstations preview
+      // Always use redirect on cloudworkstations preview (popup blocked there)
       if (isCloudworkstations) {
         await setPersistence(auth, browserSessionPersistence);
         await signInWithRedirect(auth, provider);
         return;
       }
 
-      // Detect mobile browsers — popups are blocked by many mobile browsers,
-      // office WiFi firewalls, and iOS Safari in certain network configurations.
-      // Redirect is more reliable across all environments.
-      const isMobile = typeof window !== 'undefined' &&
-        /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
-
-      // Also detect if running as a PWA (standalone mode)
-      const isPWA = typeof window !== 'undefined' &&
-        (window.matchMedia('(display-mode: standalone)').matches ||
-         (window.navigator as any).standalone === true);
-
       await setPersistence(auth, browserLocalPersistence);
 
-      if (isMobile || isPWA) {
-        // Use redirect on mobile/PWA — avoids popup-blocked errors on office
-        // WiFi, corporate firewalls, and iOS Safari popup restrictions
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-
-      // Desktop: try popup first, fall back to redirect if blocked
+      // ── Strategy: always try popup first ─────────────────────────────────
+      //
+      // We previously used signInWithRedirect on mobile to avoid popup-blocked
+      // errors on office WiFi. However, signInWithRedirect requires that the
+      // app's authDomain matches the domain it's served from. Our authDomain is
+      // smart-broker-usa.firebaseapp.com but the app is served from
+      // smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app — this
+      // mismatch causes the redirect to silently fail and return to the login page.
+      //
+      // signInWithPopup works on ALL domains regardless of authDomain because
+      // the popup is opened directly to Google and the credential is returned
+      // via postMessage (not via a redirect). It works on Chrome mobile, Safari,
+      // and all modern browsers.
+      //
+      // If the popup IS blocked (office WiFi firewall, browser setting), we fall
+      // back to signInWithRedirect. In that case agents should use their mobile
+      // data instead of office WiFi, or allow popups for this site.
       try {
         await signInWithPopup(auth, provider);
         setIsSigningIn(false);
       } catch (popupError: any) {
         const code = popupError?.code ?? '';
-        if (
-          code === 'auth/popup-blocked' ||
-          code === 'auth/popup-closed-by-user' ||
-          code === 'auth/cancelled-popup-request'
-        ) {
-          // Popup was blocked (firewall, browser setting, etc.) — silently
-          // fall back to redirect which works in all network environments
-          console.warn('Popup blocked, falling back to redirect sign-in:', code);
+        if (POPUP_BLOCKED_CODES.has(code)) {
+          // Popup was blocked by network/browser — fall back to redirect.
+          // Note: redirect may fail on the hosted.app domain due to authDomain
+          // mismatch. The agent should try on mobile data if this happens.
+          console.warn('[Auth] Popup blocked, falling back to redirect:', code);
           await signInWithRedirect(auth, provider);
-          // signInWithRedirect navigates away, no need to setIsSigningIn(false)
+          // signInWithRedirect navigates away — no need to setIsSigningIn(false)
         } else {
           throw popupError;
         }
