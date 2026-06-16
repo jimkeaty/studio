@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { LayoutGrid, List } from 'lucide-react';
+import { AppointmentsKanban } from './AppointmentsKanban';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -377,6 +379,7 @@ export function AppointmentsPipeline({ agentId, viewAs, initialYear }: Props) {
   const [editTarget, setEditTarget] = useState<PipelineAppointment | null>(null);
   const [statusFilter, setStatusFilter] = useState<PipelineStatus | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<AppointmentCategory | 'all'>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
 
   const fetchAppointments = useCallback(async () => {
     if (!user) return;
@@ -471,7 +474,34 @@ export function AppointmentsPipeline({ agentId, viewAs, initialYear }: Props) {
             <h2 className="text-base font-bold tracking-tight">Appointments Pipeline</h2>
             <p className="text-xs text-blue-300 mt-0.5">All appointments for {year} · Volume = avg of active price ranges</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* List / Board toggle */}
+            <div className="flex items-center rounded-lg overflow-hidden border border-white/20">
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                  viewMode === 'list'
+                    ? 'bg-white text-slate-900'
+                    : 'bg-white/10 text-white/80 hover:bg-white/20'
+                )}
+              >
+                <List className="h-3.5 w-3.5" />
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('board')}
+                className={cn(
+                  'flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                  viewMode === 'board'
+                    ? 'bg-white text-slate-900'
+                    : 'bg-white/10 text-white/80 hover:bg-white/20'
+                )}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Board
+              </button>
+            </div>
             <select
               value={year}
               onChange={e => setYear(Number(e.target.value))}
@@ -578,49 +608,63 @@ export function AppointmentsPipeline({ agentId, viewAs, initialYear }: Props) {
         </span>
       </div>
 
-      {/* ── Cards Grid ────────────────────────────────────────────────────── */}
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-xl border bg-white p-4 space-y-2 animate-pulse">
-              <div className="h-3 bg-gray-200 rounded w-1/3" />
-              <div className="h-4 bg-gray-200 rounded w-2/3" />
-              <div className="h-3 bg-gray-100 rounded w-1/2" />
-            </div>
-          ))}
-        </div>
-      ) : displayed.length === 0 ? (
-        <div className="rounded-xl border-2 border-dashed border-gray-200 p-12 text-center">
-          <div className="text-4xl mb-3">📅</div>
-          <p className="font-semibold text-gray-700">
-            {appointments.length === 0 ? `No appointments for ${year}` : 'No appointments match your filters'}
-          </p>
-          <p className="text-sm text-gray-500 mt-1">
-            {appointments.length === 0
-              ? 'Start building your pipeline by adding your first appointment.'
-              : 'Try adjusting the status or type filters above.'}
-          </p>
-          {appointments.length === 0 && (
-            <button
-              onClick={() => { setEditTarget(null); setShowModal(true); }}
-              className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              + Add Appointment
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayed.map(appt => (
-            <AppointmentCard
-              key={appt.id}
-              appt={appt}
-              onStatusChange={handleStatusChange}
-              onEdit={a => { setEditTarget(a); setShowModal(true); }}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
+      {/* ── Board View ────────────────────────────────────────────────────── */}
+      {viewMode === 'board' && (
+        <AppointmentsKanban
+          appointments={appointments}
+          categoryFilter={categoryFilter}
+          onStatusChange={handleStatusChange}
+          onEdit={a => { setEditTarget(a); setShowModal(true); }}
+          onDelete={handleDelete}
+          loading={loading}
+        />
+      )}
+
+      {/* ── List View ─────────────────────────────────────────────────────── */}
+      {viewMode === 'list' && (
+        loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-white p-4 space-y-2 animate-pulse">
+                <div className="h-3 bg-gray-200 rounded w-1/3" />
+                <div className="h-4 bg-gray-200 rounded w-2/3" />
+                <div className="h-3 bg-gray-100 rounded w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : displayed.length === 0 ? (
+          <div className="rounded-xl border-2 border-dashed border-gray-200 p-12 text-center">
+            <div className="text-4xl mb-3">📅</div>
+            <p className="font-semibold text-gray-700">
+              {appointments.length === 0 ? `No appointments for ${year}` : 'No appointments match your filters'}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              {appointments.length === 0
+                ? 'Start building your pipeline by adding your first appointment.'
+                : 'Try adjusting the status or type filters above.'}
+            </p>
+            {appointments.length === 0 && (
+              <button
+                onClick={() => { setEditTarget(null); setShowModal(true); }}
+                className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                + Add Appointment
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {displayed.map(appt => (
+              <AppointmentCard
+                key={appt.id}
+                appt={appt}
+                onStatusChange={handleStatusChange}
+                onEdit={a => { setEditTarget(a); setShowModal(true); }}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        )
       )}
 
       {/* ── Modal ─────────────────────────────────────────────────────────── */}
