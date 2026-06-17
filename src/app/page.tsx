@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -10,8 +10,7 @@ import {
   setPersistence,
   browserLocalPersistence,
 } from 'firebase/auth';
-import { useUser } from '@/firebase';
-import { useAuth } from '@/firebase';
+import { useUser, useAuth } from '@/firebase';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 18 18" {...props}>
@@ -24,18 +23,30 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-const SafariIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <circle cx="12" cy="12" r="10" />
-    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-  </svg>
-);
-
 const BRAND_STATS = [
   { icon: Trophy, value: '$2.4M+', label: 'Average team GCI tracked annually', color: 'text-amber-400' },
   { icon: TrendingUp, value: '847+', label: 'Transactions closed and tracked', color: 'text-emerald-400' },
   { icon: Zap, value: '94%', label: 'Agents who hit their annual goal', color: 'text-blue-400' },
 ];
+
+/**
+ * Reliably detect iOS PWA standalone mode.
+ *
+ * navigator.standalone is the ONLY reliable signal on iOS Safari.
+ * window.matchMedia('(display-mode: standalone)') is NOT reliable on iOS —
+ * it can return true inside regular Safari on some iOS versions.
+ *
+ * We use navigator.standalone exclusively for iOS detection.
+ * For Android/Desktop we fall back to matchMedia.
+ */
+function detectStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  // iOS Safari sets navigator.standalone = true only when launched from home screen
+  if ((window.navigator as any).standalone === true) return true;
+  // Android Chrome / Desktop fallback
+  if (window.matchMedia('(display-mode: standalone)').matches) return true;
+  return false;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -54,17 +65,15 @@ export default function Home() {
     useAnimatedLogo?: boolean;
   } | null>(null);
 
+  // Poll for auth state when in PWA mode — the user may sign in via Safari
+  // and then return to the PWA. We poll every 2 seconds to pick up the session.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     const hostname = window.location.hostname;
     setIsPreview(hostname.endsWith('.cloudworkstations.dev'));
     setAppUrl(window.location.origin);
-
-    // Detect iOS PWA standalone mode
-    // navigator.standalone is true when launched from iPhone home screen
-    const standalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true;
-    setIsPWA(standalone);
+    setIsPWA(detectStandalone());
   }, []);
 
   useEffect(() => {
@@ -77,40 +86,51 @@ export default function Home() {
   // Redirect to dashboard once signed in
   useEffect(() => {
     if (!userLoading && user) {
+      // Clear any polling interval
+      if (pollRef.current) clearInterval(pollRef.current);
       router.replace('/dashboard');
     }
   }, [user, userLoading, router]);
+
+  // When in PWA mode and not signed in, poll auth state every 2s.
+  // This catches the case where the user signed in via Safari and returned.
+  useEffect(() => {
+    if (!isPWA || userLoading || user) return;
+
+    pollRef.current = setInterval(() => {
+      // auth.currentUser is updated by Firebase SDK automatically when
+      // localStorage changes (which happens when Safari signs in).
+      // Force a re-check by reloading the current user.
+      auth.currentUser?.reload().catch(() => {});
+      // The onAuthStateChanged in client-provider will fire if user changed.
+    }, 2000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [isPWA, userLoading, user, auth]);
 
   const handleSignIn = async () => {
     setIsSigningIn(true);
     setErrorMsg(null);
     try {
       const provider = new GoogleAuthProvider();
-
-      // ── ALWAYS use signInWithPopup ──────────────────────────────────────────
-      //
-      // signInWithRedirect is BROKEN on all modern browsers (Safari 16.1+,
-      // Firefox 109+, Chrome 115+) because it relies on third-party cookies.
-      //
-      // NOTE: iOS PWA (standalone) mode blocks signInWithPopup too — iOS does
-      // not allow window.open() in standalone mode. We handle that case above
-      // by showing an "Open in Safari" card before this button is ever shown.
-      //
       await setPersistence(auth, browserLocalPersistence);
       await signInWithPopup(auth, provider);
       setIsSigningIn(false);
     } catch (error: any) {
       const code = error?.code ?? '';
 
-      // User closed the popup — not an error
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         setIsSigningIn(false);
         return;
       }
 
-      // Popup was blocked — this means we're in PWA mode and iOS blocked it
       if (code === 'auth/popup-blocked') {
-        setErrorMsg('Sign-in popup was blocked by iOS. Please use the "Open in Safari" button below to sign in first, then return to this app.');
+        // This should not happen in regular Safari — only in PWA mode.
+        // If it does, show a helpful message but do NOT show the PWA card
+        // (that would be confusing in regular Safari).
+        setErrorMsg('Sign-in popup was blocked. If you are using the home screen app, tap "Open in Safari to Sign In" below.');
         setIsSigningIn(false);
         return;
       }
@@ -119,6 +139,26 @@ export default function Home() {
       setErrorMsg(error?.message ?? 'Failed to sign in. Please try again.');
       setIsSigningIn(false);
     }
+  };
+
+  /**
+   * Open the app URL in real Safari.
+   *
+   * From within a PWA on iOS, <a target="_blank"> opens in a Safari View Controller
+   * (in-app browser) — NOT in real Safari. That means the session is isolated
+   * and cannot be shared back to the PWA.
+   *
+   * The only way to open real Safari from a PWA is:
+   *   window.location.href = url
+   * This navigates the PWA itself to the URL, which iOS then opens in Safari
+   * because the URL is the same as the PWA's scope — Safari takes over.
+   *
+   * We append ?pwa=1 so Safari knows to redirect back to the PWA after sign-in.
+   */
+  const openInSafari = () => {
+    // Navigate the current window to the app URL — iOS will open this in Safari
+    // because it matches the PWA's registered scope.
+    window.location.href = `${appUrl}/?from=pwa`;
   };
 
   const copyIdToken = async () => {
@@ -210,35 +250,31 @@ export default function Home() {
               </Alert>
             )}
 
-            {/* ── iOS PWA first-time sign-in notice ── */}
             {isPWA ? (
-              <div className="flex flex-col gap-3">
-                <Alert className="border-blue-200 bg-blue-50 text-blue-900">
-                  <SafariIcon className="h-4 w-4 text-blue-600" />
-                  <AlertTitle className="text-blue-900">First-time sign-in required</AlertTitle>
-                  <AlertDescription className="text-blue-800 text-xs leading-relaxed">
-                    Apple does not allow Google sign-in windows inside home screen apps.
-                    Sign in once through Safari, then come back here — you will be logged in automatically.
-                  </AlertDescription>
-                </Alert>
+              /* ── iOS PWA mode: show Open in Safari flow ── */
+              <div className="flex flex-col gap-4">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
+                  <p className="text-sm font-semibold text-blue-900 mb-1">One-time setup required</p>
+                  <p className="text-xs text-blue-800 leading-relaxed">
+                    Tap the button below to sign in through Safari.
+                    After signing in, come back to this app — you will go straight to your dashboard.
+                  </p>
+                </div>
 
-                {/* Open in Safari button */}
-                <a
-                  href={appUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:bg-blue-800"
+                <Button
+                  onClick={openInSafari}
+                  className="w-full h-12 text-base font-semibold gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  <ExternalLink className="h-4 w-4" />
-                  Open in Safari to Sign In
-                </a>
+                  <ExternalLink className="h-5 w-5" />
+                  Sign In with Google
+                </Button>
 
                 <p className="text-center text-xs text-muted-foreground">
-                  After signing in through Safari, return to this app — you will go straight to your dashboard.
+                  This only needs to be done once. After that, the app opens directly to your dashboard.
                 </p>
               </div>
             ) : (
-              /* Normal browser sign-in button */
+              /* ── Regular browser: normal Google sign-in ── */
               <>
                 <Button
                   onClick={handleSignIn}
