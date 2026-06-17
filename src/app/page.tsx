@@ -84,44 +84,71 @@ export default function Home() {
 
       // ── Sign-in strategy ────────────────────────────────────────────────────
       //
-      // authDomain is always "smart-broker-usa.firebaseapp.com" (set in firebase.ts).
-      // Both signInWithPopup and signInWithRedirect open /__/auth/handler on that
-      // domain — the only domain Firebase App Hosting serves it on.
+      // CRITICAL: When running as a PWA (standalone mode, added to home screen),
+      // signInWithRedirect MUST NOT be used. When the app is in standalone mode,
+      // iOS intercepts the redirect return URL and opens it in regular Safari
+      // instead of back in the PWA — so the user ends up signed in inside Safari
+      // but the PWA session never receives the credential and shows login again.
       //
-      // Mobile / PWA: use signInWithRedirect.
-      //   - Popups are blocked by iOS Safari when opened from iMessage links,
-      //     corporate WiFi, and many mobile network configurations.
-      //   - Redirect navigates the full page to Google, then returns via the
-      //     redirect URI — works on all networks and browsers.
+      // PWA standalone: always use signInWithPopup.
+      //   - The popup opens on top of the PWA, the user signs in, the popup
+      //     closes, and onAuthStateChanged fires inside the PWA. No redirect.
       //
-      // Desktop: try signInWithPopup first (better UX — no full-page navigation).
-      //   - If the popup is blocked for any reason, fall back to redirect.
+      // Mobile Safari (NOT standalone): use signInWithRedirect.
+      //   - Popups from iMessage links / cold taps are blocked by iOS.
+      //   - Redirect works fine in regular Safari because the return URL opens
+      //     back in the same Safari tab.
       //
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
+      // Desktop: try signInWithPopup first (better UX), redirect as fallback.
+      //
       const isPWA =
         window.matchMedia('(display-mode: standalone)').matches ||
         (window.navigator as any).standalone === true;
 
-      if (isMobile || isPWA) {
-        // Redirect is the most reliable path on mobile and PWA
+      const isMobileSafari =
+        /iPhone|iPad|iPod/i.test(window.navigator.userAgent) && !isPWA;
+
+      if (isPWA) {
+        // Standalone PWA: popup only — redirect breaks the PWA session on iOS
+        try {
+          await signInWithPopup(auth, provider);
+          setIsSigningIn(false);
+        } catch (popupError: any) {
+          const code = popupError?.code ?? '';
+          if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+            setIsSigningIn(false);
+            return;
+          }
+          // If popup is somehow blocked in PWA mode, show a helpful message
+          if (code === 'auth/popup-blocked') {
+            setErrorMsg('Popup was blocked. Please open this app in Safari and sign in there first, then re-add it to your home screen.');
+            setIsSigningIn(false);
+            return;
+          }
+          throw popupError;
+        }
+        return;
+      }
+
+      if (isMobileSafari) {
+        // Mobile Safari (not standalone): redirect is most reliable
+        // The return URL opens back in the same Safari tab
         await signInWithRedirect(auth, provider);
         // Page navigates away — no need to setIsSigningIn(false)
         return;
       }
 
-      // Desktop: popup first, redirect fallback
+      // Desktop / Android: popup first, redirect fallback
       try {
         await signInWithPopup(auth, provider);
         setIsSigningIn(false);
       } catch (popupError: any) {
         const code = popupError?.code ?? '';
         if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-          // User closed the popup intentionally — not an error
           setIsSigningIn(false);
           return;
         }
         if (code === 'auth/popup-blocked') {
-          // Popup blocked (firewall, browser setting) — fall back to redirect
           await signInWithRedirect(auth, provider);
           return;
         }
