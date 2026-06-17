@@ -23,10 +23,11 @@ export async function POST(req: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Admin only');
 
-    // Optional: target specific emails only
-    let body: { emails?: string[]; dryRun?: boolean } = {};
+    // Optional: target specific emails or profileIds only
+    let body: { emails?: string[]; profileIds?: string[]; dryRun?: boolean } = {};
     try { body = await req.json(); } catch { /* no body */ }
     const targetEmails = body.emails?.map((e) => e.toLowerCase().trim());
+    const targetProfileIds = body.profileIds?.map((id) => id.trim());
     const dryRun = body.dryRun === true;
 
     // Fetch all agentProfiles
@@ -51,8 +52,12 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // If targeting specific emails, skip others
+      // If targeting specific emails or profileIds, skip others
       if (targetEmails && !targetEmails.includes(email)) {
+        results.push({ profileId: doc.id, email, name, status: 'skipped_filter' });
+        continue;
+      }
+      if (targetProfileIds && !targetProfileIds.includes(doc.id)) {
         results.push({ profileId: doc.id, email, name, status: 'skipped_filter' });
         continue;
       }
