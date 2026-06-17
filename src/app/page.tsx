@@ -7,10 +7,8 @@ import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
   setPersistence,
   browserLocalPersistence,
-  browserSessionPersistence,
 } from 'firebase/auth';
 import { useUser } from '@/firebase';
 import { useAuth } from '@/firebase';
@@ -71,90 +69,43 @@ export default function Home() {
     setErrorMsg(null);
     try {
       const provider = new GoogleAuthProvider();
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
 
-      // ── Cloudworkstations preview: always redirect with session persistence ──
-      if (hostname.endsWith('.cloudworkstations.dev')) {
-        await setPersistence(auth, browserSessionPersistence);
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-
+      // ── ALWAYS use signInWithPopup ──────────────────────────────────────────
+      //
+      // signInWithRedirect is BROKEN on all modern browsers (Safari 16.1+,
+      // Firefox 109+, Chrome 115+) because it relies on third-party cookies
+      // to pass the credential from firebaseapp.com back to the app domain.
+      // All modern browsers block third-party cookies by default.
+      //
+      // Firebase's own documentation (redirect-best-practices) states:
+      // "Starting June 24 2024, implementing one of the options will be
+      //  required for redirect sign-in to work on Google Chrome M115+."
+      //
+      // The simplest fix (Option 2 per Firebase docs) is signInWithPopup.
+      // It works on: Desktop, Mobile Safari, iPhone PWA, Android Chrome.
+      //
       await setPersistence(auth, browserLocalPersistence);
-
-      // ── Sign-in strategy ────────────────────────────────────────────────────
-      //
-      // CRITICAL: When running as a PWA (standalone mode, added to home screen),
-      // signInWithRedirect MUST NOT be used. When the app is in standalone mode,
-      // iOS intercepts the redirect return URL and opens it in regular Safari
-      // instead of back in the PWA — so the user ends up signed in inside Safari
-      // but the PWA session never receives the credential and shows login again.
-      //
-      // PWA standalone: always use signInWithPopup.
-      //   - The popup opens on top of the PWA, the user signs in, the popup
-      //     closes, and onAuthStateChanged fires inside the PWA. No redirect.
-      //
-      // Mobile Safari (NOT standalone): use signInWithRedirect.
-      //   - Popups from iMessage links / cold taps are blocked by iOS.
-      //   - Redirect works fine in regular Safari because the return URL opens
-      //     back in the same Safari tab.
-      //
-      // Desktop: try signInWithPopup first (better UX), redirect as fallback.
-      //
-      const isPWA =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone === true;
-
-      const isMobileSafari =
-        /iPhone|iPad|iPod/i.test(window.navigator.userAgent) && !isPWA;
-
-      if (isPWA) {
-        // Standalone PWA: popup only — redirect breaks the PWA session on iOS
-        try {
-          await signInWithPopup(auth, provider);
-          setIsSigningIn(false);
-        } catch (popupError: any) {
-          const code = popupError?.code ?? '';
-          if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-            setIsSigningIn(false);
-            return;
-          }
-          // If popup is somehow blocked in PWA mode, show a helpful message
-          if (code === 'auth/popup-blocked') {
-            setErrorMsg('Popup was blocked. Please open this app in Safari and sign in there first, then re-add it to your home screen.');
-            setIsSigningIn(false);
-            return;
-          }
-          throw popupError;
-        }
-        return;
-      }
-
-      if (isMobileSafari) {
-        // Mobile Safari (not standalone): redirect is most reliable
-        // The return URL opens back in the same Safari tab
-        await signInWithRedirect(auth, provider);
-        // Page navigates away — no need to setIsSigningIn(false)
-        return;
-      }
-
-      // Desktop / Android: popup first, redirect fallback
-      try {
-        await signInWithPopup(auth, provider);
-        setIsSigningIn(false);
-      } catch (popupError: any) {
-        const code = popupError?.code ?? '';
-        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-          setIsSigningIn(false);
-          return;
-        }
-        if (code === 'auth/popup-blocked') {
-          await signInWithRedirect(auth, provider);
-          return;
-        }
-        throw popupError;
-      }
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged in FirebaseClientProvider will fire and set user,
+      // which triggers the useEffect above to router.replace('/dashboard').
+      setIsSigningIn(false);
     } catch (error: any) {
+      const code = error?.code ?? '';
+
+      // User closed the popup — not an error, just reset the button
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        setIsSigningIn(false);
+        return;
+      }
+
+      // Popup was blocked by the browser (rare — only happens if user has
+      // strict popup blocking enabled site-wide)
+      if (code === 'auth/popup-blocked') {
+        setErrorMsg('Sign-in popup was blocked by your browser. Please allow popups for this site and try again.');
+        setIsSigningIn(false);
+        return;
+      }
+
       console.error('Sign-in error:', error);
       setErrorMsg(error?.message ?? 'Failed to sign in. Please try again.');
       setIsSigningIn(false);
@@ -199,12 +150,6 @@ export default function Home() {
   }
 
   return (
-    /*
-     * Outer wrapper: full screen, no overflow hidden so the gradient bleeds
-     * edge-to-edge. Safe-area insets are applied HERE so the available space
-     * for centering is already inside the safe area — not on the scroll
-     * container — which is what makes justify-center work correctly on iPhone.
-     */
     <div
       className="relative bg-background"
       style={{
@@ -218,12 +163,6 @@ export default function Home() {
       {/* Background gradient */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background" />
 
-      {/*
-        Scrollable inner container.
-        min-height fills the remaining space AFTER the safe-area padding above,
-        so justify-center centres content within the visible area only.
-        overflow-y-auto lets content scroll on very small screens (iPhone SE).
-      */}
       <div
         className="relative z-10 flex min-h-full flex-col items-center justify-center overflow-y-auto px-4 py-6"
         style={{ minHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}

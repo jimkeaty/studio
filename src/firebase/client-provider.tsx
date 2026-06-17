@@ -2,25 +2,23 @@
 /**
  * FirebaseClientProvider — the ONLY auth file that matters.
  *
- * DESIGN PRINCIPLE: Keep it as simple as possible.
+ * DESIGN PRINCIPLE: Maximum simplicity. No redirect flow.
  *
- * Everything lives here:
- *  - Firebase app + auth initialization
- *  - getRedirectResult() called ONCE (singleton, never duplicated)
- *  - onAuthStateChanged subscription
- *  - AuthContext with { user, loading, auth }
+ * We use signInWithPopup exclusively (no signInWithRedirect).
+ * This means:
+ *  - No getRedirectResult() needed
+ *  - No race conditions between getRedirectResult and onAuthStateChanged
+ *  - No third-party cookie dependency (redirect flow requires them;
+ *    Safari 16.1+, Firefox 109+, Chrome 115+ all block them by default)
  *
- * Components call useAuthContext() directly — no useUser hook, no
- * intermediate providers, no promise chains, no refs.
- *
- * HOW THE LOOP IS PREVENTED:
- *  - `loading` starts as true
- *  - We call getRedirectResult() first, then subscribe to onAuthStateChanged
- *  - onAuthStateChanged fires AFTER getRedirectResult resolves (Firebase
- *    guarantees this ordering when called in the same tick)
- *  - We only set loading=false inside onAuthStateChanged
- *  - The dashboard guard only redirects when loading===false && user===null
- *  - Result: the guard never sees a false null
+ * Auth state flow:
+ *  1. loading=true on mount
+ *  2. onAuthStateChanged fires once with current user (or null)
+ *  3. loading=false — dashboard guard now has the real answer
+ *  4. If user is null → login page shows
+ *  5. User clicks "Continue with Google" → signInWithPopup
+ *  6. Popup closes → onAuthStateChanged fires again with signed-in user
+ *  7. login page useEffect sees user → router.replace('/dashboard')
  */
 import React, {
   createContext,
@@ -31,7 +29,6 @@ import React, {
   type ReactNode,
 } from 'react';
 import {
-  getRedirectResult,
   onAuthStateChanged,
   type Auth,
   type User,
@@ -80,37 +77,20 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMounted(true);
 
-    // Register service worker
+    // Register service worker for PWA / push notifications
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
     }
 
-    // THE KEY: call getRedirectResult() first, then subscribe.
-    // Firebase processes the redirect credential synchronously before
-    // onAuthStateChanged fires — so by the time our callback runs,
-    // auth.currentUser is already the signed-in user.
-    getRedirectResult(auth)
-      .catch((err) => {
-        // Non-fatal — a failed redirect just means sign in again
-        console.warn('[Auth] getRedirectResult:', err?.code);
-      })
-      .finally(() => {
-        // Now subscribe. At this point Firebase has processed any redirect
-        // credential, so the first onAuthStateChanged call will have the
-        // correct user (not null).
-        const unsub = onAuthStateChanged(auth, (firebaseUser) => {
-          setUser(firebaseUser);
-          setLoading(false);
-        });
+    // Subscribe to auth state. Since we use signInWithPopup exclusively,
+    // the first call will correctly reflect the current auth state with no
+    // race conditions. loading stays true until this fires.
+    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setLoading(false);
+    });
 
-        // Store unsub for cleanup — we can't return it from .finally()
-        // so we use a module-level variable trick
-        _unsub = unsub;
-      });
-
-    return () => {
-      if (_unsub) { _unsub(); _unsub = null; }
-    };
+    return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -123,6 +103,3 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
-// Module-level cleanup ref (avoids needing useRef for the unsubscribe)
-let _unsub: (() => void) | null = null;
