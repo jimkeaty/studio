@@ -8,10 +8,8 @@ import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
   setPersistence,
   browserLocalPersistence,
-  browserSessionPersistence,
 } from 'firebase/auth';
 import { useUser } from '@/firebase';
 import { useAuth } from '@/firebase/provider';
@@ -32,13 +30,6 @@ const BRAND_STATS = [
   { icon: TrendingUp, value: '847+', label: 'Transactions closed and tracked', color: 'text-emerald-400' },
   { icon: Zap, value: '94%', label: 'Agents who hit their annual goal', color: 'text-blue-400' },
 ];
-
-// Popup-blocked error codes from Firebase Auth
-const POPUP_BLOCKED_CODES = new Set([
-  'auth/popup-blocked',
-  'auth/popup-closed-by-user',
-  'auth/cancelled-popup-request',
-]);
 
 export default function Home() {
   const router = useRouter();
@@ -78,57 +69,31 @@ export default function Home() {
     setErrorMsg(null);
     try {
       const provider = new GoogleAuthProvider();
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-      const isCloudworkstations = hostname.endsWith('.cloudworkstations.dev');
-
-      // Always use redirect on cloudworkstations preview (popup blocked there)
-      if (isCloudworkstations) {
-        await setPersistence(auth, browserSessionPersistence);
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-
       await setPersistence(auth, browserLocalPersistence);
 
-      // ── Browser-aware sign-in strategy ───────────────────────────────────
+      // ── Always use signInWithPopup ────────────────────────────────────────
       //
-      // Safari (iOS/macOS): blocks popups by default, especially in PWA/standalone
-      // mode. Use signInWithRedirect — now safe because authDomain is set to the
-      // actual hosted domain (smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app)
-      // which matches where the app is served from.
+      // Firebase App Hosting does NOT serve the /__/auth/handler route that
+      // signInWithRedirect requires. Using signInWithRedirect causes a 404 at
+      // /__/auth/handler on both Safari and Chrome.
       //
-      // Chrome (mobile + desktop): signInWithPopup is preferred — it's faster,
-      // doesn't navigate away, and works regardless of authDomain. Fall back to
-      // redirect only if popup is explicitly blocked (office WiFi firewall).
-      const isSafari = typeof window !== 'undefined' &&
-        /^((?!chrome|android).)*safari/i.test(window.navigator.userAgent);
-
-      const isPWA = typeof window !== 'undefined' &&
-        (window.matchMedia('(display-mode: standalone)').matches ||
-         (window.navigator as any).standalone === true);
-
-      if (isSafari || isPWA) {
-        // Safari and PWA: use redirect (popup blocked by default in these contexts)
-        await signInWithRedirect(auth, provider);
-        // signInWithRedirect navigates away — execution stops here
+      // signInWithPopup works on all browsers including Safari on iOS (the popup
+      // opens as a new tab/window, which Safari allows when triggered by a direct
+      // user gesture like a button click). The user taps the button → popup opens
+      // → Google sign-in completes → popup closes → app is authenticated.
+      //
+      // Note: Safari in PWA/standalone mode may block popups if the sign-in is
+      // not triggered synchronously from a user gesture. This is handled correctly
+      // here because handleSignIn is called directly from an onClick handler.
+      await signInWithPopup(auth, provider);
+      setIsSigningIn(false);
+    } catch (error: any) {
+      const code = error?.code ?? '';
+      // auth/popup-closed-by-user is not an error — user cancelled intentionally
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        setIsSigningIn(false);
         return;
       }
-
-      // Chrome and other browsers: try popup first, fall back to redirect if blocked
-      try {
-        await signInWithPopup(auth, provider);
-        setIsSigningIn(false);
-      } catch (popupError: any) {
-        const code = popupError?.code ?? '';
-        if (POPUP_BLOCKED_CODES.has(code)) {
-          // Popup blocked (office WiFi firewall, browser setting) — fall back to redirect
-          console.warn('[Auth] Popup blocked, falling back to redirect:', code);
-          await signInWithRedirect(auth, provider);
-        } else {
-          throw popupError;
-        }
-      }
-    } catch (error: any) {
       console.error('Sign-in error:', error);
       setErrorMsg(error?.message ?? 'Failed to sign in. Please try again.');
       setIsSigningIn(false);

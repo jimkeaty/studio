@@ -70,30 +70,17 @@ export function getFirebaseApp(): FirebaseApp {
 
   const config = readWebAppConfig();
 
-  // ── authDomain runtime override ──────────────────────────────────────────
-  // Firebase App Hosting injects FIREBASE_WEBAPP_CONFIG at runtime with
-  // authDomain = "smart-broker-usa.firebaseapp.com". However, the app is
-  // served from a different domain (us-central1.hosted.app or a custom domain).
+  // ── authDomain: use the Firebase default (firebaseapp.com) ─────────────────
+  // We use signInWithPopup exclusively. The popup opens at:
+  //   https://[authDomain]/__/auth/handler
+  // Firebase App Hosting does NOT serve /__/auth/handler on the hosted.app
+  // domain — only the Firebase default domain (smart-broker-usa.firebaseapp.com)
+  // serves this route. So we must NOT override authDomain to window.location.hostname.
   //
-  // signInWithRedirect requires authDomain to match the origin — if they differ,
-  // the redirect credential handoff silently fails (cross-origin iframe blocked)
-  // and the user is sent back to the login page in a loop on Safari and PWA.
-  //
-  // Fix: at runtime (browser only), override authDomain to the current hostname
-  // so it always matches wherever the app is served from. This is the approach
-  // recommended by Firebase for custom/non-default domains.
-  //
-  // Exceptions:
-  //   - localhost: keep as-is (local dev uses the default firebaseapp.com domain)
-  //   - cloudworkstations.dev: preview environment, keep as-is
-  //   - server-side (typeof window === 'undefined'): no override (build time)
-  if (
-    typeof window !== "undefined" &&
-    window.location.hostname !== "localhost" &&
-    !window.location.hostname.endsWith(".cloudworkstations.dev")
-  ) {
-    config.authDomain = window.location.hostname;
-  }
+  // The hosted.app domain is listed in Firebase Console → Authentication →
+  // Authorized Domains, which is all that's needed for signInWithPopup to work
+  // cross-origin (the popup opens on firebaseapp.com, then posts a message back
+  // to the app origin — no redirect needed).
 
   // Always initialise as [DEFAULT] so that getApp() and getAuth() work
   // everywhere, including during Next.js static generation with the placeholder.
