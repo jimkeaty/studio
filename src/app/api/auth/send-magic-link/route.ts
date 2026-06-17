@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initAdmin } from '@/lib/firebaseAdmin';
+import { adminAuth } from '@/lib/firebase/admin';
 import { Resend } from 'resend';
 
 /**
@@ -26,10 +26,9 @@ export async function POST(req: NextRequest) {
     const normalizedEmail = email.trim().toLowerCase();
 
     // Verify the email belongs to a known user in Firebase Auth
-    const adminApp = initAdmin();
     let userRecord;
     try {
-      userRecord = await adminApp.auth().getUserByEmail(normalizedEmail);
+      userRecord = await adminAuth.getUserByEmail(normalizedEmail);
     } catch {
       // Don't reveal whether the email exists — just say "if you have an account, check your email"
       // This prevents email enumeration attacks
@@ -47,7 +46,7 @@ export async function POST(req: NextRequest) {
       handleCodeInApp: true,
     };
 
-    const signInLink = await adminApp.auth().generateSignInWithEmailLink(
+    const signInLink = await adminAuth.generateSignInWithEmailLink(
       normalizedEmail,
       actionCodeSettings
     );
