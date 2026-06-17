@@ -155,10 +155,15 @@ export default function Home() {
   if (userLoading || user) {
     return (
       <div
-        className="flex min-h-[100dvh] items-center justify-center bg-background"
+        className="flex bg-background"
         style={{
+          minHeight: '100dvh',
           paddingTop: 'env(safe-area-inset-top)',
           paddingBottom: 'env(safe-area-inset-bottom)',
+          paddingLeft: 'env(safe-area-inset-left)',
+          paddingRight: 'env(safe-area-inset-right)',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -167,25 +172,34 @@ export default function Home() {
   }
 
   return (
+    /*
+     * Outer wrapper: full screen, no overflow hidden so the gradient bleeds
+     * edge-to-edge. Safe-area insets are applied HERE so the available space
+     * for centering is already inside the safe area — not on the scroll
+     * container — which is what makes justify-center work correctly on iPhone.
+     */
     <div
-      className="relative min-h-[100dvh] overflow-hidden bg-background"
+      className="relative bg-background"
+      style={{
+        minHeight: '100dvh',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
+      }}
     >
       {/* Background gradient */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background" />
 
       {/*
-        Scrollable inner container with safe-area padding.
-        Using a scrollable flex column (not justify-center) so that on small
-        iPhones the content is never clipped behind the Dynamic Island / notch
-        (top) or the home indicator (bottom). The content is vertically centred
-        when there is enough room via min-h + justify-center on the inner div.
+        Scrollable inner container.
+        min-height fills the remaining space AFTER the safe-area padding above,
+        so justify-center centres content within the visible area only.
+        overflow-y-auto lets content scroll on very small screens (iPhone SE).
       */}
       <div
-        className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-center overflow-y-auto px-4"
-        style={{
-          paddingTop: 'max(env(safe-area-inset-top), 24px)',
-          paddingBottom: 'max(env(safe-area-inset-bottom), 24px)',
-        }}
+        className="relative z-10 flex min-h-full flex-col items-center justify-center overflow-y-auto px-4 py-6"
+        style={{ minHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
       >
       <div className="flex w-full max-w-md flex-col items-center gap-8">
         {/* Logo / Brand */}

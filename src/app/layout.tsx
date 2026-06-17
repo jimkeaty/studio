@@ -14,8 +14,8 @@ export const metadata: Metadata = {
     title: 'Smart Broker',
   },
   icons: {
-    icon: '/icons/icon-192x192.png',
-    apple: '/apple-touch-icon.png',
+    icon: '/icons/icon-192x192.png?v=2',
+    apple: '/apple-touch-icon.png?v=2',
   },
 };
 
@@ -43,9 +43,11 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        {/* PWA */}
+        {/* PWA — v2 query string forces iOS Safari to bust its apple-touch-icon cache */}
         <link rel="manifest" href="/manifest" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png?v=2" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png?v=2" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="mobile-web-app-capable" content="yes" />
