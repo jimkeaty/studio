@@ -7,16 +7,16 @@ import BuildBadge from '@/components/BuildBadge';
 export const metadata: Metadata = {
   title: 'Smart Broker USA',
   description: 'Performance and accountability dashboard for real estate agents and brokers.',
-  manifest: '/manifest',
+  // NOTE: Do NOT set metadata.manifest here — Next.js overrides it to /manifest.json
+  // which bypasses our dynamic /manifest route. The <link rel="manifest"> tag is
+  // set manually in the <head> below, pointing to /manifest (the dynamic route).
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'Smart Broker',
   },
-  icons: {
-    icon: '/icons/icon-192x192.png?v=2',
-    apple: '/apple-touch-icon.png?v=2',
-  },
+  // NOTE: Do NOT set metadata.icons here — Next.js ignores query strings (?v=2)
+  // on icon URLs, so cache-busting doesn't work. Icons are set manually below.
 };
 
 export const viewport: Viewport = {
