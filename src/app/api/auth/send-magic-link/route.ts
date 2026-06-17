@@ -109,6 +109,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error('[send-magic-link] error:', err);
-    return NextResponse.json({ ok: false, error: 'Failed to send sign-in link.' }, { status: 500 });
+    const detail = err?.message || err?.code || String(err);
+    return NextResponse.json({ ok: false, error: 'Failed to send sign-in link.', detail }, { status: 500 });
   }
 }
