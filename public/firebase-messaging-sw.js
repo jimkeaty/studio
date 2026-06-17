@@ -6,7 +6,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 firebase.initializeApp({
   apiKey: "AIzaSyCbkEpvYeoQJ0O-pjszaNb1Nj5T0wf_T3s",
-  authDomain: "smart-broker-usa.firebaseapp.com",
+  authDomain: "smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app",
   projectId: "smart-broker-usa",
   storageBucket: "smart-broker-usa.firebasestorage.app",
   messagingSenderId: "349178824168",

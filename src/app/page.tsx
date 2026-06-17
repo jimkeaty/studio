@@ -90,35 +90,40 @@ export default function Home() {
 
       await setPersistence(auth, browserLocalPersistence);
 
-      // ── Strategy: always try popup first ─────────────────────────────────
+      // ── Browser-aware sign-in strategy ───────────────────────────────────
       //
-      // We previously used signInWithRedirect on mobile to avoid popup-blocked
-      // errors on office WiFi. However, signInWithRedirect requires that the
-      // app's authDomain matches the domain it's served from. Our authDomain is
-      // smart-broker-usa.firebaseapp.com but the app is served from
-      // smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app — this
-      // mismatch causes the redirect to silently fail and return to the login page.
+      // Safari (iOS/macOS): blocks popups by default, especially in PWA/standalone
+      // mode. Use signInWithRedirect — now safe because authDomain is set to the
+      // actual hosted domain (smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app)
+      // which matches where the app is served from.
       //
-      // signInWithPopup works on ALL domains regardless of authDomain because
-      // the popup is opened directly to Google and the credential is returned
-      // via postMessage (not via a redirect). It works on Chrome mobile, Safari,
-      // and all modern browsers.
-      //
-      // If the popup IS blocked (office WiFi firewall, browser setting), we fall
-      // back to signInWithRedirect. In that case agents should use their mobile
-      // data instead of office WiFi, or allow popups for this site.
+      // Chrome (mobile + desktop): signInWithPopup is preferred — it's faster,
+      // doesn't navigate away, and works regardless of authDomain. Fall back to
+      // redirect only if popup is explicitly blocked (office WiFi firewall).
+      const isSafari = typeof window !== 'undefined' &&
+        /^((?!chrome|android).)*safari/i.test(window.navigator.userAgent);
+
+      const isPWA = typeof window !== 'undefined' &&
+        (window.matchMedia('(display-mode: standalone)').matches ||
+         (window.navigator as any).standalone === true);
+
+      if (isSafari || isPWA) {
+        // Safari and PWA: use redirect (popup blocked by default in these contexts)
+        await signInWithRedirect(auth, provider);
+        // signInWithRedirect navigates away — execution stops here
+        return;
+      }
+
+      // Chrome and other browsers: try popup first, fall back to redirect if blocked
       try {
         await signInWithPopup(auth, provider);
         setIsSigningIn(false);
       } catch (popupError: any) {
         const code = popupError?.code ?? '';
         if (POPUP_BLOCKED_CODES.has(code)) {
-          // Popup was blocked by network/browser — fall back to redirect.
-          // Note: redirect may fail on the hosted.app domain due to authDomain
-          // mismatch. The agent should try on mobile data if this happens.
+          // Popup blocked (office WiFi firewall, browser setting) — fall back to redirect
           console.warn('[Auth] Popup blocked, falling back to redirect:', code);
           await signInWithRedirect(auth, provider);
-          // signInWithRedirect navigates away — no need to setIsSigningIn(false)
         } else {
           throw popupError;
         }
