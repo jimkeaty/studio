@@ -7,6 +7,16 @@
  * with dummy credentials instead of throwing.  The real config is always
  * present at runtime (App Hosting injects FIREBASE_WEBAPP_CONFIG; local dev
  * uses NEXT_PUBLIC_FIREBASE_* from .env.local).
+ *
+ * authDomain is ALWAYS "smart-broker-usa.firebaseapp.com" — the only domain
+ * that Firebase serves /__/auth/handler on.  We never override it to
+ * window.location.hostname because:
+ *   - signInWithRedirect: the redirect goes to authDomain/__/auth/handler.
+ *     If authDomain = hosted.app domain, that 404s.
+ *     If authDomain = firebaseapp.com, it works (and the hosted.app domain
+ *     is listed in Firebase Console → Authentication → Authorized Domains).
+ *   - signInWithPopup: the popup opens at authDomain/__/auth/handler.
+ *     Same requirement — must be firebaseapp.com.
  */
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
@@ -50,7 +60,7 @@ function readWebAppConfig(): WebAppConfig {
   if (apiKey) {
     return {
       apiKey,
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "smart-broker-usa.firebaseapp.com",
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "",
       storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "",
       messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
@@ -70,17 +80,14 @@ export function getFirebaseApp(): FirebaseApp {
 
   const config = readWebAppConfig();
 
-  // ── authDomain: use the Firebase default (firebaseapp.com) ─────────────────
-  // We use signInWithPopup exclusively. The popup opens at:
-  //   https://[authDomain]/__/auth/handler
-  // Firebase App Hosting does NOT serve /__/auth/handler on the hosted.app
-  // domain — only the Firebase default domain (smart-broker-usa.firebaseapp.com)
-  // serves this route. So we must NOT override authDomain to window.location.hostname.
-  //
-  // The hosted.app domain is listed in Firebase Console → Authentication →
-  // Authorized Domains, which is all that's needed for signInWithPopup to work
-  // cross-origin (the popup opens on firebaseapp.com, then posts a message back
-  // to the app origin — no redirect needed).
+  // IMPORTANT: always force authDomain to the Firebase default domain.
+  // This is the only domain that serves /__/auth/handler (used by both
+  // signInWithPopup and signInWithRedirect).  The hosted.app serving domain
+  // does NOT serve this route.  The hosted.app domain is listed in Firebase
+  // Console → Authentication → Authorized Domains so cross-origin auth works.
+  if (typeof window !== "undefined") {
+    config.authDomain = "smart-broker-usa.firebaseapp.com";
+  }
 
   // Always initialise as [DEFAULT] so that getApp() and getAuth() work
   // everywhere, including during Next.js static generation with the placeholder.

@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -11,6 +10,7 @@ import {
   signInWithRedirect,
   setPersistence,
   browserLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth';
 import { useUser } from '@/firebase';
 import { useAuth } from '@/firebase/provider';
@@ -59,6 +59,7 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
+  // Redirect to dashboard once signed in
   useEffect(() => {
     if (!userLoading && user) {
       router.replace('/dashboard');
@@ -70,43 +71,60 @@ export default function Home() {
     setErrorMsg(null);
     try {
       const provider = new GoogleAuthProvider();
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+
+      // ── Cloudworkstations preview: always redirect with session persistence ──
+      if (hostname.endsWith('.cloudworkstations.dev')) {
+        await setPersistence(auth, browserSessionPersistence);
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
       await setPersistence(auth, browserLocalPersistence);
 
-      // ── Sign-in strategy: popup first, redirect fallback ─────────────────────
+      // ── Sign-in strategy ────────────────────────────────────────────────────
       //
-      // 1. Try signInWithPopup first. This works on most browsers when the
-      //    button is tapped directly (synchronous user gesture).
+      // authDomain is always "smart-broker-usa.firebaseapp.com" (set in firebase.ts).
+      // Both signInWithPopup and signInWithRedirect open /__/auth/handler on that
+      // domain — the only domain Firebase App Hosting serves it on.
       //
-      // 2. Safari on iPhone blocks popups when the page is opened from a link
-      //    in iMessage, Mail, or another app (the tap is not considered a direct
-      //    gesture on the page). In that case Firebase throws auth/popup-blocked.
+      // Mobile / PWA: use signInWithRedirect.
+      //   - Popups are blocked by iOS Safari when opened from iMessage links,
+      //     corporate WiFi, and many mobile network configurations.
+      //   - Redirect navigates the full page to Google, then returns via the
+      //     redirect URI — works on all networks and browsers.
       //
-      // 3. When popup is blocked, fall back to signInWithRedirect. The redirect
-      //    uses authDomain = "smart-broker-usa.firebaseapp.com" (set in
-      //    apphosting.yaml and firebase.ts), which is the only domain that
-      //    serves /__/auth/handler. The hosted.app domain is listed in Firebase
-      //    Console → Authentication → Authorized Domains so the redirect
-      //    credential handoff succeeds.
+      // Desktop: try signInWithPopup first (better UX — no full-page navigation).
+      //   - If the popup is blocked for any reason, fall back to redirect.
       //
-      // 4. After the redirect, getRedirectResult() in client-provider.tsx
-      //    processes the result and onAuthStateChanged fires automatically.
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
+      const isPWA =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true;
+
+      if (isMobile || isPWA) {
+        // Redirect is the most reliable path on mobile and PWA
+        await signInWithRedirect(auth, provider);
+        // Page navigates away — no need to setIsSigningIn(false)
+        return;
+      }
+
+      // Desktop: popup first, redirect fallback
       try {
         await signInWithPopup(auth, provider);
         setIsSigningIn(false);
       } catch (popupError: any) {
-        const popupCode = popupError?.code ?? '';
-        if (popupCode === 'auth/popup-closed-by-user' || popupCode === 'auth/cancelled-popup-request') {
-          // User cancelled intentionally — not an error
+        const code = popupError?.code ?? '';
+        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+          // User closed the popup intentionally — not an error
           setIsSigningIn(false);
           return;
         }
-        if (popupCode === 'auth/popup-blocked') {
-          // Safari blocked the popup (opened from iMessage/link) — use redirect
-          // The page will navigate away; no need to setIsSigningIn(false)
+        if (code === 'auth/popup-blocked') {
+          // Popup blocked (firewall, browser setting) — fall back to redirect
           await signInWithRedirect(auth, provider);
           return;
         }
-        // Any other popup error — rethrow to outer catch
         throw popupError;
       }
     } catch (error: any) {
@@ -143,153 +161,105 @@ export default function Home() {
           paddingBottom: 'env(safe-area-inset-bottom)',
         }}
       >
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Authenticating...</p>
-        </div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-[100dvh]">
-      {/* ── Left panel: Brand story (desktop only) ───────────────────────── */}
-      <div className="hidden lg:flex lg:flex-1 flex-col justify-between p-12 bg-gradient-to-br from-slate-900 via-blue-950 to-violet-950 text-white">
-        {/* Logo */}
-        <div>
-          <div className="mb-6">
-            {activeLogo ? (
-              <img
-                src={activeLogo}
-                alt={companyName}
-                className="h-16 w-auto object-contain"
-                style={{ maxWidth: '220px' }}
-              />
-            ) : (
-              <div className="text-3xl font-black tracking-tight">
-                {companyName}
-              </div>
-            )}
-          </div>
-          <div className="mt-4 text-2xl font-bold leading-snug text-white/90 max-w-sm">
-            The command center for top-producing real estate agents.
-          </div>
-          <p className="mt-4 text-white/60 text-sm leading-relaxed max-w-xs">
-            Track every deal, every commission, and every milestone — all in one place designed for closers.
-          </p>
-        </div>
+    <div
+      className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-background px-4"
+      style={{
+        // iOS PWA safe-area insets — push content below the iPhone notch/dynamic island
+        // and above the home indicator so nothing is hidden behind system UI.
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      {/* Background gradient */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background" />
 
-        {/* Social proof stats */}
-        <div className="space-y-4">
-          {BRAND_STATS.map(({ icon: Icon, value, label, color }) => (
-            <div key={value} className="flex items-center gap-4 py-4 border-b border-white/10">
-              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-                <Icon className={`h-5 w-5 ${color}`} />
-              </div>
-              <div>
-                <div className="text-xl font-black">{value}</div>
-                <div className="text-sm text-white/60">{label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="text-xs text-white/30">
-          © {new Date().getFullYear()} {companyName}. All rights reserved.
-        </div>
-      </div>
-
-      {/*
-        ── Right panel / Mobile full-screen sign-in ──────────────────────────
-        On mobile (including iPhone PWA), this is the ONLY panel visible.
-        We use:
-          - min-h-[100dvh]  → full dynamic viewport height (respects iOS bars)
-          - pt-[env(safe-area-inset-top)]  → push content below the iPhone
-            status bar / notch when launched as a home-screen PWA
-          - pb-[env(safe-area-inset-bottom)] → clear the home indicator
-          - justify-center  → vertically center the sign-in card
-        On desktop it sits beside the brand panel (max-w-md).
-      */}
-      <div
-        className="flex flex-1 lg:max-w-md flex-col justify-center items-center bg-background"
-        style={{
-          paddingTop: 'max(2rem, env(safe-area-inset-top))',
-          paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
-          paddingLeft: 'max(2rem, env(safe-area-inset-left))',
-          paddingRight: 'max(2rem, env(safe-area-inset-right))',
-        }}
-      >
-        {/* Logo — always shown on mobile, hidden on desktop (desktop has left panel) */}
-        <div className="lg:hidden mb-8 text-center w-full">
+      <div className="relative z-10 flex w-full max-w-md flex-col items-center gap-8">
+        {/* Logo / Brand */}
+        <div className="flex flex-col items-center gap-3 text-center">
           {activeLogo ? (
             <img
               src={activeLogo}
               alt={companyName}
-              className="h-14 w-auto object-contain mx-auto"
-              style={{ maxWidth: '200px' }}
+              className="h-16 w-auto object-contain"
             />
           ) : (
-            <div className="text-2xl font-black tracking-tight text-foreground">{companyName}</div>
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-2xl font-bold shadow-lg">
+              {companyName.charAt(0)}
+            </div>
           )}
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{companyName}</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {branding?.tagline || 'Sign in to your dashboard'}
+            </p>
+          </div>
         </div>
 
-        <div className="max-w-sm w-full">
-          <h1 className="text-3xl font-black tracking-tight text-foreground mb-1">Welcome back</h1>
-          <p className="text-muted-foreground text-sm mb-8">Sign in to your {companyName} dashboard</p>
+        {/* Sign-in card */}
+        <div className="w-full rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="mb-6 text-center">
+            <h2 className="text-xl font-semibold text-foreground">Welcome back</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Sign in to your {companyName} dashboard
+            </p>
+          </div>
 
           {errorMsg && (
-            <Alert variant="destructive" className="mb-6">
+            <Alert variant="destructive" className="mb-4">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Sign-in Error</AlertTitle>
               <AlertDescription>{errorMsg}</AlertDescription>
             </Alert>
           )}
 
-          {isPreview ? (
-            <Alert className="mb-6">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Preview Mode</AlertTitle>
-              <AlertDescription>
-                Authentication is disabled in this preview environment.
-                <Button asChild className="w-full mt-4">
-                  <a href="https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app" target="_blank" rel="noopener noreferrer">
-                    Open Live App
-                  </a>
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              <button
-                onClick={handleSignIn}
-                disabled={isSigningIn}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl border-2 border-border bg-card hover:border-primary hover:bg-primary/5 transition-all duration-200 font-semibold text-foreground text-base disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
-              >
-                {isSigningIn ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  <>
-                    <GoogleIcon />
-                    Continue with Google
-                  </>
-                )}
-              </button>
+          <Button
+            onClick={handleSignIn}
+            disabled={isSigningIn}
+            className="w-full h-12 text-base font-medium gap-3"
+            variant="outline"
+          >
+            {isSigningIn ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <GoogleIcon />
+            )}
+            {isSigningIn ? 'Signing in…' : 'Continue with Google'}
+          </Button>
 
-              {process.env.NODE_ENV !== 'production' && (
-                <Button variant="secondary" className="w-full mt-3" onClick={copyIdToken} disabled={isSigningIn}>
-                  Copy ID Token (debug)
-                </Button>
-              )}
-            </>
-          )}
-
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            By signing in you agree to our Terms of Service and Privacy Policy.
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            By signing in you agree to our{' '}
+            <a href="/terms" className="underline underline-offset-2 hover:text-foreground">Terms of Service</a>
+            {' '}and{' '}
+            <a href="/privacy" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</a>.
           </p>
         </div>
+
+        {/* Brand stats */}
+        <div className="grid w-full grid-cols-3 gap-3">
+          {BRAND_STATS.map(({ icon: Icon, value, label, color }) => (
+            <div key={label} className="flex flex-col items-center gap-1 rounded-xl border bg-card/60 p-3 text-center">
+              <Icon className={`h-4 w-4 ${color}`} />
+              <span className="text-sm font-bold text-foreground">{value}</span>
+              <span className="text-[10px] leading-tight text-muted-foreground">{label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Dev tools — only shown on preview/cloudworkstations */}
+        {isPreview && (
+          <div className="w-full rounded-xl border border-dashed p-4 text-center">
+            <p className="text-xs text-muted-foreground mb-2">Dev tools (preview only)</p>
+            <Button size="sm" variant="ghost" onClick={copyIdToken} className="text-xs">
+              Copy ID Token
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

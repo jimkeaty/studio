@@ -14,6 +14,9 @@ env:
 
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
     value: "smart-broker-usa.firebaseapp.com"
+    # IMPORTANT: this must remain firebaseapp.com — it is the only domain that
+    # Firebase serves /__/auth/handler on (used by both signInWithPopup and
+    # signInWithRedirect).  The hosted.app domain does NOT serve this route.
     availability:
       - BUILD
       - RUNTIME
