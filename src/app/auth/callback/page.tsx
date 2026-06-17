@@ -3,20 +3,27 @@
  * /auth/callback
  *
  * Handles the Firebase email sign-in link (magic link) callback.
- * When an agent taps "Sign In to Dashboard" in their email, they land here.
  *
- * KEY FIX: We read the email from the URL query param (?email=...) instead
- * of localStorage. iOS PWA and Safari have SEPARATE localStorage — so any
- * email stored in the PWA is invisible to Safari (where email links open).
- * Embedding the email in the URL avoids this entirely.
+ * IMPORTANT: useSearchParams() in Next.js App Router requires a <Suspense>
+ * boundary — without it the page renders blank on production builds.
+ * We split into an outer shell (with Suspense) and an inner component.
+ *
+ * Email is read from the URL query param (?email=...) — NOT from localStorage,
+ * because iOS PWA and Safari have SEPARATE localStorage contexts.
  */
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { isSignInWithEmailLink, signInWithEmailLink, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import {
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  setPersistence,
+  browserLocalPersistence,
+} from 'firebase/auth';
 import { useAuth } from '@/firebase';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 
-export default function AuthCallbackPage() {
+// ── Inner component (uses useSearchParams — must be inside Suspense) ──────────
+function CallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const auth = useAuth();
@@ -28,15 +35,13 @@ export default function AuthCallbackPage() {
       try {
         const href = window.location.href;
 
-        // Verify this is actually a sign-in link
         if (!isSignInWithEmailLink(auth, href)) {
           setStatus('error');
           setErrorMsg('This link is not valid or has already been used. Please request a new sign-in link.');
           return;
         }
 
-        // Get the email from the URL query param embedded by the send-magic-link API.
-        // We do NOT use localStorage — iOS PWA and Safari have separate storage contexts.
+        // Email is embedded in the URL by the send-magic-link API
         const email = searchParams.get('email');
         if (!email) {
           setStatus('error');
@@ -44,20 +49,14 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // Complete the sign-in with persistent session
         await setPersistence(auth, browserLocalPersistence);
         await signInWithEmailLink(auth, email, href);
 
         setStatus('success');
-
-        // Redirect to dashboard after a brief success flash
-        setTimeout(() => {
-          router.replace('/dashboard');
-        }, 1200);
+        setTimeout(() => router.replace('/dashboard'), 1200);
       } catch (err: any) {
-        console.error('[auth/callback] sign-in error:', err);
+        console.error('[auth/callback] error:', err);
         const code = err?.code ?? '';
-
         if (code === 'auth/invalid-action-code') {
           setErrorMsg('This sign-in link has expired or already been used. Please request a new one.');
         } else if (code === 'auth/user-disabled') {
@@ -70,7 +69,7 @@ export default function AuthCallbackPage() {
     };
 
     completeSignIn();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -82,8 +81,6 @@ export default function AuthCallbackPage() {
       }}
     >
       <div className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
-
-        {/* Logo */}
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-2xl font-bold shadow-lg">
           K
         </div>
@@ -123,8 +120,22 @@ export default function AuthCallbackPage() {
             </button>
           </>
         )}
-
       </div>
     </div>
+  );
+}
+
+// ── Outer shell with Suspense boundary (required by Next.js App Router) ───────
+export default function AuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-dvh items-center justify-center bg-background">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <CallbackInner />
+    </Suspense>
   );
 }
