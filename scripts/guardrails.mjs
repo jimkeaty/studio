@@ -44,6 +44,10 @@ function isServerSafe(rel) {
   // Server-only transaction utility helpers (co-agent split, etc.)
   if (r.startsWith("src/lib/transactions/")) return true;
 
+  // Next.js route handlers outside /api/ — these are server-only (no client bundle)
+  // e.g. src/app/manifest/route.ts serves the dynamic PWA manifest
+  if (r.startsWith("src/app/manifest/")) return true;
+
   return false;
 }
 
