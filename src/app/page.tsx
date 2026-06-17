@@ -168,18 +168,26 @@ export default function Home() {
 
   return (
     <div
-      className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-background px-4"
-      style={{
-        // iOS PWA safe-area insets — push content below the iPhone notch/dynamic island
-        // and above the home indicator so nothing is hidden behind system UI.
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
+      className="relative min-h-[100dvh] overflow-hidden bg-background"
     >
       {/* Background gradient */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background" />
 
-      <div className="relative z-10 flex w-full max-w-md flex-col items-center gap-8">
+      {/*
+        Scrollable inner container with safe-area padding.
+        Using a scrollable flex column (not justify-center) so that on small
+        iPhones the content is never clipped behind the Dynamic Island / notch
+        (top) or the home indicator (bottom). The content is vertically centred
+        when there is enough room via min-h + justify-center on the inner div.
+      */}
+      <div
+        className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-center overflow-y-auto px-4"
+        style={{
+          paddingTop: 'max(env(safe-area-inset-top), 24px)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 24px)',
+        }}
+      >
+      <div className="flex w-full max-w-md flex-col items-center gap-8">
         {/* Logo / Brand */}
         <div className="flex flex-col items-center gap-3 text-center">
           {activeLogo ? (
@@ -260,6 +268,7 @@ export default function Home() {
             </Button>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
