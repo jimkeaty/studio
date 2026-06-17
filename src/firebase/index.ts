@@ -1,7 +1,8 @@
 'use client';
-
-// Barrel file for Firebase hooks and providers.
-// Initialization is handled within FirebaseClientProvider.
-
-export * from './provider';
-export * from './auth/use-user';
+// Single barrel export — everything comes from client-provider now.
+export {
+  FirebaseClientProvider,
+  useAuthContext,
+  useAuth,
+  useUser,
+} from './client-provider';

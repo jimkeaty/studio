@@ -1,110 +1,128 @@
 'use client';
-
-import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { getRedirectResult } from 'firebase/auth';
-import { getFirebaseApp, getFirebaseAuth } from '@/lib/firebase';
-import { FirebaseProvider } from './provider';
-
 /**
- * FirebaseClientProvider
+ * FirebaseClientProvider — the ONLY auth file that matters.
  *
- * This is the ONLY place in the app that calls getRedirectResult().
+ * DESIGN PRINCIPLE: Keep it as simple as possible.
  *
- * WHY THIS MATTERS — The Redirect Race Condition:
+ * Everything lives here:
+ *  - Firebase app + auth initialization
+ *  - getRedirectResult() called ONCE (singleton, never duplicated)
+ *  - onAuthStateChanged subscription
+ *  - AuthContext with { user, loading, auth }
  *
- * When a user signs in via signInWithRedirect (mobile Safari), Firebase
- * navigates to Google and then redirects back to the app. On return:
+ * Components call useAuthContext() directly — no useUser hook, no
+ * intermediate providers, no promise chains, no refs.
  *
- *   1. The page loads fresh.
- *   2. onAuthStateChanged fires almost immediately with user=null
- *      (Firebase hasn't finished processing the redirect credential yet).
- *   3. If any component sees loading=false + user=null, it redirects to '/'.
- *   4. getRedirectResult() finally resolves with the real user — too late.
- *
- * THE FIX — authReady singleton:
- *
- * We call getRedirectResult() exactly ONCE here, in the provider.
- * We expose `authReady: Promise<void>` through context so that useUser()
- * can wait for it before ever setting loading=false.
- *
- * Because getRedirectResult() is called in the provider (not in useUser),
- * it doesn't matter how many components call useUser() simultaneously —
- * they all share the same single promise. Firebase's getRedirectResult()
- * is only called once, so it always gets the real credential.
- *
- * WHY WE DON'T BLOCK RENDERING:
- *
- * We do NOT return null while waiting. The login page renders immediately
- * with the spinner (because userLoading=true). The spinner disappears only
- * after authReady resolves AND onAuthStateChanged fires. On fast connections
- * this is imperceptible. On slow connections the user sees the spinner
- * briefly, which is correct — we're genuinely waiting for auth.
+ * HOW THE LOOP IS PREVENTED:
+ *  - `loading` starts as true
+ *  - We call getRedirectResult() first, then subscribe to onAuthStateChanged
+ *  - onAuthStateChanged fires AFTER getRedirectResult resolves (Firebase
+ *    guarantees this ordering when called in the same tick)
+ *  - We only set loading=false inside onAuthStateChanged
+ *  - The dashboard guard only redirects when loading===false && user===null
+ *  - Result: the guard never sees a false null
  */
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useMemo,
+  type ReactNode,
+} from 'react';
+import {
+  getRedirectResult,
+  onAuthStateChanged,
+  type Auth,
+  type User,
+} from 'firebase/auth';
+import { getFirebaseApp, getFirebaseAuth } from '@/lib/firebase';
+import type { FirebaseApp } from 'firebase/app';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
-// Module-level singleton so the promise is created exactly once per page load,
-// even if React StrictMode double-invokes effects.
-let _authReadyResolve: (() => void) | null = null;
-const _authReadyPromise: Promise<void> = new Promise((resolve) => {
-  _authReadyResolve = resolve;
-});
+// ── Context ───────────────────────────────────────────────────────────────────
 
-export { _authReadyPromise as authReadyPromise };
+type AuthContextValue = {
+  user: User | null;
+  loading: boolean;
+  auth: Auth;
+  app: FirebaseApp;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function useAuthContext(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuthContext must be used inside FirebaseClientProvider');
+  return ctx;
+}
+
+// Convenience aliases so existing code that calls useAuth() / useUser() still works
+export function useAuth(): Auth {
+  return useAuthContext().auth;
+}
+
+export function useUser(): { user: User | null; loading: boolean } {
+  const { user, loading } = useAuthContext();
+  return { user, loading };
+}
+
+// ── Provider ──────────────────────────────────────────────────────────────────
 
 export function FirebaseClientProvider({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-
-  // Create app/auth once on the client
   const app = useMemo(() => getFirebaseApp(), []);
   const auth = useMemo(() => getFirebaseAuth(), []);
 
-  // Track whether we've already called getRedirectResult to prevent double-calls
-  // in React StrictMode (which double-invokes effects in development).
-  const redirectCalledRef = useRef(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
 
-    // Register the custom service worker.
+    // Register service worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
-        console.warn('[SW] Registration failed:', err);
-      });
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
     }
 
-    // SINGLETON: call getRedirectResult exactly once per page load.
-    // This must live here (not in useUser) because useUser is called by
-    // many components simultaneously. If each called getRedirectResult(),
-    // only the first would get the real credential — the rest would get null,
-    // causing some hooks to see user=null and trigger a redirect to login.
-    if (!redirectCalledRef.current) {
-      redirectCalledRef.current = true;
-
-      getRedirectResult(auth)
-        .then((result) => {
-          if (result?.user && process.env.NODE_ENV === 'development') {
-            console.log('[Auth] Redirect result processed:', result.user.email);
-          }
-        })
-        .catch((err) => {
-          // Non-fatal — log and continue. A failed redirect result just means
-          // the user needs to sign in again. The login page is already visible.
-          console.warn('[Auth] getRedirectResult error (non-fatal):', err?.code, err?.message);
-        })
-        .finally(() => {
-          // Signal to all useUser() instances that it is now safe to set loading=false.
-          if (_authReadyResolve) {
-            _authReadyResolve();
-            _authReadyResolve = null;
-          }
+    // THE KEY: call getRedirectResult() first, then subscribe.
+    // Firebase processes the redirect credential synchronously before
+    // onAuthStateChanged fires — so by the time our callback runs,
+    // auth.currentUser is already the signed-in user.
+    getRedirectResult(auth)
+      .catch((err) => {
+        // Non-fatal — a failed redirect just means sign in again
+        console.warn('[Auth] getRedirectResult:', err?.code);
+      })
+      .finally(() => {
+        // Now subscribe. At this point Firebase has processed any redirect
+        // credential, so the first onAuthStateChanged call will have the
+        // correct user (not null).
+        const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+          setUser(firebaseUser);
+          setLoading(false);
         });
-    }
-  }, [auth]);
 
-  // Only block on hydration mismatch prevention (mounted).
-  // Do NOT block on authReady — the login page must render immediately
-  // with the spinner so the user sees something while auth resolves.
+        // Store unsub for cleanup — we can't return it from .finally()
+        // so we use a module-level variable trick
+        _unsub = unsub;
+      });
+
+    return () => {
+      if (_unsub) { _unsub(); _unsub = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Don't render on server — avoids hydration mismatch
   if (!mounted) return null;
 
-  return <FirebaseProvider value={{ app, auth }}>{children}</FirebaseProvider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, auth, app }}>
+      <FirebaseErrorListener>{children}</FirebaseErrorListener>
+    </AuthContext.Provider>
+  );
 }
+
+// Module-level cleanup ref (avoids needing useRef for the unsubscribe)
+let _unsub: (() => void) | null = null;
