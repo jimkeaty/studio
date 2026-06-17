@@ -8,6 +8,7 @@ import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
   setPersistence,
   browserLocalPersistence,
 } from 'firebase/auth';
@@ -71,29 +72,44 @@ export default function Home() {
       const provider = new GoogleAuthProvider();
       await setPersistence(auth, browserLocalPersistence);
 
-      // ── Always use signInWithPopup ────────────────────────────────────────
+      // ── Sign-in strategy: popup first, redirect fallback ─────────────────────
       //
-      // Firebase App Hosting does NOT serve the /__/auth/handler route that
-      // signInWithRedirect requires. Using signInWithRedirect causes a 404 at
-      // /__/auth/handler on both Safari and Chrome.
+      // 1. Try signInWithPopup first. This works on most browsers when the
+      //    button is tapped directly (synchronous user gesture).
       //
-      // signInWithPopup works on all browsers including Safari on iOS (the popup
-      // opens as a new tab/window, which Safari allows when triggered by a direct
-      // user gesture like a button click). The user taps the button → popup opens
-      // → Google sign-in completes → popup closes → app is authenticated.
+      // 2. Safari on iPhone blocks popups when the page is opened from a link
+      //    in iMessage, Mail, or another app (the tap is not considered a direct
+      //    gesture on the page). In that case Firebase throws auth/popup-blocked.
       //
-      // Note: Safari in PWA/standalone mode may block popups if the sign-in is
-      // not triggered synchronously from a user gesture. This is handled correctly
-      // here because handleSignIn is called directly from an onClick handler.
-      await signInWithPopup(auth, provider);
-      setIsSigningIn(false);
-    } catch (error: any) {
-      const code = error?.code ?? '';
-      // auth/popup-closed-by-user is not an error — user cancelled intentionally
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      // 3. When popup is blocked, fall back to signInWithRedirect. The redirect
+      //    uses authDomain = "smart-broker-usa.firebaseapp.com" (set in
+      //    apphosting.yaml and firebase.ts), which is the only domain that
+      //    serves /__/auth/handler. The hosted.app domain is listed in Firebase
+      //    Console → Authentication → Authorized Domains so the redirect
+      //    credential handoff succeeds.
+      //
+      // 4. After the redirect, getRedirectResult() in client-provider.tsx
+      //    processes the result and onAuthStateChanged fires automatically.
+      try {
+        await signInWithPopup(auth, provider);
         setIsSigningIn(false);
-        return;
+      } catch (popupError: any) {
+        const popupCode = popupError?.code ?? '';
+        if (popupCode === 'auth/popup-closed-by-user' || popupCode === 'auth/cancelled-popup-request') {
+          // User cancelled intentionally — not an error
+          setIsSigningIn(false);
+          return;
+        }
+        if (popupCode === 'auth/popup-blocked') {
+          // Safari blocked the popup (opened from iMessage/link) — use redirect
+          // The page will navigate away; no need to setIsSigningIn(false)
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        // Any other popup error — rethrow to outer catch
+        throw popupError;
       }
+    } catch (error: any) {
       console.error('Sign-in error:', error);
       setErrorMsg(error?.message ?? 'Failed to sign in. Please try again.');
       setIsSigningIn(false);
