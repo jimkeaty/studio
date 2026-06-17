@@ -1,9 +1,9 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap, ExternalLink } from 'lucide-react';
+import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap, Mail, CheckCircle } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithPopup,
@@ -30,18 +30,12 @@ const BRAND_STATS = [
 ];
 
 /**
- * Reliably detect iOS PWA standalone mode.
- *
+ * Detect iOS PWA standalone mode.
  * navigator.standalone is the ONLY reliable signal on iOS Safari.
- * window.matchMedia('(display-mode: standalone)') is NOT reliable on iOS —
- * it can return true inside regular Safari on some iOS versions.
- *
- * We use navigator.standalone exclusively for iOS detection.
- * For Android/Desktop we fall back to matchMedia.
+ * It is true ONLY when launched from the home screen icon.
  */
 function detectStandalone(): boolean {
   if (typeof window === 'undefined') return false;
-  // iOS Safari sets navigator.standalone = true only when launched from home screen
   if ((window.navigator as any).standalone === true) return true;
   // Android Chrome / Desktop fallback
   if (window.matchMedia('(display-mode: standalone)').matches) return true;
@@ -52,11 +46,22 @@ export default function Home() {
   const router = useRouter();
   const auth = useAuth();
   const { user, loading: userLoading } = useUser();
+
+  // Google sign-in state
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Magic link state (PWA mode)
+  const [email, setEmail] = useState('');
+  const [isSendingLink, setIsSendingLink] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  // Environment detection
   const [isPreview, setIsPreview] = useState(false);
   const [isPWA, setIsPWA] = useState(false);
-  const [appUrl, setAppUrl] = useState('');
+
+  // Branding
   const [branding, setBranding] = useState<{
     companyName?: string;
     tagline?: string;
@@ -65,14 +70,9 @@ export default function Home() {
     useAnimatedLogo?: boolean;
   } | null>(null);
 
-  // Poll for auth state when in PWA mode — the user may sign in via Safari
-  // and then return to the PWA. We poll every 2 seconds to pick up the session.
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   useEffect(() => {
     const hostname = window.location.hostname;
     setIsPreview(hostname.endsWith('.cloudworkstations.dev'));
-    setAppUrl(window.location.origin);
     setIsPWA(detectStandalone());
   }, []);
 
@@ -86,31 +86,12 @@ export default function Home() {
   // Redirect to dashboard once signed in
   useEffect(() => {
     if (!userLoading && user) {
-      // Clear any polling interval
-      if (pollRef.current) clearInterval(pollRef.current);
       router.replace('/dashboard');
     }
   }, [user, userLoading, router]);
 
-  // When in PWA mode and not signed in, poll auth state every 2s.
-  // This catches the case where the user signed in via Safari and returned.
-  useEffect(() => {
-    if (!isPWA || userLoading || user) return;
-
-    pollRef.current = setInterval(() => {
-      // auth.currentUser is updated by Firebase SDK automatically when
-      // localStorage changes (which happens when Safari signs in).
-      // Force a re-check by reloading the current user.
-      auth.currentUser?.reload().catch(() => {});
-      // The onAuthStateChanged in client-provider will fire if user changed.
-    }, 2000);
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [isPWA, userLoading, user, auth]);
-
-  const handleSignIn = async () => {
+  // ── Google sign-in (regular browser only) ─────────────────────────────────
+  const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     setErrorMsg(null);
     try {
@@ -120,45 +101,47 @@ export default function Home() {
       setIsSigningIn(false);
     } catch (error: any) {
       const code = error?.code ?? '';
-
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         setIsSigningIn(false);
         return;
       }
-
-      if (code === 'auth/popup-blocked') {
-        // This should not happen in regular Safari — only in PWA mode.
-        // If it does, show a helpful message but do NOT show the PWA card
-        // (that would be confusing in regular Safari).
-        setErrorMsg('Sign-in popup was blocked. If you are using the home screen app, tap "Open in Safari to Sign In" below.');
-        setIsSigningIn(false);
-        return;
-      }
-
       console.error('Sign-in error:', error);
       setErrorMsg(error?.message ?? 'Failed to sign in. Please try again.');
       setIsSigningIn(false);
     }
   };
 
-  /**
-   * Open the app URL in real Safari.
-   *
-   * From within a PWA on iOS, <a target="_blank"> opens in a Safari View Controller
-   * (in-app browser) — NOT in real Safari. That means the session is isolated
-   * and cannot be shared back to the PWA.
-   *
-   * The only way to open real Safari from a PWA is:
-   *   window.location.href = url
-   * This navigates the PWA itself to the URL, which iOS then opens in Safari
-   * because the URL is the same as the PWA's scope — Safari takes over.
-   *
-   * We append ?pwa=1 so Safari knows to redirect back to the PWA after sign-in.
-   */
-  const openInSafari = () => {
-    // Navigate the current window to the app URL — iOS will open this in Safari
-    // because it matches the PWA's registered scope.
-    window.location.href = `${appUrl}/?from=pwa`;
+  // ── Magic link sign-in (PWA mode) ──────────────────────────────────────────
+  const handleSendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    setIsSendingLink(true);
+    setLinkError(null);
+
+    try {
+      // Store email in localStorage so the callback page can complete sign-in
+      window.localStorage.setItem('emailForSignIn', email.trim().toLowerCase());
+
+      const res = await fetch('/api/auth/send-magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      const data = await res.json();
+
+      if (!data.ok) {
+        setLinkError(data.error ?? 'Failed to send sign-in link. Please try again.');
+        setIsSendingLink(false);
+        return;
+      }
+
+      setLinkSent(true);
+      setIsSendingLink(false);
+    } catch {
+      setLinkError('Network error. Please check your connection and try again.');
+      setIsSendingLink(false);
+    }
   };
 
   const copyIdToken = async () => {
@@ -242,42 +225,83 @@ export default function Home() {
               </p>
             </div>
 
-            {errorMsg && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Sign-in Error</AlertTitle>
-                <AlertDescription>{errorMsg}</AlertDescription>
-              </Alert>
-            )}
-
             {isPWA ? (
-              /* ── iOS PWA mode: show Open in Safari flow ── */
-              <div className="flex flex-col gap-4">
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
-                  <p className="text-sm font-semibold text-blue-900 mb-1">One-time setup required</p>
-                  <p className="text-xs text-blue-800 leading-relaxed">
-                    Tap the button below to sign in through Safari.
-                    After signing in, come back to this app — you will go straight to your dashboard.
-                  </p>
+              /* ── iOS PWA: email magic link ── */
+              linkSent ? (
+                <div className="flex flex-col items-center gap-4 py-2 text-center">
+                  <CheckCircle className="h-12 w-12 text-emerald-500" />
+                  <div>
+                    <p className="text-base font-semibold text-foreground">Check your email</p>
+                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                      We sent a sign-in link to <strong>{email}</strong>.
+                      Tap the link in the email — it will open Safari and sign you in automatically.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setLinkSent(false); setEmail(''); }}
+                    className="text-xs text-muted-foreground underline underline-offset-2"
+                  >
+                    Use a different email
+                  </button>
                 </div>
+              ) : (
+                <form onSubmit={handleSendMagicLink} className="flex flex-col gap-3">
+                  {linkError && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>Error</AlertTitle>
+                      <AlertDescription>{linkError}</AlertDescription>
+                    </Alert>
+                  )}
 
-                <Button
-                  onClick={openInSafari}
-                  className="w-full h-12 text-base font-semibold gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <ExternalLink className="h-5 w-5" />
-                  Sign In with Google
-                </Button>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="email" className="text-sm font-medium text-foreground">
+                      Work email address
+                    </label>
+                    <input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@keatyrealestate.com"
+                      required
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
 
-                <p className="text-center text-xs text-muted-foreground">
-                  This only needs to be done once. After that, the app opens directly to your dashboard.
-                </p>
-              </div>
+                  <Button
+                    type="submit"
+                    disabled={isSendingLink || !email.trim()}
+                    className="w-full h-12 text-base font-semibold gap-2"
+                  >
+                    {isSendingLink ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Mail className="h-5 w-5" />
+                    )}
+                    {isSendingLink ? 'Sending…' : 'Send Sign-In Link'}
+                  </Button>
+
+                  <p className="text-center text-xs text-muted-foreground">
+                    We will email you a one-tap sign-in link. No password needed.
+                  </p>
+                </form>
+              )
             ) : (
-              /* ── Regular browser: normal Google sign-in ── */
+              /* ── Regular browser: Google sign-in ── */
               <>
+                {errorMsg && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Sign-in Error</AlertTitle>
+                    <AlertDescription>{errorMsg}</AlertDescription>
+                  </Alert>
+                )}
+
                 <Button
-                  onClick={handleSignIn}
+                  onClick={handleGoogleSignIn}
                   disabled={isSigningIn}
                   className="w-full h-12 text-base font-medium gap-3"
                   variant="outline"
