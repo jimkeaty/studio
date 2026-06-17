@@ -24,6 +24,7 @@ type BrandingSettings = {
   animatedLogoUrl: string | null;
   useAnimatedLogo: boolean;
   primaryColor: string | null;
+  pwaIconUrl: string | null;
   updatedAt: string | null;
 };
 
@@ -34,6 +35,7 @@ const DEFAULT_BRANDING: BrandingSettings = {
   animatedLogoUrl: null,
   useAnimatedLogo: false,
   primaryColor: null,
+  pwaIconUrl: null,
   updatedAt: null,
 };
 
@@ -186,6 +188,7 @@ export default function AdminBrandingPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingAnimated, setUploadingAnimated] = useState(false);
+  const [uploadingPwaIcon, setUploadingPwaIcon] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -242,9 +245,12 @@ export default function AdminBrandingPage() {
   };
 
   // ---------- Upload handler ----------
-  const handleUpload = async (file: File, type: 'logo' | 'animated') => {
+  const handleUpload = async (file: File, type: 'logo' | 'animated' | 'pwaIcon') => {
     if (!user) return;
-    const setUploading = type === 'logo' ? setUploadingLogo : setUploadingAnimated;
+    const setUploading =
+      type === 'logo' ? setUploadingLogo
+      : type === 'animated' ? setUploadingAnimated
+      : setUploadingPwaIcon;
     setUploading(true);
     setError(null);
     try {
@@ -262,10 +268,13 @@ export default function AdminBrandingPage() {
       // Update local state with new URL
       if (type === 'logo') {
         setBranding((prev) => ({ ...prev, logoUrl: data.url }));
-      } else {
+      } else if (type === 'animated') {
         setBranding((prev) => ({ ...prev, animatedLogoUrl: data.url }));
+      } else {
+        setBranding((prev) => ({ ...prev, pwaIconUrl: data.url }));
       }
-      setSuccess(`${type === 'logo' ? 'Logo' : 'Animated logo'} uploaded. Remember to save.`);
+      const labels: Record<string, string> = { logo: 'Logo', animated: 'Animated logo', pwaIcon: 'Home screen icon' };
+      setSuccess(`${labels[type]} uploaded. Remember to save.`);
       setTimeout(() => setSuccess(null), 4000);
     } catch (err: any) {
       setError(err.message);
@@ -463,6 +472,60 @@ export default function AdminBrandingPage() {
                     Upload an animated logo to enable this option.
                   </p>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* PWA Home Screen Icon */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" /> Home Screen Icon
+                </CardTitle>
+                <CardDescription>
+                  The icon that appears when agents add the app to their iPhone or Android home screen.
+                  Upload a square PNG (at least 512×512 px). This also updates the browser tab icon.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-start gap-6">
+                  {/* Preview */}
+                  <div className="flex-shrink-0">
+                    <p className="text-xs text-muted-foreground mb-2">Current icon</p>
+                    <div className="h-24 w-24 rounded-2xl border bg-muted flex items-center justify-center overflow-hidden shadow-sm">
+                      {branding.pwaIconUrl ? (
+                        <img src={branding.pwaIconUrl} alt="PWA icon" className="h-full w-full object-cover" />
+                      ) : (
+                        <img src="/icons/icon-192x192.png" alt="Default icon" className="h-full w-full object-cover" />
+                      )}
+                    </div>
+                    {branding.pwaIconUrl && (
+                      <button
+                        type="button"
+                        className="mt-2 text-xs text-destructive hover:underline"
+                        onClick={() => setBranding((prev) => ({ ...prev, pwaIconUrl: null }))}
+                      >
+                        Remove custom icon
+                      </button>
+                    )}
+                  </div>
+                  {/* Upload zone */}
+                  <div className="flex-1 w-full">
+                    <UploadZone
+                      label="Upload Home Screen Icon"
+                      accept="image/png,image/jpeg,image/webp"
+                      currentUrl={null}
+                      onUpload={(file) => handleUpload(file, 'pwaIcon')}
+                      uploading={uploadingPwaIcon}
+                      hint="Square PNG, JPG, or WebP. At least 512×512 px. Max 15 MB."
+                    />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-3">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    <strong>Tip:</strong> After uploading and saving, agents who already have the app on their home screen
+                    will see the new icon the next time they open the app. New installs will use it immediately.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

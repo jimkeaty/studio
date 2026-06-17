@@ -7,7 +7,7 @@ import BuildBadge from '@/components/BuildBadge';
 export const metadata: Metadata = {
   title: 'Smart Broker USA',
   description: 'Performance and accountability dashboard for real estate agents and brokers.',
-  manifest: '/manifest.json',
+  manifest: '/manifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -44,7 +44,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
         {/* PWA */}
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/manifest" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

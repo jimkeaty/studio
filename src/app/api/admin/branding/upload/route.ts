@@ -55,9 +55,9 @@ export async function POST(req: NextRequest) {
 
     // ---------- Parse type query param ----------
     const url = new URL(req.url);
-    const uploadType = url.searchParams.get('type') || 'logo'; // "logo" | "animated"
-    if (uploadType !== 'logo' && uploadType !== 'animated') {
-      return jsonError(400, 'Query param `type` must be "logo" or "animated"');
+    const uploadType = url.searchParams.get('type') || 'logo'; // "logo" | "animated" | "pwaIcon"
+    if (uploadType !== 'logo' && uploadType !== 'animated' && uploadType !== 'pwaIcon') {
+      return jsonError(400, 'Query param `type` must be "logo", "animated", or "pwaIcon"');
     }
 
     // ---------- Parse multipart form ----------

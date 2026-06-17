@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
           animatedLogoUrl: null,
           useAnimatedLogo: false,
           primaryColor: null,
+          pwaIconUrl: null,
           updatedAt: null,
         },
       });
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
         animatedLogoUrl: data.animatedLogoUrl ?? null,
         useAnimatedLogo: data.useAnimatedLogo ?? false,
         primaryColor: data.primaryColor ?? null,
+        pwaIconUrl: data.pwaIconUrl ?? null,
         updatedAt: data.updatedAt ?? null,
       },
     });
@@ -102,6 +104,7 @@ async function upsertBranding(req: NextRequest) {
       animatedLogoUrl,
       useAnimatedLogo,
       primaryColor,
+      pwaIconUrl,
     } = body;
 
     if (!companyName || typeof companyName !== 'string' || !companyName.trim()) {
@@ -122,6 +125,7 @@ async function upsertBranding(req: NextRequest) {
       animatedLogoUrl: animatedLogoUrl?.trim() || null,
       useAnimatedLogo: Boolean(useAnimatedLogo),
       primaryColor: primaryColor?.trim() || null,
+      pwaIconUrl: pwaIconUrl?.trim() || null,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: decoded.uid,
     };
