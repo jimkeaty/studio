@@ -436,8 +436,9 @@ function AgentDashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userLoading, impersonationReady, bootstrapPending, isTeamLeader, perfView, teamDashYear, viewAs]);
 
-  if (userLoading) return <DashboardSkeleton />;
-  if (!user) return <Alert><AlertTriangle className="h-4 w-4" /><AlertTitle>Sign In Required</AlertTitle><AlertDescription>Please sign in.</AlertDescription></Alert>;
+  // Auth guard: layout redirects to / when user is null.
+  // Show skeleton during loading or brief redirect window.
+  if (userLoading || !user) return <DashboardSkeleton />;
 
   const dashboard = data?.dashboard;
    const plan = data?.plan ?? null;

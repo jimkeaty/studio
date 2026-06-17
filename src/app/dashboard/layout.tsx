@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Header } from '@/components/dashboard/header';
 import { SidebarNav, MobileBottomTabBar } from '@/components/dashboard/sidebar-nav';
@@ -9,7 +10,7 @@ import { ImpersonationProvider, useImpersonation } from '@/contexts/Impersonatio
 import { useUser } from '@/firebase';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 import { Button } from '@/components/ui/button';
-import { UserX } from 'lucide-react';
+import { UserX, Loader2 } from 'lucide-react';
 import { CommandPalette } from '@/components/dashboard/command-palette';
 import { PushNotificationPrompt } from '@/components/dashboard/push-notification-prompt';
 
@@ -61,9 +62,11 @@ function DashboardShell({ children }: { children: ReactNode }) {
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { user } = useUser();
+  const { user, loading: userLoading } = useUser();
   const { isAdmin } = useIsAdminLike();
+  const router = useRouter();
   const getToken = user ? () => user.getIdToken() : undefined;
+
   // Detect team leader role so ImpersonationProvider can allow viewAs for team members
   const [isTeamLeader, setIsTeamLeader] = React.useState(false);
   React.useEffect(() => {
@@ -75,6 +78,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         .catch(() => {})
     ).catch(() => {});
   }, [user]);
+
+  // Redirect unauthenticated users to the login page
+  // Wait for userLoading=false so we don't redirect during the initial auth check
+  React.useEffect(() => {
+    if (!userLoading && !user) {
+      router.replace('/');
+    }
+  }, [user, userLoading, router]);
+
+  // Show a spinner while auth is resolving or while redirecting
+  if (userLoading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <ImpersonationProvider isAdmin={isAdmin} isTeamLeader={isTeamLeader} getToken={getToken}>
