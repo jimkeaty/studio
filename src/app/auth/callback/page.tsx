@@ -2,26 +2,23 @@
 /**
  * /auth/callback
  *
- * This page handles the Firebase email sign-in link (magic link) callback.
- * When an agent taps the "Sign In to Dashboard" link in their email, they
- * land here. We complete the sign-in using isSignInWithEmailLink +
- * signInWithEmailLink, then redirect to the dashboard.
+ * Handles the Firebase email sign-in link (magic link) callback.
+ * When an agent taps "Sign In to Dashboard" in their email, they land here.
  *
- * This works perfectly in iOS PWA standalone mode because:
- *  - No popup needed
- *  - No third-party cookies needed
- *  - The link opens in Safari (email links always open in Safari on iOS)
- *  - Firebase stores the session in localStorage which is shared with the PWA
- *  - Agent can then open the home screen icon and go straight to dashboard
+ * KEY FIX: We read the email from the URL query param (?email=...) instead
+ * of localStorage. iOS PWA and Safari have SEPARATE localStorage — so any
+ * email stored in the PWA is invisible to Safari (where email links open).
+ * Embedding the email in the URL avoids this entirely.
  */
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { isSignInWithEmailLink, signInWithEmailLink, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { useAuth } from '@/firebase';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const auth = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -38,27 +35,18 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // Get the email — stored in localStorage when the magic link was requested
-        let email = window.localStorage.getItem('emailForSignIn');
-
+        // Get the email from the URL query param embedded by the send-magic-link API.
+        // We do NOT use localStorage — iOS PWA and Safari have separate storage contexts.
+        const email = searchParams.get('email');
         if (!email) {
-          // Email not found in localStorage — this can happen if the agent opens
-          // the link on a different device than where they requested it.
-          // Ask them to enter their email.
-          email = window.prompt('Please enter your email address to complete sign-in:');
-          if (!email) {
-            setStatus('error');
-            setErrorMsg('Email address required to complete sign-in.');
-            return;
-          }
+          setStatus('error');
+          setErrorMsg('Sign-in link is missing the email address. Please request a new link.');
+          return;
         }
 
-        // Complete the sign-in
+        // Complete the sign-in with persistent session
         await setPersistence(auth, browserLocalPersistence);
         await signInWithEmailLink(auth, email, href);
-
-        // Clean up
-        window.localStorage.removeItem('emailForSignIn');
 
         setStatus('success');
 

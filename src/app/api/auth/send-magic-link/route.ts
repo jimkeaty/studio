@@ -41,8 +41,11 @@ export async function POST(req: NextRequest) {
 
     // Generate the Firebase email sign-in link
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app';
+    // Embed the email in the callback URL so the callback page never needs
+    // localStorage — which is NOT shared between the iOS PWA and Safari.
+    const callbackUrl = `${appUrl}/auth/callback?email=${encodeURIComponent(normalizedEmail)}`;
     const actionCodeSettings = {
-      url: `${appUrl}/auth/callback`,
+      url: callbackUrl,
       handleCodeInApp: true,
     };
 
