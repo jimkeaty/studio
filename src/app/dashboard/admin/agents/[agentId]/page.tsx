@@ -52,31 +52,29 @@ export default function AgentDetailPage({ params }: AgentPageProps) {
     setInviteMsg('');
     try {
       const token = await user.getIdToken();
-      // Use the bulk-invite API targeting just this agent's profile ID
-      const res = await fetch(`/api/admin/bulk-invite-agents`, {
+      // Use the dedicated single-agent invite endpoint
+      const res = await fetch(`/api/admin/agent-profiles/${agentId}/invite`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        // We pass the agentId as a profile filter — the API will look up the email
-        body: JSON.stringify({ profileIds: [agentId] }),
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Invite failed');
 
-      const result = data.results?.[0];
-      if (!result) throw new Error('No result returned');
-
-      if (result.status === 'invited') {
-        setInviteStatus('done');
-        setInviteMsg(`Invite sent to ${result.email}`);
-      } else if (result.status === 'already_exists') {
-        setInviteStatus('done');
-        setInviteMsg(`${result.email} already has an account — they can sign in with Google now`);
-      } else if (result.status === 'skipped_no_email') {
+      if (data.status === 'skipped_no_email') {
         setInviteStatus('error');
         setInviteMsg('No email address on this profile — add an email first');
+        return;
+      }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Invite failed');
+
+      if (data.status === 'invited') {
+        setInviteStatus('done');
+        setInviteMsg(data.message || `Invite sent to ${data.email}`);
+      } else if (data.status === 'already_exists') {
+        setInviteStatus('done');
+        setInviteMsg(data.message || `${data.email} already has an account — they can sign in with Google now`);
       } else {
         setInviteStatus('error');
-        setInviteMsg(result.error || `Status: ${result.status}`);
+        setInviteMsg(data.error || `Unexpected status: ${data.status}`);
       }
     } catch (err: any) {
       setInviteStatus('error');
