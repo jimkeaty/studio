@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap } from 'lucide-react';
+import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap, ExternalLink } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithPopup,
@@ -24,6 +24,13 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const SafariIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+  </svg>
+);
+
 const BRAND_STATS = [
   { icon: Trophy, value: '$2.4M+', label: 'Average team GCI tracked annually', color: 'text-amber-400' },
   { icon: TrendingUp, value: '847+', label: 'Transactions closed and tracked', color: 'text-emerald-400' },
@@ -37,6 +44,8 @@ export default function Home() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPreview, setIsPreview] = useState(false);
+  const [isPWA, setIsPWA] = useState(false);
+  const [appUrl, setAppUrl] = useState('');
   const [branding, setBranding] = useState<{
     companyName?: string;
     tagline?: string;
@@ -46,8 +55,16 @@ export default function Home() {
   } | null>(null);
 
   useEffect(() => {
-    const currentHostname = window.location.hostname;
-    setIsPreview(currentHostname.endsWith('.cloudworkstations.dev'));
+    const hostname = window.location.hostname;
+    setIsPreview(hostname.endsWith('.cloudworkstations.dev'));
+    setAppUrl(window.location.origin);
+
+    // Detect iOS PWA standalone mode
+    // navigator.standalone is true when launched from iPhone home screen
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+    setIsPWA(standalone);
   }, []);
 
   useEffect(() => {
@@ -73,35 +90,27 @@ export default function Home() {
       // ── ALWAYS use signInWithPopup ──────────────────────────────────────────
       //
       // signInWithRedirect is BROKEN on all modern browsers (Safari 16.1+,
-      // Firefox 109+, Chrome 115+) because it relies on third-party cookies
-      // to pass the credential from firebaseapp.com back to the app domain.
-      // All modern browsers block third-party cookies by default.
+      // Firefox 109+, Chrome 115+) because it relies on third-party cookies.
       //
-      // Firebase's own documentation (redirect-best-practices) states:
-      // "Starting June 24 2024, implementing one of the options will be
-      //  required for redirect sign-in to work on Google Chrome M115+."
-      //
-      // The simplest fix (Option 2 per Firebase docs) is signInWithPopup.
-      // It works on: Desktop, Mobile Safari, iPhone PWA, Android Chrome.
+      // NOTE: iOS PWA (standalone) mode blocks signInWithPopup too — iOS does
+      // not allow window.open() in standalone mode. We handle that case above
+      // by showing an "Open in Safari" card before this button is ever shown.
       //
       await setPersistence(auth, browserLocalPersistence);
       await signInWithPopup(auth, provider);
-      // onAuthStateChanged in FirebaseClientProvider will fire and set user,
-      // which triggers the useEffect above to router.replace('/dashboard').
       setIsSigningIn(false);
     } catch (error: any) {
       const code = error?.code ?? '';
 
-      // User closed the popup — not an error, just reset the button
+      // User closed the popup — not an error
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         setIsSigningIn(false);
         return;
       }
 
-      // Popup was blocked by the browser (rare — only happens if user has
-      // strict popup blocking enabled site-wide)
+      // Popup was blocked — this means we're in PWA mode and iOS blocked it
       if (code === 'auth/popup-blocked') {
-        setErrorMsg('Sign-in popup was blocked by your browser. Please allow popups for this site and try again.');
+        setErrorMsg('Sign-in popup was blocked by iOS. Please use the "Open in Safari" button below to sign in first, then return to this app.');
         setIsSigningIn(false);
         return;
       }
@@ -124,7 +133,6 @@ export default function Home() {
     }
   };
 
-  // Determine which logo URL to use
   const activeLogo = branding?.useAnimatedLogo && branding?.animatedLogoUrl
     ? branding.animatedLogoUrl
     : branding?.logoUrl ?? null;
@@ -160,95 +168,124 @@ export default function Home() {
         paddingRight: 'env(safe-area-inset-right)',
       }}
     >
-      {/* Background gradient */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background" />
 
       <div
         className="relative z-10 flex min-h-full flex-col items-center justify-center overflow-y-auto px-4 py-6"
         style={{ minHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
       >
-      <div className="flex w-full max-w-md flex-col items-center gap-8">
-        {/* Logo / Brand */}
-        <div className="flex flex-col items-center gap-3 text-center">
-          {activeLogo ? (
-            <img
-              src={activeLogo}
-              alt={companyName}
-              className="h-16 w-auto object-contain"
-            />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-2xl font-bold shadow-lg">
-              {companyName.charAt(0)}
-            </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{companyName}</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {branding?.tagline || 'Sign in to your dashboard'}
-            </p>
-          </div>
-        </div>
+        <div className="flex w-full max-w-md flex-col items-center gap-8">
 
-        {/* Sign-in card */}
-        <div className="w-full rounded-2xl border bg-card p-6 shadow-sm">
-          <div className="mb-6 text-center">
-            <h2 className="text-xl font-semibold text-foreground">Welcome back</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Sign in to your {companyName} dashboard
-            </p>
-          </div>
-
-          {errorMsg && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Sign-in Error</AlertTitle>
-              <AlertDescription>{errorMsg}</AlertDescription>
-            </Alert>
-          )}
-
-          <Button
-            onClick={handleSignIn}
-            disabled={isSigningIn}
-            className="w-full h-12 text-base font-medium gap-3"
-            variant="outline"
-          >
-            {isSigningIn ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+          {/* Logo / Brand */}
+          <div className="flex flex-col items-center gap-3 text-center">
+            {activeLogo ? (
+              <img src={activeLogo} alt={companyName} className="h-16 w-auto object-contain" />
             ) : (
-              <GoogleIcon />
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-2xl font-bold shadow-lg">
+                {companyName.charAt(0)}
+              </div>
             )}
-            {isSigningIn ? 'Signing in…' : 'Continue with Google'}
-          </Button>
-
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            By signing in you agree to our{' '}
-            <a href="/terms" className="underline underline-offset-2 hover:text-foreground">Terms of Service</a>
-            {' '}and{' '}
-            <a href="/privacy" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</a>.
-          </p>
-        </div>
-
-        {/* Brand stats */}
-        <div className="grid w-full grid-cols-3 gap-3">
-          {BRAND_STATS.map(({ icon: Icon, value, label, color }) => (
-            <div key={label} className="flex flex-col items-center gap-1 rounded-xl border bg-card/60 p-3 text-center">
-              <Icon className={`h-4 w-4 ${color}`} />
-              <span className="text-sm font-bold text-foreground">{value}</span>
-              <span className="text-[10px] leading-tight text-muted-foreground">{label}</span>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{companyName}</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {branding?.tagline || 'Sign in to your dashboard'}
+              </p>
             </div>
-          ))}
-        </div>
-
-        {/* Dev tools — only shown on preview/cloudworkstations */}
-        {isPreview && (
-          <div className="w-full rounded-xl border border-dashed p-4 text-center">
-            <p className="text-xs text-muted-foreground mb-2">Dev tools (preview only)</p>
-            <Button size="sm" variant="ghost" onClick={copyIdToken} className="text-xs">
-              Copy ID Token
-            </Button>
           </div>
-        )}
-      </div>
+
+          {/* Sign-in card */}
+          <div className="w-full rounded-2xl border bg-card p-6 shadow-sm">
+            <div className="mb-6 text-center">
+              <h2 className="text-xl font-semibold text-foreground">Welcome back</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Sign in to your {companyName} dashboard
+              </p>
+            </div>
+
+            {errorMsg && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Sign-in Error</AlertTitle>
+                <AlertDescription>{errorMsg}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* ── iOS PWA first-time sign-in notice ── */}
+            {isPWA ? (
+              <div className="flex flex-col gap-3">
+                <Alert className="border-blue-200 bg-blue-50 text-blue-900">
+                  <SafariIcon className="h-4 w-4 text-blue-600" />
+                  <AlertTitle className="text-blue-900">First-time sign-in required</AlertTitle>
+                  <AlertDescription className="text-blue-800 text-xs leading-relaxed">
+                    Apple does not allow Google sign-in windows inside home screen apps.
+                    Sign in once through Safari, then come back here — you will be logged in automatically.
+                  </AlertDescription>
+                </Alert>
+
+                {/* Open in Safari button */}
+                <a
+                  href={appUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:bg-blue-800"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open in Safari to Sign In
+                </a>
+
+                <p className="text-center text-xs text-muted-foreground">
+                  After signing in through Safari, return to this app — you will go straight to your dashboard.
+                </p>
+              </div>
+            ) : (
+              /* Normal browser sign-in button */
+              <>
+                <Button
+                  onClick={handleSignIn}
+                  disabled={isSigningIn}
+                  className="w-full h-12 text-base font-medium gap-3"
+                  variant="outline"
+                >
+                  {isSigningIn ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <GoogleIcon />
+                  )}
+                  {isSigningIn ? 'Signing in…' : 'Continue with Google'}
+                </Button>
+
+                <p className="mt-4 text-center text-xs text-muted-foreground">
+                  By signing in you agree to our{' '}
+                  <a href="/terms" className="underline underline-offset-2 hover:text-foreground">Terms of Service</a>
+                  {' '}and{' '}
+                  <a href="/privacy" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</a>.
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Brand stats */}
+          <div className="grid w-full grid-cols-3 gap-3">
+            {BRAND_STATS.map(({ icon: Icon, value, label, color }) => (
+              <div key={label} className="flex flex-col items-center gap-1 rounded-xl border bg-card/60 p-3 text-center">
+                <Icon className={`h-4 w-4 ${color}`} />
+                <span className="text-sm font-bold text-foreground">{value}</span>
+                <span className="text-[10px] leading-tight text-muted-foreground">{label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Dev tools */}
+          {isPreview && (
+            <div className="w-full rounded-xl border border-dashed p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-2">Dev tools (preview only)</p>
+              <Button size="sm" variant="ghost" onClick={copyIdToken} className="text-xs">
+                Copy ID Token
+              </Button>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );
