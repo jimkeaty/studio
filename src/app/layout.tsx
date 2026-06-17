@@ -44,9 +44,11 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png?v=2" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png?v=2" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="mobile-web-app-capable" content="yes" />
+        {/* Note: apple-mobile-web-app-capable intentionally removed.
+            That meta tag forces iOS to treat Add-to-Home-Screen as a standalone
+            PWA with isolated storage, which breaks Google OAuth sign-in.
+            Without it, Add-to-Home-Screen creates a Safari bookmark that shares
+            the Safari session — so agents stay signed in. */}
       </head>
       <body className="font-body antialiased" suppressHydrationWarning>
         <FirebaseClientProvider>{children}</FirebaseClientProvider>

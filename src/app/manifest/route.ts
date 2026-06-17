@@ -46,7 +46,7 @@ export async function GET() {
     short_name: companyName.split(' ')[0] || companyName,
     description: `Performance and accountability dashboard for ${companyName}.`,
     start_url: '/dashboard',
-    display: 'standalone',
+    display: 'browser',
     orientation: 'portrait-primary',
     background_color: primaryColor,
     theme_color: primaryColor,
