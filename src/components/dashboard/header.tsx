@@ -304,7 +304,13 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:px-6">
+    <header
+      className="sticky top-0 z-30 flex items-center gap-4 border-b bg-background px-4 sm:px-6"
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        minHeight: 'calc(4rem + env(safe-area-inset-top, 0px))',
+      }}
+    >
       {/* ── Mobile sidebar toggle ──────────────────────────────────────────── */}
       <Button
         variant="outline"

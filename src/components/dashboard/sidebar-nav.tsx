@@ -243,7 +243,13 @@ export function SidebarNav() {
   return (
     <Sidebar className="border-r">
       <SidebarHeader className="border-b border-slate-700/60">
-        <div className="flex h-16 items-center gap-3 px-4">
+        <div
+          className="flex items-center gap-3 px-4"
+          style={{
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            minHeight: 'calc(4rem + env(safe-area-inset-top, 0px))',
+          }}
+        >
           {activeLogo ? (
             <img
               src={activeLogo}
