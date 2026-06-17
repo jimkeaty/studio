@@ -8,11 +8,6 @@ import { FirebaseProvider } from './provider';
 
 export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  // redirectChecked: true once getRedirectResult() has resolved.
-  // Prevents the login page from flashing while Firebase processes the
-  // OAuth redirect result on mobile Chrome (where the redirect takes a
-  // moment to resolve after Google sends the user back to the app).
-  const [redirectChecked, setRedirectChecked] = useState(false);
 
   // Create app/auth once on the client
   const app = useMemo(() => getFirebaseApp(), []);
@@ -29,29 +24,35 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    // Process Google redirect sign-in result.
+    // Process Google redirect sign-in result in the background.
     // This is a no-op if the user did not arrive via signInWithRedirect.
-    // MUST await before allowing the login page to render its sign-in button,
-    // otherwise onAuthStateChanged fires with user=null during the brief window
-    // before Firebase processes the redirect credential — causing a redirect loop.
+    //
+    // IMPORTANT: We do NOT block rendering on this promise. Blocking caused a
+    // blank white screen on first-time mobile users because getRedirectResult()
+    // can take several seconds on slow connections, and if it throws (e.g. due
+    // to authDomain mismatch), the app never rendered at all.
+    //
+    // Instead: the login page renders immediately. If a redirect result exists,
+    // onAuthStateChanged fires once it resolves and automatically redirects the
+    // user to /dashboard. If there is no redirect result (popup flow or fresh
+    // visit), this is a fast no-op.
     getRedirectResult(auth)
       .then((result) => {
         if (result && process.env.NODE_ENV === 'development') {
-          console.log('Firebase redirect result processed successfully:', result.user?.email);
+          console.log('[Auth] Redirect result processed:', result.user?.email);
         }
       })
       .catch((error) => {
-        console.error('Error processing Firebase redirect result:', error);
-      })
-      .finally(() => {
-        setRedirectChecked(true);
+        // Non-fatal: log only. A failed redirect result just means the user
+        // needs to sign in again. The login page is already visible.
+        console.warn('[Auth] getRedirectResult error (non-fatal):', error?.code, error?.message);
       });
   }, [auth]);
 
-  // Prevent hydration mismatch by ensuring server + first client render match.
-  // Also block rendering until getRedirectResult() has resolved to prevent
-  // the login page from appearing briefly before the redirect auth completes.
-  if (!mounted || !redirectChecked) return null;
+  // Only block on hydration mismatch prevention (mounted).
+  // Do NOT block on redirect result — the login page must render immediately
+  // so first-time users on mobile see the sign-in button right away.
+  if (!mounted) return null;
 
   return <FirebaseProvider value={{ app, auth }}>{children}</FirebaseProvider>;
 }
