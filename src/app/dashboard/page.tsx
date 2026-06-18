@@ -572,6 +572,7 @@ function AgentDashboardPage() {
               year={perfYear}
               compareYear={compareYear}
               setCompareYear={setCompareYear}
+              viewAs={viewAs}
             />
           </DashboardSection>
 
@@ -2130,12 +2131,31 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
 function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, setCompareYear }: {
   perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   year: number; compareYear: number | null; setCompareYear: (y: number | null) => void;
+  viewAs?: string | null;
 }) {
   const [showProjected, setShowProjected] = useState(false);
   const [showGoals, setShowGoals] = useState(true);
   const [showPending, setShowPending] = useState(true);
   // Rolling 12-month vs calendar year toggle
   const [rollingView, setRollingView] = useState(false);
+  // Next-year data for cross-year rolling window
+  const { user: chartUser } = useUser();
+  const [nextYearData, setNextYearData] = useState<AgentMetricsResponse | null>(null);
+
+  useEffect(() => {
+    if (!rollingView || !chartUser || !perfData?.agentView) return;
+    const goalStart: number = (perfData.agentView as any).goalStartMonth ?? 1;
+    if (goalStart <= 1) return; // starts in January — no cross-year needed
+    const nextYear = year + 1;
+    chartUser.getIdToken().then(token => {
+      const params = new URLSearchParams({ year: String(nextYear) });
+      if (viewAs) params.set('viewAs', viewAs);
+      fetch(`/api/agent/command-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(d => setNextYearData(d))
+        .catch(() => {});
+    });
+  }, [rollingView, chartUser, year, viewAs, perfData]);
 
   if (perfLoading) return <Skeleton className="h-80" />;
   if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Failed to load performance data</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
@@ -2159,6 +2179,11 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const currentYear2 = today2.getFullYear();
   const isCurrentYear2 = year === currentYear2;
 
+  // Next-year raw data (for cross-year rolling window)
+  const nextRawMonths = nextYearData?.overview?.months ?? [];
+  const nextRawNetIncome: number[] = (nextYearData?.agentView as any)?.monthlyNetIncome ?? [];
+  const nextRawPendingNetIncome: number[] = (nextYearData?.agentView as any)?.monthlyPendingNetIncome ?? [];
+
   // Build the display months array (12 slots)
   let months: typeof rawMonths;
   let monthlyNetIncome: number[];
@@ -2166,23 +2191,34 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   let rollingStartMonthIdx: number; // 0-based index into rawMonths where rolling window starts
 
   if (rollingView && goalStartMonth > 1) {
-    // Rolling window: starts at goalStartMonth (1-based), wraps into next year if needed.
-    // For simplicity we only support same-year rolling (no cross-year wrap) for now.
-    // Slots before goalStartMonth are shifted to the end of the array.
+    // Rolling window: starts at goalStartMonth (1-based), wraps into next year.
+    // e.g. goalStartMonth=6 (June): slots 0-5 = Jun-Dec of this year (indices 5-11),
+    //                               slots 6-11 = Jan-May of next year (indices 0-4).
     const startIdx = goalStartMonth - 1; // 0-based
     rollingStartMonthIdx = startIdx;
-    months = [
-      ...rawMonths.slice(startIdx),
-      ...rawMonths.slice(0, startIdx),
-    ];
-    monthlyNetIncome = [
-      ...rawMonthlyNetIncome.slice(startIdx),
-      ...rawMonthlyNetIncome.slice(0, startIdx),
-    ];
-    monthlyPendingNetIncome = [
-      ...rawMonthlyPendingNetIncome.slice(startIdx),
-      ...rawMonthlyPendingNetIncome.slice(0, startIdx),
-    ];
+    const thisYearTail = rawMonths.slice(startIdx);           // Jun-Dec (7 months for June start)
+    const nextYearHead = nextRawMonths.length === 12
+      ? nextRawMonths.slice(0, startIdx)                      // Jan-May of next year
+      : rawMonths.slice(0, startIdx).map((m, i) => ({         // fallback: pad with empty months
+          ...m,
+          label: new Date(year + 1, i, 1).toLocaleString('default', { month: 'short' }),
+          month: i + 1,
+          grossMarginGoal: null, volumeGoal: null, salesCountGoal: null,
+          closedVolume: 0, closedCount: 0, pendingVolume: 0, pendingCount: 0,
+        }));
+    months = [...thisYearTail, ...nextYearHead];
+
+    const thisYearNetTail = rawMonthlyNetIncome.slice(startIdx);
+    const nextYearNetHead = nextRawNetIncome.length === 12
+      ? nextRawNetIncome.slice(0, startIdx)
+      : new Array(startIdx).fill(0);
+    monthlyNetIncome = [...thisYearNetTail, ...nextYearNetHead];
+
+    const thisYearPendTail = rawMonthlyPendingNetIncome.slice(startIdx);
+    const nextYearPendHead = nextRawPendingNetIncome.length === 12
+      ? nextRawPendingNetIncome.slice(0, startIdx)
+      : new Array(startIdx).fill(0);
+    monthlyPendingNetIncome = [...thisYearPendTail, ...nextYearPendHead];
   } else {
     rollingStartMonthIdx = 0;
     months = rawMonths;
@@ -2196,6 +2232,12 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const currentMonthIdx = isCurrentYear ? today.getMonth() : 11;
   const todayMonthLabel = today.toLocaleString('default', { month: 'long' });
   const todayMonthShort = today.toLocaleString('default', { month: 'short' });
+  // In rolling view, the months array is reordered starting at goalStartMonth.
+  // currentMonthIdx in the reordered array = (today.getMonth() - (goalStartMonth-1) + 12) % 12
+  const rollingCurrentMonthIdx = rollingView && goalStartMonth > 1
+    ? (currentMonthIdx - (goalStartMonth - 1) + 12) % 12
+    : currentMonthIdx;
+  const effectiveMonthIdx = rollingView ? rollingCurrentMonthIdx : currentMonthIdx;
 
   // Helper: compute projected future months using seasonality weights.
   //
@@ -2447,8 +2489,8 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         <CardContent>
           <ChartContainer config={incomeChartConfig} className="h-[350px] w-full">
             <BarChart data={months.map((m, i) => {
-              const isFuture = isCurrentYear && i > currentMonthIdx;
-              const isPartial = isCurrentYear && i === currentMonthIdx;
+              const isFuture = isCurrentYear && i > effectiveMonthIdx;
+              const isPartial = isCurrentYear && i === effectiveMonthIdx;
               const income = monthlyNetIncome[i] || 0;
               return {
                 label: m.label,
@@ -2575,8 +2617,8 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         <CardContent>
           <ChartContainer config={volumeChartConfig} className="h-[300px] w-full">
             <BarChart data={months.map((m, i) => {
-              const isFuture = isCurrentYear && i > currentMonthIdx;
-              const isPartial = isCurrentYear && i === currentMonthIdx;
+              const isFuture = isCurrentYear && i > effectiveMonthIdx;
+              const isPartial = isCurrentYear && i === effectiveMonthIdx;
               return {
                 ...m,
                 closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
@@ -2702,8 +2744,8 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
         <CardContent>
           <ChartContainer config={salesChartConfig} className="h-[300px] w-full">
             <BarChart data={months.map((m, i) => {
-              const isFuture = isCurrentYear && i > currentMonthIdx;
-              const isPartial = isCurrentYear && i === currentMonthIdx;
+              const isFuture = isCurrentYear && i > effectiveMonthIdx;
+              const isPartial = isCurrentYear && i === effectiveMonthIdx;
               return {
                 ...m,
                 closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
