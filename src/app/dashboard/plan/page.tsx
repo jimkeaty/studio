@@ -747,8 +747,8 @@ export default function BusinessPlanPage() {
       } finally {
         setIsLoading(false);
         handleCalculate();
-        // Re-distribute goals after all state has been restored so the volume column populates
-        setTimeout(distributeGoals, 100);
+        // NOTE: do NOT call distributeGoals here — it has a stale closure over seasonWeights
+        // and will overwrite the inline goals computed above with empty volume values.
       }
     };
 
@@ -817,26 +817,45 @@ export default function BusinessPlanPage() {
       }
 
       // Auto-save monthly goals whenever the plan is saved so the dashboard KPIs stay in sync.
-      // Compute goals inline from current state values to avoid reading stale monthlyGoals
-      // (distributeGoals uses a 50ms setTimeout so monthlyGoals state may not have updated yet).
+      // Compute goals inline with grace period suppression and proportional distribution
+      // across active closing months only (not all 12 months).
       if (goalSegment) {
         const vol = parseFloat(yearlyVolume) || 0;
         const sales = parseInt(yearlySales, 10) || 0;
         const income = parseFloat(yearlyIncome) || 0;
+        // Determine grace period / plan start boundaries
+        const savePlanStart = data.planStartDate ? new Date(data.planStartDate + 'T00:00:00') : null;
+        const saveStartMonthNum = savePlanStart ? savePlanStart.getMonth() + 1 : 1;
+        const saveGrace = isNewAgent ? gracePeriodMonths : 0;
+        const saveFirstClosingMonth = saveStartMonthNum + saveGrace;
+        // Compute total seasonality weight for active closing months only
+        const saveActiveMonths = Array.from({ length: 12 }, (_, i) => i + 1)
+          .filter(m => m >= saveFirstClosingMonth);
+        const saveTotalSalesPct = saveActiveMonths.reduce((s, m) => {
+          const sw = seasonWeights[m];
+          return s + (parseFloat(sw?.salesPct ?? '8.33') || 8.33);
+        }, 0) || 100;
+        const saveTotalVolPct = saveActiveMonths.reduce((s, m) => {
+          const sw = seasonWeights[m];
+          return s + (parseFloat(sw?.volumePct ?? '8.33') || 8.33);
+        }, 0) || 100;
         const goalPromises = [];
         for (let m = 1; m <= 12; m++) {
           const sw = seasonWeights[m];
-          const volPct = parseFloat(sw?.volumePct) || 8.33;
-          const salesPct = parseFloat(sw?.salesPct) || 8.33;
-          const computedVolume = vol > 0 ? Math.round(vol * (volPct / 100)) : null;
-          const computedSales = sales > 0 ? Math.round(sales * (salesPct / 100)) : null;
-          const computedMargin = income > 0 ? Math.round(income * (salesPct / 100)) : null;
-          // Fall back to existing monthlyGoals if computed values are all null
-          const existing = monthlyGoals[m];
-          const finalVolume = computedVolume ?? (existing?.volume ? parseFloat(existing.volume) : null);
-          const finalSales = computedSales ?? (existing?.sales ? parseInt(existing.sales, 10) : null);
-          const finalMargin = computedMargin ?? (existing?.margin ? parseFloat(existing.margin) : null);
-          if (finalVolume == null && finalSales == null && finalMargin == null) continue;
+          const volPct = parseFloat(sw?.volumePct ?? '8.33') || 8.33;
+          const salesPct = parseFloat(sw?.salesPct ?? '8.33') || 8.33;
+          const isBeforeStart = savePlanStart && m < saveStartMonthNum;
+          const isGrace = m >= saveStartMonthNum && m < saveFirstClosingMonth;
+          let finalVolume: number | null = null;
+          let finalSales: number | null = null;
+          let finalMargin: number | null = null;
+          if (!isBeforeStart && !isGrace) {
+            // Active closing month: distribute proportionally across active months only
+            finalVolume = vol > 0 ? Math.round(vol * (volPct / saveTotalVolPct)) : null;
+            finalSales = sales > 0 ? Math.round(sales * (salesPct / saveTotalSalesPct)) : null;
+            finalMargin = income > 0 ? Math.round(income * (salesPct / saveTotalSalesPct)) : null;
+          }
+          // Always write the record (even null) so grace/pre-start months are explicitly zeroed
           goalPromises.push(
             fetch('/api/broker/goals', {
               method: 'POST',

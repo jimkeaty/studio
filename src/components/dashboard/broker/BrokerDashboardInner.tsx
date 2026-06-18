@@ -1196,6 +1196,8 @@ export function BrokerDashboardInner() {
   // Collapsible state for new sections
   const [reportCardOpen, setReportCardOpen] = useState(true);
   const [kpiTrackerOpen, setKpiTrackerOpen] = useState(true);
+  // Rolling 12-month vs calendar year toggle for charts
+  const [rollingView, setRollingView] = useState(false);
 
   const fetchKpiData = useCallback(async () => {
     if (!user) return;
@@ -1405,17 +1407,30 @@ export function BrokerDashboardInner() {
             {typeLabel ? ` · ${typeLabel}` : ''} — {year}
           </p>
         </div>
-        <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-          <SelectTrigger className="w-[120px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[...Array(5)].map((_, i) => {
-              const y = new Date().getFullYear() - i;
-              return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
-            })}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+            <SelectTrigger className="w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[...Array(5)].map((_, i) => {
+                const y = new Date().getFullYear() - i;
+                return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+              })}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            onClick={() => setRollingView(r => !r)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+              rollingView
+                ? 'bg-indigo-500 text-white border-indigo-500'
+                : 'bg-background text-muted-foreground border-border hover:bg-muted'
+            }`}
+          >
+            🔄 {rollingView ? '12-Month Rolling' : 'Calendar Year'}
+          </button>
+        </div>
       </div>
 
       {/* ── Team Pulse Bar ─────────────────────────────────────────────── */}
@@ -1948,7 +1963,9 @@ export function BrokerDashboardInner() {
                   grossMargin: (!isFuture && !isPartial) ? m.grossMargin : null,
                   partialGrossMargin: isPartial ? m.grossMargin : null,
                   pendingGrossMargin: (!showPendingGM || isFuture) ? null : (m.pendingGci ?? 0),
-                  grossMarginGoal: showGoals ? (isFuture ? null : m.grossMarginGoal) : null,
+                  // Show goal bars for ALL months (past and future) in calendar view.
+                  // In rolling view, suppress future months so the bar doesn't crowd the chart.
+                  grossMarginGoal: showGoals ? (rollingView && isFuture ? null : m.grossMarginGoal) : null,
                   compareMargin: compareYear ? (data.comparisonData?.months?.[i]?.grossMargin ?? null) : null,
                   projectedMargin: showProjected ? (projectedMonthData?.margin[i] ?? null) : null,
                 };
@@ -2133,7 +2150,7 @@ export function BrokerDashboardInner() {
                   ...m,
                   closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
                   partialClosedVolume: isPartial ? m.closedVolume : null,
-                  volumeGoal: showGoals ? (isFuture ? null : m.volumeGoal) : null,
+                  volumeGoal: showGoals ? (rollingView && isFuture ? null : m.volumeGoal) : null,
                   pendingVolume: (!showPending || isFuture) ? null : m.pendingVolume,
                   compareVolume: compareYear ? (data.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
                   projectedVolume: showProjected ? (projectedMonthData?.volume[i] ?? null) : null,
@@ -2264,7 +2281,7 @@ export function BrokerDashboardInner() {
                   ...m,
                   closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
                   partialClosedCount: isPartial ? m.closedCount : null,
-                  salesCountGoal: showGoals ? (isFuture ? null : m.salesCountGoal) : null,
+                  salesCountGoal: showGoals ? (rollingView && isFuture ? null : m.salesCountGoal) : null,
                   pendingCount: (!showPending || isFuture) ? null : m.pendingCount,
                   compareCount: compareYear ? (data.comparisonData?.months?.[i]?.closedCount ?? null) : null,
                   projectedCount: showProjected ? (projectedMonthData?.sales[i] ?? null) : null,
