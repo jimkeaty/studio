@@ -619,33 +619,39 @@ export default function BusinessPlanPage() {
             .catch(() => {});
         }
 
-        // Load monthly goals from command-metrics
+        // Load monthly goals from command-metrics — awaited so the plan's inline computation
+        // (below) always runs AFTER and can override stale Firestore values.
         const metricsParams = new URLSearchParams({ year });
         if (isImpersonating && effectiveUid) metricsParams.set('viewAs', effectiveUid);
-        fetch(`/api/agent/command-metrics?${metricsParams}`, { headers: { Authorization: `Bearer ${token}` } })
-          .then(r => r.json())
-          .then((d: any) => {
-            if (d?.agentView?.goalSegment) setGoalSegment(d.agentView.goalSegment);
-            if (d?.overview?.months) {
-              const map: Record<number, { margin: string; volume: string; sales: string }> = {};
-              for (const m of d.overview.months) {
-                map[m.month] = {
-                  margin: m.grossMarginGoal != null ? String(Math.round(m.grossMarginGoal)) : '',
-                  volume: m.volumeGoal != null ? String(Math.round(m.volumeGoal)) : '',
-                  sales: m.salesCountGoal != null ? String(m.salesCountGoal) : '',
-                };
-              }
-              setMonthlyGoals(map);
-              // Seed yearly totals from saved goals
-              const totalMargin = Object.values(map).reduce((s, g) => s + (parseFloat(g.margin) || 0), 0);
-              const totalVolume = Object.values(map).reduce((s, g) => s + (parseFloat(g.volume) || 0), 0);
-              const totalSales = Object.values(map).reduce((s, g) => s + (parseInt(g.sales, 10) || 0), 0);
-              if (totalMargin > 0) setYearlyIncome(String(Math.round(totalMargin)));
-              if (totalVolume > 0) setYearlyVolume(String(Math.round(totalVolume)));
-              if (totalSales > 0) setYearlySales(String(totalSales));
+        let metricsGoalSegment = '';
+        try {
+          const metricsRes = await fetch(`/api/agent/command-metrics?${metricsParams}`, { headers: { Authorization: `Bearer ${token}` } });
+          const d = await metricsRes.json();
+          if (d?.agentView?.goalSegment) {
+            metricsGoalSegment = d.agentView.goalSegment;
+            setGoalSegment(d.agentView.goalSegment);
+          }
+          // Seed monthly goals from Firestore as a baseline (will be overwritten below
+          // by the plan's inline computation if the plan has yearlyVolume/Sales/Income).
+          if (d?.overview?.months) {
+            const map: Record<number, { margin: string; volume: string; sales: string }> = {};
+            for (const m of d.overview.months) {
+              map[m.month] = {
+                margin: m.grossMarginGoal != null ? String(Math.round(m.grossMarginGoal)) : '',
+                volume: m.volumeGoal != null ? String(Math.round(m.volumeGoal)) : '',
+                sales: m.salesCountGoal != null ? String(m.salesCountGoal) : '',
+              };
             }
-          })
-          .catch(() => {});
+            setMonthlyGoals(map);
+            // Seed yearly totals from saved goals only if plan doesn't have its own values
+            const totalMargin = Object.values(map).reduce((s, g) => s + (parseFloat(g.margin) || 0), 0);
+            const totalVolume = Object.values(map).reduce((s, g) => s + (parseFloat(g.volume) || 0), 0);
+            const totalSales = Object.values(map).reduce((s, g) => s + (parseInt(g.sales, 10) || 0), 0);
+            if (totalMargin > 0) setYearlyIncome(String(Math.round(totalMargin)));
+            if (totalVolume > 0) setYearlyVolume(String(Math.round(totalVolume)));
+            if (totalSales > 0) setYearlySales(String(totalSales));
+          }
+        } catch { /* non-fatal */ }
 
         // If no plan exists, server returns ok:true with plan:{} — keep defaults
         if (json?.ok && json.plan && typeof json.plan === "object" && Object.keys(json.plan).length > 0) {
@@ -672,9 +678,21 @@ export default function BusinessPlanPage() {
           }
 
           // Compute monthly goals inline (avoids stale-closure issue with setTimeout+distributeGoals)
-          const restoredVol = plan.yearlyVolume ?? 0;
-          const restoredSales = plan.yearlySales ?? 0;
-          const restoredIncome = plan.yearlyIncome ?? 0;
+          // Derive volume from plan fields if yearlyVolume is not explicitly stored.
+          let restoredVol = plan.yearlyVolume ?? 0;
+          let restoredSales = plan.yearlySales ?? 0;
+          const restoredIncome = plan.yearlyIncome ?? plan.annualIncomeGoal ?? 0;
+          if (restoredVol === 0 && restoredIncome > 0) {
+            const commPct = (plan as any).goalAvgCommPct ?? 0;
+            const netPct = (plan as any).goalAvgNetPct ?? 0;
+            if (commPct > 0 && netPct > 0) {
+              restoredVol = Math.round(restoredIncome / ((commPct / 100) * (netPct / 100)));
+            }
+          }
+          if (restoredSales === 0 && restoredVol > 0) {
+            const asp = (plan as any).goalAvgSalePrice ?? 0;
+            if (asp > 0) restoredSales = Math.round(restoredVol / asp);
+          }
           if (restoredVol > 0 || restoredSales > 0 || restoredIncome > 0) {
             // Determine first closing month (1-based)
             const planStart = plan.planStartDate ? new Date(plan.planStartDate + 'T00:00:00') : null;
