@@ -754,12 +754,27 @@ export default function BusinessPlanPage() {
         throw new Error(json?.error ?? "Failed to save plan");
       }
 
-      // Auto-save monthly goals whenever the plan is saved so the dashboard KPIs stay in sync
+      // Auto-save monthly goals whenever the plan is saved so the dashboard KPIs stay in sync.
+      // Compute goals inline from current state values to avoid reading stale monthlyGoals
+      // (distributeGoals uses a 50ms setTimeout so monthlyGoals state may not have updated yet).
       if (goalSegment) {
+        const vol = parseFloat(yearlyVolume) || 0;
+        const sales = parseInt(yearlySales, 10) || 0;
+        const income = parseFloat(yearlyIncome) || 0;
         const goalPromises = [];
         for (let m = 1; m <= 12; m++) {
-          const g = monthlyGoals[m];
-          if (!g) continue;
+          const sw = seasonWeights[m];
+          const volPct = parseFloat(sw?.volumePct) || 8.33;
+          const salesPct = parseFloat(sw?.salesPct) || 8.33;
+          const computedVolume = vol > 0 ? Math.round(vol * (volPct / 100)) : null;
+          const computedSales = sales > 0 ? Math.round(sales * (salesPct / 100)) : null;
+          const computedMargin = income > 0 ? Math.round(income * (salesPct / 100)) : null;
+          // Fall back to existing monthlyGoals if computed values are all null
+          const existing = monthlyGoals[m];
+          const finalVolume = computedVolume ?? (existing?.volume ? parseFloat(existing.volume) : null);
+          const finalSales = computedSales ?? (existing?.sales ? parseInt(existing.sales, 10) : null);
+          const finalMargin = computedMargin ?? (existing?.margin ? parseFloat(existing.margin) : null);
+          if (finalVolume == null && finalSales == null && finalMargin == null) continue;
           goalPromises.push(
             fetch('/api/broker/goals', {
               method: 'POST',
@@ -768,9 +783,9 @@ export default function BusinessPlanPage() {
                 year: parseInt(year, 10),
                 month: m,
                 segment: goalSegment,
-                grossMarginGoal: g.margin ? parseFloat(g.margin) : null,
-                volumeGoal: g.volume ? parseFloat(g.volume) : null,
-                salesCountGoal: g.sales ? parseInt(g.sales, 10) : null,
+                grossMarginGoal: finalMargin,
+                volumeGoal: finalVolume,
+                salesCountGoal: finalSales,
               }),
             })
           );
