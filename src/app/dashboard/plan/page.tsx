@@ -523,7 +523,43 @@ export default function BusinessPlanPage() {
       }
     }
     setSeasonWeights(sw);
-    setTimeout(distributeGoals, 50);
+
+    // Compute goals inline using the freshly-built `sw` — do NOT use setTimeout(distributeGoals)
+    // because distributeGoals closes over the OLD seasonWeights state (React state is async)
+    // and would run before the new weights are committed, producing stale/empty volume values.
+    const vol = parseFloat(yearlyVolume) || 0;
+    const sales = parseInt(yearlySales, 10) || 0;
+    const income = parseFloat(yearlyIncome) || 0;
+
+    // Determine grace period so we don't write goals for suppressed months
+    const planStartVal = form.getValues('planStartDate');
+    const planStart = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+    const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
+    const grace = isNewAgent ? gracePeriodMonths : 0;
+    const firstClosingMonth = startMonthNum + grace;
+
+    // Compute total active-month weights for proportional distribution
+    const activeMonths = Array.from({ length: 12 }, (_, i) => i + 1).filter(m => m >= firstClosingMonth);
+    const totalSalesPct = activeMonths.reduce((s, m) => s + (parseFloat(sw[m]?.salesPct) || 8.33), 0) || 100;
+    const totalVolPct   = activeMonths.reduce((s, m) => s + (parseFloat(sw[m]?.volumePct) || 8.33), 0) || 100;
+
+    const newGoals: typeof monthlyGoals = {};
+    for (let m = 1; m <= 12; m++) {
+      const isBeforeStart = planStart && m < startMonthNum;
+      const isGrace = m >= startMonthNum && m < firstClosingMonth;
+      if (isBeforeStart || isGrace) {
+        newGoals[m] = { margin: '', volume: '', sales: '' };
+      } else {
+        const salesPct = parseFloat(sw[m]?.salesPct) || 8.33;
+        const volPct   = parseFloat(sw[m]?.volumePct) || 8.33;
+        newGoals[m] = {
+          volume: vol    > 0 ? String(Math.round(vol    * (volPct   / totalVolPct)))   : '',
+          sales:  sales  > 0 ? String(Math.round(sales  * (salesPct / totalSalesPct))) : '',
+          margin: income > 0 ? String(Math.round(income * (salesPct / totalSalesPct))) : '',
+        };
+      }
+    }
+    setMonthlyGoals(newGoals);
   };
 
   const saveMonthlyGoals = async () => {
