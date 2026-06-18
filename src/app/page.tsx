@@ -1,12 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap, Mail, CheckCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, TrendingUp, Trophy, Zap, Mail, CheckCircle, ArrowLeft } from 'lucide-react';
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithCustomToken,
   setPersistence,
   browserLocalPersistence,
 } from 'firebase/auth';
@@ -37,10 +38,11 @@ const BRAND_STATS = [
 function detectStandalone(): boolean {
   if (typeof window === 'undefined') return false;
   if ((window.navigator as any).standalone === true) return true;
-  // Android Chrome / Desktop fallback
   if (window.matchMedia('(display-mode: standalone)').matches) return true;
   return false;
 }
+
+type OtpStep = 'email' | 'code' | 'verifying';
 
 export default function Home() {
   const router = useRouter();
@@ -51,11 +53,13 @@ export default function Home() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Magic link state (PWA mode)
+  // OTP state (PWA mode)
+  const [otpStep, setOtpStep] = useState<OtpStep>('email');
   const [email, setEmail] = useState('');
-  const [isSendingLink, setIsSendingLink] = useState(false);
-  const [linkSent, setLinkSent] = useState(false);
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Environment detection
   const [isPreview, setIsPreview] = useState(false);
@@ -90,6 +94,13 @@ export default function Home() {
     }
   }, [user, userLoading, router]);
 
+  // Focus code input when moving to code step
+  useEffect(() => {
+    if (otpStep === 'code') {
+      setTimeout(() => codeInputRef.current?.focus(), 100);
+    }
+  }, [otpStep]);
+
   // ── Google sign-in (regular browser only) ─────────────────────────────────
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -111,36 +122,59 @@ export default function Home() {
     }
   };
 
-  // ── Magic link sign-in (PWA mode) ──────────────────────────────────────────
-  const handleSendMagicLink = async (e: React.FormEvent) => {
+  // ── OTP: Step 1 — send code ────────────────────────────────────────────────
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
-
-    setIsSendingLink(true);
-    setLinkError(null);
-
+    setIsSendingOtp(true);
+    setOtpError(null);
     try {
-      // Store email in localStorage so the callback page can complete sign-in
-      window.localStorage.setItem('emailForSignIn', email.trim().toLowerCase());
-
-      const res = await fetch('/api/auth/send-magic-link', {
+      const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
       const data = await res.json();
-
       if (!data.ok) {
-        setLinkError(data.error ?? 'Failed to send sign-in link. Please try again.');
-        setIsSendingLink(false);
+        setOtpError(data.error ?? 'Failed to send code. Please try again.');
+        setIsSendingOtp(false);
         return;
       }
-
-      setLinkSent(true);
-      setIsSendingLink(false);
+      setOtpStep('code');
+      setIsSendingOtp(false);
     } catch {
-      setLinkError('Network error. Please check your connection and try again.');
-      setIsSendingLink(false);
+      setOtpError('Network error. Please check your connection and try again.');
+      setIsSendingOtp(false);
+    }
+  };
+
+  // ── OTP: Step 2 — verify code and sign in directly in this window ──────────
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otpCode.length !== 6) return;
+    setOtpStep('verifying');
+    setOtpError(null);
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otpCode.trim() }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setOtpError(data.error ?? 'Incorrect code. Please try again.');
+        setOtpStep('code');
+        setOtpCode('');
+        return;
+      }
+      // Sign in with the custom token — this happens IN the PWA context, no redirect
+      await setPersistence(auth, browserLocalPersistence);
+      await signInWithCustomToken(auth, data.token);
+      // onAuthStateChanged fires → useUser updates → useEffect above redirects to /dashboard
+    } catch {
+      setOtpError('Verification failed. Please try again.');
+      setOtpStep('code');
+      setOtpCode('');
     }
   };
 
@@ -226,69 +260,115 @@ export default function Home() {
             </div>
 
             {isPWA ? (
-              /* ── iOS PWA: email magic link ── */
-              linkSent ? (
-                <div className="flex flex-col items-center gap-4 py-2 text-center">
-                  <CheckCircle className="h-12 w-12 text-emerald-500" />
-                  <div>
-                    <p className="text-base font-semibold text-foreground">Check your email</p>
-                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                      We sent a sign-in link to <strong>{email}</strong>.
-                      Tap the link in the email — it will open Safari and sign you in automatically.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => { setLinkSent(false); setEmail(''); }}
-                    className="text-xs text-muted-foreground underline underline-offset-2"
-                  >
-                    Use a different email
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSendMagicLink} className="flex flex-col gap-3">
-                  {linkError && (
-                    <Alert variant="destructive">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertTitle>Error</AlertTitle>
-                      <AlertDescription>{linkError}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="email" className="text-sm font-medium text-foreground">
-                      Work email address
-                    </label>
-                    <input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      placeholder="you@keatyrealestate.com"
-                      required
-                      autoComplete="email"
-                      autoCapitalize="none"
-                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={isSendingLink || !email.trim()}
-                    className="w-full h-12 text-base font-semibold gap-2"
-                  >
-                    {isSendingLink ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Mail className="h-5 w-5" />
+              /* ── iOS PWA: 6-digit OTP — everything happens in this window ── */
+              <>
+                {otpStep === 'email' && (
+                  <form onSubmit={handleSendOtp} className="flex flex-col gap-3">
+                    {otpError && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Error</AlertTitle>
+                        <AlertDescription>{otpError}</AlertDescription>
+                      </Alert>
                     )}
-                    {isSendingLink ? 'Sending…' : 'Send Sign-In Link'}
-                  </Button>
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="email" className="text-sm font-medium text-foreground">
+                        Work email address
+                      </label>
+                      <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="you@keatyrealestate.com"
+                        required
+                        autoComplete="email"
+                        autoCapitalize="none"
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={isSendingOtp || !email.trim()}
+                      className="w-full h-12 text-base font-semibold gap-2"
+                    >
+                      {isSendingOtp ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Mail className="h-5 w-5" />
+                      )}
+                      {isSendingOtp ? 'Sending code…' : 'Send Sign-In Code'}
+                    </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                      We will email you a 6-digit code. No password needed.
+                    </p>
+                  </form>
+                )}
 
-                  <p className="text-center text-xs text-muted-foreground">
-                    We will email you a one-tap sign-in link. No password needed.
-                  </p>
-                </form>
-              )
+                {(otpStep === 'code' || otpStep === 'verifying') && (
+                  <form onSubmit={handleVerifyOtp} className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <button
+                        type="button"
+                        onClick={() => { setOtpStep('email'); setOtpCode(''); setOtpError(null); }}
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label="Back"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                      </button>
+                      <p className="text-sm text-muted-foreground">
+                        Code sent to <strong className="text-foreground">{email}</strong>
+                      </p>
+                    </div>
+                    {otpError && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Error</AlertTitle>
+                        <AlertDescription>{otpError}</AlertDescription>
+                      </Alert>
+                    )}
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="otp" className="text-sm font-medium text-foreground">
+                        Enter your 6-digit code
+                      </label>
+                      <input
+                        id="otp"
+                        ref={codeInputRef}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]{6}"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        required
+                        autoComplete="one-time-code"
+                        disabled={otpStep === 'verifying'}
+                        className="w-full rounded-lg border bg-background px-3 py-3 text-center text-2xl font-mono font-bold tracking-[0.5em] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={otpCode.length !== 6 || otpStep === 'verifying'}
+                      className="w-full h-12 text-base font-semibold gap-2"
+                    >
+                      {otpStep === 'verifying' ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-5 w-5" />
+                      )}
+                      {otpStep === 'verifying' ? 'Signing in…' : 'Sign In'}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => { setOtpStep('email'); setOtpCode(''); setOtpError(null); }}
+                      className="text-center text-xs text-muted-foreground underline underline-offset-2"
+                    >
+                      Resend code or use a different email
+                    </button>
+                  </form>
+                )}
+              </>
             ) : (
               /* ── Regular browser: Google sign-in ── */
               <>
@@ -299,7 +379,6 @@ export default function Home() {
                     <AlertDescription>{errorMsg}</AlertDescription>
                   </Alert>
                 )}
-
                 <Button
                   onClick={handleGoogleSignIn}
                   disabled={isSigningIn}
@@ -313,7 +392,6 @@ export default function Home() {
                   )}
                   {isSigningIn ? 'Signing in…' : 'Continue with Google'}
                 </Button>
-
                 <p className="mt-4 text-center text-xs text-muted-foreground">
                   By signing in you agree to our{' '}
                   <a href="/terms" className="underline underline-offset-2 hover:text-foreground">Terms of Service</a>
