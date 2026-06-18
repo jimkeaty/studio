@@ -39,6 +39,8 @@ export interface BusinessPlan {
   // resetStartDate ?? planStartDate ?? Jan 1 of the plan year
   planStartDate?: string; // YYYY-MM-DD
   resetStartDate?: string; // YYYY-MM-DD
+  isNewAgent?: boolean; // true = grace period applies before closing goals start
+  gracePeriodMonths?: number; // default 3 for new agents, 0 for existing
 
   // Financial & Timing block — average sale price and commission percentages
   goalAvgSalePrice?: number;

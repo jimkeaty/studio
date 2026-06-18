@@ -302,6 +302,8 @@ export default function BusinessPlanPage() {
   const [yearlyVolume, setYearlyVolume] = useState('');
   const [yearlySales, setYearlySales] = useState('');
   const [yearlyIncome, setYearlyIncome] = useState('');
+  const [isNewAgent, setIsNewAgent] = useState(false);
+  const [gracePeriodMonths, setGracePeriodMonths] = useState(3);
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
@@ -660,6 +662,8 @@ export default function BusinessPlanPage() {
           if (plan.yearlyVolume != null && plan.yearlyVolume > 0) setYearlyVolume(String(plan.yearlyVolume));
           if (plan.yearlySales != null && plan.yearlySales > 0) setYearlySales(String(plan.yearlySales));
           if (plan.yearlyIncome != null && plan.yearlyIncome > 0) setYearlyIncome(String(plan.yearlyIncome));
+          if (plan.isNewAgent != null) setIsNewAgent(!!plan.isNewAgent);
+          if (plan.gracePeriodMonths != null) setGracePeriodMonths(plan.gracePeriodMonths);
 
           // Only reset if we have plan assumptions; otherwise defaults stay
           if (plan?.assumptions?.conversionRates) {
@@ -734,6 +738,8 @@ export default function BusinessPlanPage() {
         annualIncomeGoal: data.annualIncomeGoal,
         planStartDate: data.planStartDate || undefined,
         resetStartDate: data.resetStartDate || undefined,
+        isNewAgent,
+        gracePeriodMonths: isNewAgent ? gracePeriodMonths : 0,
         // Financial & Timing block — persist so they reload correctly
         ...(goalAvgSalePrice > 0 ? { goalAvgSalePrice } : {}),
         ...(goalAvgCommPct > 0 ? { goalAvgCommPct } : {}),
@@ -1161,8 +1167,37 @@ export default function BusinessPlanPage() {
                 )}
               />
             </div>
+            {/* New Agent toggle + Grace Period */}
+            <div className="flex items-start gap-4 p-4 rounded-lg border bg-muted/30">
+              <div className="flex items-center gap-2 pt-0.5">
+                <input
+                  type="checkbox"
+                  id="isNewAgent"
+                  checked={isNewAgent}
+                  onChange={e => setIsNewAgent(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 accent-primary"
+                />
+                <label htmlFor="isNewAgent" className="text-sm font-medium cursor-pointer">
+                  New Agent (Grace Period)
+                </label>
+              </div>
+              {isNewAgent && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">Grace period:</label>
+                  <select
+                    value={gracePeriodMonths}
+                    onChange={e => setGracePeriodMonths(parseInt(e.target.value, 10))}
+                    className="h-8 rounded border border-input bg-background px-2 text-sm"
+                  >
+                    {[1,2,3,4,5,6].map(n => (
+                      <option key={n} value={n}>{n} month{n > 1 ? 's' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
-              Use Plan Start Date for a new agent or the beginning of this year’s plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year.
+              Use Plan Start Date for a new agent or the beginning of this year&apos;s plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year. Check &quot;New Agent&quot; to suppress closing goals during the grace period — activity goals (calls, engagements, appointments) start immediately.
             </p>
           </CardContent>
         </Card>

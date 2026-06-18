@@ -2134,14 +2134,61 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const [showProjected, setShowProjected] = useState(false);
   const [showGoals, setShowGoals] = useState(true);
   const [showPending, setShowPending] = useState(true);
+  // Rolling 12-month vs calendar year toggle
+  const [rollingView, setRollingView] = useState(false);
 
   if (perfLoading) return <Skeleton className="h-80" />;
   if (perfError) return <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Failed to load performance data</AlertTitle><AlertDescription>{perfError}</AlertDescription></Alert>;
   if (!perfData?.overview) return <Skeleton className="h-80" />;
 
   const { overview, agentView } = perfData;
-  const { months } = overview;
-  const { monthlyNetIncome, monthlyPendingNetIncome } = agentView;
+  const { months: rawMonths } = overview;
+  const { monthlyNetIncome: rawMonthlyNetIncome, monthlyPendingNetIncome: rawMonthlyPendingNetIncome } = agentView;
+
+  // Grace period / plan start metadata from the API
+  const planIsNewAgent: boolean = (agentView as any).planIsNewAgent ?? false;
+  const planGracePeriodMonths: number = (agentView as any).planGracePeriodMonths ?? 0;
+  const goalStartMonth: number = (agentView as any).goalStartMonth ?? 1;   // 1-based
+  const closingGoalStartMonth: number = (agentView as any).closingGoalStartMonth ?? 1; // 1-based
+
+  // Rolling 12-month view: build a 12-slot window starting from goalStartMonth.
+  // Calendar view: use the standard Jan–Dec months array.
+  // In both cases we produce a 12-element `months` array and matching income arrays
+  // so all downstream chart code is unchanged.
+  const today2 = new Date();
+  const currentYear2 = today2.getFullYear();
+  const isCurrentYear2 = year === currentYear2;
+
+  // Build the display months array (12 slots)
+  let months: typeof rawMonths;
+  let monthlyNetIncome: number[];
+  let monthlyPendingNetIncome: number[];
+  let rollingStartMonthIdx: number; // 0-based index into rawMonths where rolling window starts
+
+  if (rollingView && goalStartMonth > 1) {
+    // Rolling window: starts at goalStartMonth (1-based), wraps into next year if needed.
+    // For simplicity we only support same-year rolling (no cross-year wrap) for now.
+    // Slots before goalStartMonth are shifted to the end of the array.
+    const startIdx = goalStartMonth - 1; // 0-based
+    rollingStartMonthIdx = startIdx;
+    months = [
+      ...rawMonths.slice(startIdx),
+      ...rawMonths.slice(0, startIdx),
+    ];
+    monthlyNetIncome = [
+      ...rawMonthlyNetIncome.slice(startIdx),
+      ...rawMonthlyNetIncome.slice(0, startIdx),
+    ];
+    monthlyPendingNetIncome = [
+      ...rawMonthlyPendingNetIncome.slice(startIdx),
+      ...rawMonthlyPendingNetIncome.slice(0, startIdx),
+    ];
+  } else {
+    rollingStartMonthIdx = 0;
+    months = rawMonths;
+    monthlyNetIncome = rawMonthlyNetIncome;
+    monthlyPendingNetIncome = rawMonthlyPendingNetIncome;
+  }
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -2335,6 +2382,10 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
           </TooltipProvider>
         </div>
       )}
+      <button type="button" onClick={() => setRollingView(r => !r)}
+        className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${rollingView ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+        🔄 {rollingView ? '12-Month Rolling' : 'Calendar Year'}
+      </button>
     </div>
   );
 
@@ -2355,8 +2406,11 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
           </div>
           {/* YTD vs Goal grade banner — top of chart (always visible) */}
           {(() => {
+            // Grace period: all closing months are in grace period → show A with label
+            const currentMonthNum = isCurrentYear ? (new Date().getMonth() + 1) : 12; // 1-based
+            const allGracePeriod = planIsNewAgent && currentMonthNum < closingGoalStartMonth;
             const hasGoal = gradeNetIncome != null;
-            const g = hasGoal ? letterGrade(gradeNetIncome!) : null;
+            const g = allGracePeriod ? { letter: 'A', color: 'text-green-600' } : (hasGoal ? letterGrade(gradeNetIncome!) : null);
             const bannerClass = g ? gradeBannerBg(g.letter) : 'bg-muted/40 border-border';
             return (
               <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${bannerClass}`}>
@@ -2366,7 +2420,9 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                   </p>
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-2xl font-black">{fmtCurrencyCompact(ytdNetIncomeActual, true)}</span>
-                    {hasGoal && g ? (
+                    {allGracePeriod ? (
+                      <span className="text-xs text-green-600 font-semibold italic">Grace Period — no closing goal yet</span>
+                    ) : hasGoal && g ? (
                       <>
                         <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdNetIncomeGoal, true)} goal</span>
                         <span className={`text-sm font-bold ${g.color}`}>{gradeNetIncome}% of goal</span>
@@ -2376,8 +2432,11 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                     )}
                   </div>
                 </div>
-                {hasGoal && g ? (
-                  <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
+                {g ? (
+                  <div className={`flex flex-col items-center justify-center h-16 w-16 rounded-xl border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>
+                    <span className="text-4xl font-black leading-none">{g.letter}</span>
+                    {allGracePeriod && <span className="text-[9px] font-semibold leading-tight text-center mt-0.5">Grace</span>}
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 bg-muted/60 border-border text-muted-foreground">—</div>
                 )}
@@ -2476,8 +2535,10 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
           </div>
           {/* YTD vs Goal grade banner — top of chart (always visible) */}
           {(() => {
+            const currentMonthNum2 = isCurrentYear ? (new Date().getMonth() + 1) : 12;
+            const allGracePeriod2 = planIsNewAgent && currentMonthNum2 < closingGoalStartMonth;
             const hasGoal = gradeVolume != null;
-            const g = hasGoal ? letterGrade(gradeVolume!) : null;
+            const g = allGracePeriod2 ? { letter: 'A', color: 'text-green-600' } : (hasGoal ? letterGrade(gradeVolume!) : null);
             const bannerClass = g ? gradeBannerBg(g.letter) : 'bg-muted/40 border-border';
             return (
               <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${bannerClass}`}>
@@ -2487,7 +2548,9 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                   </p>
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-2xl font-black">{fmtCurrencyCompact(ytdVolumeActual, true)}</span>
-                    {hasGoal && g ? (
+                    {allGracePeriod2 ? (
+                      <span className="text-xs text-green-600 font-semibold italic">Grace Period — no closing goal yet</span>
+                    ) : hasGoal && g ? (
                       <>
                         <span className="text-sm text-muted-foreground">/ {fmtCurrencyCompact(ytdVolumeGoal, true)} goal</span>
                         <span className={`text-sm font-bold ${g.color}`}>{gradeVolume}% of goal</span>
@@ -2497,8 +2560,11 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                     )}
                   </div>
                 </div>
-                {hasGoal && g ? (
-                  <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
+                {g ? (
+                  <div className={`flex flex-col items-center justify-center h-16 w-16 rounded-xl border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>
+                    <span className="text-4xl font-black leading-none">{g.letter}</span>
+                    {allGracePeriod2 && <span className="text-[9px] font-semibold leading-tight text-center mt-0.5">Grace</span>}
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 bg-muted/60 border-border text-muted-foreground">—</div>
                 )}
@@ -2596,8 +2662,10 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
           </div>
           {/* YTD vs Goal grade banner — top of chart (always visible) */}
           {(() => {
+            const currentMonthNum3 = isCurrentYear ? (new Date().getMonth() + 1) : 12;
+            const allGracePeriod3 = planIsNewAgent && currentMonthNum3 < closingGoalStartMonth;
             const hasGoal = gradeSales != null;
-            const g = hasGoal ? letterGrade(gradeSales!) : null;
+            const g = allGracePeriod3 ? { letter: 'A', color: 'text-green-600' } : (hasGoal ? letterGrade(gradeSales!) : null);
             const bannerClass = g ? gradeBannerBg(g.letter) : 'bg-muted/40 border-border';
             return (
               <div className={`flex items-center justify-between px-4 py-3 rounded-lg border mt-3 ${bannerClass}`}>
@@ -2607,7 +2675,9 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                   </p>
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-2xl font-black">{ytdSalesActual} sales</span>
-                    {hasGoal && g ? (
+                    {allGracePeriod3 ? (
+                      <span className="text-xs text-green-600 font-semibold italic">Grace Period — no closing goal yet</span>
+                    ) : hasGoal && g ? (
                       <>
                         <span className="text-sm text-muted-foreground">/ {ytdSalesGoal} goal</span>
                         <span className={`text-sm font-bold ${g.color}`}>{gradeSales}% of goal</span>
@@ -2617,8 +2687,11 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                     )}
                   </div>
                 </div>
-                {hasGoal && g ? (
-                  <div className={`flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>{g.letter}</div>
+                {g ? (
+                  <div className={`flex flex-col items-center justify-center h-16 w-16 rounded-xl border-2 shrink-0 ${gradeBadgeClass(g.letter)}`}>
+                    <span className="text-4xl font-black leading-none">{g.letter}</span>
+                    {allGracePeriod3 && <span className="text-[9px] font-semibold leading-tight text-center mt-0.5">Grace</span>}
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-16 w-16 rounded-xl text-4xl font-black border-2 shrink-0 bg-muted/60 border-border text-muted-foreground">—</div>
                 )}

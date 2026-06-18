@@ -418,6 +418,39 @@ export async function GET(req: NextRequest) {
     }
     console.log(`[command-metrics] goals resolved: ${goalsMap.size} months | segment=${goalSegment} | uid=${uid} | profileDocId=${profileDocId}`);
 
+    // ── Fetch business plan for start-date / grace-period metadata ──────────
+    // Used to suppress closing goals during grace period and zero out months
+    // before the plan start date on the dashboard charts.
+    let planStartDate: string | null = null;
+    let planResetDate: string | null = null;
+    let planIsNewAgent = false;
+    let planGracePeriodMonths = 0;
+    try {
+      const planRef = adminDb
+        .collection('dashboards').doc(String(year))
+        .collection('agent').doc(agentFirebaseUid)
+        .collection('plans').doc('plan');
+      const planSnap = await planRef.get();
+      if (planSnap.exists) {
+        const pd = planSnap.data() || {};
+        planStartDate = pd.planStartDate ?? null;
+        planResetDate = pd.resetStartDate ?? null;
+        planIsNewAgent = !!pd.isNewAgent;
+        planGracePeriodMonths = planIsNewAgent ? (pd.gracePeriodMonths ?? 3) : 0;
+      }
+    } catch (_e) { /* non-fatal */ }
+    // Derive the effective start month (1-12) for this year's goals.
+    const effectiveDateStr = planResetDate || planStartDate;
+    let goalStartMonth = 1; // default: all 12 months have goals
+    if (effectiveDateStr) {
+      const [eYear, eMonth] = effectiveDateStr.split('-').map(Number);
+      if (eYear === year) goalStartMonth = eMonth;
+    }
+    // For new agents, closing/financial goals start after the grace period ends.
+    const closingGoalStartMonth = planIsNewAgent
+      ? goalStartMonth + planGracePeriodMonths
+      : goalStartMonth;
+
     // ── Partial-month helpers ─────────────────────────────────────────────
     // When viewing the current calendar year, the current in-progress month is capped
     // at today's day-of-month so YTD comparisons are apples-to-apples.
@@ -433,27 +466,37 @@ export async function GET(req: NextRequest) {
     for (let m = 1; m <= 12; m++) {
       const md = emptyMonth(m);
       const goals = goalsMap.get(m);
-      if (goals) {
+      // Determine if this month should have closing/financial goals
+      const isBeforePlanStart = m < goalStartMonth;
+      const isInGracePeriod = planIsNewAgent && m >= goalStartMonth && m < closingGoalStartMonth;
+      if (goals && !isBeforePlanStart) {
         // Pro-rate goals for the current in-progress month
         const isThisMonthPartial = isCurrentYear && (m - 1) === currentCalMonth;
         const prorateFactor = isThisMonthPartial
           ? todayDayOfMonth / daysInCurrentMonth
           : 1;
-        md.grossMarginGoal = goals.grossMarginGoal != null
-          ? Math.round(goals.grossMarginGoal * prorateFactor)
-          : null;
-        md.volumeGoal = goals.volumeGoal != null
-          ? Math.round(goals.volumeGoal * prorateFactor)
-          : null;
-        md.salesCountGoal = goals.salesCountGoal != null
-          ? Math.round(goals.salesCountGoal * prorateFactor * 10) / 10
-          : null;
+        if (!isInGracePeriod) {
+          // Normal month with closing goals
+          md.grossMarginGoal = goals.grossMarginGoal != null
+            ? Math.round(goals.grossMarginGoal * prorateFactor)
+            : null;
+          md.volumeGoal = goals.volumeGoal != null
+            ? Math.round(goals.volumeGoal * prorateFactor)
+            : null;
+          md.salesCountGoal = goals.salesCountGoal != null
+            ? Math.round(goals.salesCountGoal * prorateFactor * 10) / 10
+            : null;
+        }
+        // Grace period months: goals stay null but month is flagged
       }
       if (isCurrentYear && (m - 1) === currentCalMonth) {
         md.isPartialMonth = true;
         md.partialDayOfMonth = todayDayOfMonth;
         md.partialDaysInMonth = daysInCurrentMonth;
       }
+      // Attach grace period / before-start flags so the dashboard can render correctly
+      if (isBeforePlanStart) (md as any).isBeforePlanStart = true;
+      if (isInGracePeriod) (md as any).isGracePeriod = true;
       months.push(md);
     }
 
@@ -1145,6 +1188,13 @@ export async function GET(req: NextRequest) {
         netIncome: totals.netIncome,
         pendingNetIncome: totals.pendingNetIncome,
         goalSegment,
+        // Plan start / grace period metadata for dashboard grading
+        planStartDate,
+        planResetDate,
+        planIsNewAgent,
+        planGracePeriodMonths,
+        goalStartMonth,
+        closingGoalStartMonth,
         // Team view extras
         activeAgentCount: view === 'team' ? activeAgentCount : undefined,
         totalTeamMembers: view === 'team' ? totalTeamMembers : undefined,
