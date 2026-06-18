@@ -1,28 +1,40 @@
 /**
  * POST /api/auth/send-otp
  *
- * Generates a 6-digit OTP, stores it in Firestore with a 10-minute expiry,
- * and sends it via Resend. The OTP is then verified by /api/auth/verify-otp
- * which returns a Firebase custom token for signInWithCustomToken().
- *
- * This flow works entirely within the iOS PWA context — no redirects,
- * no popups, no cross-context storage issues.
+ * Stateless OTP flow — no Firestore required.
+ * Generates a 6-digit OTP, signs it with HMAC-SHA256, and returns the
+ * session token to the client. The client stores it in React state and
+ * passes it back to /api/auth/verify-otp along with the code.
  *
  * Body: { email: string }
- * Returns: { ok: true } or { ok: false, error: string }
+ * Returns: { ok: true, sessionToken: string } or { ok: false, error: string }
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac } from 'crypto';
 import { Resend } from 'resend';
-import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { adminAuth } from '@/lib/firebase/admin';
 
 export const runtime = 'nodejs';
+
+function getOtpSecret(): string {
+  return process.env.RESEND_API_KEY || 'fallback-otp-secret';
+}
+
+export function signOtpToken(email: string, otp: string, expiresAt: number, uid: string): string {
+  const payload = `${email}|${otp}|${expiresAt}|${uid}`;
+  const hmac = createHmac('sha256', getOtpSecret()).update(payload).digest('hex');
+  const data = Buffer.from(payload).toString('base64url');
+  return `${data}.${hmac}`;
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { email } = await req.json();
+
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return NextResponse.json({ ok: false, error: 'Valid email address required.' }, { status: 400 });
     }
+
     const normalizedEmail = email.trim().toLowerCase();
 
     // Verify the email belongs to a known user in Firebase Auth
@@ -31,21 +43,21 @@ export async function POST(req: NextRequest) {
       userRecord = await adminAuth.getUserByEmail(normalizedEmail);
     } catch {
       // Don't reveal whether the email exists
-      return NextResponse.json({ ok: true });
+      const fakeToken = signOtpToken(normalizedEmail, '000000', 0, 'invalid');
+      return NextResponse.json({ ok: true, sessionToken: fakeToken });
     }
-    if (!userRecord) return NextResponse.json({ ok: true });
+
+    if (!userRecord) {
+      const fakeToken = signOtpToken(normalizedEmail, '000000', 0, 'invalid');
+      return NextResponse.json({ ok: true, sessionToken: fakeToken });
+    }
 
     // Generate a 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
-    // Store OTP in Firestore (keyed by email, overwrite any previous)
-    await adminDb.collection('otpCodes').doc(normalizedEmail).set({
-      otp,
-      expiresAt,
-      uid: userRecord.uid,
-      createdAt: Date.now(),
-    });
+    // Create a stateless HMAC session token — no Firestore needed
+    const sessionToken = signOtpToken(normalizedEmail, otp, expiresAt, userRecord.uid);
 
     // Send via Resend
     const resendKey = process.env.RESEND_API_KEY;
@@ -53,6 +65,7 @@ export async function POST(req: NextRequest) {
       console.error('[send-otp] RESEND_API_KEY not set');
       return NextResponse.json({ ok: false, error: 'Email service not configured.' }, { status: 500 });
     }
+
     const resend = new Resend(resendKey);
     const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
 
@@ -100,9 +113,10 @@ export async function POST(req: NextRequest) {
       `,
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, sessionToken });
+
   } catch (err: any) {
-    console.error('[send-otp] error:', err);
+    console.error('[send-otp] error:', err?.message);
     return NextResponse.json({ ok: false, error: 'Failed to send code.' }, { status: 500 });
   }
 }

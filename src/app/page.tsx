@@ -57,6 +57,7 @@ export default function Home() {
   const [otpStep, setOtpStep] = useState<OtpStep>('email');
   const [email, setEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
   const codeInputRef = useRef<HTMLInputElement>(null);
@@ -140,6 +141,7 @@ export default function Home() {
         setIsSendingOtp(false);
         return;
       }
+      setSessionToken(data.sessionToken ?? null);
       setOtpStep('code');
       setIsSendingOtp(false);
     } catch {
@@ -158,7 +160,7 @@ export default function Home() {
       const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otpCode.trim() }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otpCode.trim(), sessionToken }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -169,7 +171,7 @@ export default function Home() {
       }
       // Sign in with the custom token — this happens IN the PWA context, no redirect
       await setPersistence(auth, browserLocalPersistence);
-      await signInWithCustomToken(auth, data.token);
+      await signInWithCustomToken(auth, data.customToken);
       // onAuthStateChanged fires → useUser updates → useEffect above redirects to /dashboard
     } catch {
       setOtpError('Verification failed. Please try again.');
