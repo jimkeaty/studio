@@ -97,6 +97,17 @@ env:
     availability:
       - RUNTIME
 
+  # ── Firebase Admin Service Account (for createCustomToken / OTP sign-in) ────
+  - variable: FIREBASE_CLIENT_EMAIL
+    value: "firebase-adminsdk-fbsvc@smart-broker-usa.iam.gserviceaccount.com"
+    availability:
+      - RUNTIME
+
+  - variable: FIREBASE_PRIVATE_KEY
+    value: "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDXJwo16m0jx/Az\n0ZE6JM2g7BSI7d5i6ybruuUWrHndIO0DLI2B0iHaP1Mu7ZesVrqYIVt7XfGiX2yk\n+O9OBHUdU+Pm9iWfJqEc926uiXPz4nRR5/j0mpYexzdOED2hAzKfpi3rvEXPD8tw\ngn8dvd1sbZlXxTAZCXafU562OEX/YIvk+n1tRvUJt8vv9mPT110RyHjiOp4+ks3p\nAx5IKz9amxwyWYw8BLdrOHFK4bH9Niout1tGAp5jUGTsFWi8oeWTsPpdzCRJbtx8\nWEeAjh5gbtasJZhRbDaRGYnMhXkcpIy4QkHcA3pe6gLjvLaLEatuR76qFyKhePMZ\n2o3ZNsOHAgMBAAECggEABWif/wjGpsRpfeuS1YfwDv6vfhnyNkE8QlnDplvm5kPx\nlMDmBmxZ3JCLSctoosJscysiPpyYxIeFsZ9hEOm1+/9WXU8F3AthPqVU5mYK7+zG\nxZuBVrzYjB4OflcbIHa5iXCKZqyNPwd8/PzSa+KDBPddbVaJblHNsErx6KBfh5SF\nYPrdBgDZ7jVwXqri3/gfLv8UYXheKYdhOEzqflvQJ8z00+28inDtBcvpbcDBM/Lu\nA4rEuo16oeVhNf4neMc1kATB5tgPWx3yrEkdTZylS1O1yOr3z1LYGDmpQ7vpEe7Y\ncWWbeeZtZbcgbZCROI3UxTQiLAPuxDB6X9kEmPCEuQKBgQDuZYFVVC1PT0UQBlgg\nZpbF2gfGMAujF1TWytisJ3cJMm59zzGx5gFcV9fiZJI65M89Kn5K/SFPSYVVETr8\nt7krIlH8pp/dnp9riJRstvplW7DHc8ogp4pfXkTYBv6PzXhTYiMkkYqZvd42ZePz\n+rxeeUeNU/7TcJUvFnCN0FFczQKBgQDnCiUX1grpmPNNbxxmfhVajOdF3bKRKhgC\nPZ9PggiFk9i2KaQi9oB3YefUknjxgKcQhJ7jaRPtaXZxS/L3R1lFl08KLO14O15p\nRPU1R7EWr9g2S7qShCL62CxeoOktcOmYd7e4wH1Jz3UUAAK0zCocTuCCcLLR6Fgs\n7+v+9jthowKBgQCPWoiAOCMa6u77qOT7btVBWk+MdL26r7/7fXT3aK/i3umkS6B1\nenrc/ZG6+IEaWxbnkBLrovWRyQMdWUQgTZZSgsvMYqIFUWpJ7pJaIVnG83EFLvKf\n2j+SA4zgXqxa6tJtSbkaN06iDpN+IJ0HzIHTSZimOpkkqjF7ZEIAdQFIDQKBgFOR\nZtNVV4MhELgsfXBRILYtCyZJR2KcgCynT2150k1GqfdR3o3K7bLA1hMcm+R2rXcb\nEUGea1fPcskOOKbaxt6WGT/L+mUnzEF1cOBBuztChYk2IRkH9IMZGAtuVolaMxQ0\nEV8hOPAuuuFuE4yD4KN2oFxuGTA1w1cVvR3uwJHTAoGBAKQe26+NAwDMz1EUnJ5s\nTnh+0p5HqKekHBbCvYfLy+g+VlJeFbfk5oIMAW4X4hNZcdiDCV+/iRk8pUOjnM2m\nzpKhfUTOk1o70qF83N5DneHAr95XmzRwbLrf78r5gjXFli1eJS44bmsywU30PyH6\ntxu6ytfI08Wq7ITwWqO0SrRm\n-----END PRIVATE KEY-----\n"
+    availability:
+      - RUNTIME
+
   # ── OpenAI ───────────────────────────────────────────────────────────────
   # OPENAI_API_KEY is configured via Firebase App Hosting environment variable
   # override in the Firebase console (bypasses this file to avoid secret scanning)

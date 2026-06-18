@@ -9,9 +9,37 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { adminAuth } from '@/lib/firebase/admin';
+import admin from 'firebase-admin';
 
 export const runtime = 'nodejs';
+
+/**
+ * Get or initialise a Firebase Admin app that uses the explicit service account
+ * credentials from env vars.  We use a named app ("otp-signer") so it doesn't
+ * conflict with the default app used by other routes.
+ */
+function getAdminAuth() {
+  const appName = 'otp-signer';
+  if (admin.apps.find((a) => a?.name === appName)) {
+    return admin.app(appName).auth();
+  }
+
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'smart-broker-usa';
+
+  if (!clientEmail || !privateKey) {
+    throw new Error('FIREBASE_CLIENT_EMAIL or FIREBASE_PRIVATE_KEY env vars are missing');
+  }
+
+  const app = admin.initializeApp(
+    {
+      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+    },
+    appName
+  );
+  return app.auth();
+}
 
 function getOtpSecret(): string {
   return process.env.RESEND_API_KEY || 'fallback-otp-secret';
@@ -73,8 +101,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create a Firebase custom token for the verified user
-    const customToken = await adminAuth.createCustomToken(result.uid);
+    // Create a Firebase custom token using the explicit service account credentials
+    const auth = getAdminAuth();
+    const customToken = await auth.createCustomToken(result.uid);
 
     return NextResponse.json({ ok: true, customToken });
 
