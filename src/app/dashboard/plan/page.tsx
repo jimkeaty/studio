@@ -664,6 +664,10 @@ export default function BusinessPlanPage() {
           if (plan.yearlyIncome != null && plan.yearlyIncome > 0) setYearlyIncome(String(plan.yearlyIncome));
           if (plan.isNewAgent != null) setIsNewAgent(!!plan.isNewAgent);
           if (plan.gracePeriodMonths != null) setGracePeriodMonths(plan.gracePeriodMonths);
+          // Restore seasonality weights so the volume column populates correctly
+          if ((plan as any).seasonWeights && typeof (plan as any).seasonWeights === 'object') {
+            setSeasonWeights((plan as any).seasonWeights);
+          }
 
           // Only reset if we have plan assumptions; otherwise defaults stay
           if (plan?.assumptions?.conversionRates) {
@@ -696,11 +700,13 @@ export default function BusinessPlanPage() {
       } finally {
         setIsLoading(false);
         handleCalculate();
+        // Re-distribute goals after all state has been restored so the volume column populates
+        setTimeout(distributeGoals, 100);
       }
     };
 
     loadPlan();
-  }, [user, userLoading, year, form, handleCalculate]);
+  }, [user, userLoading, year, form, handleCalculate, distributeGoals]);
 
   const onSubmit = async (data: PlanFormValues) => {
     if (!user) {
@@ -747,6 +753,8 @@ export default function BusinessPlanPage() {
         ...(parseFloat(yearlyVolume) > 0 ? { yearlyVolume: parseFloat(yearlyVolume) } : {}),
         ...(parseFloat(yearlySales) > 0 ? { yearlySales: parseFloat(yearlySales) } : {}),
         ...(parseFloat(yearlyIncome) > 0 ? { yearlyIncome: parseFloat(yearlyIncome) } : {}),
+        // Persist seasonality weights so they reload correctly
+        seasonWeights: Object.keys(seasonWeights).length > 0 ? seasonWeights : undefined,
         assumptions,
         calculatedTargets: finalCalculatedPlan,
         updatedAt: new Date().toISOString(),
