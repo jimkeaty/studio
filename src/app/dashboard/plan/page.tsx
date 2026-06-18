@@ -1320,6 +1320,16 @@ export default function BusinessPlanPage() {
                                 form.setValue('avgCommission', net);
                                 handleCalculate();
                               }
+                              // Recompute yearlyVolume & yearlySales so seasonality volume column populates
+                              const commPct = goalAvgCommPct > 0 ? goalAvgCommPct : avgCommPct;
+                              const netPct = goalAvgNetPct > 0 ? goalAvgNetPct : avgNetPct;
+                              const income = parseFloat(yearlyIncome) || 0;
+                              if (income > 0 && commPct > 0 && netPct > 0) {
+                                const calcVol = Math.round(income / ((commPct / 100) * (netPct / 100)));
+                                setYearlyVolume(String(calcVol));
+                                if (v > 0) setYearlySales(String(Math.round(calcVol / v)));
+                              }
+                              setTimeout(distributeGoals, 50);
                             }}
                           />
                         </div>
@@ -1344,6 +1354,16 @@ export default function BusinessPlanPage() {
                                 form.setValue('avgCommission', net);
                                 handleCalculate();
                               }
+                              // Recompute yearlyVolume so seasonality volume column populates
+                              const asp = goalAvgSalePrice > 0 ? goalAvgSalePrice : avgSalePrice;
+                              const netPct = goalAvgNetPct > 0 ? goalAvgNetPct : avgNetPct;
+                              const income = parseFloat(yearlyIncome) || 0;
+                              if (income > 0 && v > 0 && netPct > 0) {
+                                const calcVol = Math.round(income / ((v / 100) * (netPct / 100)));
+                                setYearlyVolume(String(calcVol));
+                                if (asp > 0) setYearlySales(String(Math.round(calcVol / asp)));
+                              }
+                              setTimeout(distributeGoals, 50);
                             }}
                           />
                         </div>
@@ -1368,6 +1388,16 @@ export default function BusinessPlanPage() {
                                 form.setValue('avgCommission', net);
                                 handleCalculate();
                               }
+                              // Recompute yearlyVolume so seasonality volume column populates
+                              const asp = goalAvgSalePrice > 0 ? goalAvgSalePrice : avgSalePrice;
+                              const commPct = goalAvgCommPct > 0 ? goalAvgCommPct : avgCommPct;
+                              const income = parseFloat(yearlyIncome) || 0;
+                              if (income > 0 && commPct > 0 && v > 0) {
+                                const calcVol = Math.round(income / ((commPct / 100) * (v / 100)));
+                                setYearlyVolume(String(calcVol));
+                                if (asp > 0) setYearlySales(String(Math.round(calcVol / asp)));
+                              }
+                              setTimeout(distributeGoals, 50);
                             }}
                           />
                         </div>
