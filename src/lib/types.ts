@@ -40,6 +40,15 @@ export interface BusinessPlan {
   planStartDate?: string; // YYYY-MM-DD
   resetStartDate?: string; // YYYY-MM-DD
 
+  // Financial & Timing block — average sale price and commission percentages
+  goalAvgSalePrice?: number;
+  goalAvgCommPct?: number;
+  goalAvgNetPct?: number;
+  // Yearly totals derived from financial block (used to seed seasonality)
+  yearlyVolume?: number;
+  yearlySales?: number;
+  yearlyIncome?: number;
+
   assumptions: PlanAssumptions;
   calculatedTargets: {
     monthlyNetIncome: number;

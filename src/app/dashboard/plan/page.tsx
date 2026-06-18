@@ -653,6 +653,14 @@ export default function BusinessPlanPage() {
             setRecruitingGoalIncome(String(plan.recruitingGoalIncome));
           }
 
+          // Restore Financial & Timing block values
+          if (plan.goalAvgSalePrice != null && plan.goalAvgSalePrice > 0) setGoalAvgSalePrice(plan.goalAvgSalePrice);
+          if (plan.goalAvgCommPct != null && plan.goalAvgCommPct > 0) setGoalAvgCommPct(plan.goalAvgCommPct);
+          if (plan.goalAvgNetPct != null && plan.goalAvgNetPct > 0) setGoalAvgNetPct(plan.goalAvgNetPct);
+          if (plan.yearlyVolume != null && plan.yearlyVolume > 0) setYearlyVolume(String(plan.yearlyVolume));
+          if (plan.yearlySales != null && plan.yearlySales > 0) setYearlySales(String(plan.yearlySales));
+          if (plan.yearlyIncome != null && plan.yearlyIncome > 0) setYearlyIncome(String(plan.yearlyIncome));
+
           // Only reset if we have plan assumptions; otherwise defaults stay
           if (plan?.assumptions?.conversionRates) {
             form.reset({
@@ -726,6 +734,13 @@ export default function BusinessPlanPage() {
         annualIncomeGoal: data.annualIncomeGoal,
         planStartDate: data.planStartDate || undefined,
         resetStartDate: data.resetStartDate || undefined,
+        // Financial & Timing block — persist so they reload correctly
+        ...(goalAvgSalePrice > 0 ? { goalAvgSalePrice } : {}),
+        ...(goalAvgCommPct > 0 ? { goalAvgCommPct } : {}),
+        ...(goalAvgNetPct > 0 ? { goalAvgNetPct } : {}),
+        ...(parseFloat(yearlyVolume) > 0 ? { yearlyVolume: parseFloat(yearlyVolume) } : {}),
+        ...(parseFloat(yearlySales) > 0 ? { yearlySales: parseFloat(yearlySales) } : {}),
+        ...(parseFloat(yearlyIncome) > 0 ? { yearlyIncome: parseFloat(yearlyIncome) } : {}),
         assumptions,
         calculatedTargets: finalCalculatedPlan,
         updatedAt: new Date().toISOString(),
@@ -737,6 +752,30 @@ export default function BusinessPlanPage() {
 
       if (!json?.ok) {
         throw new Error(json?.error ?? "Failed to save plan");
+      }
+
+      // Auto-save monthly goals whenever the plan is saved so the dashboard KPIs stay in sync
+      if (goalSegment) {
+        const goalPromises = [];
+        for (let m = 1; m <= 12; m++) {
+          const g = monthlyGoals[m];
+          if (!g) continue;
+          goalPromises.push(
+            fetch('/api/broker/goals', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                year: parseInt(year, 10),
+                month: m,
+                segment: goalSegment,
+                grossMarginGoal: g.margin ? parseFloat(g.margin) : null,
+                volumeGoal: g.volume ? parseFloat(g.volume) : null,
+                salesCountGoal: g.sales ? parseInt(g.sales, 10) : null,
+              }),
+            })
+          );
+        }
+        await Promise.all(goalPromises).catch(() => {}); // non-blocking
       }
 
       toast({ title: "Plan Saved!", description: `Your business plan for ${year} has been updated.` });
