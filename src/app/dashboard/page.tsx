@@ -2455,7 +2455,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 netIncome: (!isFuture && !isPartial) ? income : null,
                 partialNetIncome: isPartial ? income : null,
                 pendingNetIncome: (showPending && !isFuture) ? (monthlyPendingNetIncome[i] || 0) : null,
-                incomeGoal: showGoals ? (isFuture ? null : m.grossMarginGoal) : null,
+                incomeGoal: showGoals ? (rollingView ? (isFuture ? null : m.grossMarginGoal) : m.grossMarginGoal) : null,
                 compareIncome: compareYear ? (perfData.comparisonData?.months?.[i]?.netIncome ?? null) : null,
                 projectedNetIncome: showProjected ? (projNetIncome[i] ?? null) : null,
               };
@@ -2582,7 +2582,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
                 partialClosedVolume: isPartial ? m.closedVolume : null,
                 pendingVolume: (showPending && !isFuture) ? m.pendingVolume : null,
-                volumeGoal: showGoals ? (isFuture ? null : m.volumeGoal) : null,
+                volumeGoal: showGoals ? (rollingView ? (isFuture ? null : m.volumeGoal) : m.volumeGoal) : null,
                 compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
                 projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
               };
@@ -2709,7 +2709,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
                 partialClosedCount: isPartial ? m.closedCount : null,
                 pendingCount: (showPending && !isFuture) ? m.pendingCount : null,
-                salesCountGoal: showGoals ? (isFuture ? null : m.salesCountGoal) : null,
+                salesCountGoal: showGoals ? (rollingView ? (isFuture ? null : m.salesCountGoal) : m.salesCountGoal) : null,
                 compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
                 projectedCount: showProjected ? (projSales[i] ?? null) : null,
               };
