@@ -706,7 +706,8 @@ export default function BusinessPlanPage() {
     };
 
     loadPlan();
-  }, [user, userLoading, year, form, handleCalculate, distributeGoals]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userLoading, year, form, handleCalculate]);
 
   const onSubmit = async (data: PlanFormValues) => {
     if (!user) {
