@@ -50,6 +50,9 @@ export interface BusinessPlan {
   yearlyVolume?: number;
   yearlySales?: number;
   yearlyIncome?: number;
+  // Seasonality weights saved with the plan so they reload correctly
+  // Shape: { [monthIndex: number]: { salesPct: string; volumePct: string } }
+  seasonWeights?: Record<number, { salesPct: string; volumePct: string }>;
 
   assumptions: PlanAssumptions;
   calculatedTargets: {

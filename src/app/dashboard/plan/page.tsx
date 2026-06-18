@@ -665,8 +665,55 @@ export default function BusinessPlanPage() {
           if (plan.isNewAgent != null) setIsNewAgent(!!plan.isNewAgent);
           if (plan.gracePeriodMonths != null) setGracePeriodMonths(plan.gracePeriodMonths);
           // Restore seasonality weights so the volume column populates correctly
+          const restoredWeights: Record<number, { salesPct: string; volumePct: string }> = {};
           if ((plan as any).seasonWeights && typeof (plan as any).seasonWeights === 'object') {
-            setSeasonWeights((plan as any).seasonWeights);
+            Object.assign(restoredWeights, (plan as any).seasonWeights);
+            setSeasonWeights(restoredWeights);
+          }
+
+          // Compute monthly goals inline (avoids stale-closure issue with setTimeout+distributeGoals)
+          const restoredVol = plan.yearlyVolume ?? 0;
+          const restoredSales = plan.yearlySales ?? 0;
+          const restoredIncome = plan.yearlyIncome ?? 0;
+          if (restoredVol > 0 || restoredSales > 0 || restoredIncome > 0) {
+            // Determine first closing month (1-based)
+            const planStart = plan.planStartDate ? new Date(plan.planStartDate + 'T00:00:00') : null;
+            const startMonthNum = planStart ? planStart.getMonth() + 1 : 1; // 1=Jan
+            const grace = plan.isNewAgent ? (plan.gracePeriodMonths ?? 3) : 0;
+            const firstClosingMonth = startMonthNum + grace; // may exceed 12 (handled below)
+
+            // Compute total seasonality weight for active closing months only
+            const activeMonths = Array.from({ length: 12 }, (_, i) => i + 1)
+              .filter(m => m >= firstClosingMonth);
+            const totalSalesPct = activeMonths.reduce((s, m) => {
+              const sw = restoredWeights[m];
+              return s + (parseFloat(sw?.salesPct ?? '8.33') || 8.33);
+            }, 0) || 100;
+            const totalVolPct = activeMonths.reduce((s, m) => {
+              const sw = restoredWeights[m];
+              return s + (parseFloat(sw?.volumePct ?? '8.33') || 8.33);
+            }, 0) || 100;
+
+            const inlineGoals: Record<number, { margin: string; volume: string; sales: string }> = {};
+            for (let m = 1; m <= 12; m++) {
+              const sw = restoredWeights[m];
+              const isBeforeStart = planStart && m < startMonthNum;
+              const isGrace = m >= startMonthNum && m < firstClosingMonth;
+              if (isBeforeStart || isGrace) {
+                // Before plan start or in grace period — no closing goals
+                inlineGoals[m] = { margin: '', volume: '', sales: '' };
+              } else {
+                // Active month — distribute proportionally using this month's share of active total
+                const salesPct = parseFloat(sw?.salesPct ?? '8.33') || 8.33;
+                const volPct = parseFloat(sw?.volumePct ?? '8.33') || 8.33;
+                inlineGoals[m] = {
+                  margin: restoredIncome > 0 ? String(Math.round(restoredIncome * (salesPct / totalSalesPct))) : '',
+                  volume: restoredVol > 0 ? String(Math.round(restoredVol * (volPct / totalVolPct))) : '',
+                  sales: restoredSales > 0 ? String(Math.round(restoredSales * (salesPct / totalSalesPct))) : '',
+                };
+              }
+            }
+            setMonthlyGoals(inlineGoals);
           }
 
           // Only reset if we have plan assumptions; otherwise defaults stay

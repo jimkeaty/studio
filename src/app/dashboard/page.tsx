@@ -2128,7 +2128,7 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
 // 5. CHARTS SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, setCompareYear }: {
+function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, setCompareYear, viewAs }: {
   perfData: AgentMetricsResponse | null; perfLoading: boolean; perfError: string | null;
   year: number; compareYear: number | null; setCompareYear: (y: number | null) => void;
   viewAs?: string | null;
