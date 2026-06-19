@@ -3500,6 +3500,24 @@ export default function AddTransactionPage() {
             </div>
           </Section>}
 
+          {/* ── Additional Information ───────────────────────────────────────────────────────────────────
+              Positioned here (above Buyer Closing Cost / Commission) so that
+              any answers that affect commission calculations are filled in first.
+          ─────────────────────────────────────────────────────────────────── */}
+          <Section title="Additional Information">
+            <FormField control={form.control} name="additionalComments" render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Textarea
+                    placeholder="Any additional comments, special conditions, contingencies, HOA info, key location, anything important..."
+                    className="min-h-[100px]"
+                    {...field}
+                  />
+                </FormControl>
+              </FormItem>
+            )} />
+          </Section>
+
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 5 — COMMISSION & FEES (buyer/dual only)
           ═══════════════════════════════════════════════════════════════════ */}
@@ -4305,21 +4323,6 @@ export default function AddTransactionPage() {
               </div>
             </CardContent>
           </Card>
-
-          {/* ── Additional Comments ───────────────────────────────────────── */}
-          <Section title="Additional Comments">
-            <FormField control={form.control} name="additionalComments" render={({ field }) => (
-              <FormItem>
-                <FormControl>
-                  <Textarea
-                    placeholder="Any additional comments, special conditions, contingencies, HOA info, key location, anything important..."
-                    className="min-h-[100px]"
-                    {...field}
-                  />
-                </FormControl>
-              </FormItem>
-            )} />
-          </Section>
 
           {/* Hidden fields */}
           <input type="hidden" {...form.register('notes')} />
