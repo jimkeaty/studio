@@ -121,16 +121,17 @@ export async function POST(req: NextRequest) {
       gci: toNum(body.gci),
       transactionFee: toNum(body.transactionFee),
       earnestMoney: toNum(body.earnestMoney),
-      // Commission split fields — only admins may set these; agents' submitted values are ignored
-      // and recalculated from the agent's saved profile during TC approval.
-      ...(isAdmin
-        ? {
-            brokerPct: toNum(body.brokerPct),
-            brokerGci: toNum(body.brokerGci),
-            agentPct: toNum(body.agentPct),
-            agentDollar: toNum(body.agentDollar),
-          }
-        : {}),
+      // Commission split fields — always stored from agent submission so TC can review.
+      // TC can override before approving. Stored as submitted values for transparency.
+      brokerPct: toNum(body.brokerPct) || null,
+      brokerGci: toNum(body.brokerGci) || null,
+      agentPct: toNum(body.agentPct) || null,
+      agentDollar: toNum(body.agentDollar) || null,
+      // Outbound referral fee
+      hasOutboundReferral: !!body.hasOutboundReferral,
+      outboundReferralPercent: toNum(body.outboundReferralPercent) || null,
+      outboundReferralDollar: toNum(body.outboundReferralDollar) || null,
+      outboundReferralRecipient: toStr(body.outboundReferralRecipient) || null,
 
       // Dates
       listingDate: toStr(body.listingDate),
@@ -330,6 +331,31 @@ export async function POST(req: NextRequest) {
         primaryAgentSplitPercent: toNum(body.primaryAgentSplitPercent) ?? 50,
         coAgentSplitPercent: toNum(body.coAgentSplitPercent) ?? 50,
       } : {}),
+      // Commission fields — stored from agent submission so the ledger shows commission
+      // immediately. The TC can review and override before approving. These are stored
+      // as a pendingCommissionSnapshot so the TC knows they came from the agent's form.
+      commission: toNum(body.gci) || toNum(body.commission) || null,
+      gci: toNum(body.gci) || toNum(body.commission) || null,
+      commissionPercent: toNum(body.commissionPercent) || null,
+      transactionFee: toNum(body.transactionFee) || null,
+      agentDollar: toNum(body.agentDollar) || null,
+      brokerGci: toNum(body.brokerGci) || null,
+      agentPct: toNum(body.agentPct) || null,
+      brokerPct: toNum(body.brokerPct) || null,
+      ...(toNum(body.agentDollar) || toNum(body.brokerGci)
+        ? {
+            splitSnapshot: {
+              grossCommission: toNum(body.gci) || toNum(body.commission) || null,
+              agentNetCommission: toNum(body.agentDollar) || null,
+              companyRetained: toNum(body.brokerGci) || null,
+            },
+          }
+        : {}),
+      // Outbound referral fee — stored for TC review
+      hasOutboundReferral: !!body.hasOutboundReferral,
+      outboundReferralPercent: toNum(body.outboundReferralPercent) || null,
+      outboundReferralDollar: toNum(body.outboundReferralDollar) || null,
+      outboundReferralRecipient: toStr(body.outboundReferralRecipient) || null,
       // Review status flags — cleared when TC approves
       reviewStatus: 'pending_review',
       tcIntakeId: ref.id,

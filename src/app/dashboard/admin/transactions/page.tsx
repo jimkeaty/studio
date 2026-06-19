@@ -81,8 +81,8 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
     case 'closedDate': return tx.closedDate || (tx as any).closingDate || '';
     case 'dealValue': return (tx as any).salePrice || tx.dealValue || 0;
     case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
-    case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.netCommission ?? 0;
-    case 'companyRetained': return tx.splitSnapshot?.companyRetained ?? 0;
+    case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? tx.netCommission ?? 0;
+    case 'companyRetained': return tx.splitSnapshot?.companyRetained ?? tx.brokerGci ?? 0;
     case 'source': return tx.source || 'manual';
     default: return '';
   }
@@ -538,8 +538,8 @@ export default function AdminTransactionLedgerPage() {
   }, [transactions, statusFilter, agentFilter, addressSearch, sortKey, sortDir]);
 
   const totalGross = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0), [filtered]);
-  const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0), 0), [filtered]);
-  const totalBroker = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.companyRetained ?? 0), 0), [filtered]);
+  const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0), 0), [filtered]);
+  const totalBroker = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0), 0), [filtered]);
 
   /* ─── Auth guards ──────────────────────────────────────────────────── */
 
@@ -843,7 +843,7 @@ export default function AdminTransactionLedgerPage() {
               {/* ── Mobile card layout (sm and below) ─────────────────────────── */}
               <div className="flex flex-col gap-3 sm:hidden">
                 {filtered.map((t) => {
-                  const net = t.splitSnapshot?.agentNetCommission ?? (t as any).netCommission ?? 0;
+                  const net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? (t as any).netCommission ?? 0;
                   const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
                   const sc = statusConfig[t.status] || statusConfig.pending;
                   return (
@@ -956,9 +956,9 @@ export default function AdminTransactionLedgerPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((t) => {
-                    const net = t.splitSnapshot?.agentNetCommission ?? t.netCommission ?? 0;
+                    const net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0;
                     const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
-                    const broker = t.splitSnapshot?.companyRetained ?? 0;
+                    const broker = t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0;
                     const sc = statusConfig[t.status] || statusConfig.pending;
                     return (
                       <TableRow

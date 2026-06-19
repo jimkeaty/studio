@@ -120,6 +120,10 @@ export interface Transaction {
   commissionPercent?: number;
   commissionBasePrice?: number;
   gci?: number;
+  agentDollar?: number | null;
+  brokerGci?: number | null;
+  agentPct?: number | null;
+  brokerPct?: number | null;
   transactionFee?: number;
   earnestMoney?: number;
   listingDate?: string | null;
