@@ -2054,7 +2054,7 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-lg border p-2.5 space-y-0.5">
             <div className="flex items-center gap-1">
-              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Delta</p>
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Delta</p>
               <TooltipProvider delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2072,12 +2072,12 @@ function KpiTrackerCard({ label, icon: Icon, unit, actual, target, performance, 
               </TooltipProvider>
             </div>
             <div className="flex items-center gap-1">
-              {delta >= 0 ? <ArrowUpRight className="h-3.5 w-3.5 text-green-600" /> : <ArrowDownRight className="h-3.5 w-3.5 text-red-600" />}
-              <span className={cn('text-base font-bold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
+              {delta >= 0 ? <ArrowUpRight className="h-5 w-5 text-green-600" /> : <ArrowDownRight className="h-5 w-5 text-red-600" />}
+              <span className={cn('text-xl font-extrabold', delta >= 0 ? 'text-green-600' : 'text-red-600')}>
                 {delta >= 0 ? '+' : ''}{fmtNum(delta)}
               </span>
             </div>
-            <p className="text-[10px] text-muted-foreground">{delta >= 0 ? 'ahead' : 'behind'}</p>
+            <p className="text-xs font-medium text-muted-foreground">{delta >= 0 ? 'ahead of pace' : 'behind pace'}</p>
           </div>
 
           <div className="rounded-lg border p-2.5 space-y-0.5">
