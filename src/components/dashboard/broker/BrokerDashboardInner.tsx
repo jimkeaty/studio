@@ -1198,6 +1198,30 @@ export function BrokerDashboardInner() {
   const [kpiTrackerOpen, setKpiTrackerOpen] = useState(true);
   // Rolling 12-month vs calendar year toggle for charts
   const [rollingView, setRollingView] = useState(false);
+  // Next-year data for cross-year rolling window
+  const [nextYearBrokerData, setNextYearBrokerData] = useState<BrokerCommandMetrics | null>(null);
+
+  // Fetch next-year broker data when rolling view is enabled
+  useEffect(() => {
+    if (!rollingView || !user) { setNextYearBrokerData(null); return; }
+    const today = new Date();
+    const startIdx = today.getMonth(); // 0-based current month
+    if (startIdx === 0) return; // starts in January — no cross-year needed
+    const nextYear = today.getFullYear() + 1;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const params = new URLSearchParams({ year: String(nextYear) });
+        if (selectedTeam) params.set('teamId', selectedTeam);
+        if (selectedType) params.set('type', selectedType);
+        const res = await fetch(`/api/broker/command-metrics?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const d: BrokerCommandMetrics = await res.json();
+        setNextYearBrokerData(d);
+      } catch { /* silent */ }
+    })();
+  }, [rollingView, user, selectedTeam, selectedType]);
 
   const fetchKpiData = useCallback(async () => {
     if (!user) return;
@@ -1299,7 +1323,35 @@ export function BrokerDashboardInner() {
 
   if (!data?.overview) return <BrokerDashboardSkeleton />;
 
-  const { totals, months, categoryBreakdown } = data.overview;
+    const { totals, months: rawMonths, categoryBreakdown } = data.overview;
+
+  // ── Rolling 12-month display array ───────────────────────────────────────
+  // In rolling view: window starts at the current month, wraps into next year.
+  // e.g. today = June 2026 (idx 5): slots 0-6 = Jun-Dec 2026, slots 7-11 = Jan-May 2027.
+  // In calendar view: displayMonths = rawMonths (Jan-Dec of selected year).
+  const todayForRolling = new Date();
+  const rollingStartIdx = todayForRolling.getMonth(); // 0-based
+  const nextRawMonths: MonthlyData[] = nextYearBrokerData?.overview?.months ?? [];
+
+  const displayMonths: MonthlyData[] = (() => {
+    if (!rollingView || rollingStartIdx === 0) return rawMonths;
+    const thisYearTail = rawMonths.slice(rollingStartIdx); // current month → Dec
+    const nextYearHead = nextRawMonths.length === 12
+      ? nextRawMonths.slice(0, rollingStartIdx)            // Jan → (current month - 1) of next year
+      : rawMonths.slice(0, rollingStartIdx).map((m, i) => ({
+          ...m,
+          label: new Date(year + 1, i, 1).toLocaleString('default', { month: 'short' }),
+          month: i + 1,
+          totalGCI: 0, grossMargin: 0, closedVolume: 0, closedCount: 0,
+          pendingVolume: 0, pendingCount: 0, pendingGci: 0,
+          grossMarginGoal: null, volumeGoal: null, salesCountGoal: null,
+        }));
+    return [...thisYearTail, ...nextYearHead];
+  })();
+
+  // In rolling view the "current month" is always slot 0 (the first slot = today's month).
+  // In calendar view it's the normal 0-based month index.
+  const months = displayMonths; // alias so all downstream code is unchanged
 
   // ── Computed averages ─────────────────────────────────────────────────
   const avgSalePrice = totals.closedCount > 0
@@ -1325,7 +1377,9 @@ export function BrokerDashboardInner() {
   const startOfYear = new Date(currentYear, 0, 1);
   const daysElapsed = Math.floor((today.getTime() - startOfYear.getTime()) / 86400000) + 1;
   const ytdFraction = isCurrentYear ? daysElapsed / daysInYear : 1;
-  const currentMonthIdx = today.getMonth(); // 0-indexed, e.g. March = 2
+  // In rolling view the current month is always slot 0 (the window starts at today's month).
+  // In calendar view it's the normal 0-based month index.
+  const currentMonthIdx = rollingView ? 0 : today.getMonth();
 
   // ── Seasonality Projection ────────────────────────────────────────────────
   // For each metric, project future months based on how actual YTD compares to
@@ -1963,9 +2017,8 @@ export function BrokerDashboardInner() {
                   grossMargin: (!isFuture && !isPartial) ? m.grossMargin : null,
                   partialGrossMargin: isPartial ? m.grossMargin : null,
                   pendingGrossMargin: (!showPendingGM || isFuture) ? null : (m.pendingGci ?? 0),
-                  // Show goal bars for ALL months (past and future) in calendar view.
-                  // In rolling view, suppress future months so the bar doesn't crowd the chart.
-                  grossMarginGoal: showGoals ? (rollingView && isFuture ? null : m.grossMarginGoal) : null,
+                  // Show goal bars for all 12 months in both calendar and rolling view.
+                  grossMarginGoal: showGoals ? m.grossMarginGoal : null,
                   compareMargin: compareYear ? (data.comparisonData?.months?.[i]?.grossMargin ?? null) : null,
                   projectedMargin: showProjected ? (projectedMonthData?.margin[i] ?? null) : null,
                 };
@@ -2150,7 +2203,7 @@ export function BrokerDashboardInner() {
                   ...m,
                   closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
                   partialClosedVolume: isPartial ? m.closedVolume : null,
-                  volumeGoal: showGoals ? (rollingView && isFuture ? null : m.volumeGoal) : null,
+                  volumeGoal: showGoals ? m.volumeGoal : null,
                   pendingVolume: (!showPending || isFuture) ? null : m.pendingVolume,
                   compareVolume: compareYear ? (data.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
                   projectedVolume: showProjected ? (projectedMonthData?.volume[i] ?? null) : null,
@@ -2281,7 +2334,7 @@ export function BrokerDashboardInner() {
                   ...m,
                   closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
                   partialClosedCount: isPartial ? m.closedCount : null,
-                  salesCountGoal: showGoals ? (rollingView && isFuture ? null : m.salesCountGoal) : null,
+                  salesCountGoal: showGoals ? m.salesCountGoal : null,
                   pendingCount: (!showPending || isFuture) ? null : m.pendingCount,
                   compareCount: compareYear ? (data.comparisonData?.months?.[i]?.closedCount ?? null) : null,
                   projectedCount: showProjected ? (projectedMonthData?.sales[i] ?? null) : null,
