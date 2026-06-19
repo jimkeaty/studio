@@ -485,79 +485,98 @@ export default function BusinessPlanPage() {
     setTimeout(distributeGoals, 50);
   };
 
+  // ── Rolling-12 helper ────────────────────────────────────────────────────
+  // Returns an array of 12 {calMonth (1-12), calYear} objects starting at firstClosingMonth.
+  // seasonWeights are indexed by rolling position 1-12 (not calendar month).
+  const getRollingMonths = useCallback((firstClosingCalMonth: number, planYear: number) => {
+    return Array.from({ length: 12 }, (_, i) => {
+      const totalMonth = firstClosingCalMonth + i; // may exceed 12
+      const calMonth = ((totalMonth - 1) % 12) + 1; // wrap to 1-12
+      const calYear = planYear + Math.floor((totalMonth - 1) / 12);
+      return { calMonth, calYear, pos: i + 1 };
+    });
+  }, []);
+
   const distributeGoals = useCallback(() => {
     const vol = parseFloat(yearlyVolume) || 0;
     const sales = parseInt(yearlySales, 10) || 0;
     const income = parseFloat(yearlyIncome) || 0;
-    const newGoals: typeof monthlyGoals = {};
-    for (let m = 1; m <= 12; m++) {
-      const sw = seasonWeights[m];
-      const volPct = parseFloat(sw?.volumePct) || 8.33;
-      const salesPct = parseFloat(sw?.salesPct) || 8.33;
-      newGoals[m] = {
-        volume: vol > 0 ? String(Math.round(vol * (volPct / 100))) : '',
-        sales: sales > 0 ? String(Math.round(sales * (salesPct / 100))) : '',
-        margin: income > 0 ? String(Math.round(income * (salesPct / 100))) : '',
-      };
-    }
-    setMonthlyGoals(newGoals);
-  }, [yearlyVolume, yearlySales, yearlyIncome, seasonWeights, setMonthlyGoals]);
-
-  const applySeasonality = (source: 'lastYear' | 'allTime' | 'brokerage' | 'even') => {
-    const sw: typeof seasonWeights = {};
-    for (let m = 1; m <= 12; m++) {
-      if (source === 'even') {
-        sw[m] = { salesPct: '8.33', volumePct: '8.33' };
-      } else if (source === 'lastYear' && historicalStats?.seasonality) {
-        const s = historicalStats.seasonality[m - 1];
-        sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
-      } else if (source === 'allTime' && historicalStats?.allTimeSeasonality) {
-        const s = historicalStats.allTimeSeasonality[m - 1];
-        sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
-      } else if (source === 'brokerage' && brokerageSeasonality) {
-        const s = brokerageSeasonality[m - 1];
-        sw[m] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
-      } else {
-        // Fallback to even if source data not available
-        sw[m] = { salesPct: '8.33', volumePct: '8.33' };
-      }
-    }
-    setSeasonWeights(sw);
-
-    // Compute goals inline using the freshly-built `sw` — do NOT use setTimeout(distributeGoals)
-    // because distributeGoals closes over the OLD seasonWeights state (React state is async)
-    // and would run before the new weights are committed, producing stale/empty volume values.
-    const vol = parseFloat(yearlyVolume) || 0;
-    const sales = parseInt(yearlySales, 10) || 0;
-    const income = parseFloat(yearlyIncome) || 0;
-
-    // Determine grace period so we don't write goals for suppressed months
+    // Compute rolling window
     const planStartVal = form.getValues('planStartDate');
     const planStart = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
     const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
     const grace = isNewAgent ? gracePeriodMonths : 0;
     const firstClosingMonth = startMonthNum + grace;
-
-    // Compute total active-month weights for proportional distribution
-    const activeMonths = Array.from({ length: 12 }, (_, i) => i + 1).filter(m => m >= firstClosingMonth);
-    const totalSalesPct = activeMonths.reduce((s, m) => s + (parseFloat(sw[m]?.salesPct) || 8.33), 0) || 100;
-    const totalVolPct   = activeMonths.reduce((s, m) => s + (parseFloat(sw[m]?.volumePct) || 8.33), 0) || 100;
-
+    const planYear = parseInt(year, 10) || new Date().getFullYear();
+    // If firstClosingMonth > 12 it means the agent won't close anything this calendar year
+    // (e.g. start=Nov, grace=3 → first closing = Feb next year). Use even distribution.
+    const effectiveFirst = firstClosingMonth > 12 ? 1 : firstClosingMonth;
+    const rollingMonths = getRollingMonths(effectiveFirst, planYear);
+    // Total active weight across all 12 rolling positions
+    const totalSalesPct = rollingMonths.reduce((s, rm) => s + (parseFloat(seasonWeights[rm.pos]?.salesPct) || 8.33), 0) || 100;
+    const totalVolPct   = rollingMonths.reduce((s, rm) => s + (parseFloat(seasonWeights[rm.pos]?.volumePct) || 8.33), 0) || 100;
     const newGoals: typeof monthlyGoals = {};
-    for (let m = 1; m <= 12; m++) {
-      const isBeforeStart = planStart && m < startMonthNum;
-      const isGrace = m >= startMonthNum && m < firstClosingMonth;
-      if (isBeforeStart || isGrace) {
-        newGoals[m] = { margin: '', volume: '', sales: '' };
+    for (const rm of rollingMonths) {
+      const salesPct = parseFloat(seasonWeights[rm.pos]?.salesPct) || 8.33;
+      const volPct   = parseFloat(seasonWeights[rm.pos]?.volumePct) || 8.33;
+      newGoals[rm.pos] = {
+        volume: vol    > 0 ? String(Math.round(vol    * (volPct   / totalVolPct)))   : '',
+        sales:  sales  > 0 ? String(Math.round(sales  * (salesPct / totalSalesPct))) : '',
+        margin: income > 0 ? String(Math.round(income * (salesPct / totalSalesPct))) : '',
+      };
+    }
+    setMonthlyGoals(newGoals);
+  }, [yearlyVolume, yearlySales, yearlyIncome, seasonWeights, isNewAgent, gracePeriodMonths, year, form, getRollingMonths, setMonthlyGoals]);
+
+  const applySeasonality = (source: 'lastYear' | 'allTime' | 'brokerage' | 'even') => {
+    // Build seasonality weights keyed by rolling position 1-12.
+    // The source data is indexed by calendar month (Jan=0..Dec=11).
+    // We map each rolling position to its calendar month to look up the right weight.
+    const planStartVal = form.getValues('planStartDate');
+    const planStart = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+    const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
+    const grace = isNewAgent ? gracePeriodMonths : 0;
+    const firstClosingMonth = startMonthNum + grace;
+    const planYear = parseInt(year, 10) || new Date().getFullYear();
+    const effectiveFirst = firstClosingMonth > 12 ? 1 : firstClosingMonth;
+    const rollingMonths = getRollingMonths(effectiveFirst, planYear);
+
+    const sw: typeof seasonWeights = {};
+    for (const rm of rollingMonths) {
+      const calIdx = rm.calMonth - 1; // 0-based index into seasonality arrays
+      if (source === 'even') {
+        sw[rm.pos] = { salesPct: '8.33', volumePct: '8.33' };
+      } else if (source === 'lastYear' && historicalStats?.seasonality) {
+        const s = historicalStats.seasonality[calIdx];
+        sw[rm.pos] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
+      } else if (source === 'allTime' && historicalStats?.allTimeSeasonality) {
+        const s = historicalStats.allTimeSeasonality[calIdx];
+        sw[rm.pos] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
+      } else if (source === 'brokerage' && brokerageSeasonality) {
+        const s = brokerageSeasonality[calIdx];
+        sw[rm.pos] = { salesPct: String(s?.salesPct ?? 8.33), volumePct: String(s?.volumePct ?? 8.33) };
       } else {
-        const salesPct = parseFloat(sw[m]?.salesPct) || 8.33;
-        const volPct   = parseFloat(sw[m]?.volumePct) || 8.33;
-        newGoals[m] = {
-          volume: vol    > 0 ? String(Math.round(vol    * (volPct   / totalVolPct)))   : '',
-          sales:  sales  > 0 ? String(Math.round(sales  * (salesPct / totalSalesPct))) : '',
-          margin: income > 0 ? String(Math.round(income * (salesPct / totalSalesPct))) : '',
-        };
+        sw[rm.pos] = { salesPct: '8.33', volumePct: '8.33' };
       }
+    }
+    setSeasonWeights(sw);
+
+    // Compute goals inline using the freshly-built sw — do NOT use setTimeout(distributeGoals)
+    // because distributeGoals closes over the OLD seasonWeights state (React state is async).
+    const vol = parseFloat(yearlyVolume) || 0;
+    const sales = parseInt(yearlySales, 10) || 0;
+    const income = parseFloat(yearlyIncome) || 0;
+    const totalSalesPct = rollingMonths.reduce((s, rm) => s + (parseFloat(sw[rm.pos]?.salesPct) || 8.33), 0) || 100;
+    const totalVolPct   = rollingMonths.reduce((s, rm) => s + (parseFloat(sw[rm.pos]?.volumePct) || 8.33), 0) || 100;
+    const newGoals: typeof monthlyGoals = {};
+    for (const rm of rollingMonths) {
+      const salesPct = parseFloat(sw[rm.pos]?.salesPct) || 8.33;
+      const volPct   = parseFloat(sw[rm.pos]?.volumePct) || 8.33;
+      newGoals[rm.pos] = {
+        volume: vol    > 0 ? String(Math.round(vol    * (volPct   / totalVolPct)))   : '',
+        sales:  sales  > 0 ? String(Math.round(sales  * (salesPct / totalSalesPct))) : '',
+        margin: income > 0 ? String(Math.round(income * (salesPct / totalSalesPct))) : '',
+      };
     }
     setMonthlyGoals(newGoals);
   };
@@ -567,24 +586,52 @@ export default function BusinessPlanPage() {
     setIsSavingGoals(true);
     try {
       const token = await user.getIdToken();
+      // Build the rolling window to map positions to calendar year+month
+      const planStartVal = form.getValues('planStartDate');
+      const planStart = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+      const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
+      const grace = isNewAgent ? gracePeriodMonths : 0;
+      const firstClosingMonth = startMonthNum + grace;
+      const planYear = parseInt(year, 10) || new Date().getFullYear();
+      const effectiveFirst = firstClosingMonth > 12 ? 1 : firstClosingMonth;
+      const rollingMonths = getRollingMonths(effectiveFirst, planYear);
+
       const promises = [];
-      for (let m = 1; m <= 12; m++) {
-        const g = monthlyGoals[m];
-        if (!g) continue;
+      for (const rm of rollingMonths) {
+        const g = monthlyGoals[rm.pos];
         promises.push(
           fetch('/api/broker/goals', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({
-              year: parseInt(year, 10),
-              month: m,
+              year: rm.calYear,
+              month: rm.calMonth,
               segment: goalSegment,
-              grossMarginGoal: g.margin ? parseFloat(g.margin) : null,
-              volumeGoal: g.volume ? parseFloat(g.volume) : null,
-              salesCountGoal: g.sales ? parseInt(g.sales, 10) : null,
+              grossMarginGoal: g?.margin ? parseFloat(g.margin) : null,
+              volumeGoal: g?.volume ? parseFloat(g.volume) : null,
+              salesCountGoal: g?.sales ? parseInt(g.sales, 10) : null,
             }),
           })
         );
+      }
+      // Also explicitly null-out grace period months in the plan year
+      if (planStart && grace > 0) {
+        for (let m = startMonthNum; m < Math.min(firstClosingMonth, 13); m++) {
+          promises.push(
+            fetch('/api/broker/goals', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                year: planYear,
+                month: m,
+                segment: goalSegment,
+                grossMarginGoal: null,
+                volumeGoal: null,
+                salesCountGoal: null,
+              }),
+            })
+          );
+        }
       }
       await Promise.all(promises);
       toast({ title: 'Goals Saved!', description: 'Monthly goals have been updated.' });
@@ -713,7 +760,7 @@ export default function BusinessPlanPage() {
             setSeasonWeights(restoredWeights);
           }
 
-          // Compute monthly goals inline (avoids stale-closure issue with setTimeout+distributeGoals)
+          // Compute monthly goals inline using rolling-12-month model.
           // Derive volume from plan fields if yearlyVolume is not explicitly stored.
           let restoredVol = plan.yearlyVolume ?? 0;
           let restoredSales = plan.yearlySales ?? 0;
@@ -730,42 +777,38 @@ export default function BusinessPlanPage() {
             if (asp > 0) restoredSales = Math.round(restoredVol / asp);
           }
           if (restoredVol > 0 || restoredSales > 0 || restoredIncome > 0) {
-            // Determine first closing month (1-based)
             const planStart = plan.planStartDate ? new Date(plan.planStartDate + 'T00:00:00') : null;
-            const startMonthNum = planStart ? planStart.getMonth() + 1 : 1; // 1=Jan
+            const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
             const grace = plan.isNewAgent ? (plan.gracePeriodMonths ?? 3) : 0;
-            const firstClosingMonth = startMonthNum + grace; // may exceed 12 (handled below)
-
-            // Compute total seasonality weight for active closing months only
-            const activeMonths = Array.from({ length: 12 }, (_, i) => i + 1)
-              .filter(m => m >= firstClosingMonth);
-            const totalSalesPct = activeMonths.reduce((s, m) => {
-              const sw = restoredWeights[m];
+            const firstClosingMonth = startMonthNum + grace;
+            const planYearNum = parseInt(year, 10) || new Date().getFullYear();
+            const effectiveFirst = firstClosingMonth > 12 ? 1 : firstClosingMonth;
+            // Build rolling-12 window: positions 1-12 starting at first closing month
+            const rollingMonths = Array.from({ length: 12 }, (_, i) => {
+              const totalMonth = effectiveFirst + i;
+              const calMonth = ((totalMonth - 1) % 12) + 1;
+              const calYear = planYearNum + Math.floor((totalMonth - 1) / 12);
+              return { calMonth, calYear, pos: i + 1 };
+            });
+            // Total weight across all 12 rolling positions
+            const totalSalesPct = rollingMonths.reduce((s, rm) => {
+              const sw = restoredWeights[rm.pos];
               return s + (parseFloat(sw?.salesPct ?? '8.33') || 8.33);
             }, 0) || 100;
-            const totalVolPct = activeMonths.reduce((s, m) => {
-              const sw = restoredWeights[m];
+            const totalVolPct = rollingMonths.reduce((s, rm) => {
+              const sw = restoredWeights[rm.pos];
               return s + (parseFloat(sw?.volumePct ?? '8.33') || 8.33);
             }, 0) || 100;
-
             const inlineGoals: Record<number, { margin: string; volume: string; sales: string }> = {};
-            for (let m = 1; m <= 12; m++) {
-              const sw = restoredWeights[m];
-              const isBeforeStart = planStart && m < startMonthNum;
-              const isGrace = m >= startMonthNum && m < firstClosingMonth;
-              if (isBeforeStart || isGrace) {
-                // Before plan start or in grace period — no closing goals
-                inlineGoals[m] = { margin: '', volume: '', sales: '' };
-              } else {
-                // Active month — distribute proportionally using this month's share of active total
-                const salesPct = parseFloat(sw?.salesPct ?? '8.33') || 8.33;
-                const volPct = parseFloat(sw?.volumePct ?? '8.33') || 8.33;
-                inlineGoals[m] = {
-                  margin: restoredIncome > 0 ? String(Math.round(restoredIncome * (salesPct / totalSalesPct))) : '',
-                  volume: restoredVol > 0 ? String(Math.round(restoredVol * (volPct / totalVolPct))) : '',
-                  sales: restoredSales > 0 ? String(Math.round(restoredSales * (salesPct / totalSalesPct))) : '',
-                };
-              }
+            for (const rm of rollingMonths) {
+              const sw = restoredWeights[rm.pos];
+              const salesPct = parseFloat(sw?.salesPct ?? '8.33') || 8.33;
+              const volPct   = parseFloat(sw?.volumePct ?? '8.33') || 8.33;
+              inlineGoals[rm.pos] = {
+                margin: restoredIncome > 0 ? String(Math.round(restoredIncome * (salesPct / totalSalesPct))) : '',
+                volume: restoredVol    > 0 ? String(Math.round(restoredVol    * (volPct   / totalVolPct)))   : '',
+                sales:  restoredSales  > 0 ? String(Math.round(restoredSales  * (salesPct / totalSalesPct))) : '',
+              };
             }
             setMonthlyGoals(inlineGoals);
           }
@@ -870,60 +913,67 @@ export default function BusinessPlanPage() {
         throw new Error(json?.error ?? "Failed to save plan");
       }
 
-      // Auto-save monthly goals whenever the plan is saved so the dashboard KPIs stay in sync.
-      // Compute goals inline with grace period suppression and proportional distribution
-      // across active closing months only (not all 12 months).
+      // Auto-save monthly goals whenever the plan is saved using the rolling-12-month model.
+      // Goals are keyed by rolling position 1-12 and written to the correct calendar year+month.
       if (goalSegment) {
         const vol = parseFloat(yearlyVolume) || 0;
         const sales = parseInt(yearlySales, 10) || 0;
         const income = parseFloat(yearlyIncome) || 0;
-        // Determine grace period / plan start boundaries
         const savePlanStart = data.planStartDate ? new Date(data.planStartDate + 'T00:00:00') : null;
         const saveStartMonthNum = savePlanStart ? savePlanStart.getMonth() + 1 : 1;
         const saveGrace = isNewAgent ? gracePeriodMonths : 0;
         const saveFirstClosingMonth = saveStartMonthNum + saveGrace;
-        // Compute total seasonality weight for active closing months only
-        const saveActiveMonths = Array.from({ length: 12 }, (_, i) => i + 1)
-          .filter(m => m >= saveFirstClosingMonth);
-        const saveTotalSalesPct = saveActiveMonths.reduce((s, m) => {
-          const sw = seasonWeights[m];
+        const savePlanYear = parseInt(year, 10) || new Date().getFullYear();
+        const saveEffectiveFirst = saveFirstClosingMonth > 12 ? 1 : saveFirstClosingMonth;
+        const saveRollingMonths = getRollingMonths(saveEffectiveFirst, savePlanYear);
+        // Total weight across all 12 rolling positions
+        const saveTotalSalesPct = saveRollingMonths.reduce((s, rm) => {
+          const sw = seasonWeights[rm.pos];
           return s + (parseFloat(sw?.salesPct ?? '8.33') || 8.33);
         }, 0) || 100;
-        const saveTotalVolPct = saveActiveMonths.reduce((s, m) => {
-          const sw = seasonWeights[m];
+        const saveTotalVolPct = saveRollingMonths.reduce((s, rm) => {
+          const sw = seasonWeights[rm.pos];
           return s + (parseFloat(sw?.volumePct ?? '8.33') || 8.33);
         }, 0) || 100;
         const goalPromises = [];
-        for (let m = 1; m <= 12; m++) {
-          const sw = seasonWeights[m];
-          const volPct = parseFloat(sw?.volumePct ?? '8.33') || 8.33;
+        // Write rolling-12 goals to their correct calendar year+month
+        for (const rm of saveRollingMonths) {
+          const sw = seasonWeights[rm.pos];
+          const volPct   = parseFloat(sw?.volumePct ?? '8.33') || 8.33;
           const salesPct = parseFloat(sw?.salesPct ?? '8.33') || 8.33;
-          const isBeforeStart = savePlanStart && m < saveStartMonthNum;
-          const isGrace = m >= saveStartMonthNum && m < saveFirstClosingMonth;
-          let finalVolume: number | null = null;
-          let finalSales: number | null = null;
-          let finalMargin: number | null = null;
-          if (!isBeforeStart && !isGrace) {
-            // Active closing month: distribute proportionally across active months only
-            finalVolume = vol > 0 ? Math.round(vol * (volPct / saveTotalVolPct)) : null;
-            finalSales = sales > 0 ? Math.round(sales * (salesPct / saveTotalSalesPct)) : null;
-            finalMargin = income > 0 ? Math.round(income * (salesPct / saveTotalSalesPct)) : null;
-          }
-          // Always write the record (even null) so grace/pre-start months are explicitly zeroed
           goalPromises.push(
             fetch('/api/broker/goals', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
               body: JSON.stringify({
-                year: parseInt(year, 10),
-                month: m,
+                year: rm.calYear,
+                month: rm.calMonth,
                 segment: goalSegment,
-                grossMarginGoal: finalMargin,
-                volumeGoal: finalVolume,
-                salesCountGoal: finalSales,
+                grossMarginGoal: income > 0 ? Math.round(income * (salesPct / saveTotalSalesPct)) : null,
+                volumeGoal:      vol    > 0 ? Math.round(vol    * (volPct   / saveTotalVolPct))   : null,
+                salesCountGoal:  sales  > 0 ? Math.round(sales  * (salesPct / saveTotalSalesPct)) : null,
               }),
             })
           );
+        }
+        // Explicitly null-out grace period months so old values are cleared
+        if (savePlanStart && saveGrace > 0) {
+          for (let m = saveStartMonthNum; m < Math.min(saveFirstClosingMonth, 13); m++) {
+            goalPromises.push(
+              fetch('/api/broker/goals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  year: savePlanYear,
+                  month: m,
+                  segment: goalSegment,
+                  grossMarginGoal: null,
+                  volumeGoal: null,
+                  salesCountGoal: null,
+                }),
+              })
+            );
+          }
         }
         await Promise.all(goalPromises).catch(() => {}); // non-blocking
       }
@@ -1997,11 +2047,32 @@ export default function BusinessPlanPage() {
                 </div>
 
                 {/* Monthly goals table */}
+                {(() => {
+                  // Build rolling-12 window for display
+                  const planStartVal = form.getValues('planStartDate');
+                  const planStartDt = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+                  const startMonthNum = planStartDt ? planStartDt.getMonth() + 1 : 1;
+                  const grace = isNewAgent ? gracePeriodMonths : 0;
+                  const firstClosingMonth = startMonthNum + grace;
+                  const planYearNum = parseInt(year, 10) || new Date().getFullYear();
+                  const effectiveFirst = firstClosingMonth > 12 ? 1 : firstClosingMonth;
+                  const rollingMonths = getRollingMonths(effectiveFirst, planYearNum);
+                  const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                  // Grace period months to show as suppressed rows above the rolling table
+                  const gracePeriodRows = grace > 0 && planStartDt
+                    ? Array.from({ length: grace }, (_, i) => {
+                        const m = startMonthNum + i;
+                        const calMonth = ((m - 1) % 12) + 1;
+                        const calYear = planYearNum + Math.floor((m - 1) / 12);
+                        return { calMonth, calYear };
+                      })
+                    : [];
+                  return (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[90px]">Month</TableHead>
+                        <TableHead className="w-[110px]">Month</TableHead>
                         <TableHead className="w-[70px] text-center text-muted-foreground text-xs">Season %</TableHead>
                         <TableHead className="text-right">Net Income Goal</TableHead>
                         <TableHead className="text-right">Volume Goal</TableHead>
@@ -2009,13 +2080,28 @@ export default function BusinessPlanPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
+                      {/* Grace period rows — shown as suppressed/greyed with dashes */}
+                      {gracePeriodRows.map(({ calMonth, calYear }) => (
+                        <TableRow key={`grace-${calYear}-${calMonth}`} className="opacity-40">
+                          <TableCell className="font-medium text-muted-foreground">
+                            {MONTH_LABELS[calMonth - 1]}{calYear !== planYearNum ? ` '${String(calYear).slice(2)}` : ''}
+                            <span className="ml-1 text-xs text-amber-600 font-semibold">(Grace)</span>
+                          </TableCell>
+                          <TableCell className="text-center text-xs text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                        </TableRow>
+                      ))}
+                      {/* Rolling-12 active months */}
+                      {rollingMonths.map(rm => {
+                        const m = rm.pos;
                         const g = monthlyGoals[m] ?? { margin: '', volume: '', sales: '' };
                         const sw = seasonWeights[m] ?? { salesPct: '8.33', volumePct: '8.33' };
-                        const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        const monthLabel = `${MONTH_LABELS[rm.calMonth - 1]}${rm.calYear !== planYearNum ? ` '${String(rm.calYear).slice(2)}` : ''}`;
                         return (
-                          <TableRow key={m}>
-                            <TableCell className="font-medium">{MONTH_LABELS[m - 1]}</TableCell>
+                          <TableRow key={`rolling-${rm.calYear}-${rm.calMonth}`}>
+                            <TableCell className="font-medium">{monthLabel}</TableCell>
                             <TableCell className="text-center">
                               <span className="text-xs font-semibold text-primary tabular-nums">
                                 {parseFloat(sw.salesPct).toFixed(1)}%
@@ -2091,6 +2177,8 @@ export default function BusinessPlanPage() {
                     </TableBody>
                   </Table>
                 </div>
+                  );
+                })()}
               </CardContent>
             </CollapsibleContent>
           </Card>
