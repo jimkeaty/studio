@@ -158,8 +158,9 @@ const CHARLES_DITCH_TIERS: CommissionTierTemplate[] = [
     tierName: 'Tier 3',
     fromCompanyDollar: 120000,
     toCompanyDollar: null,
-    agentSplitPercent: 70,
-    companySplitPercent: 30,
+    // Updated to 75/25 to match the actual Charles Ditch team plan leaderStructureBands
+    agentSplitPercent: 75,
+    companySplitPercent: 25,
     notes: '',
   },
 ];

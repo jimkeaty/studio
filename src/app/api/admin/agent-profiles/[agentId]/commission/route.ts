@@ -283,6 +283,115 @@ export async function GET(
       }
     }
 
+    // ── 0a-LEADER. Team leader — always prefer the team plan's leaderStructureBands ──
+    // For team leaders on a team WITH a leader structure, the team plan is the
+    // authoritative source for the leader's split. This takes priority over any
+    // tiers stored on the agent profile (which may be stale from an earlier save
+    // using the wrong template). The agent profile's stored tiers are only used
+    // as a fallback if the team plan fetch fails or has no leaderStructureBands.
+    if (
+      agentType === 'team' &&
+      teamRole === 'leader' &&
+      primaryTeamId &&
+      !isLeaderlessGroup
+    ) {
+      try {
+        const leaderTeamSnap = await adminDb.collection('teams').doc(primaryTeamId).get();
+        if (leaderTeamSnap.exists) {
+          const leaderTeamData = leaderTeamSnap.data() || {};
+          const leaderTeamPlanId: string | null = leaderTeamData.teamPlanId || null;
+          if (leaderTeamPlanId) {
+            const leaderPlanSnap = await adminDb.collection('teamPlans').doc(leaderTeamPlanId).get();
+            if (leaderPlanSnap.exists) {
+              const leaderPlanData = leaderPlanSnap.data() || {};
+              const leaderPlanStructureType: string =
+                leaderPlanData.structureType || leaderTeamData.structureType || 'with_leader';
+              if (leaderPlanStructureType === 'with_leader') {
+                const leaderBandsPlan: any[] = leaderPlanData.leaderStructureBands || [];
+                if (leaderBandsPlan.length > 0) {
+                  const leaderTiersFromPlan = leaderBandsPlan.map((b: any, i: number) => ({
+                    tierName: b.tierName || `Band ${i + 1}`,
+                    fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+                    toCompanyDollar:
+                      b.toCompanyDollar === null || b.toCompanyDollar === undefined
+                        ? null
+                        : Number(b.toCompanyDollar),
+                    // Leader's split: agentSplitPercent = leaderPercent (their cut of GCI)
+                    agentSplitPercent: Number(b.leaderPercent || 0),
+                    companySplitPercent: Number(b.companyPercent || 0),
+                    transactionFee: null,
+                    capAmount: null,
+                    notes: b.notes || '',
+                  }));
+                  // Fetch YTD rollup for tier progression
+                  let ytdLeader = 0;
+                  let cycleStartLeader: string | null = null;
+                  let cycleEndLeader: string | null = null;
+                  try {
+                    const today = new Date();
+                    const anniversaryMonth = Number(data.anniversaryMonth ?? 0);
+                    const anniversaryDay = Number(data.anniversaryDay ?? 0);
+                    const currentCycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+                    const rollupYear = currentCycle.cycleStart.getUTCFullYear();
+                    const rollupSnapLeader = await adminDb
+                      .collection('agentYearRollups')
+                      .doc(`${agentId}_${rollupYear}`)
+                      .get();
+                    if (rollupSnapLeader.exists) {
+                      const r = rollupSnapLeader.data() || {};
+                      ytdLeader = Number(r.tierProgressionGci ?? r.tierProgressionCompanyDollar ?? r.companyDollar ?? 0);
+                      cycleStartLeader = String(r.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10));
+                      cycleEndLeader = String(r.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10));
+                    } else {
+                      const prevRollupYear = rollupYear - 1;
+                      const prevRollupSnapLeader = await adminDb
+                        .collection('agentYearRollups')
+                        .doc(`${agentId}_${prevRollupYear}`)
+                        .get();
+                      if (prevRollupSnapLeader.exists) {
+                        const rp = prevRollupSnapLeader.data() || {};
+                        const prevCycleEnd = rp.cycleEnd ? new Date(rp.cycleEnd) : null;
+                        if (prevCycleEnd && today <= prevCycleEnd) {
+                          ytdLeader = Number(rp.tierProgressionGci ?? rp.tierProgressionCompanyDollar ?? rp.companyDollar ?? 0);
+                          cycleStartLeader = String(rp.cycleStart || '');
+                          cycleEndLeader = String(rp.cycleEnd || '');
+                        }
+                      }
+                      if (!cycleStartLeader) {
+                        cycleStartLeader = currentCycle.cycleStart.toISOString().slice(0, 10);
+                        cycleEndLeader = currentCycle.cycleEnd.toISOString().slice(0, 10);
+                      }
+                    }
+                  } catch { /* non-fatal */ }
+                  const defaultTransactionFeeLeader =
+                    data.defaultTransactionFee != null
+                      ? Number(data.defaultTransactionFee)
+                      : getTeamDefaultTransactionFee(teamGroup);
+                  return NextResponse.json({
+                    ok: true,
+                    agentId,
+                    agentType,
+                    teamGroup,
+                    commissionMode: 'custom',
+                    tiersSource: 'team_plan_leader',
+                    defaultTransactionFee: defaultTransactionFeeLeader,
+                    tiers: leaderTiersFromPlan,
+                    teamMemberLeaderSplit: null,
+                    ytdTierProgressionGci: ytdLeader,
+                    ytdTierProgressionCompanyDollar: ytdLeader,
+                    cycleStart: cycleStartLeader,
+                    cycleEnd: cycleEndLeader,
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Non-fatal — fall through to agent stored tiers
+      }
+    }
+
     // ── 0a. Agent's own stored tiers — ABSOLUTE SOURCE OF TRUTH ─────────────────
     // If the agent profile has tiers saved with valid splits, use them immediately
     // and return — regardless of commissionMode, agentType, or teamGroup.
