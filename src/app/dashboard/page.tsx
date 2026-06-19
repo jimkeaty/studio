@@ -2144,8 +2144,11 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
 
   useEffect(() => {
     if (!rollingView || !chartUser || !perfData?.agentView) return;
-    const goalStart: number = (perfData.agentView as any).goalStartMonth ?? 1;
-    if (goalStart <= 1) return; // starts in January — no cross-year needed
+    // Use closingGoalStartMonth (first closing month after grace period) as the rolling window start.
+    // For a new agent with start=Jun and grace=3, closingGoalStartMonth=9 (Sep).
+    const closingStart: number = (perfData.agentView as any).closingGoalStartMonth
+      ?? (perfData.agentView as any).goalStartMonth ?? 1;
+    if (closingStart <= 1) return; // starts in January — no cross-year needed
     const nextYear = year + 1;
     chartUser.getIdToken().then(token => {
       const params = new URLSearchParams({ year: String(nextYear) });
@@ -2190,15 +2193,19 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   let monthlyPendingNetIncome: number[];
   let rollingStartMonthIdx: number; // 0-based index into rawMonths where rolling window starts
 
-  if (rollingView && goalStartMonth > 1) {
-    // Rolling window: starts at goalStartMonth (1-based), wraps into next year.
-    // e.g. goalStartMonth=6 (June): slots 0-5 = Jun-Dec of this year (indices 5-11),
-    //                               slots 6-11 = Jan-May of next year (indices 0-4).
-    const startIdx = goalStartMonth - 1; // 0-based
+  // Use closingGoalStartMonth as the rolling window start so the 12 slots all have goals.
+  // For Abby (start=Jun, grace=3): closingGoalStartMonth=9 → window = Sep 2026 → Aug 2027.
+  const rollingWindowStart = rollingView ? closingGoalStartMonth : 1;
+
+  if (rollingView && rollingWindowStart > 1) {
+    // Rolling window: starts at closingGoalStartMonth (1-based), wraps into next year.
+    // e.g. closingGoalStartMonth=9 (Sep): slots 0-3 = Sep-Dec of this year (indices 8-11),
+    //                                     slots 4-11 = Jan-Aug of next year (indices 0-7).
+    const startIdx = rollingWindowStart - 1; // 0-based
     rollingStartMonthIdx = startIdx;
-    const thisYearTail = rawMonths.slice(startIdx);           // Jun-Dec (7 months for June start)
+    const thisYearTail = rawMonths.slice(startIdx);
     const nextYearHead = nextRawMonths.length === 12
-      ? nextRawMonths.slice(0, startIdx)                      // Jan-May of next year
+      ? nextRawMonths.slice(0, startIdx)
       : rawMonths.slice(0, startIdx).map((m, i) => ({         // fallback: pad with empty months
           ...m,
           label: new Date(year + 1, i, 1).toLocaleString('default', { month: 'short' }),
@@ -2232,10 +2239,10 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
   const currentMonthIdx = isCurrentYear ? today.getMonth() : 11;
   const todayMonthLabel = today.toLocaleString('default', { month: 'long' });
   const todayMonthShort = today.toLocaleString('default', { month: 'short' });
-  // In rolling view, the months array is reordered starting at goalStartMonth.
-  // currentMonthIdx in the reordered array = (today.getMonth() - (goalStartMonth-1) + 12) % 12
-  const rollingCurrentMonthIdx = rollingView && goalStartMonth > 1
-    ? (currentMonthIdx - (goalStartMonth - 1) + 12) % 12
+  // In rolling view, the months array is reordered starting at closingGoalStartMonth.
+  // currentMonthIdx in the reordered array = (today.getMonth() - (rollingWindowStart-1) + 12) % 12
+  const rollingCurrentMonthIdx = rollingView && rollingWindowStart > 1
+    ? (currentMonthIdx - (rollingWindowStart - 1) + 12) % 12
     : currentMonthIdx;
   const effectiveMonthIdx = rollingView ? rollingCurrentMonthIdx : currentMonthIdx;
 
@@ -2497,7 +2504,9 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 netIncome: (!isFuture && !isPartial) ? income : null,
                 partialNetIncome: isPartial ? income : null,
                 pendingNetIncome: (showPending && !isFuture) ? (monthlyPendingNetIncome[i] || 0) : null,
-                incomeGoal: showGoals ? (rollingView ? (isFuture ? null : m.grossMarginGoal) : m.grossMarginGoal) : null,
+                // In rolling view, show goal bars for all 12 months (the whole point of rolling view).
+                // In calendar year view, suppress future months to avoid a goal bar with no actuals.
+                incomeGoal: showGoals ? (rollingView ? m.grossMarginGoal : m.grossMarginGoal) : null,
                 compareIncome: compareYear ? (perfData.comparisonData?.months?.[i]?.netIncome ?? null) : null,
                 projectedNetIncome: showProjected ? (projNetIncome[i] ?? null) : null,
               };
@@ -2624,7 +2633,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
                 partialClosedVolume: isPartial ? m.closedVolume : null,
                 pendingVolume: (showPending && !isFuture) ? m.pendingVolume : null,
-                volumeGoal: showGoals ? (rollingView ? (isFuture ? null : m.volumeGoal) : m.volumeGoal) : null,
+                volumeGoal: showGoals ? m.volumeGoal : null,
                 compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
                 projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
               };
@@ -2751,7 +2760,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
                 partialClosedCount: isPartial ? m.closedCount : null,
                 pendingCount: (showPending && !isFuture) ? m.pendingCount : null,
-                salesCountGoal: showGoals ? (rollingView ? (isFuture ? null : m.salesCountGoal) : m.salesCountGoal) : null,
+                salesCountGoal: showGoals ? m.salesCountGoal : null,
                 compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
                 projectedCount: showProjected ? (projSales[i] ?? null) : null,
               };
