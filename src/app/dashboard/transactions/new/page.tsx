@@ -1074,22 +1074,39 @@ export default function AddTransactionPage() {
   const watchedGCI = form.watch('gci');
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
-    const gci = Number(watchedGCI) || 0;
-    if (gci <= 0) { setActiveTier(null); return; }
+    const grossGci = Number(watchedGCI) || 0;
+    if (grossGci <= 0) { setActiveTier(null); return; }
+
+    // ── Outbound referral fee deduction ─────────────────────────────────────
+    // The referral fee is paid off the top before the broker/agent split.
+    // e.g. $3,000 GCI × 25% referral = $750 fee → $2,250 net for split.
+    const referralPct = Number(form.getValues('outboundReferralFeePercent') || 0);
+    const referralDollarOverride = Number(form.getValues('outboundReferralFeeDollar') || 0);
+    const hasReferral = form.getValues('hasOutboundReferral');
+    let referralFee = 0;
+    if (hasReferral && referralPct > 0) {
+      // Auto-calculate from pct; if user manually entered a dollar amount use that instead
+      const autoDollar = Math.round(grossGci * (referralPct / 100) * 100) / 100;
+      referralFee = referralDollarOverride > 0 ? referralDollarOverride : autoDollar;
+      // Keep the dollar field in sync
+      form.setValue('outboundReferralFeeDollar', referralFee as any);
+    }
+    const netGci = Math.max(0, grossGci - referralFee);
+
+    // Tier lookup uses the full gross GCI (per knowledge base: tier lookup on full GCI)
     const ytd = agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0;
-    const tierLookupAmount = ytd > 0 ? ytd : gci;
+    const tierLookupAmount = ytd > 0 ? ytd : grossGci;
     const tier = findActiveTier(agentCommission.tiers, tierLookupAmount);
     setActiveTier(tier);
     if (tier) {
       // For team members on a team WITH a leader, the tier's agentSplitPercent is already
       // the EFFECTIVE % of full GCI (leaderPercent × memberPercent / 100), so the formula
-      // agentNet = GCI × agentSplitPercent is correct for all agent types.
-      // The leaderStructurePercent and memberPercentOfLeaderSide fields are only used
-      // for the preview card display breakdown.
+      // agentNet = netGci × agentSplitPercent is correct for all agent types.
       const agentPct = tier.agentSplitPercent;    // Effective % of full GCI
       const brokerPct = tier.companySplitPercent;  // Company's % of full GCI
-      const agentNet = Number((gci * (agentPct / 100)).toFixed(2));
-      const brokerGci = Number((gci * (brokerPct / 100)).toFixed(2));
+      // Split is applied to netGci (after referral fee deduction)
+      const agentNet = Number((netGci * (agentPct / 100)).toFixed(2));
+      const brokerGci = Number((netGci * (brokerPct / 100)).toFixed(2));
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
       form.setValue('agentPct', agentPct as any);
       form.setValue('brokerPct', brokerPct as any);
@@ -1103,7 +1120,7 @@ export default function AddTransactionPage() {
         }
       }
     }
-  }, [watchedGCI, agentCommission]);
+  }, [watchedGCI, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral]);
 
   // Sync additionalComments → notes
   const watchedAdditionalComments = form.watch('additionalComments');
@@ -3631,13 +3648,22 @@ export default function AddTransactionPage() {
                 {(() => {
                   const agentDollar = Number(form.watch('agentDollar')) || 0;
                   const gci = Number(form.watch('gci')) || 0;
+                  // Compute netGci after referral deduction for correct split % display
+                  const previewRefPct = Number(form.watch('outboundReferralFeePercent') || 0);
+                  const previewRefDollar = Number(form.watch('outboundReferralFeeDollar') || 0);
+                  const previewHasRef = form.watch('hasOutboundReferral');
+                  const previewRefFee = previewHasRef && previewRefPct > 0
+                    ? (previewRefDollar > 0 ? previewRefDollar : Math.round(gci * (previewRefPct / 100) * 100) / 100)
+                    : 0;
+                  const previewNetGci = Math.max(0, gci - previewRefFee);
                   const watchedTxCompFee = form.watch('txComplianceFee');
                   const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
                   const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
                   const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
                   const agentNet = agentDollar - feeDeduction;
-                  const splitPct = gci > 0 ? Math.round((agentDollar / gci) * 100) : (activeTier?.agentSplitPercent ?? 0);
+                  // Split % is relative to netGci (after referral), not gross GCI
+                  const splitPct = previewNetGci > 0 ? Math.round((agentDollar / previewNetGci) * 100) : (activeTier?.agentSplitPercent ?? 0);
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
                   if (agentDollar <= 0 && !activeTier) return (
@@ -3666,6 +3692,14 @@ export default function AddTransactionPage() {
                           <p className="text-xl font-black text-green-700 dark:text-green-300">{fmtExact(agentNet)}</p>
                         </div>
                       </div>
+                      {previewRefFee > 0 && (
+                        <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-xs text-amber-800 dark:text-amber-300 space-y-0.5">
+                          <p className="font-semibold">Referral Fee Breakdown</p>
+                          <p>Gross GCI: <strong>{fmtExact(gci)}</strong></p>
+                          <p>Outbound Referral ({previewRefPct}%): <strong>-{fmtExact(previewRefFee)}</strong></p>
+                          <p>Net for Split: <strong>{fmtExact(previewNetGci)}</strong></p>
+                        </div>
+                      )}
                       {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
                         <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
                           <p className="text-xs text-muted-foreground">Transaction Fee</p>
@@ -3791,10 +3825,21 @@ export default function AddTransactionPage() {
                           const tier = findActiveTier(agentCommission.tiers, tierLookup2);
                           setActiveTier(tier);
                           if (tier) {
+                            // Deduct outbound referral fee before split (same logic as auto-calc useEffect)
+                            const refPct2 = Number(form.getValues('outboundReferralFeePercent') || 0);
+                            const refDollar2 = Number(form.getValues('outboundReferralFeeDollar') || 0);
+                            const hasRef2 = form.getValues('hasOutboundReferral');
+                            let refFee2 = 0;
+                            if (hasRef2 && refPct2 > 0) {
+                              const autoDollar2 = Math.round(gci * (refPct2 / 100) * 100) / 100;
+                              refFee2 = refDollar2 > 0 ? refDollar2 : autoDollar2;
+                              form.setValue('outboundReferralFeeDollar', refFee2 as any);
+                            }
+                            const netGci2 = Math.max(0, gci - refFee2);
                             form.setValue('agentPct', tier.agentSplitPercent as any);
                             form.setValue('brokerPct', tier.companySplitPercent as any);
-                            form.setValue('agentDollar', Number((gci * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
-                            form.setValue('brokerGci', Number((gci * (tier.companySplitPercent / 100)).toFixed(2)) as any);
+                            form.setValue('agentDollar', Number((netGci2 * (tier.agentSplitPercent / 100)).toFixed(2)) as any);
+                            form.setValue('brokerGci', Number((netGci2 * (tier.companySplitPercent / 100)).toFixed(2)) as any);
                             const txFee2 = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
                             if (txFee2 > 0) {
                               form.setValue('txComplianceFee', 'yes');
@@ -3867,6 +3912,14 @@ export default function AddTransactionPage() {
                 {(() => {
                   const gci = Number(form.watch('gci')) || 0;
                   const agentDollar = Number(form.watch('agentDollar')) || 0;
+                  // Referral fee deduction for admin/TC preview card
+                  const adminRefPct = Number(form.watch('outboundReferralFeePercent') || 0);
+                  const adminRefDollar = Number(form.watch('outboundReferralFeeDollar') || 0);
+                  const adminHasRef = form.watch('hasOutboundReferral');
+                  const adminRefFee = adminHasRef && adminRefPct > 0
+                    ? (adminRefDollar > 0 ? adminRefDollar : Math.round(gci * (adminRefPct / 100) * 100) / 100)
+                    : 0;
+                  const adminNetGci = Math.max(0, gci - adminRefFee);
                   const watchedTxCompFee = form.watch('txComplianceFee');
                   const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
@@ -3890,11 +3943,12 @@ export default function AddTransactionPage() {
                   const leaderStructurePct = activeTier?.leaderStructurePercent ?? 0;   // e.g. 75%
                   const memberDirectPct = activeTier?.agentSplitPercent ?? 0;           // e.g. 70%
                   const companyPct = activeTier?.companySplitPercent ?? 0;              // e.g. 25%
-                  // leaderStructureGross = GCI × leaderPercent (the leader's side before member payout)
-                  const leaderStructureGross = isTeamMemberWithLeader ? Number((gci * (leaderStructurePct / 100)).toFixed(2)) : 0;
+                  // leaderStructureGross = netGci × leaderPercent (the leader's side before member payout)
+                  // All split math uses adminNetGci (after referral deduction)
+                  const leaderStructureGross = isTeamMemberWithLeader ? Number((adminNetGci * (leaderStructurePct / 100)).toFixed(2)) : 0;
                   const companyRetained = isTeamMemberWithLeader
-                    ? Number((gci * (companyPct / 100)).toFixed(2))
-                    : Number((gci - agentDollar).toFixed(2));
+                    ? Number((adminNetGci * (companyPct / 100)).toFixed(2))
+                    : Number((adminNetGci - agentDollar).toFixed(2));
                   // Leader retains the spread: leaderStructureGross - memberPaid
                   const leaderRetained = isTeamMemberWithLeader
                     ? Number((leaderStructureGross - agentDollar).toFixed(2))
@@ -3991,7 +4045,7 @@ export default function AddTransactionPage() {
                               </div>
                             )}
                             <div className="text-center">
-                              <p className="text-xs text-muted-foreground mb-0.5">Your Split ({gci > 0 ? Math.round((agentDollar / gci) * 100) : 0}%)</p>
+                              <p className="text-xs text-muted-foreground mb-0.5">Your Split ({adminNetGci > 0 ? Math.round((agentDollar / adminNetGci) * 100) : 0}%)</p>
                               <p className="text-lg font-black text-foreground">{fmt(agentDollar)}</p>
                             </div>
                             {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
