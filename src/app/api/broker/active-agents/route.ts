@@ -106,15 +106,20 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // ── 2. Fetch all closed transactions (all years) to find first deal dates ─
+    // ── 2. Fetch all transactions (closed + pending) to find first deal dates and pending counts ─
     const txSnap = await adminDb.collection('transactions')
       .where('status', '==', 'closed')
+      .get();
+    const pendingTxSnap = await adminDb.collection('transactions')
+      .where('status', 'in', ['pending', 'under_contract'])
       .get();
 
     // Build map: agentId → earliest closed month (YYYY-MM)
     const firstDealMap = new Map<string, string>();
     // Build map: agentId → Set of YYYY-MM months they had a closed deal
     const dealMonthsMap = new Map<string, Set<string>>();
+    // Build map: agentId → count of pending/under_contract transactions
+    const pendingCountMap = new Map<string, number>();
 
     for (const doc of txSnap.docs) {
       const t = doc.data() as any;
@@ -130,6 +135,14 @@ export async function GET(req: NextRequest) {
         // Track all deal months
         if (!dealMonthsMap.has(aid)) dealMonthsMap.set(aid, new Set());
         dealMonthsMap.get(aid)!.add(ym);
+      }
+    }
+    for (const doc of pendingTxSnap.docs) {
+      const t = doc.data() as any;
+      if (demoAgentIds.size > 0 && demoAgentIds.has(String(t.agentId || ''))) continue;
+      const agentIds = [t.agentId, t.coAgentId].filter(Boolean) as string[];
+      for (const aid of agentIds) {
+        pendingCountMap.set(aid, (pendingCountMap.get(aid) ?? 0) + 1);
       }
     }
 
@@ -330,15 +343,24 @@ export async function GET(req: NextRequest) {
       ? Math.round((ytdDeals / currentMonthData.totalActive) * 100) / 100
       : 0;
 
-    // No Deals Yet count: active agents past grace period with no closed deals
+    // No Deals Yet count: active agents past grace period with no closed AND no pending deals.
+    // Matches the same definition used by agent-roster-metrics so both dashboards agree.
+    // Agents with no startDate are treated as established (past grace) — same as roster-metrics.
     const noDealsYetCount = agentRecords.filter(ar => {
-      if (!ar.activationMonth) return false;
-      if (ar.activationMonth > currentYM) return false;
+      // Must be currently active (not departed)
       if (ar.endMonth && ar.endMonth <= currentYM) return false;
-      // Must be past grace period (graceEndMonth <= currentYM)
-      if (!ar.graceEndMonth || ar.graceEndMonth > currentYM) return false;
-      // Must have no closed deals
-      return !ar.firstDealMonth;
+      // Must have been activated (has startDate or has a first deal)
+      // Agents with no startDate AND no firstDeal are excluded (not yet active)
+      if (!ar.activationMonth && !ar.startDate) return false;
+      // Must be past grace period:
+      //   - If graceEndMonth is set, it must be <= currentYM
+      //   - If graceEndMonth is NOT set (no startDate), treat as established (past grace)
+      if (ar.graceEndMonth && ar.graceEndMonth > currentYM) return false;
+      // Must have no closed deals ever
+      if (ar.firstDealMonth) return false;
+      // Must have no pending deals currently
+      if ((pendingCountMap.get(ar.agentId) ?? 0) > 0) return false;
+      return true;
     }).length;
 
     // ── 10. Grace period graduation projection ───────────────────────────────
