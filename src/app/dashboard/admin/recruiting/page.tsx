@@ -13,6 +13,8 @@ import { RecruitingPipelinePanel } from '@/components/dashboard/broker/Recruitin
 import { UnifiedRecruitingReportCard } from '@/components/dashboard/broker/UnifiedRecruitingReportCard';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
+import { RecruitingGoalsSummary } from '@/components/dashboard/broker/RecruitingGoalsSummary';
+import { RecruitingReverseCalculator } from '@/components/dashboard/broker/RecruitingReverseCalculator';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -1749,33 +1751,63 @@ export default function RecruitingDashboardPage() {
 
 
 
-      {/* Funnel Targets */}
+      {/* ── Recruiting Funnel — What It Takes (upgraded) ─────────────────── */}
       {funnelTargets && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recruiting Funnel — What It Takes</CardTitle>
-            <CardDescription>Reverse-calculated from your goal of {plan.yearlyNewHiresGoal} new hires/year</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 text-center">
-              {[
-                { label: 'Prospect Calls', yearly: funnelTargets.yearly.calls, monthly: funnelTargets.monthly.calls, weekly: funnelTargets.weekly.calls },
-                { label: 'Interviews Set', yearly: funnelTargets.yearly.interviewsSet, monthly: funnelTargets.monthly.interviewsSet, weekly: funnelTargets.weekly.interviewsSet },
-                { label: 'Interviews Held', yearly: funnelTargets.yearly.interviewsHeld, monthly: funnelTargets.monthly.interviewsHeld, weekly: funnelTargets.weekly.interviewsHeld },
-                { label: 'Offers Made', yearly: funnelTargets.yearly.offers, monthly: funnelTargets.monthly.offers },
-                { label: 'Committed', yearly: funnelTargets.yearly.committed, monthly: funnelTargets.monthly.committed },
-                { label: 'Onboarded', yearly: funnelTargets.yearly.onboarded, monthly: funnelTargets.monthly.onboarded },
-              ].map((item, i) => (
-                <div key={i} className="border rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground mb-1">{item.label}</p>
-                  <p className="text-xl font-bold">{item.yearly}</p>
-                  <p className="text-xs text-muted-foreground">{item.monthly}/mo{item.weekly ? ` · ${item.weekly}/wk` : ''}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <RecruitingGoalsSummary
+          funnelTargets={funnelTargets}
+          totals={{
+            totalProspectCalls: totals.totalProspectCalls,
+            totalInterviewsSet: totals.totalInterviewsSet,
+            totalInterviews: totals.totalInterviews,
+            totalOffers: totals.totalOffers ?? 0,
+            totalCommitted: totals.totalCommitted ?? 0,
+            totalOnboarded: totals.totalOnboarded ?? totals.newHires ?? 0,
+            monthsElapsed: totals.monthsElapsed,
+          }}
+          year={year}
+          yearlyNewHiresGoal={plan.yearlyNewHiresGoal}
+        />
       )}
+
+      {/* ── Recruiting Reverse Calculator ─────────────────────────────────── */}
+      <RecruitingReverseCalculator
+        liveAvgCompanyFeePerDeal={data.liveData?.avgCompanyFeePerDeal ?? null}
+        liveAvgDealsPerAgentPerMonth={data.liveData?.avgDealsPerAgentPerMonth ?? totals.avgDealsPerAgent ?? 0.78}
+        currentActiveAgents={realActiveAgents}
+        conversionRates={plan.conversionRates ?? {
+          callToInterview: 0.20,
+          interviewSetToHeld: 0.70,
+          interviewToOffer: 0.50,
+          offerToCommit: 0.60,
+          commitToOnboard: 0.85,
+          expectedAttritionPct: 0.15,
+        }}
+        companyRetentionPct={plan.companyRetentionPct ?? 0.29}
+        avgCompanyFeePerDealOverride={plan.avgCompanyFeePerDealOverride ?? null}
+        netMarginGoal={plan.netMarginGoal ?? null}
+        year={year}
+        onSavePlan={async (updates) => {
+          if (!user) return;
+          const token = await user.getIdToken();
+          await fetch('/api/broker/recruiting-metrics', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              action: 'savePlan',
+              year,
+              netMarginGoal: updates.netMarginGoal,
+              companyRetentionPct: updates.companyRetentionPct,
+              avgCompanyFeePerDealOverride: updates.avgCompanyFeePerDealOverride,
+              conversionRates: updates.conversionRates,
+              // Preserve existing goals
+              yearlyNewHiresGoal: plan.yearlyNewHiresGoal,
+              yearlyActiveAgentsGoal: plan.yearlyActiveAgentsGoal,
+              netGainGoal: plan.netGainGoal,
+            }),
+          });
+          fetchData();
+        }}
+      />
 
       {/* ── CHART 1: Active Agents Count ──────────────────────────────────── */}
       <Card>

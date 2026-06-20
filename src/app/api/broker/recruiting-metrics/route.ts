@@ -112,10 +112,13 @@ export async function GET(req: NextRequest) {
     const plan = planSnap.exists ? planSnap.data() : null;
 
     // 4. Get transaction counts per month for deals-per-agent calc
+    //    Also compute avg company fee per deal from splitSnapshot.companyRetained
     const txSnap = await adminDb.collection('transactions')
       .where('year', '==', year).where('status', '==', 'closed').get();
 
     const monthlyDeals: number[] = new Array(12).fill(0);
+    let totalCompanyRetained = 0;
+    let companyRetainedCount = 0;
     txSnap.docs.forEach(d => {
       const t = d.data();
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
@@ -133,7 +136,17 @@ export async function GET(req: NextRequest) {
           monthlyDeals[closedDate.getMonth()] += sideCount;
         }
       }
+      // Accumulate company retained for avg fee calculation
+      const companyRetained = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? null;
+      if (companyRetained != null && companyRetained > 0) {
+        totalCompanyRetained += companyRetained;
+        companyRetainedCount += 1;
+      }
     });
+    // Avg company fee per deal (from live data)
+    const liveAvgCompanyFeePerDeal = companyRetainedCount > 0
+      ? Math.round(totalCompanyRetained / companyRetainedCount)
+      : null;
 
     // 5. Get available years
     // Build from recruitingTracking collection, but always include the past 5 years
@@ -274,6 +287,10 @@ export async function GET(req: NextRequest) {
     const totalInterviews = months.reduce((s, m) => s + m.interviewsHeld, 0);
     const totalInterviewsSet = months.reduce((s, m) => s + (m.interviewsSet ?? 0), 0);
     const totalProspectCalls = months.reduce((s, m) => s + m.prospectCalls, 0);
+    const totalCommitted = months.reduce((s, m) => s + (m.committed ?? 0), 0);
+    // offers and onboarded not yet tracked in monthly data entry — use 0 as placeholder
+    const totalOffers = 0;
+    const totalOnboarded = totalNewHires; // onboarded = new hires (same thing)
 
     // 8. Recruiting funnel calculations (like business plan)
     const conversionRates = plan?.conversionRates || {
@@ -287,6 +304,10 @@ export async function GET(req: NextRequest) {
 
     const yearlyNewHiresGoal = plan?.yearlyNewHiresGoal ?? null;
     const yearlyActiveAgentsGoal = plan?.yearlyActiveAgentsGoal ?? null;
+    // Company retention % assumption (default 29%)
+    const companyRetentionPct = plan?.companyRetentionPct ?? 0.29;
+    // Avg company fee per deal: use plan override if set, otherwise live data
+    const avgCompanyFeePerDeal = plan?.avgCompanyFeePerDealOverride ?? liveAvgCompanyFeePerDeal;
 
     // Reverse-calculate from goal
     let funnelTargets = null;
@@ -313,6 +334,18 @@ export async function GET(req: NextRequest) {
           calls: Math.ceil(calls / 50), // 50 working weeks
           interviewsSet: Math.ceil(interviewsSet / 50),
           interviewsHeld: Math.ceil(interviewsHeld / 50),
+          offers: Math.ceil(offers / 50),
+          committed: Math.ceil(committed / 50),
+          onboarded: Math.ceil(onboarded / 50),
+        },
+        // Daily goals (260 working days / year)
+        daily: {
+          calls: Math.ceil(calls / 260),
+          interviewsSet: Math.ceil(interviewsSet / 260),
+          interviewsHeld: Math.ceil(interviewsHeld / 260),
+          offers: Math.ceil(offers / 260),
+          committed: Math.ceil(committed / 260),
+          onboarded: Math.ceil(onboarded / 260),
         },
       };
     }
@@ -365,12 +398,24 @@ export async function GET(req: NextRequest) {
         totalInterviews,
         totalInterviewsSet,
         totalProspectCalls,
+        totalCommitted,
+        totalOffers,
+        totalOnboarded,
       },
       plan: {
         yearlyNewHiresGoal,
         yearlyActiveAgentsGoal,
         conversionRates,
         expectedAttritionPct: conversionRates.expectedAttritionPct,
+        companyRetentionPct,
+        avgCompanyFeePerDealOverride: plan?.avgCompanyFeePerDealOverride ?? null,
+        netMarginGoal: plan?.netMarginGoal ?? null,
+      },
+      // Live data for reverse calculator
+      liveData: {
+        avgCompanyFeePerDeal: liveAvgCompanyFeePerDeal,
+        avgDealsPerAgentPerMonth: avgDealsPerAgent,
+        totalTransactionsWithFeeData: companyRetainedCount,
       },
       funnelTargets,
       grades,
@@ -419,7 +464,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'savePlan') {
-      const { year, yearlyNewHiresGoal, yearlyActiveAgentsGoal, netGainGoal, conversionRates } = body;
+      const { year, yearlyNewHiresGoal, yearlyActiveAgentsGoal, netGainGoal, conversionRates,
+              companyRetentionPct, avgCompanyFeePerDealOverride, netMarginGoal } = body;
       if (!year) return jsonError(400, 'year required');
 
       await adminDb.collection('recruitingPlans').doc(String(year)).set({
@@ -428,6 +474,9 @@ export async function POST(req: NextRequest) {
         yearlyActiveAgentsGoal: yearlyActiveAgentsGoal ?? null,
         netGainGoal: netGainGoal ?? null,
         conversionRates: conversionRates ?? {},
+        companyRetentionPct: companyRetentionPct ?? null,
+        avgCompanyFeePerDealOverride: avgCompanyFeePerDealOverride ?? null,
+        netMarginGoal: netMarginGoal ?? null,
         updatedAt: new Date().toISOString(),
         updatedBy: decoded.uid,
       }, { merge: true });
