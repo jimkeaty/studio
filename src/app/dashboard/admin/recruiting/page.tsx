@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useUser } from '@/firebase';
 import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsChart';
 import { RecruitingPipelinePanel } from '@/components/dashboard/broker/RecruitingPipelinePanel';
-import { RecruiterReportCard } from '@/components/dashboard/broker/RecruiterReportCard';
+import { UnifiedRecruitingReportCard } from '@/components/dashboard/broker/UnifiedRecruitingReportCard';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
-import { BrokerKPIReportCard } from '@/components/dashboard/broker/BrokerKPIReportCard';
+
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -1611,7 +1611,6 @@ export default function RecruitingDashboardPage() {
   const [activeAgentsData, setActiveAgentsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [reportCardOpen, setReportCardOpen] = useState(true);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -1713,28 +1712,8 @@ export default function RecruitingDashboardPage() {
 
         {/* ── TAB 2: Recruiting Pipeline (existing content) ───────────────── */}
         <TabsContent value="recruiting" className="space-y-8 mt-6">
-      {/* ── Broker Agent KPI Report Card ──────────────────────────────────── */}
-      <BrokerKPIReportCard year={year} />
-
-
-      {/* ── Recruiter Report Card ────────────────────────────────────────── */}
-      <RecruiterReportCard
-        activeAgents={realActiveAgents}
-        ytdNewHires={realYtdNewHires}
-        ytdDepartures={realYtdDepartures}
-        ytdInterviewsHeld={totals.totalInterviews}
-        ytdInterviewsSet={totals.totalInterviewsSet ?? 0}
-        ytdProspectCalls={totals.totalProspectCalls}
-        yearlyActiveAgentsGoal={plan.yearlyActiveAgentsGoal ?? null}
-        yearlyNewHiresGoal={plan.yearlyNewHiresGoal ?? null}
-        yearlyInterviewsGoal={funnelTargets?.yearly?.interviewsHeld ?? null}
-        yearlyInterviewsSetGoal={funnelTargets?.yearly?.interviewsSet ?? null}
-        yearlyProspectCallsGoal={funnelTargets?.yearly?.calls ?? null}
-        monthsElapsed={monthsElapsed}
-        isCurrentYear={new Date().getFullYear() === year}
-        open={reportCardOpen}
-        onToggle={() => setReportCardOpen(v => !v)}
-      />
+      {/* ── Unified Recruiting & Agent KPI Report Card ─────────────────────── */}
+      <UnifiedRecruitingReportCard year={year} />
 
 
 

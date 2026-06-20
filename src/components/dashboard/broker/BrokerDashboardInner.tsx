@@ -34,7 +34,7 @@ import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsCha
 import { BrokerageReportCard } from '@/components/dashboard/broker/BrokerageReportCard';
 import { BrokerageKpiTracker } from '@/components/dashboard/broker/BrokerageKpiTracker';
 import type { BrokerKpiActuals, BrokerKpiGoals } from '@/components/dashboard/broker/BrokerageKpiTracker';
-import { BrokerKPIReportCard } from '@/components/dashboard/broker/BrokerKPIReportCard';
+import { UnifiedRecruitingReportCard } from '@/components/dashboard/broker/UnifiedRecruitingReportCard';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -2578,7 +2578,7 @@ export function BrokerDashboardInner() {
       <GoalsEditor months={months} year={year} prevYearStats={data.prevYearStats} onSaved={fetchData} segment={selectedTeam || 'TOTAL'} />
 
       {/* ── Broker Agent KPI Report Card ──────────────────────────────────── */}
-      <BrokerKPIReportCard year={year} />
+      <UnifiedRecruitingReportCard year={year} />
 
       {/* ── Active Agents Chart ────────────────────────────────────────────── */}
       <ActiveAgentsChart showGoalEdit={true} initialYear={year} />
