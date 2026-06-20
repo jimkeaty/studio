@@ -99,9 +99,16 @@ export async function GET(req: NextRequest) {
     });
 
     // 5. Get available years
+    // Build from recruitingTracking collection, but always include the past 5 years
+    // as a fallback so the Compare To dropdown is never empty.
     const yearsSnap = await adminDb.collection('recruitingTracking').select('year').get();
-    const availableYears = [...new Set(yearsSnap.docs.map(d => d.data().year as number))]
-      .filter(y => y !== year).sort((a, b) => b - a);
+    const yearSet = new Set<number>(yearsSnap.docs.map(d => d.data().year as number));
+    // Fallback: always include past 5 years
+    for (let offset = 1; offset <= 5; offset++) yearSet.add(year - offset);
+    const availableYears = [...yearSet]
+      .filter(y => y !== year && y >= 2018)
+      .sort((a, b) => b - a)
+      .slice(0, 8);
 
     // 5b. Fetch agent profiles to compute real monthly departures and in-training counts
     function parseAgentDate(raw: admin.firestore.Timestamp | string | undefined | null): Date | null {

@@ -303,7 +303,14 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
   }) ?? [];
 
   const kpi = data?.kpi;
-  const availableYears: number[] = data?.availableYears ?? [];
+  // Use API-provided availableYears; if empty (API error or sparse data),
+  // fall back to the past 5 calendar years so the dropdown is never blank.
+  const availableYears: number[] = (() => {
+    const fromApi: number[] = data?.availableYears ?? [];
+    if (fromApi.length > 0) return fromApi;
+    const currentCalYear = new Date().getFullYear();
+    return Array.from({ length: 5 }, (_, i) => currentCalYear - 1 - i);
+  })();
   const graceProjection: any[] = data?.graceProjection ?? [];
   const selectedTeamLabel = TEAM_GROUP_OPTIONS.find(t => t.value === teamGroup)?.label ?? 'All Teams';
 

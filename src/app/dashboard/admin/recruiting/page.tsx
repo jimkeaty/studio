@@ -1642,7 +1642,14 @@ export default function RecruitingDashboardPage() {
   if (error) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
   if (!data) return null;
 
-  const { months, totals, plan, funnelTargets, grades, availableYears } = data;
+  const { months, totals, plan, funnelTargets, grades } = data;
+  // Use API-provided availableYears; fall back to past 5 years if empty
+  const availableYears: number[] = (() => {
+    const fromApi: number[] = data.availableYears ?? [];
+    if (fromApi.length > 0) return fromApi;
+    const currentCalYear = new Date().getFullYear();
+    return Array.from({ length: 5 }, (_, i) => currentCalYear - 1 - i);
+  })();
 
   // Real active agent data from the authoritative active-agents API
   const realActiveAgents = activeAgentsData?.kpi?.currentActive ?? totals.activeAgents;
