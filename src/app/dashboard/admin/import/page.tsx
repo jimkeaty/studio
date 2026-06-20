@@ -420,7 +420,25 @@ const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
-type Step = 'upload' | 'mapping' | 'preview' | 'result';
+type Step = 'upload' | 'mapping' | 'preview' | 'agent-review' | 'result';
+
+// Agent resolution types (mirrors /api/admin/import/resolve-agents)
+type AgentResolutionStatus = 'auto_resolved' | 'fuzzy_match' | 'former_agent' | 'no_match';
+interface AgentResolution {
+  csvName: string;
+  status: AgentResolutionStatus;
+  matchedAgentId?: string;
+  matchedDisplayName?: string;
+  matchedAgentStatus?: string;
+  similarity?: number;
+  candidates?: { agentId: string; displayName: string; agentStatus: string; similarity: number }[];
+  rowNumbers: number[];
+}
+interface AgentDecision {
+  action: 'use_existing' | 'create_new' | 'historical' | 'skip';
+  agentId?: string;
+  displayName?: string;
+}
 
 export default function BulkImportPage() {
   const { user, loading: userLoading } = useUser();
@@ -447,6 +465,13 @@ export default function BulkImportPage() {
   const [importBatches, setImportBatches] = useState<{importBatchId:string;importedAt:string;count:number;years:number[];sampleAgents:string[];sampleAddresses:string[]}[]>([]);
   const [batchesLoading, setBatchesLoading] = useState(false);
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
+
+  // Agent review state
+  const [agentResolutions, setAgentResolutions] = useState<AgentResolution[]>([]);
+  const [agentDecisions, setAgentDecisions] = useState<Record<string, AgentDecision>>({});
+  const [activeAgentsList, setActiveAgentsList] = useState<{ agentId: string; displayName: string }[]>([]);
+  const [agentSearchTerms, setAgentSearchTerms] = useState<Record<string, string>>({});
+  const [resolving, setResolving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -614,7 +639,7 @@ export default function BulkImportPage() {
   const onDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
 
   // ── Import handler ───────────────────────────────────────────────────────
-  const handleImport = async () => {
+  const doImport = async (decisions?: Record<string, AgentDecision>) => {
     if (!user) return;
     setImporting(true);
     setImportProgress(5);
@@ -653,7 +678,15 @@ export default function BulkImportPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ rows: chunks[i] }),
+          body: JSON.stringify({
+            rows: chunks[i],
+            agentResolutions: Object.entries(decisions ?? agentDecisions).map(([csvName, d]) => ({
+              csvName,
+              action: d.action,
+              agentId: d.agentId,
+              displayName: d.displayName,
+            })),
+          }),
         });
 
         const data = await res.json();
@@ -680,6 +713,70 @@ export default function BulkImportPage() {
     }
   };
 
+  // ── Preflight: resolve agent names before import ─────────────────────────
+  const runAgentResolution = async () => {
+    if (!user) return;
+    setResolving(true);
+    setPageError(null);
+    try {
+      const token = await user.getIdToken();
+      const validMapped = parsedRows
+        .filter(r => r.__errors.length === 0)
+        .map(r => mapRowToApiPayload(r, columnMap));
+
+      // Collect unique agent names and which rows they appear on
+      const nameRowMap = new Map<string, number[]>();
+      validMapped.forEach((row, idx) => {
+        const name = String(row.agentName ?? '').trim();
+        if (name) {
+          const rows = nameRowMap.get(name) ?? [];
+          rows.push(idx + 2); // 1-based row number
+          nameRowMap.set(name, rows);
+        }
+      });
+
+      const agentNames = Array.from(nameRowMap.entries()).map(([name, rows]) => ({ name, rows }));
+
+      const res = await fetch('/api/admin/import/resolve-agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ agentNames }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Agent resolution failed');
+
+      setAgentResolutions(data.resolutions ?? []);
+      setActiveAgentsList(data.activeAgents ?? []);
+
+      // Pre-populate decisions: auto-resolved agents need no action
+      const initialDecisions: Record<string, AgentDecision> = {};
+      for (const r of (data.resolutions ?? []) as AgentResolution[]) {
+        if (r.status === 'auto_resolved') {
+          initialDecisions[r.csvName] = { action: 'use_existing', agentId: r.matchedAgentId };
+        } else if (r.status === 'fuzzy_match' && r.similarity && r.similarity >= 95) {
+          // Very high confidence fuzzy match — pre-accept but user can override
+          initialDecisions[r.csvName] = { action: 'use_existing', agentId: r.matchedAgentId };
+        }
+      }
+      setAgentDecisions(initialDecisions);
+
+      // If nothing needs review, skip the review step
+      const needsReview = (data.resolutions ?? []).filter(
+        (r: AgentResolution) => r.status !== 'auto_resolved' && !(r.status === 'fuzzy_match' && r.similarity && r.similarity >= 95)
+      );
+      if (needsReview.length === 0) {
+        // All agents auto-resolved — go straight to import
+        await doImport(initialDecisions);
+      } else {
+        setStep('agent-review');
+      }
+    } catch (err: any) {
+      setPageError(err.message || 'Failed to resolve agents');
+    } finally {
+      setResolving(false);
+    }
+  };
+
   // ── Reset ────────────────────────────────────────────────────────────────
   const reset = () => {
     setParsedRows([]);
@@ -689,6 +786,10 @@ export default function BulkImportPage() {
     setPageError(null);
     setImportProgress(0);
     setColumnMap({});
+    setAgentResolutions([]);
+    setAgentDecisions({});
+    setActiveAgentsList([]);
+    setAgentSearchTerms({});
     setStep('upload');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -801,8 +902,8 @@ export default function BulkImportPage() {
       </div>
 
       {/* Step indicator */}
-      <div className="flex items-center gap-2 text-sm">
-        {(['upload', 'mapping', 'preview', 'result'] as Step[]).map((s, i) => (
+      <div className="flex items-center gap-2 text-sm flex-wrap">
+        {(['upload', 'mapping', 'preview', 'agent-review', 'result'] as Step[]).map((s, i) => (
           <div key={s} className="flex items-center gap-2">
             {i > 0 && <div className="h-px w-6 bg-border" />}
             <span
@@ -813,7 +914,7 @@ export default function BulkImportPage() {
                   : 'bg-muted text-muted-foreground'
               )}
             >
-              {i + 1}. {{ upload: 'Upload', mapping: 'Map Columns', preview: 'Preview', result: 'Result' }[s]}
+              {i + 1}. {{ upload: 'Upload', mapping: 'Map Columns', preview: 'Preview', 'agent-review': 'Agent Review', result: 'Result' }[s]}
             </span>
           </div>
         ))}
@@ -1396,7 +1497,202 @@ export default function BulkImportPage() {
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleImport} disabled={importing || validRows.length === 0}>
+            <Button onClick={runAgentResolution} disabled={resolving || importing || validRows.length === 0}>
+              {resolving ? (
+                <>Checking agents…</>
+              ) : importing ? (
+                <>Importing…</>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Continue — Review Agents
+                </>
+              )}
+            </Button>
+            <Button variant="outline" onClick={reset} disabled={resolving || importing}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Start Over
+            </Button>
+            {invalidRows.length > 0 && validRows.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {invalidRows.length} invalid row{invalidRows.length !== 1 ? 's' : ''} will be skipped.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 4: AGENT REVIEW ────────────────────────────────────────────────────── */}
+      {step === 'agent-review' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                Agent Review Required
+              </CardTitle>
+              <CardDescription>
+                Some agent names in your file need your attention before importing.
+                Auto-resolved agents (exact matches) are shown for reference only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {agentResolutions.map((resolution) => {
+                const decision = agentDecisions[resolution.csvName];
+                const isAutoResolved = resolution.status === 'auto_resolved' ||
+                  (resolution.status === 'fuzzy_match' && (resolution.similarity ?? 0) >= 95);
+
+                return (
+                  <div key={resolution.csvName} className={cn(
+                    'border rounded-lg p-4 space-y-3',
+                    isAutoResolved ? 'border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20' :
+                    resolution.status === 'former_agent' ? 'border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/20' :
+                    resolution.status === 'no_match' ? 'border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' :
+                    'border-yellow-200 bg-yellow-50/50 dark:border-yellow-900 dark:bg-yellow-950/20'
+                  )}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-medium">{resolution.csvName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Appears on {resolution.rowNumbers.length} row{resolution.rowNumbers.length !== 1 ? 's' : ''}
+                          {resolution.rowNumbers.length <= 5 ? ` (rows ${resolution.rowNumbers.join(', ')})` : ''}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn(
+                        'shrink-0 text-xs',
+                        isAutoResolved ? 'border-green-500 text-green-700' :
+                        resolution.status === 'former_agent' ? 'border-orange-500 text-orange-700' :
+                        resolution.status === 'no_match' ? 'border-red-500 text-red-700' :
+                        'border-yellow-500 text-yellow-700'
+                      )}>
+                        {isAutoResolved ? '✓ Auto-resolved' :
+                         resolution.status === 'former_agent' ? 'Former agent' :
+                         resolution.status === 'no_match' ? 'No match found' :
+                         `${Math.round((resolution.similarity ?? 0) * 100)}% match`}
+                      </Badge>
+                    </div>
+
+                    {isAutoResolved ? (
+                      <p className="text-sm text-green-700 dark:text-green-400">
+                        ✓ Matched to <strong>{resolution.matchedDisplayName}</strong> (exact match)
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {resolution.status === 'former_agent' && (
+                          <p className="text-sm text-orange-700 dark:text-orange-400">
+                            This agent (<strong>{resolution.matchedDisplayName}</strong>) is marked as inactive/former.
+                            Choose how to handle their {resolution.rowNumbers.length} transaction{resolution.rowNumbers.length !== 1 ? 's' : ''}:
+                          </p>
+                        )}
+                        {resolution.status === 'fuzzy_match' && (
+                          <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                            Possible match: <strong>{resolution.matchedDisplayName}</strong> ({Math.round((resolution.similarity ?? 0) * 100)}% similar).
+                            Is this the same person?
+                          </p>
+                        )}
+                        {resolution.status === 'no_match' && (
+                          <p className="text-sm text-red-700 dark:text-red-400">
+                            No existing agent found for this name.
+                          </p>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex flex-wrap gap-2">
+                          {(resolution.status === 'fuzzy_match' || resolution.status === 'former_agent') && resolution.matchedAgentId && (
+                            <Button
+                              size="sm"
+                              variant={decision?.action === 'use_existing' ? 'default' : 'outline'}
+                              onClick={() => setAgentDecisions(prev => ({ ...prev, [resolution.csvName]: { action: 'use_existing', agentId: resolution.matchedAgentId } }))}
+                            >
+                              {resolution.status === 'former_agent' ? 'Import to former agent' : '✓ Yes, same person'}
+                            </Button>
+                          )}
+                          {resolution.status === 'former_agent' && resolution.matchedAgentId && (
+                            <Button
+                              size="sm"
+                              variant={decision?.action === 'historical' ? 'default' : 'outline'}
+                              onClick={() => setAgentDecisions(prev => ({ ...prev, [resolution.csvName]: { action: 'historical', agentId: resolution.matchedAgentId } }))}
+                            >
+                              Import as historical only
+                            </Button>
+                          )}
+                          {resolution.status === 'fuzzy_match' && (
+                            <Button
+                              size="sm"
+                              variant={decision?.action === 'create_new' ? 'default' : 'outline'}
+                              onClick={() => setAgentDecisions(prev => ({ ...prev, [resolution.csvName]: { action: 'create_new', displayName: resolution.csvName } }))}
+                            >
+                              No, different person — create new
+                            </Button>
+                          )}
+                          {resolution.status === 'no_match' && (
+                            <Button
+                              size="sm"
+                              variant={decision?.action === 'create_new' ? 'default' : 'outline'}
+                              onClick={() => setAgentDecisions(prev => ({ ...prev, [resolution.csvName]: { action: 'create_new', displayName: resolution.csvName } }))}
+                            >
+                              Create new historical profile
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant={decision?.action === 'skip' ? 'destructive' : 'outline'}
+                            onClick={() => setAgentDecisions(prev => ({ ...prev, [resolution.csvName]: { action: 'skip' } }))}
+                          >
+                            Skip all {resolution.rowNumbers.length} rows
+                          </Button>
+                        </div>
+
+                        {/* Manual agent picker for no_match */}
+                        {resolution.status === 'no_match' && (
+                          <div className="mt-2">
+                            <p className="text-xs text-muted-foreground mb-1">Or assign to an existing agent:</p>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="Search agents…"
+                                className="flex-1 text-sm border rounded px-2 py-1"
+                                value={agentSearchTerms[resolution.csvName] ?? ''}
+                                onChange={e => setAgentSearchTerms(prev => ({ ...prev, [resolution.csvName]: e.target.value }))}
+                              />
+                            </div>
+                            {agentSearchTerms[resolution.csvName] && (
+                              <div className="mt-1 border rounded max-h-32 overflow-y-auto">
+                                {activeAgentsList
+                                  .filter(a => a.displayName.toLowerCase().includes((agentSearchTerms[resolution.csvName] ?? '').toLowerCase()))
+                                  .slice(0, 8)
+                                  .map(a => (
+                                    <button
+                                      key={a.agentId}
+                                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
+                                      onClick={() => {
+                                        setAgentDecisions(prev => ({ ...prev, [resolution.csvName]: { action: 'use_existing', agentId: a.agentId, displayName: a.displayName } }));
+                                        setAgentSearchTerms(prev => ({ ...prev, [resolution.csvName]: '' }));
+                                      }}
+                                    >
+                                      {a.displayName}
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Summary and proceed */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => doImport(agentDecisions)}
+              disabled={importing || agentResolutions.some(r => {
+                const isAutoResolved = r.status === 'auto_resolved' || (r.status === 'fuzzy_match' && (r.similarity ?? 0) >= 95);
+                return !isAutoResolved && !agentDecisions[r.csvName];
+              })}
+            >
               {importing ? (
                 <>Importing…</>
               ) : (
@@ -1406,15 +1702,28 @@ export default function BulkImportPage() {
                 </>
               )}
             </Button>
-            <Button variant="outline" onClick={reset} disabled={importing}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Start Over
+            <Button variant="outline" onClick={() => setStep('preview')} disabled={importing}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Preview
             </Button>
-            {invalidRows.length > 0 && validRows.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                {invalidRows.length} invalid row{invalidRows.length !== 1 ? 's' : ''} will be skipped.
+            {agentResolutions.some(r => {
+              const isAutoResolved = r.status === 'auto_resolved' || (r.status === 'fuzzy_match' && (r.similarity ?? 0) >= 95);
+              return !isAutoResolved && !agentDecisions[r.csvName];
+            }) && (
+              <p className="text-sm text-yellow-600">
+                Please resolve all flagged agents before importing.
               </p>
             )}
           </div>
+
+          {importing && (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm font-medium mb-2">Importing {validRows.length} transactions…</p>
+                <Progress value={importProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-1">{importProgress}% complete</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

@@ -184,6 +184,31 @@ export async function POST(req: NextRequest) {
       return jsonError(400, 'Maximum 2000 rows per import batch');
     }
 
+    // ── Agent resolution decisions from the pre-import review step ─────────────
+    // Map of csvName (lowercase) → decision
+    // decision.action:
+    //   'use_existing'  — map this name to an existing agentId (active or former)
+    //   'create_new'    — create a new profile (former agent, new person with same name)
+    //   'historical'    — import transactions under the former agent profile (no onboarding)
+    //   'skip'          — skip all rows for this agent name
+    type ResolutionDecision = {
+      action: 'use_existing' | 'create_new' | 'historical' | 'skip';
+      agentId?: string;         // for use_existing / historical
+      displayName?: string;     // for create_new override
+    };
+    const agentResolutions = new Map<string, ResolutionDecision>();
+    if (Array.isArray(body.agentResolutions)) {
+      for (const r of body.agentResolutions) {
+        if (r.csvName && r.action) {
+          agentResolutions.set(String(r.csvName).toLowerCase().trim(), {
+            action: r.action,
+            agentId: r.agentId,
+            displayName: r.displayName,
+          });
+        }
+      }
+    }
+
     // ── Load all agent profiles for name → id lookup ──────────────────────────
     const [profilesSnap, teamsSnap] = await Promise.all([
       adminDb.collection('agentProfiles').get(),
@@ -264,12 +289,39 @@ export async function POST(req: NextRequest) {
         const agentNameRaw = String(row.agentName ?? '').trim();
         if (!agentNameRaw) throw new Error('Agent Name is required');
 
+        // ── Check for a pre-resolved decision from the Agent Review step ────
+        const resolution = agentResolutions.get(agentNameRaw.toLowerCase());
+
+        // Skip this row if the user chose to skip this agent
+        if (resolution?.action === 'skip') {
+          failed.push({ row: rowNum, error: `Skipped: agent "${agentNameRaw}" was excluded in Agent Review`, data: row });
+          continue;
+        }
+
         // Try exact match first, then fuzzy match
         const exactMatch = nameToAgent.get(agentNameRaw.toLowerCase());
         let agent = exactMatch || null;
 
-        // If no exact match, try fuzzy matching
-        if (!agent) {
+        // If a resolution decision was provided, honour it
+        if (resolution?.action === 'use_existing' || resolution?.action === 'historical') {
+          const resolvedEntry = allAgentsList.find(a => a.agentId === resolution.agentId);
+          if (resolvedEntry) {
+            agent = resolvedEntry;
+            if (resolution.action === 'historical') {
+              // Mark as historical import — no onboarding trigger
+              fuzzyMatchedAgents.push({
+                row: rowNum,
+                csvName: agentNameRaw,
+                matchedName: resolvedEntry.displayName,
+                similarity: 100,
+              });
+            }
+          }
+        } else if (resolution?.action === 'create_new') {
+          // Force creation of a new profile even if a fuzzy match exists
+          agent = null;
+        } else if (!agent) {
+          // No resolution provided — fall back to fuzzy matching
           const fuzzyResult = fuzzyLookupAgent(
             agentNameRaw,
             nameToAgent as Map<string, { agentId: string; displayName: string }>,
@@ -277,7 +329,6 @@ export async function POST(req: NextRequest) {
             DEFAULT_SIMILARITY_THRESHOLD,
           );
           if (fuzzyResult) {
-            // Found a fuzzy match — use existing agent instead of creating a duplicate
             const matchedEntry = allAgentsList.find(a => a.agentId === fuzzyResult.agentId);
             if (matchedEntry) {
               agent = matchedEntry;
