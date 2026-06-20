@@ -29,8 +29,7 @@ import { useUser } from '@/firebase';
 
 // ── Chart config ─────────────────────────────────────────────────────────────
 const chartConfig: ChartConfig = {
-  activeClosed: { label: 'Active (Closed Deal)', color: 'hsl(var(--chart-1))' },
-  activeTenure: { label: 'Active (No Deals Yet)', color: 'hsl(var(--chart-2))' },
+  totalActive:  { label: 'Active Agents', color: 'hsl(var(--chart-1))' },
   pipeline:     { label: 'Pipeline (Upcoming)', color: 'hsl(var(--chart-4))' },
   goal:         { label: 'Goal', color: 'hsl(var(--chart-3))' },
   projected:    { label: 'Projected', color: 'hsl(38 92% 50%)' },
@@ -275,7 +274,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               )}
             </CardTitle>
             <CardDescription>
-              Monthly active agents — stacked by activation type — {year}
+              Monthly active agent count — {year}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -403,7 +402,8 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
             <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis yAxisId="left" allowDecimals={false} />
+              {/* Y-axis starts at 40 so month-to-month changes are visually meaningful */}
+              <YAxis yAxisId="left" allowDecimals={false} domain={[40, 'auto']} />
               {showDealsPerAgent && (
                 <YAxis yAxisId="right" orientation="right" allowDecimals tickFormatter={v => v.toFixed(1)} />
               )}
@@ -419,10 +419,9 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               />
               <ChartLegend content={<ChartLegendContent />} />
 
-              {/* Stacked bars */}
-              <Bar yAxisId="left" dataKey="activeClosed" stackId="agents" fill="var(--color-activeClosed)" radius={[0, 0, 0, 0]} name="Active (Closed Deal)" />
-              <Bar yAxisId="left" dataKey="activeTenure" stackId="agents" fill="var(--color-activeTenure)" radius={[0, 0, 0, 0]} name="Active (No Deals Yet)" />
-              <Bar yAxisId="left" dataKey="pipeline" stackId="agents" fill="var(--color-pipeline)" radius={[4, 4, 0, 0]} opacity={0.6} name="Pipeline (Upcoming)" />
+              {/* Single combined active bar — breakdown (No Deals Yet, Past Grace) shown in KPI blocks above */}
+              <Bar yAxisId="left" dataKey="totalActive" fill="var(--color-totalActive)" radius={[4, 4, 0, 0]} name="Active Agents" />
+              <Bar yAxisId="left" dataKey="pipeline" fill="var(--color-pipeline)" radius={[4, 4, 0, 0]} opacity={0.6} name="Pipeline (Upcoming)" />
 
               {/* Goal bars */}
               {showGoal && (
