@@ -195,7 +195,7 @@ function GraceProjectionBlock({ graceProjection }: { graceProjection: any[] }) {
   );
 }
 
-// ── Delta label renderer ──────────────────────────────────────────────────────
+// ── Delta label renderer (goal vs actual) ────────────────────────────────────
 function DeltaLabel(props: any) {
   const { x, y, width, value } = props;
   if (value == null) return null;
@@ -207,6 +207,29 @@ function DeltaLabel(props: any) {
       y={y - 4}
       textAnchor="middle"
       fontSize={11}
+      fontWeight={700}
+      fill={color}
+    >
+      {label}
+    </text>
+  );
+}
+
+// ── Year-over-year delta label renderer (current year vs compare year) ────────
+// Rendered on top of the compare year bar, showing how many more/fewer agents
+// the current year has vs the compare year in the same month.
+function YoYDeltaLabel(props: any) {
+  const { x, y, width, value } = props;
+  if (value == null) return null;
+  // Offset upward so it sits above the taller of the two bars
+  const color = value > 0 ? '#2563eb' : value < 0 ? '#dc2626' : '#64748b';
+  const label = value > 0 ? `+${value}` : String(value);
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 6}
+      textAnchor="middle"
+      fontSize={10}
       fontWeight={700}
       fill={color}
     >
@@ -269,13 +292,19 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
     const comp = data.compareMonths?.find((c: any) => c.month === m.month);
     const goalVal = m.goal ?? null;
     const delta = (goalVal != null && m.totalActive != null) ? m.totalActive - goalVal : null;
+    // Year-over-year delta: current year agents minus compare year agents for same month
+    const compTotal = (comp && !comp.isFuture) ? (comp.totalActive ?? null) : null;
+    const yoyDelta = (showCompare && m.totalActive != null && compTotal != null)
+      ? m.totalActive - compTotal
+      : null;
     return {
       ...m,
       projected: showProjected ? (proj?.projected ?? null) : null,
-      compare: showCompare ? (comp?.totalActive ?? null) : null,
+      compare: showCompare ? compTotal : null,
       goal: showGoal ? goalVal : null,
       dealsPerAgent: showDealsPerAgent ? (m.dealsPerAgent ?? null) : null,
       delta,
+      yoyDelta,
     };
   }) ?? [];
 
@@ -398,9 +427,13 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               icon={TrendingUp}
             />
             <KPICard
-              title="YTD Deals / Agent"
-              value={kpi.ytdDealsPerAgent != null ? kpi.ytdDealsPerAgent.toFixed(2) : '—'}
-              sub={`${kpi.ytdDeals ?? 0} deals ÷ ${kpi.currentActive ?? 0} agents`}
+              title="Avg Monthly Deals/Agent"
+              value={kpi.avgMonthlyDealsPerAgent != null ? kpi.avgMonthlyDealsPerAgent.toFixed(2) : '—'}
+              sub={
+                kpi.compareAvgMonthlyDealsPerAgent != null
+                  ? `${year}: ${kpi.avgMonthlyDealsPerAgent?.toFixed(2) ?? '—'} | ${compareYear}: ${kpi.compareAvgMonthlyDealsPerAgent.toFixed(2)}`
+                  : `${kpi.ytdDeals ?? 0} deals YTD · ${kpi.currentActive ?? 0} agents`
+              }
               icon={BarChart2}
             />
             <KPICard
@@ -456,9 +489,11 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
                 <Bar yAxisId="left" dataKey="goal" fill="var(--color-goal)" radius={[4, 4, 0, 0]} opacity={0.25} name="Goal" />
               )}
 
-              {/* Compare year bars */}
+              {/* Compare year bars — with YoY delta annotation on top */}
               {showCompare && compareYear && (
-                <Bar yAxisId="left" dataKey="compare" fill="var(--color-compare)" radius={[4, 4, 0, 0]} opacity={0.4} name={String(compareYear)} />
+                <Bar yAxisId="left" dataKey="compare" fill="var(--color-compare)" radius={[4, 4, 0, 0]} opacity={0.4} name={String(compareYear)}>
+                  <LabelList dataKey="yoyDelta" content={<YoYDeltaLabel />} />
+                </Bar>
               )}
 
               {/* Projection line */}
@@ -472,6 +507,63 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               )}
             </ComposedChart>
           </ChartContainer>
+        )}
+
+        {/* YTD Summary Banner — shown when compare year is selected */}
+        {!loading && !error && showCompare && compareYear && kpi && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="text-sm font-semibold text-blue-800 mb-2">
+              Year-over-Year Summary — As of {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground">{year} Active Agents</div>
+                <div className="text-2xl font-bold text-blue-700">{kpi.currentActive ?? '—'}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground">{compareYear} Active Agents</div>
+                <div className="text-2xl font-bold text-slate-600">{kpi.compareYtdAgents ?? '—'}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground">Difference</div>
+                <div className={`text-2xl font-bold ${
+                  kpi.compareYtdAgents != null && kpi.currentActive != null
+                    ? (kpi.currentActive - kpi.compareYtdAgents) > 0 ? 'text-green-600' : (kpi.currentActive - kpi.compareYtdAgents) < 0 ? 'text-red-600' : 'text-slate-500'
+                    : 'text-slate-500'
+                }`}>
+                  {kpi.compareYtdAgents != null && kpi.currentActive != null
+                    ? ((kpi.currentActive - kpi.compareYtdAgents) > 0 ? '+' : '') + (kpi.currentActive - kpi.compareYtdAgents)
+                    : '—'}
+                </div>
+              </div>
+            </div>
+            {kpi.compareAvgMonthlyDealsPerAgent != null && (
+              <div className="mt-3 pt-3 border-t border-blue-200 grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">{year} Avg Deals/Agent/Mo</div>
+                  <div className="text-lg font-bold text-blue-700">{kpi.avgMonthlyDealsPerAgent?.toFixed(2) ?? '—'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">{compareYear} Avg Deals/Agent/Mo</div>
+                  <div className="text-lg font-bold text-slate-600">{kpi.compareAvgMonthlyDealsPerAgent.toFixed(2)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Difference</div>
+                  <div className={`text-lg font-bold ${
+                    (() => {
+                      const diff = (kpi.avgMonthlyDealsPerAgent ?? 0) - kpi.compareAvgMonthlyDealsPerAgent;
+                      return diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-slate-500';
+                    })()
+                  }`}>
+                    {(() => {
+                      const diff = Math.round(((kpi.avgMonthlyDealsPerAgent ?? 0) - kpi.compareAvgMonthlyDealsPerAgent) * 100) / 100;
+                      return (diff > 0 ? '+' : '') + diff.toFixed(2);
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Grace Period Graduation Projection */}
