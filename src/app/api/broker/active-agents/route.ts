@@ -353,6 +353,18 @@ export async function GET(req: NextRequest) {
 
     // ── 9. KPI cards ─────────────────────────────────────────────────────────
     const currentMonthData = months.find(m => m.ym === currentYM) || months[months.length - 1];
+
+    // Fetch recruiting plan goals for this year (new hires goal, net gain goal)
+    let yearlyNewHiresGoal: number | null = null;
+    let netGainGoal: number | null = null;
+    try {
+      const planDoc = await adminDb.collection('recruitingPlans').doc(String(year)).get();
+      if (planDoc.exists) {
+        const pd = planDoc.data()!;
+        yearlyNewHiresGoal = pd.yearlyNewHiresGoal ?? null;
+        netGainGoal = pd.netGainGoal ?? null;
+      }
+    } catch { /* non-fatal */ }
     const prevMonthData = months.find(m => m.month === (currentMonthData.month - 1)) || null;
     const ytdNewHires = agentRecords.filter(ar => {
       if (!ar.activationMonth) return false;
@@ -518,6 +530,9 @@ export async function GET(req: NextRequest) {
         ytdDeals,
         noDealsYetCount,
         inGraceCount: currentMonthData.inGrace ?? 0,
+        // Recruiting plan goals (for grading New Hires and Net Agents Added)
+        yearlyNewHiresGoal,
+        netGainGoal,
         // Compare year KPIs (same-date cutoff)
         compareYtdAgents: compareMonths
           ? (compareMonths.find(m => m.month === currentMonthData.month && !m.isFuture)?.totalActive ?? null)

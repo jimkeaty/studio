@@ -259,6 +259,27 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
     ? Math.round((avgDeals / dealsGoal) * 100) : null;
   const dealsPerAgentGrade = dealsPerAgentPct != null ? letterGrade(dealsPerAgentPct) : 'F';
 
+  // ── Grade: New Hires YTD ─────────────────────────────────────────────────
+  // YTD pro-rated goal = yearlyNewHiresGoal × (monthsElapsed / 12)
+  const yearlyNewHiresGoal = kpi?.yearlyNewHiresGoal ?? null;
+  const ytdNewHiresGoalProrated = yearlyNewHiresGoal != null
+    ? Math.round((yearlyNewHiresGoal / 12) * monthsElapsed) : null;
+  const ytdNewHires = kpi?.ytdNewHires ?? null;
+  const newHiresPct = (ytdNewHires != null && ytdNewHiresGoalProrated != null && ytdNewHiresGoalProrated > 0)
+    ? Math.round((ytdNewHires / ytdNewHiresGoalProrated) * 100) : null;
+  const newHiresGrade = newHiresPct != null ? letterGrade(newHiresPct) : null;
+
+  // ── Grade: Net Agents Added YTD ──────────────────────────────────────────
+  // Net = ytdNewHires - ytdDepartures
+  const netGainGoal = kpi?.netGainGoal ?? null;
+  const ytdDepartures = kpi?.ytdDepartures ?? 0;
+  const netAgentsAdded = (ytdNewHires ?? 0) - ytdDepartures;
+  const ytdNetGainGoalProrated = netGainGoal != null
+    ? Math.round((netGainGoal / 12) * monthsElapsed) : null;
+  const netGainPct = (ytdNetGainGoalProrated != null && ytdNetGainGoalProrated > 0)
+    ? Math.round((netAgentsAdded / ytdNetGainGoalProrated) * 100) : null;
+  const netGainGrade = netGainPct != null ? letterGrade(netGainPct) : null;
+
   // ── Pace text helper ──────────────────────────────────────────────────────
   const paceText = (actual: number, goal: number | null, label: string, isDecimal = false) => {
     if (!goal) return `No goal set`;
@@ -345,25 +366,67 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
                   icon={BarChart3}
                 />
 
-                {/* ── INFO: New Hires YTD ───────────────────────────────── */}
-                <InfoCard
-                  title="New Hires YTD"
-                  value={fmtN(kpi.ytdNewHires)}
-                  sub={`${kpi.ytdDepartures ?? 0} departed · Net: ${((kpi.ytdNewHires ?? 0) - (kpi.ytdDepartures ?? 0)) >= 0 ? '+' : ''}${((kpi.ytdNewHires ?? 0) - (kpi.ytdDepartures ?? 0)).toLocaleString()}`}
-                  icon={UserPlus}
-                  colorClass="border-l-emerald-400"
-                  badgeClass="bg-emerald-500 text-white"
-                />
+                {/* ── GRADED or INFO: New Hires YTD ─────────────────────── */}
+                {newHiresGrade ? (
+                  <HeroCard
+                    title="New Hires YTD"
+                    grade={newHiresGrade}
+                    primary={fmtN(ytdNewHires)}
+                    secondary={
+                      ytdNewHiresGoalProrated != null
+                        ? paceText(ytdNewHires ?? 0, ytdNewHiresGoalProrated, 'hires YTD pace')
+                        : 'No hires goal set'
+                    }
+                    performancePct={newHiresPct ?? undefined}
+                    goalLabel={ytdNewHiresGoalProrated != null ? `YTD pace goal: ${ytdNewHiresGoalProrated}` : undefined}
+                    icon={UserPlus}
+                  />
+                ) : (
+                  <InfoCard
+                    title="New Hires YTD"
+                    value={fmtN(ytdNewHires)}
+                    sub={`${ytdDepartures} departed · Set yearly hires goal to see grade`}
+                    icon={UserPlus}
+                    colorClass="border-l-emerald-400"
+                    badgeClass="bg-emerald-500 text-white"
+                  />
+                )}
 
                 {/* ── INFO: YTD Departures ──────────────────────────────── */}
                 <InfoCard
                   title="YTD Departures"
-                  value={fmtN(kpi.ytdDepartures)}
+                  value={fmtN(ytdDepartures)}
                   sub={`Agents who left in ${year} — lower is better`}
                   icon={UserMinus}
-                  colorClass={(kpi.ytdDepartures ?? 0) > 0 ? 'border-l-red-400' : 'border-l-slate-300'}
-                  badgeClass={(kpi.ytdDepartures ?? 0) > 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
+                  colorClass={ytdDepartures > 0 ? 'border-l-red-400' : 'border-l-slate-300'}
+                  badgeClass={ytdDepartures > 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
                 />
+
+                {/* ── GRADED or INFO: Net Agents Added YTD ─────────────── */}
+                {netGainGrade ? (
+                  <HeroCard
+                    title="Net Agents Added YTD"
+                    grade={netGainGrade}
+                    primary={(netAgentsAdded >= 0 ? '+' : '') + netAgentsAdded}
+                    secondary={
+                      ytdNetGainGoalProrated != null
+                        ? paceText(netAgentsAdded, ytdNetGainGoalProrated, 'net agents YTD pace')
+                        : 'No net gain goal set'
+                    }
+                    performancePct={netGainPct != null ? Math.max(0, netGainPct) : undefined}
+                    goalLabel={ytdNetGainGoalProrated != null ? `YTD pace goal: +${ytdNetGainGoalProrated}` : undefined}
+                    icon={TrendingUp}
+                  />
+                ) : (
+                  <InfoCard
+                    title="Net Agents Added YTD"
+                    value={(netAgentsAdded >= 0 ? '+' : '') + netAgentsAdded}
+                    sub={`+${ytdNewHires ?? 0} hired − ${ytdDepartures} departed · Set net gain goal to see grade`}
+                    icon={TrendingUp}
+                    colorClass={netAgentsAdded > 0 ? 'border-l-emerald-400' : netAgentsAdded < 0 ? 'border-l-red-400' : 'border-l-slate-300'}
+                    badgeClass={netAgentsAdded > 0 ? 'bg-emerald-500 text-white' : netAgentsAdded < 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
+                  />
+                )}
 
                 {/* ── INFO: Pipeline ────────────────────────────────────── */}
                 <InfoCard
@@ -400,7 +463,7 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
                   <span key={g} className={`font-semibold ${color}`}>{g} = {label}</span>
                 ))}
                 <span className="ml-2 text-muted-foreground">
-                  · Graded: Active Agents (vs monthly goal) · Avg Deals/Agent (vs 1.0/mo goal)
+                  · Graded: Active Agents · Avg Deals/Agent · New Hires YTD · Net Agents Added YTD
                 </span>
               </div>
             </>
