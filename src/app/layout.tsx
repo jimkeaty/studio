@@ -41,9 +41,16 @@ export default function RootLayout({
         />
         {/* PWA — v2 query string forces iOS Safari to bust its apple-touch-icon cache */}
         <link rel="manifest" href="/manifest" />
+        {/*
+          Favicons: /api/favicon proxies the custom pwaIconUrl from Firestore branding settings.
+          Falls back to /favicon.png if no custom icon is set.
+          The apple-touch-icon still uses the static file since iOS caches it aggressively
+          and the dynamic proxy would break PWA install on Safari.
+        */}
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png?v=2" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png?v=2" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/api/favicon" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/api/favicon" />
+        <link rel="shortcut icon" href="/api/favicon" />
         {/* Note: apple-mobile-web-app-capable intentionally removed.
             That meta tag forces iOS to treat Add-to-Home-Screen as a standalone
             PWA with isolated storage, which breaks Google OAuth sign-in.

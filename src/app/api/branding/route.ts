@@ -17,6 +17,7 @@ export async function GET() {
           animatedLogoUrl: null,
           useAnimatedLogo: false,
           primaryColor: null,
+          pwaIconUrl: null,
         },
       });
     }
@@ -31,6 +32,7 @@ export async function GET() {
         animatedLogoUrl: data.animatedLogoUrl ?? null,
         useAnimatedLogo: data.useAnimatedLogo ?? false,
         primaryColor: data.primaryColor ?? null,
+        pwaIconUrl: data.pwaIconUrl ?? null,
       },
     });
   } catch (err: any) {
@@ -45,6 +47,7 @@ export async function GET() {
         animatedLogoUrl: null,
         useAnimatedLogo: false,
         primaryColor: null,
+        pwaIconUrl: null,
       },
     });
   }

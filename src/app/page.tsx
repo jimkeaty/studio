@@ -73,6 +73,7 @@ export default function Home() {
     logoUrl?: string | null;
     animatedLogoUrl?: string | null;
     useAnimatedLogo?: boolean;
+    pwaIconUrl?: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -192,9 +193,10 @@ export default function Home() {
     }
   };
 
+  // Priority: animated logo (if enabled) → static logo → PWA/home screen icon
   const activeLogo = branding?.useAnimatedLogo && branding?.animatedLogoUrl
     ? branding.animatedLogoUrl
-    : branding?.logoUrl ?? null;
+    : branding?.logoUrl || branding?.pwaIconUrl || null;
   const companyName = branding?.companyName || 'Keaty Real Estate';
 
   if (userLoading || user) {

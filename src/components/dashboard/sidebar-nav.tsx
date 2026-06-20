@@ -125,6 +125,7 @@ type BrandingData = {
   animatedLogoUrl: string | null;
   useAnimatedLogo: boolean;
   primaryColor: string | null;
+  pwaIconUrl: string | null;
 };
 
 // Shown to all users (agent + admin) — core nav
@@ -235,10 +236,11 @@ export function SidebarNav() {
 
   const companyName = branding?.companyName || 'Smart Broker USA';
   const tagline = branding?.tagline;
+  // Priority: animated logo (if enabled) → static logo → PWA/home screen icon
   const activeLogo =
     branding?.useAnimatedLogo && branding?.animatedLogoUrl
       ? branding.animatedLogoUrl
-      : branding?.logoUrl;
+      : branding?.logoUrl || branding?.pwaIconUrl || null;
 
   return (
     <Sidebar className="border-r">
