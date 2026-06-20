@@ -369,6 +369,151 @@ function PlanForm({ plan, year, onSaved }: { plan: any; year: number; onSaved: (
   );
 }
 
+// ── Historical Year Goals Editor ────────────────────────────────────────────
+// Collapsible section with a toggle switch — lets broker/team leader set
+// goals for past years so the Year Scorecard can grade historical performance.
+
+function HistoricalGoalsEditor() {
+  const { user } = useUser();
+  const { toast } = useToast();
+  const currentYear = new Date().getFullYear();
+  const pastYears = Array.from({ length: 6 }, (_, i) => currentYear - 1 - i); // last 6 years
+
+  const [open, setOpen] = useState(false);
+  const [selectedYear, setSelectedYear] = useState<number>(pastYears[0]);
+  const [goals, setGoals] = useState<Record<number, { agentsGoal: string; hiresGoal: string; netGainGoal: string }>>({});
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const loadGoals = useCallback(async (yr: number) => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/broker/active-agents/year-scorecard?year=${yr}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const g = data.goals ?? {};
+      setGoals(prev => ({
+        ...prev,
+        [yr]: {
+          agentsGoal: g.yearlyActiveAgentsGoal != null ? String(g.yearlyActiveAgentsGoal) : '',
+          hiresGoal: g.yearlyNewHiresGoal != null ? String(g.yearlyNewHiresGoal) : '',
+          netGainGoal: g.netGainGoal != null ? String(g.netGainGoal) : '',
+        },
+      }));
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [user]);
+
+  useEffect(() => {
+    if (open) loadGoals(selectedYear);
+  }, [open, selectedYear, loadGoals]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const g = goals[selectedYear] ?? {};
+      await fetch('/api/broker/active-agents/year-scorecard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          year: selectedYear,
+          yearlyActiveAgentsGoal: g.agentsGoal ? parseInt(g.agentsGoal, 10) : null,
+          yearlyNewHiresGoal: g.hiresGoal ? parseInt(g.hiresGoal, 10) : null,
+          netGainGoal: g.netGainGoal !== '' ? parseInt(g.netGainGoal, 10) : null,
+        }),
+      });
+      toast({ title: 'Saved!', description: `${selectedYear} historical goals updated.` });
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Save failed', description: 'Could not save goals.' });
+    } finally { setSaving(false); }
+  };
+
+  const g = goals[selectedYear] ?? { agentsGoal: '', hiresGoal: '', netGainGoal: '' };
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Switch checked={open} onCheckedChange={setOpen} id="historical-goals-toggle" />
+              <label htmlFor="historical-goals-toggle" className="cursor-pointer">
+                <CardTitle className="text-lg">Historical Year Goals</CardTitle>
+                <CardDescription className="text-sm mt-0.5">
+                  Set goals for past years to grade historical performance in the Year Scorecard.
+                </CardDescription>
+              </label>
+            </div>
+          </div>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-5">
+            <div className="flex items-center gap-3">
+              <Label className="text-sm whitespace-nowrap">Select Year</Label>
+              <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+                <SelectTrigger className="w-[110px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {pastYears.map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <Label className="text-sm">Year-End Active Agents Goal</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 80"
+                  value={g.agentsGoal}
+                  onChange={e => setGoals(prev => ({ ...prev, [selectedYear]: { ...g, agentsGoal: e.target.value } }))}
+                />
+                <p className="text-xs text-muted-foreground">Target active agent count by Dec {selectedYear}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Yearly New Hires Goal</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 24"
+                  value={g.hiresGoal}
+                  onChange={e => setGoals(prev => ({ ...prev, [selectedYear]: { ...g, hiresGoal: e.target.value } }))}
+                />
+                <p className="text-xs text-muted-foreground">How many new agents to onboard in {selectedYear}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Net Agent Gain Goal</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 10"
+                  value={g.netGainGoal}
+                  onChange={e => setGoals(prev => ({ ...prev, [selectedYear]: { ...g, netGainGoal: e.target.value } }))}
+                />
+                <p className="text-xs text-muted-foreground">Net new agents (hires minus departures) for {selectedYear}</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={handleSave} disabled={saving}>
+                <Save className="mr-2 h-4 w-4" />{saving ? 'Saving…' : `Save ${selectedYear} Goals`}
+              </Button>
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
 // ── Grade Badge ─────────────────────────────────────────────────────────────
 
 function GradeBadge({ grade, size = 'sm' }: { grade: string; size?: 'sm' | 'lg' }) {
@@ -1810,6 +1955,7 @@ export default function RecruitingDashboardPage() {
       {/* ── Plan & Tracking Forms ────────────────────────────────────────── */}
       <PlanForm plan={plan} year={year} onSaved={fetchData} />
       <TrackingForm months={months} year={year} onSaved={fetchData} />
+      <HistoricalGoalsEditor />
 
       {/* ── Active Agents Chart (computed from Firestore) ──────────────── */}
       <ActiveAgentsChart showGoalEdit={true} initialYear={year} />

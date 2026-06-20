@@ -242,13 +242,18 @@ interface ActiveAgentsChartProps {
 
 export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveAgentsChartProps) {
   const { user } = useUser();
-  const [year, setYear] = useState(initialYear ?? new Date().getFullYear());
+  const currentCalYear = new Date().getFullYear();
+  const [year, setYear] = useState(initialYear ?? currentCalYear);
   const [compareYear, setCompareYear] = useState<number | null>(null);
   const [teamGroup, setTeamGroup] = useState<string>('all');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+
+  // Year Scorecard (past years only)
+  const [scorecard, setScorecard] = useState<any>(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
 
   // Toggles
   const [showGoal, setShowGoal] = useState(true);
@@ -282,6 +287,22 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
   }, [token, year, compareYear, teamGroup]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load year scorecard for past years
+  useEffect(() => {
+    if (!token || year >= currentCalYear) {
+      setScorecard(null);
+      return;
+    }
+    setScorecardLoading(true);
+    fetch(`/api/broker/active-agents/year-scorecard?year=${year}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setScorecard(d))
+      .catch(() => setScorecard(null))
+      .finally(() => setScorecardLoading(false));
+  }, [token, year, currentCalYear]);
 
   const chartData = data?.months?.map((m: any) => {
     const proj = data.projection?.find((p: any) => p.month === m.month);
@@ -561,6 +582,214 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
         {/* Grace Period Graduation Projection */}
         {!loading && !error && (
           <GraceProjectionBlock graceProjection={graceProjection} />
+        )}
+
+        {/* Year Scorecard — past years only */}
+        {year < currentCalYear && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-sm flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-slate-600" />
+                {year} Year Scorecard
+              </h4>
+              {scorecardLoading && <span className="text-xs text-muted-foreground">Loading…</span>}
+            </div>
+
+            {!scorecardLoading && scorecard && (
+              <>
+                {/* Grade Cards Row */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {/* Active Agents Grade */}
+                  <div className={`rounded-lg border-2 p-3 ${
+                    !scorecard.grades?.agents ? 'border-slate-200 bg-white' :
+                    scorecard.grades.agents.grade === 'A' ? 'border-green-300 bg-green-50' :
+                    scorecard.grades.agents.grade === 'B' ? 'border-blue-300 bg-blue-50' :
+                    scorecard.grades.agents.grade === 'C' ? 'border-yellow-300 bg-yellow-50' :
+                    scorecard.grades.agents.grade === 'D' ? 'border-orange-300 bg-orange-50' :
+                    'border-red-300 bg-red-50'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium">Year-End Active Agents</div>
+                        <div className="text-2xl font-bold mt-0.5">{scorecard.actuals?.yearEndActive ?? '—'}</div>
+                        {scorecard.goals?.yearlyActiveAgentsGoal && (
+                          <div className="text-xs text-muted-foreground">Goal: {scorecard.goals.yearlyActiveAgentsGoal}</div>
+                        )}
+                      </div>
+                      {scorecard.grades?.agents && (
+                        <div className={`text-4xl font-black ${
+                          scorecard.grades.agents.grade === 'A' ? 'text-green-600' :
+                          scorecard.grades.agents.grade === 'B' ? 'text-blue-600' :
+                          scorecard.grades.agents.grade === 'C' ? 'text-yellow-600' :
+                          scorecard.grades.agents.grade === 'D' ? 'text-orange-600' :
+                          'text-red-600'
+                        }`}>{scorecard.grades.agents.grade}</div>
+                      )}
+                      {!scorecard.grades?.agents && (
+                        <div className="text-2xl font-black text-slate-300">—</div>
+                      )}
+                    </div>
+                    {scorecard.grades?.agents && (
+                      <div className="mt-2">
+                        <div className="w-full bg-slate-200 rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full ${
+                              scorecard.grades.agents.grade === 'A' ? 'bg-green-500' :
+                              scorecard.grades.agents.grade === 'B' ? 'bg-blue-500' :
+                              scorecard.grades.agents.grade === 'C' ? 'bg-yellow-500' :
+                              scorecard.grades.agents.grade === 'D' ? 'bg-orange-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${Math.min(scorecard.grades.agents.pct, 100)}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">{scorecard.grades.agents.pct}% of goal</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Net Gain Grade */}
+                  <div className={`rounded-lg border-2 p-3 ${
+                    !scorecard.grades?.netGain ? 'border-slate-200 bg-white' :
+                    scorecard.grades.netGain.grade === 'A' ? 'border-green-300 bg-green-50' :
+                    scorecard.grades.netGain.grade === 'B' ? 'border-blue-300 bg-blue-50' :
+                    scorecard.grades.netGain.grade === 'C' ? 'border-yellow-300 bg-yellow-50' :
+                    scorecard.grades.netGain.grade === 'D' ? 'border-orange-300 bg-orange-50' :
+                    'border-red-300 bg-red-50'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium">Net Agent Gain</div>
+                        <div className={`text-2xl font-bold mt-0.5 ${
+                          (scorecard.actuals?.netGain ?? 0) > 0 ? 'text-green-600' :
+                          (scorecard.actuals?.netGain ?? 0) < 0 ? 'text-red-600' : ''
+                        }`}>
+                          {scorecard.actuals?.netGain != null
+                            ? ((scorecard.actuals.netGain > 0 ? '+' : '') + scorecard.actuals.netGain)
+                            : '—'}
+                        </div>
+                        {scorecard.goals?.netGainGoal != null && (
+                          <div className="text-xs text-muted-foreground">Goal: +{scorecard.goals.netGainGoal}</div>
+                        )}
+                      </div>
+                      {scorecard.grades?.netGain && (
+                        <div className={`text-4xl font-black ${
+                          scorecard.grades.netGain.grade === 'A' ? 'text-green-600' :
+                          scorecard.grades.netGain.grade === 'B' ? 'text-blue-600' :
+                          scorecard.grades.netGain.grade === 'C' ? 'text-yellow-600' :
+                          scorecard.grades.netGain.grade === 'D' ? 'text-orange-600' :
+                          'text-red-600'
+                        }`}>{scorecard.grades.netGain.grade}</div>
+                      )}
+                      {!scorecard.grades?.netGain && (
+                        <div className="text-xs text-muted-foreground italic mt-1">Set net gain goal to grade</div>
+                      )}
+                    </div>
+                    {scorecard.grades?.netGain && (
+                      <div className="mt-2">
+                        <div className="w-full bg-slate-200 rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full ${
+                              scorecard.grades.netGain.grade === 'A' ? 'bg-green-500' :
+                              scorecard.grades.netGain.grade === 'B' ? 'bg-blue-500' :
+                              scorecard.grades.netGain.grade === 'C' ? 'bg-yellow-500' :
+                              scorecard.grades.netGain.grade === 'D' ? 'bg-orange-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${Math.min(scorecard.grades.netGain.pct, 100)}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">{scorecard.grades.netGain.pct}% of goal</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* New Hires Grade */}
+                  <div className={`rounded-lg border-2 p-3 ${
+                    !scorecard.grades?.hires ? 'border-slate-200 bg-white' :
+                    scorecard.grades.hires.grade === 'A' ? 'border-green-300 bg-green-50' :
+                    scorecard.grades.hires.grade === 'B' ? 'border-blue-300 bg-blue-50' :
+                    scorecard.grades.hires.grade === 'C' ? 'border-yellow-300 bg-yellow-50' :
+                    scorecard.grades.hires.grade === 'D' ? 'border-orange-300 bg-orange-50' :
+                    'border-red-300 bg-red-50'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium">New Hires</div>
+                        <div className="text-2xl font-bold mt-0.5">{scorecard.actuals?.ytdNewHires ?? '—'}</div>
+                        {scorecard.goals?.yearlyNewHiresGoal && (
+                          <div className="text-xs text-muted-foreground">Goal: {scorecard.goals.yearlyNewHiresGoal}</div>
+                        )}
+                      </div>
+                      {scorecard.grades?.hires && (
+                        <div className={`text-4xl font-black ${
+                          scorecard.grades.hires.grade === 'A' ? 'text-green-600' :
+                          scorecard.grades.hires.grade === 'B' ? 'text-blue-600' :
+                          scorecard.grades.hires.grade === 'C' ? 'text-yellow-600' :
+                          scorecard.grades.hires.grade === 'D' ? 'text-orange-600' :
+                          'text-red-600'
+                        }`}>{scorecard.grades.hires.grade}</div>
+                      )}
+                      {!scorecard.grades?.hires && (
+                        <div className="text-xs text-muted-foreground italic mt-1">Set hires goal to grade</div>
+                      )}
+                    </div>
+                    {scorecard.grades?.hires && (
+                      <div className="mt-2">
+                        <div className="w-full bg-slate-200 rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full ${
+                              scorecard.grades.hires.grade === 'A' ? 'bg-green-500' :
+                              scorecard.grades.hires.grade === 'B' ? 'bg-blue-500' :
+                              scorecard.grades.hires.grade === 'C' ? 'bg-yellow-500' :
+                              scorecard.grades.hires.grade === 'D' ? 'bg-orange-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${Math.min(scorecard.grades.hires.pct, 100)}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">{scorecard.grades.hires.pct}% of goal</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Summary row: hires, departures, net */}
+                <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-200">
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground">New Hires</div>
+                    <div className="text-xl font-bold text-green-600">+{scorecard.actuals?.ytdNewHires ?? 0}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground">Departures</div>
+                    <div className="text-xl font-bold text-red-600">−{scorecard.actuals?.ytdDepartures ?? 0}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground">Net Gain</div>
+                    <div className={`text-xl font-bold ${
+                      (scorecard.actuals?.netGain ?? 0) > 0 ? 'text-green-600' :
+                      (scorecard.actuals?.netGain ?? 0) < 0 ? 'text-red-600' : 'text-slate-500'
+                    }`}>
+                      {scorecard.actuals?.netGain != null
+                        ? ((scorecard.actuals.netGain > 0 ? '+' : '') + scorecard.actuals.netGain)
+                        : '—'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* No goals set nudge */}
+                {!scorecard.goals?.yearlyActiveAgentsGoal && !scorecard.goals?.netGainGoal && !scorecard.goals?.yearlyNewHiresGoal && (
+                  <div className="text-xs text-muted-foreground text-center py-1">
+                    No goals set for {year} — use the Historical Year Goals editor above to add them and unlock grades.
+                  </div>
+                )}
+              </>
+            )}
+
+            {!scorecardLoading && !scorecard && (
+              <div className="text-xs text-muted-foreground text-center py-2">Could not load scorecard data.</div>
+            )}
+          </div>
         )}
 
         {/* Goal Editor */}
