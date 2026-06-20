@@ -23,7 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Users, TrendingUp, UserPlus, UserMinus, Save, Target,
-  BarChart2, AlertTriangle, GraduationCap,
+  AlertTriangle, GraduationCap,
 } from 'lucide-react';
 import { useUser } from '@/firebase';
 
@@ -189,27 +189,6 @@ function DeltaLabel(props: any) {
   );
 }
 
-// ── Deals/Agent delta label renderer (actual vs 1.0 goal) ───────────────────
-// Rendered above each data point on the deals/agent line.
-function DealsGoalDeltaLabel(props: any) {
-  const { x, y, value } = props;
-  if (value == null) return null;
-  const rounded = Math.round(value * 100) / 100;
-  const color = rounded > 0 ? '#16a34a' : rounded < 0 ? '#dc2626' : '#64748b';
-  const label = rounded > 0 ? `+${rounded.toFixed(2)}` : rounded.toFixed(2);
-  return (
-    <text
-      x={x}
-      y={y - 8}
-      textAnchor="middle"
-      fontSize={10}
-      fontWeight={700}
-      fill={color}
-    >
-      {label}
-    </text>
-  );
-}
 
 // ── Year-over-year delta label renderer (current year vs compare year) ────────
 // Rendered on top of the compare year bar, showing how many more/fewer agents
@@ -259,7 +238,6 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
   const [showGoal, setShowGoal] = useState(true);
   const [showProjected, setShowProjected] = useState(true);
   const [showCompare, setShowCompare] = useState(false);
-  const [showDealsPerAgent, setShowDealsPerAgent] = useState(false);
   const [showGoalEditor, setShowGoalEditor] = useState(false);
 
   useEffect(() => {
@@ -314,19 +292,11 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
     const yoyDelta = (showCompare && m.totalActive != null && compTotal != null)
       ? m.totalActive - compTotal
       : null;
-    // Deals/agent delta vs goal of 1.0/month
-    const dpa = m.dealsPerAgent ?? null;
-    const dealsDelta = (showDealsPerAgent && showGoal && dpa != null)
-      ? Math.round((dpa - 1.0) * 100) / 100
-      : null;
     return {
       ...m,
       projected: showProjected ? (proj?.projected ?? null) : null,
       compare: showCompare ? compTotal : null,
       goal: showGoal ? goalVal : null,
-      dealsPerAgent: showDealsPerAgent ? dpa : null,
-      dealsGoalLine: (showDealsPerAgent && showGoal) ? 1.0 : null,
-      dealsDelta,
       delta,
       yoyDelta,
     };
@@ -414,10 +384,6 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               <TrendingUp className="h-3.5 w-3.5 mr-1" />
               Projected
             </Button>
-            <Button variant={showDealsPerAgent ? 'default' : 'outline'} size="sm" onClick={() => setShowDealsPerAgent(v => !v)}>
-              <BarChart2 className="h-3.5 w-3.5 mr-1" />
-              Deals/Agent
-            </Button>
             {showGoalEdit && (
               <Button variant="outline" size="sm" onClick={() => setShowGoalEditor(v => !v)}>
                 <Save className="h-3.5 w-3.5 mr-1" />
@@ -443,19 +409,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               {/* Y-axis starts at 50 so month-to-month changes are visually meaningful */}
               <YAxis yAxisId="left" allowDecimals={false} domain={[50, 'auto']} />
-              {showDealsPerAgent && (
-                <YAxis yAxisId="right" orientation="right" allowDecimals tickFormatter={v => v.toFixed(1)} />
-              )}
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name) => {
-                      if (name === 'dealsPerAgent') return [`${Number(value).toFixed(2)} deals/agent`, 'Deals per Agent'];
-                      return [value, name];
-                    }}
-                  />
-                }
-              />
+              <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
 
               {/* Single combined active bar — breakdown (No Deals Yet, Past Grace) shown in KPI blocks above */}
@@ -484,40 +438,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
                 <Line yAxisId="left" dataKey="projected" type="monotone" stroke="var(--color-projected)" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3 }} name="Projected" connectNulls />
               )}
 
-              {/* Deals per agent line with delta labels vs 1.0 goal */}
-              {showDealsPerAgent && (
-                <>
-                  {/* Goal reference line at 1.0 deals/agent/month */}
-                  {showGoal && (
-                    <Line
-                      yAxisId="right"
-                      dataKey="dealsGoalLine"
-                      type="monotone"
-                      stroke="hsl(262 80% 50%)"
-                      strokeWidth={1.5}
-                      strokeDasharray="4 3"
-                      dot={false}
-                      name="Deals/Agent Goal"
-                      connectNulls
-                    />
-                  )}
-                  <Line
-                    yAxisId="right"
-                    dataKey="dealsPerAgent"
-                    type="monotone"
-                    stroke="hsl(262 80% 50%)"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    name="Deals/Agent"
-                    connectNulls
-                  >
-                    {/* Delta label above each point: +0.15 green, -0.22 red */}
-                    {showGoal && (
-                      <LabelList dataKey="dealsDelta" content={<DealsGoalDeltaLabel />} />
-                    )}
-                  </Line>
-                </>
-              )}
+
             </ComposedChart>
           </ChartContainer>
         )}
