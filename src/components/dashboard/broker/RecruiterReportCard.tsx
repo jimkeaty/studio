@@ -2,7 +2,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // RecruiterReportCard
 // Mirrors the BrokerageReportCard visual style exactly.
-// Shows YTD grade cards for: Active Agents, New Hires, Avg Deals/Agent,
+// Shows YTD grade cards for: Active Agents, New Hires, Interviews Set,
 // Interviews Held, and Prospect Calls — all graded vs YTD prorated goal.
 // ─────────────────────────────────────────────────────────────────────────────
 import React from 'react';
@@ -175,13 +175,14 @@ export interface RecruiterReportCardProps {
   activeAgents: number;
   ytdNewHires: number;
   ytdDepartures: number;
-  avgDealsPerAgent: number;
   ytdInterviewsHeld: number;
+  ytdInterviewsSet: number;
   ytdProspectCalls: number;
   // Goals
   yearlyActiveAgentsGoal: number | null;
   yearlyNewHiresGoal: number | null;
   yearlyInterviewsGoal: number | null;  // from funnel targets
+  yearlyInterviewsSetGoal: number | null; // from funnel targets
   yearlyProspectCallsGoal: number | null; // from funnel targets
   // YTD context
   monthsElapsed: number;
@@ -195,12 +196,13 @@ export function RecruiterReportCard({
   activeAgents,
   ytdNewHires,
   ytdDepartures,
-  avgDealsPerAgent,
   ytdInterviewsHeld,
+  ytdInterviewsSet,
   ytdProspectCalls,
   yearlyActiveAgentsGoal,
   yearlyNewHiresGoal,
   yearlyInterviewsGoal,
+  yearlyInterviewsSetGoal,
   yearlyProspectCallsGoal,
   monthsElapsed,
   isCurrentYear,
@@ -214,27 +216,26 @@ export function RecruiterReportCard({
     ? Math.round(yearlyNewHiresGoal * ytdFraction) : null;
   const ytdInterviewsHeldGoal = yearlyInterviewsGoal
     ? Math.round(yearlyInterviewsGoal * ytdFraction) : null;
+  const ytdInterviewsSetGoalCalc = yearlyInterviewsSetGoal
+    ? Math.round(yearlyInterviewsSetGoal * ytdFraction) : null;
   const ytdProspectCallsGoalCalc = yearlyProspectCallsGoal
     ? Math.round(yearlyProspectCallsGoal * ytdFraction) : null;
-  // Deals/agent: YTD goal = 1 deal/agent/month × months elapsed
-  const ytdDealsPerAgentGoal = monthsElapsed;
-
   // Performance percentages
   const activeAgentsPct = ytdActiveAgentsGoal
     ? Math.round((activeAgents / ytdActiveAgentsGoal) * 100) : null;
   const newHiresPct = ytdNewHiresGoal
     ? Math.round((ytdNewHires / ytdNewHiresGoal) * 100) : null;
-  const dealsPerAgentPct = ytdDealsPerAgentGoal > 0
-    ? Math.round((avgDealsPerAgent / ytdDealsPerAgentGoal) * 100) : null;
   const interviewsPct = ytdInterviewsHeldGoal
     ? Math.round((ytdInterviewsHeld / ytdInterviewsHeldGoal) * 100) : null;
+  const interviewsSetPct = ytdInterviewsSetGoalCalc
+    ? Math.round((ytdInterviewsSet / ytdInterviewsSetGoalCalc) * 100) : null;
   const prospectCallsPct = ytdProspectCallsGoalCalc
     ? Math.round((ytdProspectCalls / ytdProspectCallsGoalCalc) * 100) : null;
 
   // Grades
   const activeAgentsGrade = activeAgentsPct != null ? letterGrade(activeAgentsPct) : 'F';
   const newHiresGrade = newHiresPct != null ? letterGrade(newHiresPct) : 'F';
-  const dealsPerAgentGrade = dealsPerAgentPct != null ? letterGrade(dealsPerAgentPct) : 'F';
+  const interviewsSetGrade = interviewsSetPct != null ? letterGrade(interviewsSetPct) : 'F';
   const interviewsGrade = interviewsPct != null ? letterGrade(interviewsPct) : 'F';
   const prospectCallsGrade = prospectCallsPct != null ? letterGrade(prospectCallsPct) : 'F';
 
@@ -248,7 +249,7 @@ export function RecruiterReportCard({
     return `${pct}% behind pace · ${isDecimal ? ytdGoal.toFixed(2) : ytdGoal.toLocaleString()} ${label} YTD goal`;
   };
 
-  const hasGoals = yearlyActiveAgentsGoal || yearlyNewHiresGoal || yearlyInterviewsGoal || yearlyProspectCallsGoal;
+  const hasGoals = yearlyActiveAgentsGoal || yearlyNewHiresGoal || yearlyInterviewsGoal || yearlyInterviewsSetGoal || yearlyProspectCallsGoal;
 
   return (
     <div className="space-y-3">
@@ -308,15 +309,15 @@ export function RecruiterReportCard({
               icon={UserPlus}
             />
 
-            {/* Avg Deals / Agent */}
+            {/* Interviews Set YTD */}
             <HeroCard
-              title="Avg Deals / Agent"
-              grade={dealsPerAgentGrade}
-              primary={fmtDec(avgDealsPerAgent)}
-              secondary={paceText(avgDealsPerAgent, ytdDealsPerAgentGoal, `deals/agent (${monthsElapsed} mo × 1/mo)`, true)}
-              performancePct={dealsPerAgentPct ?? undefined}
-              goalLabel={`${ytdDealsPerAgentGoal} deals/agent YTD goal`}
-              icon={BarChart3}
+              title="Interviews Set YTD"
+              grade={interviewsSetGrade}
+              primary={fmtN(ytdInterviewsSet)}
+              secondary={paceText(ytdInterviewsSet, ytdInterviewsSetGoalCalc, 'interviews set')}
+              performancePct={interviewsSetPct ?? undefined}
+              goalLabel={ytdInterviewsSetGoalCalc ? `${ytdInterviewsSetGoalCalc.toLocaleString()} of ${yearlyInterviewsSetGoal?.toLocaleString()} yearly` : undefined}
+              icon={Calendar}
             />
 
             {/* Interviews Held YTD */}

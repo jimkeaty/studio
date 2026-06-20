@@ -1715,12 +1715,13 @@ export default function RecruitingDashboardPage() {
         activeAgents={realActiveAgents}
         ytdNewHires={realYtdNewHires}
         ytdDepartures={realYtdDepartures}
-        avgDealsPerAgent={avgDealsPerAgentYTD}
         ytdInterviewsHeld={totals.totalInterviews}
+        ytdInterviewsSet={totals.totalInterviewsSet ?? 0}
         ytdProspectCalls={totals.totalProspectCalls}
         yearlyActiveAgentsGoal={plan.yearlyActiveAgentsGoal ?? null}
         yearlyNewHiresGoal={plan.yearlyNewHiresGoal ?? null}
         yearlyInterviewsGoal={funnelTargets?.yearly?.interviewsHeld ?? null}
+        yearlyInterviewsSetGoal={funnelTargets?.yearly?.interviewsSet ?? null}
         yearlyProspectCallsGoal={funnelTargets?.yearly?.calls ?? null}
         monthsElapsed={monthsElapsed}
         isCurrentYear={new Date().getFullYear() === year}
@@ -1728,77 +1729,9 @@ export default function RecruitingDashboardPage() {
         onToggle={() => setReportCardOpen(v => !v)}
       />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPI
-          title="Active Agents"
-          value={fmt(realActiveAgents)}
-          sub={plan.yearlyActiveAgentsGoal ? `Goal: ${plan.yearlyActiveAgentsGoal} · Pipeline: ${realPipelineCount}` : `Pipeline: ${realPipelineCount} in pipeline`}
-          icon={Users}
-          tooltip={{
-            what: 'Total agents currently active at the brokerage — agents who have closed at least 1 deal, or have been with the brokerage 3+ months.',
-            how: 'Pulled live from agent profiles. Excludes demo accounts. Counts agents activated by first deal date or 3-month tenure, whichever comes first.',
-          }}
-        />
-        <KPI
-          title="New Hires YTD"
-          value={fmt(realYtdNewHires)}
-          sub={`${fmt(realYtdDepartures)} departures · Net: ${fmt(realYtdNewHires - realYtdDepartures)}`}
-          icon={UserPlus}
-          tooltip={{
-            what: 'Number of new agents who became active (activated) so far this year.',
-            how: 'An agent is counted as a new hire in the month they first activate — either their first closed deal or 3 months after their start date, whichever is earlier.',
-          }}
-        />
-        <KPI
-          title="Avg Deals/Agent"
-          value={`${avgDealsPerAgentYTD}`}
-          sub={`YTD goal: ${ytdDealsGoal} deals/agent (${monthsElapsed} mo × 1/mo)`}
-          icon={BarChart3}
-          tooltip={{
-            what: `Average deals per active agent per month, averaged across all ${monthsElapsed} months elapsed YTD. Goal is 1 deal per agent per month.`,
-            how: `Calculated as: sum of monthly (deals ÷ active agents) ratios ÷ ${monthsElapsed} months elapsed. YTD goal = ${ytdDealsGoal} deals/agent (1 per month × ${monthsElapsed} months). A score of ${ytdDealsGoal}+ = A grade.`,
-          }}
-        />
-        <KPI
-          title="Interviews YTD"
-          value={fmt(totals.totalInterviews)}
-          sub={`${fmt(totals.totalProspectCalls)} prospect calls`}
-          icon={Phone}
-          tooltip={{
-            what: 'Total recruiting interviews held year-to-date, as entered in the Monthly Recruiting Data Entry form.',
-            how: 'Graded against the YTD prorated funnel target. If the yearly goal is 24 interviews and it is June, the YTD goal is 12 (24 × 6/12).',
-          }}
-        />
-      </div>
 
-      {/* Grade Cards */}
-      {grades && Object.keys(grades).length > 0 && (
-        <div>
-          <h2 className="text-xl font-bold mb-3">Recruiting Lead Indicator Grades</h2>
-          <p className="text-sm text-muted-foreground mb-3">
-            Graded on YTD actual vs YTD prorated goal ({monthsElapsed} of 12 months elapsed).
-            A = 100%+ · B = 85–99% · C = 70–84% · D = 50–69% · F = below 50%
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {grades.prospectCalls && <GradeCard label="Prospect Calls" {...grades.prospectCalls} yearlyGoal={grades.prospectCalls.yearlyGoal} monthsElapsed={grades.prospectCalls.monthsElapsed} />}
-            {grades.interviewsHeld && <GradeCard label="Interviews Held" {...grades.interviewsHeld} yearlyGoal={grades.interviewsHeld.yearlyGoal} monthsElapsed={grades.interviewsHeld.monthsElapsed} />}
-            {grades.newHires && <GradeCard label="New Hires" {...grades.newHires} yearlyGoal={grades.newHires.yearlyGoal} monthsElapsed={grades.newHires.monthsElapsed} />}
-            {grades.activeAgents && <GradeCard label="Active Agents" {...grades.activeAgents} yearlyGoal={grades.activeAgents.yearlyGoal} monthsElapsed={grades.activeAgents.monthsElapsed} />}
-            {grades.dealsPerAgent && (
-              <GradeCard
-                label="Avg Deals/Agent"
-                actual={grades.dealsPerAgent.actual}
-                goal={grades.dealsPerAgent.goal}
-                pct={grades.dealsPerAgent.pct}
-                grade={grades.dealsPerAgent.grade}
-                yearlyGoal={12}
-                monthsElapsed={monthsElapsed}
-              />
-            )}
-          </div>
-        </div>
-      )}
+
+
 
       {/* Funnel Targets */}
       {funnelTargets && (

@@ -224,6 +224,7 @@ export async function GET(req: NextRequest) {
       : 0;
     const ytdDealsPerAgentGoal = monthsElapsed; // 1 deal/agent/month × months elapsed
     const totalInterviews = months.reduce((s, m) => s + m.interviewsHeld, 0);
+    const totalInterviewsSet = months.reduce((s, m) => s + (m.interviewsSet ?? 0), 0);
     const totalProspectCalls = months.reduce((s, m) => s + m.prospectCalls, 0);
 
     // 8. Recruiting funnel calculations (like business plan)
@@ -314,6 +315,7 @@ export async function GET(req: NextRequest) {
         ytdDealsPerAgentGoal,
         monthsElapsed,
         totalInterviews,
+        totalInterviewsSet,
         totalProspectCalls,
       },
       plan: {
