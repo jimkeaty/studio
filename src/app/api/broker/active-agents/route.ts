@@ -451,8 +451,25 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 11. Available years for compare selector ─────────────────────────────
-    // Pull years from all data sources so the dropdown is always populated
+    // Build from multiple sources to ensure the dropdown is always populated.
+    // Primary: transaction year field (always set, most reliable).
+    // Secondary: agent start/activation/firstDeal dates.
+    // Fallback: always include the past 5 years so the dropdown is never empty.
     const yearSet = new Set<number>();
+
+    // (a) Transaction year field — most reliable source
+    for (const doc of txSnap.docs) {
+      const t = doc.data() as any;
+      // Use the year field first (always set), fall back to closedDate
+      if (t.year && typeof t.year === 'number') {
+        yearSet.add(t.year);
+      } else {
+        const cd = parseDate(t.closedDate);
+        if (cd) yearSet.add(cd.getFullYear());
+      }
+    }
+
+    // (b) Agent profile dates
     for (const ar of agentRecords) {
       if (ar.startDate) {
         const y = new Date(ar.startDate + 'T00:00:00').getFullYear();
@@ -467,14 +484,15 @@ export async function GET(req: NextRequest) {
         if (!isNaN(y)) yearSet.add(y);
       }
     }
-    // Also include years from transaction closed dates
-    for (const doc of txSnap.docs) {
-      const t = doc.data() as any;
-      const cd = parseDate(t.closedDate);
-      if (cd) yearSet.add(cd.getFullYear());
+
+    // (c) Fallback: always include the past 5 calendar years so the dropdown
+    //     is never empty even if agent/transaction data is sparse.
+    for (let offset = 1; offset <= 5; offset++) {
+      yearSet.add(year - offset);
     }
+
     const availableYears = [...yearSet]
-      .filter(y => y !== year)
+      .filter(y => y !== year && y >= 2018) // exclude current year and ancient data
       .sort((a, b) => b - a)
       .slice(0, 8);
 
