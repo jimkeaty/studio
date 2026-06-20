@@ -1691,10 +1691,10 @@ export default function RecruitingDashboardPage() {
       {/* ── Recruiter & DAD To-Do Board ──────────────────────────────── */}
       <RecruiterTodoBoard />
 
-      <Tabs defaultValue="roster" className="w-full">
+      <Tabs defaultValue="recruiting" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
           <TabsTrigger value="recruiting">Recruiting Pipeline</TabsTrigger>
+          <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
           <TabsTrigger value="incentive">Incentive Program Config</TabsTrigger>
         </TabsList>
 
