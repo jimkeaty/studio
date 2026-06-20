@@ -158,6 +158,7 @@ const adminMenuGroups = [
     items: [
       { href: '/dashboard/broker', label: 'Broker Command', icon: Users },
       { href: '/dashboard/admin/recruiting', label: 'Recruiting & Dev', icon: UserPlus },
+      { href: '/dashboard/admin/broker-plan', label: 'Broker Business Plan', icon: Target },
     ],
   },
   {

@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/card';
 import {
   DollarSign, TrendingUp, Target, AlertCircle, Percent, Clock,
-  ChevronDown, ChevronUp, Save, BarChart3, Banknote, Building2,
+  ChevronDown, ChevronUp, Save, BarChart3, Banknote, Building2, ExternalLink,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Cell,
@@ -1449,6 +1449,18 @@ export function BrokerDashboardInner() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* ── Broker Business Plan quick link ─────────────────────────────── */}
+      <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Target className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">Broker Business Plan</span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">— Set all goals &amp; assumptions in one place</span>
+        </div>
+        <a href="/dashboard/admin/broker-plan" className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
+          Open Plan <ExternalLink className="h-3 w-3" />
+        </a>
       </div>
 
       {/* ── Team Pulse Bar ─────────────────────────────────────────────── */}

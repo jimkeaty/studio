@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Flame, Send, Trash2, Activity, Info } from 'lucide-react';
+import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Flame, Send, Trash2, Activity, Info, ExternalLink } from 'lucide-react';
 import { ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -1726,7 +1726,18 @@ export default function RecruitingDashboardPage() {
         </Select>
       </div>
 
-      {/* ── Recruiter & DAD To-Do Board ──────────────────────────────── */}
+      {/* ── Broker Business Plan quick link ─────────────────────────────── */}
+      <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Target className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">Broker Business Plan</span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">— Set recruiting goals, funnel assumptions &amp; net margin in one place</span>
+        </div>
+        <a href="/dashboard/admin/broker-plan" className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
+          Open Plan <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+
       <RecruiterTodoBoard />
 
       <Tabs defaultValue="recruiting" className="w-full">
