@@ -32,11 +32,6 @@ export interface BrokerKpiActuals {
   appointmentsHeld: number;
   contractsWritten: number;
   closings: number;
-  agentCount: number;
-  recruitingCalls: number;
-  recruitingApptSet: number;
-  recruitingApptHeld: number;
-  recruitingClosings: number;
 }
 
 export interface BrokerKpiGoals {
@@ -46,12 +41,6 @@ export interface BrokerKpiGoals {
   appointmentsHeldGoal: number | null;
   contractsWrittenGoal: number | null;
   closingsGoal: number | null;
-  agentCountGoal: number | null;
-  newHiresGoal: number | null;
-  recruitingCallsGoal: number | null;
-  recruitingApptSetGoal: number | null;
-  recruitingApptHeldGoal: number | null;
-  recruitingClosingsGoal: number | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -88,11 +77,6 @@ const KPI_META: Record<string, { label: string; icon: React.ElementType; unit: s
   appointmentsHeld:  { label: 'Appointments Held',  icon: CalendarCheck2,unit: 'appts held',  group: 'production' },
   contractsWritten:  { label: 'Contracts Written',  icon: FileSignature, unit: 'contracts',   group: 'production' },
   closings:          { label: 'Closings',            icon: CheckCircle2,  unit: 'closings',    group: 'production' },
-  recruitingCalls:   { label: 'Recruiting Calls',   icon: PhoneCall,     unit: 'calls',       group: 'recruiting' },
-  recruitingApptSet: { label: 'Recruiting Appts Set',  icon: CalendarDays, unit: 'appts set', group: 'recruiting' },
-  recruitingApptHeld:{ label: 'Recruiting Appts Held', icon: CalendarCheck2, unit: 'appts held', group: 'recruiting' },
-  recruitingClosings:{ label: 'New Hires',          icon: UserPlus,      unit: 'hires',       group: 'recruiting' },
-  agentCount:        { label: 'Agent Count',        icon: Users,         unit: 'agents',      group: 'recruiting' },
 };
 
 const GOAL_KEY_MAP: Record<string, keyof BrokerKpiGoals> = {
@@ -102,11 +86,6 @@ const GOAL_KEY_MAP: Record<string, keyof BrokerKpiGoals> = {
   appointmentsHeld:  'appointmentsHeldGoal',
   contractsWritten:  'contractsWrittenGoal',
   closings:          'closingsGoal',
-  recruitingCalls:   'recruitingCallsGoal',
-  recruitingApptSet: 'recruitingApptSetGoal',
-  recruitingApptHeld:'recruitingApptHeldGoal',
-  recruitingClosings:'recruitingClosingsGoal',
-  agentCount:        'agentCountGoal',
 };
 
 const ACTUAL_KEY_MAP: Record<string, keyof BrokerKpiActuals> = {
@@ -116,11 +95,6 @@ const ACTUAL_KEY_MAP: Record<string, keyof BrokerKpiActuals> = {
   appointmentsHeld:  'appointmentsHeld',
   contractsWritten:  'contractsWritten',
   closings:          'closings',
-  recruitingCalls:   'recruitingCalls',
-  recruitingApptSet: 'recruitingApptSet',
-  recruitingApptHeld:'recruitingApptHeld',
-  recruitingClosings:'recruitingClosings',
-  agentCount:        'agentCount',
 };
 
 // ── localStorage key ──────────────────────────────────────────────────────────

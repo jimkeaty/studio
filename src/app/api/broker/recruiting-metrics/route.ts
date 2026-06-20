@@ -371,13 +371,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'savePlan') {
-      const { year, yearlyNewHiresGoal, yearlyActiveAgentsGoal, conversionRates } = body;
+      const { year, yearlyNewHiresGoal, yearlyActiveAgentsGoal, netGainGoal, conversionRates } = body;
       if (!year) return jsonError(400, 'year required');
 
       await adminDb.collection('recruitingPlans').doc(String(year)).set({
         year,
         yearlyNewHiresGoal: yearlyNewHiresGoal ?? null,
         yearlyActiveAgentsGoal: yearlyActiveAgentsGoal ?? null,
+        netGainGoal: netGainGoal ?? null,
         conversionRates: conversionRates ?? {},
         updatedAt: new Date().toISOString(),
         updatedBy: decoded.uid,

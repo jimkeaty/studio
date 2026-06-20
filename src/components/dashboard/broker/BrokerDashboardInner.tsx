@@ -535,9 +535,6 @@ function GoalsEditor({
   const [kpiGoalFields, setKpiGoalFields] = useState({
     callsGoal: '', engagementsGoal: '', appointmentsSetGoal: '',
     appointmentsHeldGoal: '', contractsWrittenGoal: '', closingsGoal: '',
-    agentCountGoal: '', newHiresGoal: '',
-    recruitingCallsGoal: '', recruitingApptSetGoal: '',
-    recruitingApptHeldGoal: '', recruitingClosingsGoal: '',
   });
   const [kpiSaving, setKpiSaving] = useState(false);
 
@@ -571,8 +568,7 @@ function GoalsEditor({
       const body: Record<string, number | null> = { year };
       const numFields = [
         'callsGoal','engagementsGoal','appointmentsSetGoal','appointmentsHeldGoal',
-        'contractsWrittenGoal','closingsGoal','agentCountGoal','newHiresGoal',
-        'recruitingCallsGoal','recruitingApptSetGoal','recruitingApptHeldGoal','recruitingClosingsGoal',
+        'contractsWrittenGoal','closingsGoal',
       ] as const;
       for (const k of numFields) {
         body[k] = kpiGoalFields[k] ? parseInt(kpiGoalFields[k], 10) : null;
@@ -1118,40 +1114,6 @@ function GoalsEditor({
               </div>
             </div>
 
-            {/* ── Recruiting Goals Section ──────────────────────────────── */}
-            <div className="mt-6 border-t pt-6">
-              <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-primary" /> Recruiting & Agent Count Goals
-              </h3>
-              <p className="text-xs text-muted-foreground mb-4">Set annual targets for recruiting pipeline activity and agent count growth.</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {([
-                  { key: 'agentCountGoal', label: 'Agent Count Goal (end of year)' },
-                  { key: 'newHiresGoal', label: 'New Hires Goal' },
-                  { key: 'recruitingCallsGoal', label: 'Recruiting Calls' },
-                  { key: 'recruitingApptSetGoal', label: 'Recruiting Appts Set' },
-                  { key: 'recruitingApptHeldGoal', label: 'Recruiting Appts Held' },
-                  { key: 'recruitingClosingsGoal', label: 'Recruiting Closings' },
-                ] as const).map(({ key, label }) => (
-                  <div key={key}>
-                    <Label className="text-xs text-muted-foreground">{label}</Label>
-                    <Input
-                      type="number"
-                      value={kpiGoalFields[key]}
-                      onChange={e => setKpiGoalFields(prev => ({ ...prev, [key]: e.target.value }))}
-                      placeholder="0"
-                      className="h-8 mt-1"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-end mt-4">
-                <Button onClick={saveKpiGoals} disabled={kpiSaving} variant="outline">
-                  <Save className="mr-2 h-4 w-4" />
-                  {kpiSaving ? 'Saving...' : 'Save KPI & Recruiting Goals'}
-                </Button>
-              </div>
-            </div>
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -1183,14 +1145,10 @@ export function BrokerDashboardInner() {
   const [kpiGoals, setKpiGoals] = useState<BrokerKpiGoals>({
     callsGoal: null, engagementsGoal: null, appointmentsSetGoal: null,
     appointmentsHeldGoal: null, contractsWrittenGoal: null, closingsGoal: null,
-    agentCountGoal: null, newHiresGoal: null,
-    recruitingCallsGoal: null, recruitingApptSetGoal: null,
-    recruitingApptHeldGoal: null, recruitingClosingsGoal: null,
   });
   const [kpiActuals, setKpiActuals] = useState<BrokerKpiActuals>({
     calls: 0, engagements: 0, appointmentsSet: 0, appointmentsHeld: 0,
-    contractsWritten: 0, closings: 0, agentCount: 0,
-    recruitingCalls: 0, recruitingApptSet: 0, recruitingApptHeld: 0, recruitingClosings: 0,
+    contractsWritten: 0, closings: 0,
   });
   const [kpiYtdFraction, setKpiYtdFraction] = useState<number>(1);
   const [kpiLoading, setKpiLoading] = useState(false);

@@ -271,6 +271,7 @@ function PlanForm({ plan, year, onSaved }: { plan: any; year: number; onSaved: (
   const [saving, setSaving] = useState(false);
   const [hiresGoal, setHiresGoal] = useState(String(plan?.yearlyNewHiresGoal || ''));
   const [agentsGoal, setAgentsGoal] = useState(String(plan?.yearlyActiveAgentsGoal || ''));
+  const [netGainGoal, setNetGainGoal] = useState(String(plan?.netGainGoal || ''));
   const [rates, setRates] = useState({
     callToInterview: String((plan?.conversionRates?.callToInterview ?? 0.20) * 100),
     interviewSetToHeld: String((plan?.conversionRates?.interviewSetToHeld ?? 0.70) * 100),
@@ -292,6 +293,7 @@ function PlanForm({ plan, year, onSaved }: { plan: any; year: number; onSaved: (
           action: 'savePlan', year,
           yearlyNewHiresGoal: parseInt(hiresGoal, 10) || null,
           yearlyActiveAgentsGoal: parseInt(agentsGoal, 10) || null,
+          netGainGoal: netGainGoal ? parseInt(netGainGoal, 10) : null,
           conversionRates: {
             callToInterview: (parseFloat(rates.callToInterview) || 20) / 100,
             interviewSetToHeld: (parseFloat(rates.interviewSetToHeld) || 70) / 100,
@@ -321,7 +323,7 @@ function PlanForm({ plan, year, onSaved }: { plan: any; year: number; onSaved: (
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1">
                 <Label className="text-sm">Yearly New Hires Goal</Label>
                 <Input type="number" value={hiresGoal} onChange={e => setHiresGoal(e.target.value)} placeholder="e.g. 24" />
@@ -331,6 +333,11 @@ function PlanForm({ plan, year, onSaved }: { plan: any; year: number; onSaved: (
                 <Label className="text-sm">Year-End Active Agents Goal</Label>
                 <Input type="number" value={agentsGoal} onChange={e => setAgentsGoal(e.target.value)} placeholder="e.g. 50" />
                 <p className="text-xs text-muted-foreground">Target active agent count by December</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Net Agent Gain Goal</Label>
+                <Input type="number" value={netGainGoal} onChange={e => setNetGainGoal(e.target.value)} placeholder="e.g. 10" />
+                <p className="text-xs text-muted-foreground">Net new agents (hires minus departures) for the year</p>
               </div>
             </div>
 
