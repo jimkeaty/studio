@@ -444,13 +444,32 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 11. Available years for compare selector ─────────────────────────────
-    const allStartYears = agentRecords
-      .map(ar => ar.startDate ? new Date(ar.startDate + 'T00:00:00').getFullYear() : null)
-      .filter(Boolean) as number[];
-    const availableYears = [...new Set(allStartYears)]
+    // Pull years from all data sources so the dropdown is always populated
+    const yearSet = new Set<number>();
+    for (const ar of agentRecords) {
+      if (ar.startDate) {
+        const y = new Date(ar.startDate + 'T00:00:00').getFullYear();
+        if (!isNaN(y)) yearSet.add(y);
+      }
+      if (ar.activationMonth) {
+        const y = parseInt(ar.activationMonth.slice(0, 4), 10);
+        if (!isNaN(y)) yearSet.add(y);
+      }
+      if (ar.firstDealMonth) {
+        const y = parseInt(ar.firstDealMonth.slice(0, 4), 10);
+        if (!isNaN(y)) yearSet.add(y);
+      }
+    }
+    // Also include years from transaction closed dates
+    for (const doc of txSnap.docs) {
+      const t = doc.data() as any;
+      const cd = parseDate(t.closedDate);
+      if (cd) yearSet.add(cd.getFullYear());
+    }
+    const availableYears = [...yearSet]
       .filter(y => y !== year)
       .sort((a, b) => b - a)
-      .slice(0, 5);
+      .slice(0, 8);
 
     // ── 12. Team group breakdown for current month ───────────────────────────
     const teamGroupBreakdown = currentMonthData.teamCounts;

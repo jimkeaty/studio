@@ -1561,6 +1561,9 @@ export default function RecruitingDashboardPage() {
 
         {/* ── TAB 2: Recruiting Pipeline (existing content) ───────────────── */}
         <TabsContent value="recruiting" className="space-y-8 mt-6">
+      {/* ── Broker Agent KPI Report Card ──────────────────────────────────── */}
+      <BrokerKPIReportCard year={year} />
+
 
       {/* ── Recruiter Report Card ────────────────────────────────────────── */}
       <RecruiterReportCard
@@ -1807,9 +1810,6 @@ export default function RecruitingDashboardPage() {
       {/* ── Plan & Tracking Forms ────────────────────────────────────────── */}
       <PlanForm plan={plan} year={year} onSaved={fetchData} />
       <TrackingForm months={months} year={year} onSaved={fetchData} />
-
-      {/* ── Broker Agent KPI Report Card ────────────────────────────────── */}
-      <BrokerKPIReportCard year={year} />
 
       {/* ── Active Agents Chart (computed from Firestore) ──────────────── */}
       <ActiveAgentsChart showGoalEdit={true} initialYear={year} />
