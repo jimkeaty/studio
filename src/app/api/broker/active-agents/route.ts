@@ -240,16 +240,19 @@ export async function GET(req: NextRequest) {
       // Team breakdown
       const teamCounts: Record<string, number> = {};
       for (const ar of agentRecords) {
-        if (!ar.activationMonth) continue;
-        if (ar.activationMonth > ym) continue;
+        // Skip agents who have already departed
         if (ar.endMonth && ar.endMonth <= ym) continue;
         // Determine if agent is still in grace period for this month
         const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
         if (!pastGrace) {
-          // Still in grace period — track separately, exclude from totalActive
+          // Agent is in grace period: started (has startDate/graceEndMonth) but not yet established.
+          // Count them in inGrace regardless of whether activationMonth is set yet.
           inGrace++;
           continue;
         }
+        // Established agent: must have an activationMonth and must have activated by this month
+        if (!ar.activationMonth) continue;
+        if (ar.activationMonth > ym) continue;
         // Established agent (past grace)
         const tg = ar.teamGroup || 'unknown';
         teamCounts[tg] = (teamCounts[tg] || 0) + 1;
@@ -357,6 +360,10 @@ export async function GET(req: NextRequest) {
     }).length;
     const ytdDepartures = agentRecords.filter(ar => {
       if (!ar.endMonth) return false;
+      // Only count as a departure if the agent was ever actually activated
+      // (had an activationMonth). Agents marked inactive who were never
+      // onboarded/activated should not inflate the departure count.
+      if (!ar.activationMonth) return false;
       return ar.endMonth.startsWith(String(year)) && ar.endMonth <= currentYM;
     }).length;
 
