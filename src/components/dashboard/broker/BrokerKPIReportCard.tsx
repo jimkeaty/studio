@@ -3,13 +3,14 @@
 // BrokerKPIReportCard
 // Self-contained component that fetches from /api/broker/active-agents and
 // renders colorful grade cards for broker-level agent KPIs:
-//   - Active Agents (vs yearly agent count goal)
-//   - New Hires YTD (vs yearly new hires goal)
-//   - YTD Departures (informational — lower is better)
-//   - No Deals Yet (informational — lower is better)
-//   - Deals / Agent (vs 1 deal/agent/month goal)
-//   - In Grace Period (informational — pipeline health)
+//   - Active Agents (graded vs monthly goal)
+//   - Avg Monthly Deals/Agent (graded vs 1 deal/agent/month goal)
+//   - New Hires YTD (informational)
+//   - YTD Departures (informational)
+//   - Pipeline (informational — candidates tracked)
+//   - No Deals Yet (informational — established agents with 0 deals)
 //
+// Grade math: pct = (actual / goal) * 100  — so 0.78 vs 1.0 goal = 78% (C)
 // Visual style mirrors RecruiterReportCard and BrokerageReportCard exactly.
 // Drop into any broker admin page with: <BrokerKPIReportCard year={year} />
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Users, UserPlus, UserMinus, BarChart3, AlertTriangle, GraduationCap,
+  Users, UserPlus, UserMinus, BarChart3, AlertTriangle, TrendingUp,
   ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -71,6 +72,7 @@ function gradeColorScheme(g: string) {
   }
 }
 
+// Grade: pct = actual / goal * 100 (e.g. 0.78 / 1.0 = 78% → C)
 function letterGrade(pct: number): string {
   if (pct >= 100) return 'A';
   if (pct >= 85) return 'B';
@@ -111,7 +113,7 @@ function GoalRing({ pct, grade, size = 72 }: { pct: number; grade: string; size?
   );
 }
 
-// ── HeroCard ──────────────────────────────────────────────────────────────────
+// ── HeroCard (graded KPI) ─────────────────────────────────────────────────────
 function HeroCard({
   title, grade, primary, secondary, performancePct, goalLabel, icon: Icon,
 }: {
@@ -179,7 +181,7 @@ function HeroCard({
   );
 }
 
-// ── InfoCard — for KPIs where lower is better or no grade applies ─────────────
+// ── InfoCard — informational only, no grade ───────────────────────────────────
 function InfoCard({
   title, value, sub, icon: Icon, colorClass = 'border-l-slate-400', badgeClass = 'bg-slate-500 text-white',
 }: {
@@ -239,20 +241,22 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
   const currentMonthNum = isCurrentYear ? new Date().getMonth() + 1 : 12;
   const monthsElapsed = currentMonthNum;
 
-  // ── Derive goals from the months array (monthly goals set in agent count goal editor) ──
-  // The agent count goal is a point-in-time target (not cumulative), so use the current month's goal
+  // Current month's agent count goal (point-in-time target)
   const currentMonthGoal = data?.months?.find((m: any) => m.month === currentMonthNum)?.goal ?? null;
 
-  // ── Grade calculations ────────────────────────────────────────────────────
-  // Active Agents: actual vs current-month goal
+  // ── Grade: Active Agents ──────────────────────────────────────────────────
+  // pct = actual / goal * 100  →  70 agents / 80 goal = 87.5% → B
   const activeAgentsPct = (kpi?.currentActive != null && currentMonthGoal != null && currentMonthGoal > 0)
     ? Math.round((kpi.currentActive / currentMonthGoal) * 100) : null;
   const activeAgentsGrade = activeAgentsPct != null ? letterGrade(activeAgentsPct) : 'F';
 
-  // Deals/Agent: YTD avg vs 1 deal/agent/month goal
-  const ytdDealsPerAgentGoal = monthsElapsed; // 1 deal/agent/month × months elapsed
-  const dealsPerAgentPct = (kpi?.ytdDealsPerAgent != null && ytdDealsPerAgentGoal > 0)
-    ? Math.round((kpi.ytdDealsPerAgent / ytdDealsPerAgentGoal) * 100) : null;
+  // ── Grade: Avg Monthly Deals/Agent ────────────────────────────────────────
+  // Goal = 1 deal/agent/month (fixed)
+  // pct = avgMonthlyDealsPerAgent / 1.0 * 100  →  0.78 / 1.0 = 78% → C
+  const dealsGoal = 1.0; // 1 deal per agent per month
+  const avgDeals = kpi?.avgMonthlyDealsPerAgent ?? null;
+  const dealsPerAgentPct = avgDeals != null
+    ? Math.round((avgDeals / dealsGoal) * 100) : null;
   const dealsPerAgentGrade = dealsPerAgentPct != null ? letterGrade(dealsPerAgentPct) : 'F';
 
   // ── Pace text helper ──────────────────────────────────────────────────────
@@ -261,8 +265,8 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
     const delta = actual - goal;
     const pct = goal > 0 ? Math.abs(Math.round((delta / goal) * 100)) : 0;
     const displayDelta = isDecimal ? Math.abs(delta).toFixed(2) : Math.abs(Math.round(delta)).toLocaleString();
-    if (delta >= 0) return `${pct}% ahead of pace · ${isDecimal ? goal.toFixed(2) : goal.toLocaleString()} ${label} goal`;
-    return `${pct}% behind pace · ${isDecimal ? goal.toFixed(2) : goal.toLocaleString()} ${label} goal`;
+    if (delta >= 0) return `${pct}% ahead of pace · goal: ${isDecimal ? goal.toFixed(2) : goal.toLocaleString()} ${label}`;
+    return `${displayDelta} ${label} behind pace · goal: ${isDecimal ? goal.toFixed(2) : goal.toLocaleString()} ${label}`;
   };
 
   const hasGoals = currentMonthGoal != null;
@@ -308,14 +312,15 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Active Agents */}
+
+                {/* ── GRADED: Active Agents ─────────────────────────────── */}
                 <HeroCard
                   title="Active Agents"
                   grade={activeAgentsGrade}
                   primary={fmtN(kpi.currentActive)}
                   secondary={
                     currentMonthGoal != null
-                      ? paceText(kpi.currentActive, currentMonthGoal, 'agent')
+                      ? paceText(kpi.currentActive, currentMonthGoal, 'agent goal')
                       : 'No monthly goal set — set goals in chart below'
                   }
                   performancePct={activeAgentsPct ?? undefined}
@@ -323,7 +328,24 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
                   icon={Users}
                 />
 
-                {/* New Hires YTD */}
+                {/* ── GRADED: Avg Monthly Deals/Agent ──────────────────── */}
+                {/* Grade = avgMonthlyDealsPerAgent / 1.0 goal × 100        */}
+                {/* 0.78 / 1.0 = 78% → C  (not "87% behind")               */}
+                <HeroCard
+                  title="Avg Monthly Deals / Agent"
+                  grade={dealsPerAgentGrade}
+                  primary={fmtDec(avgDeals)}
+                  secondary={
+                    avgDeals != null
+                      ? paceText(avgDeals, dealsGoal, 'deals/agent/mo', true)
+                      : 'No deal data yet'
+                  }
+                  performancePct={dealsPerAgentPct ?? undefined}
+                  goalLabel="Goal: 1.00 deal/agent/mo"
+                  icon={BarChart3}
+                />
+
+                {/* ── INFO: New Hires YTD ───────────────────────────────── */}
                 <InfoCard
                   title="New Hires YTD"
                   value={fmtN(kpi.ytdNewHires)}
@@ -333,7 +355,7 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
                   badgeClass="bg-emerald-500 text-white"
                 />
 
-                {/* YTD Departures */}
+                {/* ── INFO: YTD Departures ──────────────────────────────── */}
                 <InfoCard
                   title="YTD Departures"
                   value={fmtN(kpi.ytdDepartures)}
@@ -343,36 +365,26 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
                   badgeClass={(kpi.ytdDepartures ?? 0) > 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
                 />
 
-                {/* Deals / Agent YTD */}
-                <HeroCard
-                  title="Deals / Agent YTD"
-                  grade={dealsPerAgentGrade}
-                  primary={fmtDec(kpi.ytdDealsPerAgent)}
-                  secondary={paceText(kpi.ytdDealsPerAgent ?? 0, ytdDealsPerAgentGoal, `deals/agent (${monthsElapsed} mo × 1/mo)`, true)}
-                  performancePct={dealsPerAgentPct ?? undefined}
-                  goalLabel={`${ytdDealsPerAgentGoal} deals/agent YTD goal`}
-                  icon={BarChart3}
+                {/* ── INFO: Pipeline ────────────────────────────────────── */}
+                <InfoCard
+                  title="Pipeline"
+                  value={fmtN(kpi.pipelineCount)}
+                  sub="Recruiting candidates currently tracked"
+                  icon={TrendingUp}
+                  colorClass="border-l-blue-400"
+                  badgeClass="bg-blue-500 text-white"
                 />
 
-                {/* No Deals Yet */}
+                {/* ── INFO: No Deals Yet ────────────────────────────────── */}
                 <InfoCard
                   title="No Deals Yet"
                   value={fmtN(kpi.noDealsYetCount)}
-                  sub="Active established agents with 0 closed or pending deals — needs attention"
+                  sub={`Active established agents with 0 closed deals in ${year} — needs attention`}
                   icon={AlertTriangle}
                   colorClass={(kpi.noDealsYetCount ?? 0) > 0 ? 'border-l-amber-400' : 'border-l-slate-300'}
                   badgeClass={(kpi.noDealsYetCount ?? 0) > 0 ? 'bg-amber-500 text-white' : 'bg-slate-400 text-white'}
                 />
 
-                {/* In Grace Period */}
-                <InfoCard
-                  title="In Grace Period"
-                  value={fmtN(kpi.inGraceCount)}
-                  sub="New agents in 90-day grace period — not yet counted as active"
-                  icon={GraduationCap}
-                  colorClass="border-l-blue-400"
-                  badgeClass="bg-blue-500 text-white"
-                />
               </div>
 
               {/* Grade scale legend */}
@@ -387,7 +399,9 @@ export function BrokerKPIReportCard({ year: yearProp, initialOpen = true }: Brok
                 ].map(({ g, label, color }) => (
                   <span key={g} className={`font-semibold ${color}`}>{g} = {label}</span>
                 ))}
-                <span className="ml-2 text-muted-foreground">· Graded KPIs: Active Agents vs monthly goal, Deals/Agent vs 1/agent/month</span>
+                <span className="ml-2 text-muted-foreground">
+                  · Graded: Active Agents (vs monthly goal) · Avg Deals/Agent (vs 1.0/mo goal)
+                </span>
               </div>
             </>
           )}

@@ -46,33 +46,7 @@ const TEAM_GROUP_OPTIONS = [
 ];
 
 // ── KPI Card ─────────────────────────────────────────────────────────────────
-function KPICard({
-  title, value, sub, icon: Icon, highlight,
-}: {
-  title: string;
-  value: string | number;
-  sub?: string;
-  icon: React.ElementType;
-  highlight?: 'amber' | 'green' | 'red';
-}) {
-  const borderClass = highlight === 'amber'
-    ? 'border-amber-300 bg-amber-50'
-    : highlight === 'green'
-    ? 'border-green-300 bg-green-50'
-    : highlight === 'red'
-    ? 'border-red-300 bg-red-50'
-    : 'bg-card';
-  return (
-    <div className={`flex flex-col gap-1 rounded-lg border p-4 ${borderClass}`}>
-      <div className="flex items-center gap-2 text-muted-foreground text-sm">
-        <Icon className="h-4 w-4" />
-        {title}
-      </div>
-      <div className="text-2xl font-bold">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-    </div>
-  );
-}
+
 
 // ── Goal Editor ───────────────────────────────────────────────────────────────
 function GoalEditor({
@@ -397,55 +371,6 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* KPI Cards */}
-        {kpi && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <KPICard
-              title="Active Agents"
-              value={kpi.currentActive ?? '—'}
-              sub="This month"
-              icon={Users}
-            />
-            <KPICard
-              title="YTD New Hires"
-              value={kpi.ytdNewHires ?? '—'}
-              sub={`${year} activations`}
-              icon={UserPlus}
-              highlight="green"
-            />
-            <KPICard
-              title="YTD Departures"
-              value={kpi.ytdDepartures ?? '—'}
-              sub={`${year} exits`}
-              icon={UserMinus}
-              highlight={kpi.ytdDepartures > 0 ? 'red' : undefined}
-            />
-            <KPICard
-              title="Pipeline"
-              value={kpi.pipelineCount ?? '—'}
-              sub="Candidates tracked"
-              icon={TrendingUp}
-            />
-            <KPICard
-              title="Avg Monthly Deals/Agent"
-              value={kpi.avgMonthlyDealsPerAgent != null ? kpi.avgMonthlyDealsPerAgent.toFixed(2) : '—'}
-              sub={
-                kpi.compareAvgMonthlyDealsPerAgent != null
-                  ? `${year}: ${kpi.avgMonthlyDealsPerAgent?.toFixed(2) ?? '—'} | ${compareYear}: ${kpi.compareAvgMonthlyDealsPerAgent.toFixed(2)}`
-                  : `${kpi.ytdDeals ?? 0} deals YTD · ${kpi.currentActive ?? 0} agents`
-              }
-              icon={BarChart2}
-            />
-            <KPICard
-              title="No Deals Yet"
-              value={kpi.noDealsYetCount ?? '—'}
-              sub="Active, past grace, 0 deals"
-              icon={AlertTriangle}
-              highlight={kpi.noDealsYetCount > 0 ? 'amber' : undefined}
-            />
-          </div>
-        )}
-
         {/* Chart */}
         {loading && <Skeleton className="h-[350px] w-full" />}
         {error && (
