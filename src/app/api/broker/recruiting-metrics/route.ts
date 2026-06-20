@@ -39,14 +39,51 @@ export async function GET(req: NextRequest) {
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()), 10);
     const compareYearParam = searchParams.get('compareYear');
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
+    const viewMode = searchParams.get('viewMode') || 'calendar';
 
-    // 1. Fetch recruiting tracking data for year
+    // Build 12 slots for the view mode
+    const nowRM = new Date();
+    function toYM(d: Date) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+    const rmSlots: { ym: string; year: number; month: number; label: string; isFuture: boolean }[] = [];
+    if (viewMode === 'rolling_back') {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(nowRM.getFullYear(), nowRM.getMonth() - i, 1);
+        rmSlots.push({ ym: toYM(d), year: d.getFullYear(), month: d.getMonth()+1, label: format(d,'MMM yy'), isFuture: false });
+      }
+    } else if (viewMode === 'rolling_forward') {
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(nowRM.getFullYear(), nowRM.getMonth() + i, 1);
+        const ym = toYM(d);
+        rmSlots.push({ ym, year: d.getFullYear(), month: d.getMonth()+1, label: format(d,'MMM yy'), isFuture: ym > toYM(nowRM) });
+      }
+    } else {
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(year, i, 1);
+        const ym = toYM(d);
+        rmSlots.push({ ym, year, month: i+1, label: format(d,'MMM'), isFuture: ym > toYM(nowRM) });
+      }
+    }
+
+    // Collect all years needed for tracking data fetch
+    const yearsNeeded = [...new Set(rmSlots.map(s => s.year))];
+
+    // 1. Fetch recruiting tracking data for year(s)
+    const allTrackingDocs: any[] = [];
+    for (const y of yearsNeeded) {
+      const snap = await adminDb.collection('recruitingTracking').where('year', '==', y).get();
+      snap.docs.forEach(d => allTrackingDocs.push({ ...d.data(), _year: y }));
+    }
+    const trackingMap = new Map<string, any>(); // key: "YYYY-M"
+    allTrackingDocs.forEach(d => trackingMap.set(`${d._year}-${d.month}`, d));
+
+    // Legacy single-year trackingSnap (for backward compat with savePlan and other POST code)
     const trackingSnap = await adminDb.collection('recruitingTracking')
       .where('year', '==', year).orderBy('month', 'asc').get();
-    const trackingMap = new Map<number, any>();
+    // legacyTrackingMap: month number → doc (for the primary year only, used by POST/save)
+    const legacyTrackingMap = new Map<number, any>();
     trackingSnap.docs.forEach(d => {
       const data = d.data();
-      trackingMap.set(data.month, { id: d.id, ...data });
+      legacyTrackingMap.set(data.month, { id: d.id, ...data });
     });
 
     // Comparison year tracking
@@ -120,8 +157,6 @@ export async function GET(req: NextRequest) {
       }
       return null;
     }
-    function toYM(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-
     const agentSnap = await adminDb.collection('agentProfiles').get();
     const INACTIVE_STATUSES_RM = new Set(['inactive', 'out', 'terminated', 'churned']);
     // Monthly departure counts: month 1-12 → count of agents whose endDate falls in that month of `year`
@@ -162,26 +197,32 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 6. Build 12-month response
-    const months = Array.from({ length: 12 }, (_, i) => {
-      const m = i + 1;
-      const tracking = trackingMap.get(m) || {};
+    // 6. Build 12-month response using rmSlots
+    const months = rmSlots.map((slot, i) => {
+      const m = slot.month;
+      // trackingMap key is "YYYY-M" (new slot-aware map)
+      const tracking = trackingMap.get(`${slot.year}-${m}`) || {};
       const goals = goalsMap.get(m) || {};
       const compareTracking = compareTrackingMap.get(m) || {};
 
       const activeAgents = tracking.activeAgents ?? 0;
-      const deals = monthlyDeals[i];
+      // For rolling modes, deals index is based on slot position not calendar month
+      // monthlyDeals is still indexed 0-11 by calendar month for the primary year
+      const calendarIdx = slot.year === year ? m - 1 : -1;
+      const deals = calendarIdx >= 0 ? monthlyDeals[calendarIdx] : 0;
       const dealsPerAgent = activeAgents > 0 ? Math.round((deals / activeAgents) * 100) / 100 : 0;
-      // Auto-computed from agent profiles (override manual tracking if 0)
-      const autoDepartures = monthlyDepartures[i];
-      const autoInTraining = monthlyInTraining[i];
+      // Auto-computed from agent profiles (only valid for primary year months)
+      const autoDepartures = calendarIdx >= 0 ? monthlyDepartures[calendarIdx] : 0;
+      const autoInTraining = calendarIdx >= 0 ? monthlyInTraining[calendarIdx] : 0;
       // Use manual tracking value if explicitly entered (> 0), otherwise fall back to auto-computed
       const departures = (tracking.departures != null && tracking.departures > 0) ? tracking.departures : autoDepartures;
       const inTraining = (tracking.inTraining != null && tracking.inTraining > 0) ? tracking.inTraining : autoInTraining;
 
       return {
         month: m,
-        label: format(new Date(2000, i), 'MMM'),
+        label: slot.label,
+        ym: slot.ym,
+        isFuture: slot.isFuture,
         // Current year actuals
         activeAgents,
         newHires: tracking.newHires ?? 0,

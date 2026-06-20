@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Users, TrendingUp, Target, AlertCircle, UserPlus, UserMinus, Phone, Calendar, ChevronDown, ChevronUp, Save, BarChart3, ArrowUpDown, Eye, ArrowUp, ArrowDown, Clock, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Flame, Send, Trash2, Activity, Info } from 'lucide-react';
-import { BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, ComposedChart } from 'recharts';
+import { ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/firebase';
@@ -1607,6 +1607,7 @@ export default function RecruitingDashboardPage() {
   const { user, loading: userLoading } = useUser();
   const [year, setYear] = useState(new Date().getFullYear());
   const [compareYear, setCompareYear] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<'calendar' | 'rolling_back' | 'rolling_forward'>('calendar');
   const [data, setData] = useState<any>(null);
   const [activeAgentsData, setActiveAgentsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1620,6 +1621,7 @@ export default function RecruitingDashboardPage() {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams({ year: String(year) });
       if (compareYear) params.set('compareYear', String(compareYear));
+      if (viewMode !== 'calendar') params.set('viewMode', viewMode);
       // Fetch both recruiting metrics and real active agent data in parallel
       const [metricsRes, activeRes] = await Promise.all([
         fetch(`/api/broker/recruiting-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -1631,7 +1633,7 @@ export default function RecruitingDashboardPage() {
       setActiveAgentsData(activeData);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
-  }, [user, year, compareYear]);
+  }, [user, year, compareYear, viewMode]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -1684,6 +1686,27 @@ export default function RecruitingDashboardPage() {
     ? Math.round((monthlyRatiosYTD.reduce((s: number, r: number) => s + r, 0) / monthlyRatiosYTD.length) * 100) / 100
     : totals.avgDealsPerAgent;
   const ytdDealsGoal = monthsElapsed; // 1 deal/agent/month × months elapsed
+
+
+  // Rolling 12-month view toggle helper
+  const RollingToggle = () => (
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-muted-foreground mr-1">View:</span>
+      {(['calendar', 'rolling_back', 'rolling_forward'] as const).map(mode => (
+        <button
+          key={mode}
+          onClick={() => setViewMode(mode)}
+          className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${
+            viewMode === mode
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-background text-muted-foreground border-border hover:bg-muted'
+          }`}
+        >
+          {mode === 'calendar' ? 'Calendar Year' : mode === 'rolling_back' ? '12 Months Back' : '12 Months Forward'}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-8">
@@ -1757,34 +1780,47 @@ export default function RecruitingDashboardPage() {
       {/* ── CHART 1: Active Agents Count ──────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <CardTitle>Active Agent Count</CardTitle>
-              <CardDescription>Monthly active agent count vs goal and pipeline — {year}</CardDescription>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle>Active Agent Count</CardTitle>
+                <CardDescription>Monthly active agent count vs goal and pipeline — {year}</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Compare to:</span>
+                <Select value={compareYear ? String(compareYear) : 'none'} onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}>
+                  <SelectTrigger className="w-[120px]"><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {(availableYears ?? []).map((y: number) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Compare to:</span>
-              <Select value={compareYear ? String(compareYear) : 'none'} onValueChange={v => setCompareYear(v === 'none' ? null : Number(v))}>
-                <SelectTrigger className="w-[120px]"><SelectValue placeholder="None" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {(availableYears ?? []).map((y: number) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            <RollingToggle />
           </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={agentChartConfig} className="h-[300px] w-full">
-            <ComposedChart data={activeAgentChartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <ComposedChart data={activeAgentChartData.map((m: any) => ({
+              ...m,
+              agentDelta: (m.activeAgentsGoal != null && m.activeAgents != null) ? m.activeAgents - m.activeAgentsGoal : null,
+            }))} margin={{ top: 24, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis allowDecimals={false} />
+              <YAxis allowDecimals={false} domain={[50, 'auto']} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="activeAgents" fill="var(--color-activeAgents)" radius={[4, 4, 0, 0]} name={`${year} Active`} />
+              <Bar dataKey="activeAgents" fill="var(--color-activeAgents)" radius={[4, 4, 0, 0]} name={`${year} Active`}>
+                <LabelList dataKey="agentDelta" content={(props: any) => {
+                  const { x, y, width, value } = props;
+                  if (value == null) return null;
+                  const color = value > 0 ? '#16a34a' : value < 0 ? '#dc2626' : '#64748b';
+                  return <text x={x + width / 2} y={y - 4} textAnchor="middle" fontSize={11} fontWeight={700} fill={color}>{value > 0 ? `+${value}` : String(value)}</text>;
+                }} />
+              </Bar>
               {compareYear && <Bar dataKey="compareActiveAgents" fill="var(--color-compareActiveAgents)" radius={[4, 4, 0, 0]} opacity={0.5} name={`${compareYear}`} />}
-              <Line dataKey="activeAgentsGoal" type="monotone" stroke="var(--color-activeAgentsGoal)" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Goal" />
+              <Bar dataKey="activeAgentsGoal" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} opacity={0.25} name="Goal" />
               <Line dataKey="projected" type="monotone" stroke="hsl(var(--chart-4))" strokeWidth={1.5} strokeDasharray="3 3" dot={false} name="Projected" />
             </ComposedChart>
           </ChartContainer>
@@ -1794,11 +1830,16 @@ export default function RecruitingDashboardPage() {
       {/* ── CHART 1b: Avg Deals Per Agent ────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>Avg Deals Per Agent (Monthly)</CardTitle>
-          <CardDescription>
-            Deals closed ÷ active agents per month. Goal = 1 deal/agent/month.
-            YTD avg: <strong>{avgDealsPerAgentYTD}</strong> vs goal of <strong>{ytdDealsGoal}</strong> ({monthsElapsed} months × 1/mo)
-          </CardDescription>
+          <div className="flex flex-col gap-2">
+            <div>
+              <CardTitle>Avg Deals Per Agent (Monthly)</CardTitle>
+              <CardDescription>
+                Deals closed ÷ active agents per month. Goal = 1 deal/agent/month.
+                YTD avg: <strong>{avgDealsPerAgentYTD}</strong> vs goal of <strong>{ytdDealsGoal}</strong> ({monthsElapsed} months × 1/mo)
+              </CardDescription>
+            </div>
+            <RollingToggle />
+          </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={dealsPerAgentChartConfig} className="h-[280px] w-full">
@@ -1818,22 +1859,39 @@ export default function RecruitingDashboardPage() {
       {/* ── CHART 2: Hiring & Departures ─────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Hiring & Pipeline</CardTitle>
-          <CardDescription>New hires, departures, agents in training, and committed — {year}</CardDescription>
+          <div className="flex flex-col gap-2">
+            <div>
+              <CardTitle>Monthly Hiring & Pipeline</CardTitle>
+              <CardDescription>New hires, departures, agents in training, and committed — {year}</CardDescription>
+            </div>
+            <RollingToggle />
+          </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={hiringChartConfig} className="h-[300px] w-full">
-            <BarChart data={months} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <ComposedChart data={months.map((m: any) => {
+              const monthlyHireGoal = plan?.yearlyNewHiresGoal ? Math.round(plan.yearlyNewHiresGoal / 12) : null;
+              const hireDelta = (monthlyHireGoal != null && m.newHires != null) ? m.newHires - monthlyHireGoal : null;
+              return { ...m, monthlyHireGoal, hireDelta };
+            })} margin={{ top: 24, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="newHires" fill="var(--color-newHires)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="newHires" fill="var(--color-newHires)" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="hireDelta" content={(props: any) => {
+                  const { x, y, width, value } = props;
+                  if (value == null) return null;
+                  const color = value > 0 ? '#16a34a' : value < 0 ? '#dc2626' : '#64748b';
+                  return <text x={x + width / 2} y={y - 4} textAnchor="middle" fontSize={11} fontWeight={700} fill={color}>{value > 0 ? `+${value}` : String(value)}</text>;
+                }} />
+              </Bar>
               <Bar dataKey="departures" fill="var(--color-departures)" radius={[4, 4, 0, 0]} />
               <Bar dataKey="inTraining" fill="var(--color-inTraining)" radius={[4, 4, 0, 0]} opacity={0.7} />
               <Bar dataKey="committed" fill="var(--color-committed)" radius={[4, 4, 0, 0]} opacity={0.7} />
-            </BarChart>
+              <Bar dataKey="monthlyHireGoal" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} opacity={0.25} name="Hire Goal" />
+            </ComposedChart>
           </ChartContainer>
         </CardContent>
       </Card>
@@ -1841,8 +1899,13 @@ export default function RecruitingDashboardPage() {
       {/* ── CHART 3: Pipeline Activity ───────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Recruiting Activity</CardTitle>
-          <CardDescription>Prospect calls, interviews set, interviews held, hot prospects — {year}</CardDescription>
+          <div className="flex flex-col gap-2">
+            <div>
+              <CardTitle>Monthly Recruiting Activity</CardTitle>
+              <CardDescription>Prospect calls, interviews set, interviews held, hot prospects — {year}</CardDescription>
+            </div>
+            <RollingToggle />
+          </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={pipelineChartConfig} className="h-[300px] w-full">

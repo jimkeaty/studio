@@ -1155,14 +1155,14 @@ export function BrokerDashboardInner() {
   // Collapsible state for new sections
   const [reportCardOpen, setReportCardOpen] = useState(true);
   const [kpiTrackerOpen, setKpiTrackerOpen] = useState(true);
-  // Rolling 12-month vs calendar year toggle for charts
-  const [rollingView, setRollingView] = useState(false);
+  // Rolling 12-month vs calendar year toggle for charts (3-way)
+  const [rollingView, setRollingView] = useState<'calendar' | 'rolling_back' | 'rolling_forward'>('calendar');
   // Next-year data for cross-year rolling window
   const [nextYearBrokerData, setNextYearBrokerData] = useState<BrokerCommandMetrics | null>(null);
 
   // Fetch next-year broker data when rolling view is enabled
   useEffect(() => {
-    if (!rollingView || !user) { setNextYearBrokerData(null); return; }
+    if (rollingView === 'calendar' || !user) { setNextYearBrokerData(null); return; }
     const today = new Date();
     const startIdx = today.getMonth(); // 0-based current month
     if (startIdx === 0) return; // starts in January — no cross-year needed
@@ -1293,7 +1293,7 @@ export function BrokerDashboardInner() {
   const nextRawMonths: MonthlyData[] = nextYearBrokerData?.overview?.months ?? [];
 
   const displayMonths: MonthlyData[] = (() => {
-    if (!rollingView || rollingStartIdx === 0) return rawMonths;
+    if (rollingView === 'calendar' || rollingStartIdx === 0) return rawMonths;
     const thisYearTail = rawMonths.slice(rollingStartIdx); // current month → Dec
     const nextYearHead = nextRawMonths.length === 12
       ? nextRawMonths.slice(0, rollingStartIdx)            // Jan → (current month - 1) of next year
@@ -1432,17 +1432,22 @@ export function BrokerDashboardInner() {
               })}
             </SelectContent>
           </Select>
-          <button
-            type="button"
-            onClick={() => setRollingView(r => !r)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-              rollingView
-                ? 'bg-indigo-500 text-white border-indigo-500'
-                : 'bg-background text-muted-foreground border-border hover:bg-muted'
-            }`}
-          >
-            🔄 {rollingView ? '12-Month Rolling' : 'Calendar Year'}
-          </button>
+          <div className="flex items-center gap-1">
+            {(['calendar', 'rolling_back', 'rolling_forward'] as const).map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setRollingView(mode)}
+                className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
+                  rollingView === mode
+                    ? 'bg-indigo-500 text-white border-indigo-500'
+                    : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                }`}
+              >
+                {mode === 'calendar' ? 'Calendar Year' : mode === 'rolling_back' ? '12 Months Back' : '12 Months Forward'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

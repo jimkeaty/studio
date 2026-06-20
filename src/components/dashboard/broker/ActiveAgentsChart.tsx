@@ -239,6 +239,8 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
   const [showProjected, setShowProjected] = useState(true);
   const [showCompare, setShowCompare] = useState(false);
   const [showGoalEditor, setShowGoalEditor] = useState(false);
+  // Rolling 12-month view mode: 'calendar' | 'rolling_back' | 'rolling_forward'
+  const [viewMode, setViewMode] = useState<'calendar' | 'rolling_back' | 'rolling_forward'>('calendar');
 
   useEffect(() => {
     user?.getIdToken().then(setToken).catch(() => setToken(null));
@@ -252,6 +254,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
       const params = new URLSearchParams({ year: String(year) });
       if (compareYear) params.set('compareYear', String(compareYear));
       if (teamGroup && teamGroup !== 'all') params.set('teamGroup', teamGroup);
+      if (viewMode !== 'calendar') params.set('viewMode', viewMode);
       const res = await fetch(`/api/broker/active-agents?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -262,7 +265,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
     } finally {
       setLoading(false);
     }
-  }, [token, year, compareYear, teamGroup]);
+  }, [token, year, compareYear, teamGroup, viewMode]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -397,6 +400,23 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
                 Edit Goals
               </Button>
             )}
+          </div>
+          {/* Rolling 12-month view toggle */}
+          <div className="flex items-center gap-1 mt-2">
+            <span className="text-xs text-muted-foreground mr-1">View:</span>
+            {(['calendar', 'rolling_back', 'rolling_forward'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${
+                  viewMode === mode
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                }`}
+              >
+                {mode === 'calendar' ? 'Calendar Year' : mode === 'rolling_back' ? '12 Months Back' : '12 Months Forward'}
+              </button>
+            ))}
           </div>
         </div>
       </CardHeader>

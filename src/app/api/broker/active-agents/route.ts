@@ -79,6 +79,36 @@ export async function GET(req: NextRequest) {
     const compareYearParam = searchParams.get('compareYear');
     const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
     const teamGroupFilter = searchParams.get('teamGroup') || null; // e.g. 'cgl', 'sgl', 'charles_ditch_team'
+    // viewMode: 'calendar' (default Jan-Dec), 'rolling_back' (last 12 months), 'rolling_forward' (next 12 months)
+    const viewMode = searchParams.get('viewMode') || 'calendar';
+
+    // Build the 12 slots (YYYY-MM strings) for the view mode
+    const now2 = new Date();
+    const slots: { ym: string; year: number; month: number; label: string; isFuture: boolean }[] = [];
+    if (viewMode === 'rolling_back') {
+      // Last 12 months: from 11 months ago up to current month
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now2.getFullYear(), now2.getMonth() - i, 1);
+        const ym = toYearMonth(d);
+        slots.push({ ym, year: d.getFullYear(), month: d.getMonth() + 1, label: format(d, 'MMM yy'), isFuture: false });
+      }
+    } else if (viewMode === 'rolling_forward') {
+      // Next 12 months: from current month forward
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now2.getFullYear(), now2.getMonth() + i, 1);
+        const ym = toYearMonth(d);
+        const isFuture = ym > toYearMonth(now2);
+        slots.push({ ym, year: d.getFullYear(), month: d.getMonth() + 1, label: format(d, 'MMM yy'), isFuture });
+      }
+    } else {
+      // Calendar year: Jan-Dec of selected year
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(year, i, 1);
+        const ym = toYearMonth(d);
+        const isFuture = ym > toYearMonth(now2);
+        slots.push({ ym, year, month: i + 1, label: format(d, 'MMM'), isFuture });
+      }
+    }
 
     // ── 1. Fetch all agent profiles (excluding demo accounts) ───────────────
     const agentSnap = await adminDb.collection('agentProfiles').get();
@@ -226,13 +256,13 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // ── 6. Build monthly data for the target year ────────────────────────────
+    // ── 6. Build monthly data using slots (supports calendar, rolling_back, rolling_forward) ──
     const now = new Date();
     const currentYM = toYearMonth(now);
 
-    const months = Array.from({ length: 12 }, (_, i) => {
-      const monthNum = i + 1;
-      const ym = `${year}-${String(monthNum).padStart(2, '0')}`;
+    const months = slots.map((slot, i) => {
+      const monthNum = slot.month;
+      const ym = slot.ym;
 
             let activeClosed = 0;   // established agents with ≥1 closed deal
       let activeNoDeal = 0;   // established agents (past grace) with no closed deal yet
@@ -271,6 +301,8 @@ export async function GET(req: NextRequest) {
       }).length;
       // totalActive = established agents only (past grace period)
       const totalActive = activeClosed + activeNoDeal;
+      // For rolling modes, look up goal by calendar month number in the slot's year
+      // We need goals for potentially two calendar years (rolling_back/forward spans years)
       const goal = goalsMap.get(monthNum) ?? null;
       // Deals closed in this month — count actual deal count (not just whether agent had a deal)
       // Only count deals by established agents (past grace period)
@@ -286,8 +318,9 @@ export async function GET(req: NextRequest) {
         : 0;
       return {
         month: monthNum,
-        label: format(new Date(year, i), 'MMM'),
+        label: slot.label,
         ym,
+        isFuture: slot.isFuture,
         activeClosed,
         activeTenure: activeNoDeal,  // keep field name for backward compat
         inGrace,
