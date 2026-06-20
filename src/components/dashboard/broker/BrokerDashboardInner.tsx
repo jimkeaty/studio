@@ -1338,7 +1338,7 @@ export function BrokerDashboardInner() {
   const ytdFraction = isCurrentYear ? daysElapsed / daysInYear : 1;
   // In rolling view the current month is always slot 0 (the window starts at today's month).
   // In calendar view it's the normal 0-based month index.
-  const currentMonthIdx = rollingView ? 0 : today.getMonth();
+  const currentMonthIdx = rollingView !== 'calendar' ? 0 : today.getMonth();
 
   // ── Seasonality Projection ────────────────────────────────────────────────
   // For each metric, project future months based on how actual YTD compares to
