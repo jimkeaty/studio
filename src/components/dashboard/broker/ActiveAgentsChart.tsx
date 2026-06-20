@@ -316,15 +316,23 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               </SelectContent>
             </Select>
 
-            {/* Year selector */}
+            {/* Year selector — always anchored to current calendar year so
+                 navigating to a past year doesn't hide the current year */}
             <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
               <SelectTrigger className="w-[90px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[year - 2, year - 1, year, year + 1].map(y => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
+                {(() => {
+                  const currentCalYear = new Date().getFullYear();
+                  // Show current year + 4 years back (e.g. 2026, 2025, 2024, 2023, 2022)
+                  const opts = Array.from({ length: 5 }, (_, i) => currentCalYear - i);
+                  // Also include the selected year if it falls outside this range
+                  if (!opts.includes(year)) opts.push(year);
+                  return opts.sort((a, b) => b - a).map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ));
+                })()}
               </SelectContent>
             </Select>
 
