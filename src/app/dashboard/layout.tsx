@@ -14,6 +14,7 @@ import { UserX, Loader2 } from 'lucide-react';
 import { CommandPalette } from '@/components/dashboard/command-palette';
 import { PushNotificationPrompt } from '@/components/dashboard/push-notification-prompt';
 import { SafariPwaBanner } from '@/components/dashboard/safari-pwa-banner';
+import { OnboardingGate } from '@/components/onboarding/OnboardingGate';
 
 function ImpersonationBanner() {
   const { isImpersonating, agent, stopImpersonation } = useImpersonation();
@@ -101,7 +102,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <ImpersonationProvider isAdmin={isAdmin} isTeamLeader={isTeamLeader} getToken={getToken}>
-      <DashboardShell>{children}</DashboardShell>
+      <OnboardingGate>
+        <DashboardShell>{children}</DashboardShell>
+      </OnboardingGate>
     </ImpersonationProvider>
   );
 }

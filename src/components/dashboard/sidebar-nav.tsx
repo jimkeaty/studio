@@ -53,6 +53,7 @@ import {
   Monitor,
   Wifi,
   Tv,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { useAgentPlugins } from '@/hooks/useAgentPlugins';
@@ -178,6 +179,7 @@ const adminMenuGroups = [
       { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
       { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
       { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
+      { href: '/dashboard/admin/import-mls', label: 'MLS Data Import', icon: Upload },
       { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
     ],
   },
@@ -450,6 +452,21 @@ export function SidebarNav() {
       {/* Compact footer — just a support link, no tall card */}
       <SidebarFooter className="p-2 border-t border-slate-700/60">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Setup Wizard — re-launch the onboarding wizard"
+              className="justify-start text-primary hover:text-primary/80 font-semibold"
+              onClick={() => {
+                // Clear onboarding flag so the wizard re-launches on next page load
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('smart-broker:relaunch-onboarding'));
+                }
+              }}
+            >
+              <Zap className="h-4 w-4" />
+              <span>Setup Wizard</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip="Contact Support"
