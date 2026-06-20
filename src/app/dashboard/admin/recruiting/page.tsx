@@ -13,6 +13,7 @@ import { RecruitingPipelinePanel } from '@/components/dashboard/broker/Recruitin
 import { RecruiterReportCard } from '@/components/dashboard/broker/RecruiterReportCard';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
+import { BrokerKPIReportCard } from '@/components/dashboard/broker/BrokerKPIReportCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -1806,6 +1807,9 @@ export default function RecruitingDashboardPage() {
       {/* ── Plan & Tracking Forms ────────────────────────────────────────── */}
       <PlanForm plan={plan} year={year} onSaved={fetchData} />
       <TrackingForm months={months} year={year} onSaved={fetchData} />
+
+      {/* ── Broker Agent KPI Report Card ────────────────────────────────── */}
+      <BrokerKPIReportCard year={year} />
 
       {/* ── Active Agents Chart (computed from Firestore) ──────────────── */}
       <ActiveAgentsChart showGoalEdit={true} initialYear={year} />

@@ -8,7 +8,7 @@
 //   - Year comparison, goal line, projected line
 import { useState, useEffect, useCallback } from 'react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent,
@@ -195,6 +195,26 @@ function GraceProjectionBlock({ graceProjection }: { graceProjection: any[] }) {
   );
 }
 
+// ── Delta label renderer ──────────────────────────────────────────────────────
+function DeltaLabel(props: any) {
+  const { x, y, width, value } = props;
+  if (value == null) return null;
+  const color = value > 0 ? '#16a34a' : value < 0 ? '#dc2626' : '#64748b';
+  const label = value > 0 ? `+${value}` : String(value);
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 4}
+      textAnchor="middle"
+      fontSize={11}
+      fontWeight={700}
+      fill={color}
+    >
+      {label}
+    </text>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 interface ActiveAgentsChartProps {
   showGoalEdit?: boolean;
@@ -247,12 +267,15 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
   const chartData = data?.months?.map((m: any) => {
     const proj = data.projection?.find((p: any) => p.month === m.month);
     const comp = data.compareMonths?.find((c: any) => c.month === m.month);
+    const goalVal = m.goal ?? null;
+    const delta = (goalVal != null && m.totalActive != null) ? m.totalActive - goalVal : null;
     return {
       ...m,
       projected: showProjected ? (proj?.projected ?? null) : null,
       compare: showCompare ? (comp?.totalActive ?? null) : null,
-      goal: showGoal ? (m.goal ?? null) : null,
+      goal: showGoal ? goalVal : null,
       dealsPerAgent: showDealsPerAgent ? (m.dealsPerAgent ?? null) : null,
+      delta,
     };
   }) ?? [];
 
@@ -399,11 +422,11 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
         )}
         {!loading && !error && (
           <ChartContainer config={chartConfig} className="h-[350px] w-full">
-            <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+            <ComposedChart data={chartData} margin={{ top: 24, right: 20, bottom: 5, left: 20 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              {/* Y-axis starts at 40 so month-to-month changes are visually meaningful */}
-              <YAxis yAxisId="left" allowDecimals={false} domain={[40, 'auto']} />
+              {/* Y-axis starts at 50 so month-to-month changes are visually meaningful */}
+              <YAxis yAxisId="left" allowDecimals={false} domain={[50, 'auto']} />
               {showDealsPerAgent && (
                 <YAxis yAxisId="right" orientation="right" allowDecimals tickFormatter={v => v.toFixed(1)} />
               )}
@@ -420,7 +443,12 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
               <ChartLegend content={<ChartLegendContent />} />
 
               {/* Single combined active bar — breakdown (No Deals Yet, Past Grace) shown in KPI blocks above */}
-              <Bar yAxisId="left" dataKey="totalActive" fill="var(--color-totalActive)" radius={[4, 4, 0, 0]} name="Active Agents" />
+              <Bar yAxisId="left" dataKey="totalActive" fill="var(--color-totalActive)" radius={[4, 4, 0, 0]} name="Active Agents">
+                {/* Delta label: green if above goal, red if below, grey if on target */}
+                {showGoal && (
+                  <LabelList dataKey="delta" content={<DeltaLabel />} />
+                )}
+              </Bar>
               <Bar yAxisId="left" dataKey="pipeline" fill="var(--color-pipeline)" radius={[4, 4, 0, 0]} opacity={0.6} name="Pipeline (Upcoming)" />
 
               {/* Goal bars */}

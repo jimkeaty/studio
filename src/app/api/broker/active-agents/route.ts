@@ -228,26 +228,31 @@ export async function GET(req: NextRequest) {
       const monthNum = i + 1;
       const ym = `${year}-${String(monthNum).padStart(2, '0')}`;
 
-      let activeClosed = 0;
-      let activeTenure = 0; // "Active (No Deals Yet)"
+            let activeClosed = 0;   // established agents with ≥1 closed deal
+      let activeNoDeal = 0;   // established agents (past grace) with no closed deal yet
+      let inGrace = 0;        // agents still in grace period — NOT counted in totalActive
       // Team breakdown
       const teamCounts: Record<string, number> = {};
-
       for (const ar of agentRecords) {
         if (!ar.activationMonth) continue;
         if (ar.activationMonth > ym) continue;
         if (ar.endMonth && ar.endMonth <= ym) continue;
-
+        // Determine if agent is still in grace period for this month
+        const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
+        if (!pastGrace) {
+          // Still in grace period — track separately, exclude from totalActive
+          inGrace++;
+          continue;
+        }
+        // Established agent (past grace)
         const tg = ar.teamGroup || 'unknown';
         teamCounts[tg] = (teamCounts[tg] || 0) + 1;
-
         if (ar.firstDealMonth && ar.firstDealMonth <= ym) {
           activeClosed++;
         } else {
-          activeTenure++;
+          activeNoDeal++;
         }
       }
-
       // Pipeline: recruiting pipeline candidates with expectedStartDate in this month
       const pipelineCount = pipeline.filter((p: any) => {
         if (!p.expectedStartDate) return false;
@@ -255,25 +260,27 @@ export async function GET(req: NextRequest) {
         if (!sd) return false;
         return toYearMonth(sd) === ym;
       }).length;
-
-      const totalActive = activeClosed + activeTenure;
+      // totalActive = established agents only (past grace period)
+      const totalActive = activeClosed + activeNoDeal;
       const goal = goalsMap.get(monthNum) ?? null;
-
-      // Deals closed in this month (for deals-per-agent)
+      // Deals closed in this month — only count deals by established agents (past grace)
       let dealsInMonth = 0;
-      for (const [, monthsSet] of dealMonthsMap) {
-        if (monthsSet.has(ym)) dealsInMonth++;
+      for (const ar of agentRecords) {
+        const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
+        if (!pastGrace) continue;
+        const monthsSet = dealMonthsMap.get(ar.agentId);
+        if (monthsSet && monthsSet.has(ym)) dealsInMonth++;
       }
       const dealsPerAgent = totalActive > 0
         ? Math.round((dealsInMonth / totalActive) * 100) / 100
         : 0;
-
       return {
         month: monthNum,
         label: format(new Date(year, i), 'MMM'),
         ym,
         activeClosed,
-        activeTenure,
+        activeTenure: activeNoDeal,  // keep field name for backward compat
+        inGrace,
         pipeline: pipelineCount,
         totalActive,
         goal,
@@ -331,30 +338,30 @@ export async function GET(req: NextRequest) {
       return ar.endMonth.startsWith(String(year)) && ar.endMonth <= currentYM;
     }).length;
 
-    // YTD deals per agent: total closed deals YTD / current active agents
+    // YTD deals per agent: total closed deals YTD / current established (past grace) agents only
     let ytdDeals = 0;
     for (let m = 1; m <= currentMonthData.month; m++) {
       const ym = `${year}-${String(m).padStart(2, '0')}`;
-      for (const [, monthsSet] of dealMonthsMap) {
-        if (monthsSet.has(ym)) ytdDeals++;
+      for (const ar of agentRecords) {
+        // Only count deals by established agents (past grace at that month)
+        const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
+        if (!pastGrace) continue;
+        const monthsSet = dealMonthsMap.get(ar.agentId);
+        if (monthsSet && monthsSet.has(ym)) ytdDeals++;
       }
     }
     const ytdDealsPerAgent = currentMonthData.totalActive > 0
       ? Math.round((ytdDeals / currentMonthData.totalActive) * 100) / 100
       : 0;
 
-    // No Deals Yet count: active agents past grace period with no closed AND no pending deals.
-    // Matches the same definition used by agent-roster-metrics so both dashboards agree.
-    // Agents with no startDate are treated as established (past grace) — same as roster-metrics.
+    // No Deals Yet count: established agents (past grace) with no closed AND no pending deals.
+    // Grace period agents are excluded — they are not yet counted as active.
     const noDealsYetCount = agentRecords.filter(ar => {
       // Must be currently active (not departed)
       if (ar.endMonth && ar.endMonth <= currentYM) return false;
-      // Must have been activated (has startDate or has a first deal)
-      // Agents with no startDate AND no firstDeal are excluded (not yet active)
+      // Must have been activated
       if (!ar.activationMonth && !ar.startDate) return false;
-      // Must be past grace period:
-      //   - If graceEndMonth is set, it must be <= currentYM
-      //   - If graceEndMonth is NOT set (no startDate), treat as established (past grace)
+      // Must be past grace period (grace period agents are excluded entirely)
       if (ar.graceEndMonth && ar.graceEndMonth > currentYM) return false;
       // Must have no closed deals ever
       if (ar.firstDealMonth) return false;
@@ -430,6 +437,7 @@ export async function GET(req: NextRequest) {
         ytdDealsPerAgent,
         ytdDeals,
         noDealsYetCount,
+        inGraceCount: currentMonthData.inGrace ?? 0,
       },
       graceProjection,
       teamGroupBreakdown,
