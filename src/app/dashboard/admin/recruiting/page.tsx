@@ -1612,6 +1612,8 @@ export default function RecruitingDashboardPage() {
   const [viewMode, setViewMode] = useState<'calendar' | 'rolling_back' | 'rolling_forward'>('calendar');
   const [data, setData] = useState<any>(null);
   const [activeAgentsData, setActiveAgentsData] = useState<any>(null);
+  const [brokerPlan, setBrokerPlan] = useState<any>(null);
+  const [brokerPlanLiveData, setBrokerPlanLiveData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1624,15 +1626,24 @@ export default function RecruitingDashboardPage() {
       const params = new URLSearchParams({ year: String(year) });
       if (compareYear) params.set('compareYear', String(compareYear));
       if (viewMode !== 'calendar') params.set('viewMode', viewMode);
-      // Fetch both recruiting metrics and real active agent data in parallel
-      const [metricsRes, activeRes] = await Promise.all([
+      // Fetch recruiting metrics, active agents, and broker business plan in parallel
+      const [metricsRes, activeRes, brokerPlanRes] = await Promise.all([
         fetch(`/api/broker/recruiting-metrics?${params}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/broker/active-agents?${params}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/admin/broker-business-plan?year=${year}`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (!metricsRes.ok) { const e = await metricsRes.json(); throw new Error(e.error); }
-      const [metricsData, activeData] = await Promise.all([metricsRes.json(), activeRes.ok ? activeRes.json() : null]);
+      const [metricsData, activeData, brokerPlanData] = await Promise.all([
+        metricsRes.json(),
+        activeRes.ok ? activeRes.json() : null,
+        brokerPlanRes.ok ? brokerPlanRes.json() : null,
+      ]);
       setData(metricsData);
       setActiveAgentsData(activeData);
+      if (brokerPlanData?.ok) {
+        setBrokerPlan(brokerPlanData.plan);
+        setBrokerPlanLiveData(brokerPlanData.liveData);
+      }
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }, [user, year, compareYear, viewMode]);
@@ -1733,7 +1744,7 @@ export default function RecruitingDashboardPage() {
           <span className="text-sm font-medium">Broker Business Plan</span>
           <span className="text-xs text-muted-foreground hidden sm:inline">— Set recruiting goals, funnel assumptions &amp; net margin in one place</span>
         </div>
-        <a href="/dashboard/admin/broker-plan" className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
+        <a href="/dashboard/admin/broker-business-plan" className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
           Open Plan <ExternalLink className="h-3 w-3" />
         </a>
       </div>
@@ -1781,43 +1792,79 @@ export default function RecruitingDashboardPage() {
       )}
 
       {/* ── Recruiting Reverse Calculator ─────────────────────────────────── */}
+      {/* Uses saved broker business plan assumptions as primary source (falls back to live data) */}
       <RecruitingReverseCalculator
-        liveAvgCompanyFeePerDeal={data.liveData?.avgCompanyFeePerDeal ?? null}
-        liveAvgDealsPerAgentPerMonth={data.liveData?.avgDealsPerAgentPerMonth ?? totals.avgDealsPerAgent ?? 0.78}
-        liveAvgSalePrice={data.liveData?.avgSalePrice ?? null}
-        liveAvgCommissionPct={data.liveData?.avgCommissionPct ?? null}
+        liveAvgCompanyFeePerDeal={brokerPlanLiveData?.avgCompanyFeePerDeal ?? data.liveData?.avgCompanyFeePerDeal ?? null}
+        liveAvgDealsPerAgentPerMonth={brokerPlanLiveData?.avgDealsPerAgentPerMonth ?? data.liveData?.avgDealsPerAgentPerMonth ?? totals.avgDealsPerAgent ?? 0.78}
+        liveAvgSalePrice={brokerPlanLiveData?.avgSalePrice ?? data.liveData?.avgSalePrice ?? null}
+        liveAvgCommissionPct={brokerPlanLiveData?.avgCommissionPct ?? data.liveData?.avgCommissionPct ?? null}
         currentActiveAgents={realActiveAgents}
-        conversionRates={plan.conversionRates ?? {
-          callToInterview: 0.20,
-          interviewSetToHeld: 0.70,
-          interviewToOffer: 0.50,
-          offerToCommit: 0.60,
-          commitToOnboard: 0.85,
-          expectedAttritionPct: 0.15,
-        }}
-        companyRetentionPct={plan.companyRetentionPct ?? 0.29}
+        conversionRates={brokerPlan?.conversionRates
+          ? {
+              // Broker business plan uses % values (20, 70, 60, 80, 90)
+              // RecruitingReverseCalculator expects decimal values (0.20, 0.70, etc.)
+              callToInterview: (brokerPlan.conversionRates.callToInterview ?? 20) / 100,
+              interviewSetToHeld: (brokerPlan.conversionRates.interviewSetToHeld ?? 70) / 100,
+              interviewToOffer: (brokerPlan.conversionRates.interviewHeldToOffer ?? 60) / 100,
+              offerToCommit: (brokerPlan.conversionRates.offerToCommitted ?? 80) / 100,
+              commitToOnboard: (brokerPlan.conversionRates.committedToOnboarded ?? 90) / 100,
+              expectedAttritionPct: (brokerPlan.attritionPct ?? 15) / 100,
+            }
+          : (plan.conversionRates ?? {
+              callToInterview: 0.20,
+              interviewSetToHeld: 0.70,
+              interviewToOffer: 0.50,
+              offerToCommit: 0.60,
+              commitToOnboard: 0.85,
+              expectedAttritionPct: 0.15,
+            })}
+        companyRetentionPct={brokerPlan?.companyRetentionPct != null
+          ? brokerPlan.companyRetentionPct / 100  // broker plan stores as % (29), component expects decimal (0.29)
+          : (plan.companyRetentionPct ?? 0.29)}
         avgCompanyFeePerDealOverride={plan.avgCompanyFeePerDealOverride ?? null}
-        netMarginGoal={plan.netMarginGoal ?? null}
+        netMarginGoal={brokerPlan?.netMarginGoal ?? plan.netMarginGoal ?? null}
         year={year}
         onSavePlan={async (updates) => {
           if (!user) return;
           const token = await user.getIdToken();
-          await fetch('/api/broker/recruiting-metrics', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              action: 'savePlan',
-              year,
-              netMarginGoal: updates.netMarginGoal,
-              companyRetentionPct: updates.companyRetentionPct,
-              avgCompanyFeePerDealOverride: updates.avgCompanyFeePerDealOverride,
-              conversionRates: updates.conversionRates,
-              // Preserve existing goals
-              yearlyNewHiresGoal: plan.yearlyNewHiresGoal,
-              yearlyActiveAgentsGoal: plan.yearlyActiveAgentsGoal,
-              netGainGoal: plan.netGainGoal,
+          // Save to broker business plan (primary) and recruiting-metrics (legacy sync)
+          await Promise.all([
+            fetch('/api/admin/broker-business-plan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                year,
+                netMarginGoal: updates.netMarginGoal,
+                companyRetentionPct: Math.round(updates.companyRetentionPct * 100),
+                conversionRates: {
+                  callToInterview: Math.round(updates.conversionRates.callToInterview * 100),
+                  interviewSetToHeld: Math.round(updates.conversionRates.interviewSetToHeld * 100),
+                  interviewHeldToOffer: Math.round(updates.conversionRates.interviewToOffer * 100),
+                  offerToCommitted: Math.round(updates.conversionRates.offerToCommit * 100),
+                  committedToOnboarded: Math.round(updates.conversionRates.commitToOnboard * 100),
+                },
+                attritionPct: Math.round((updates.conversionRates.expectedAttritionPct ?? 0.15) * 100),
+                yearlyNewHiresGoal: brokerPlan?.yearlyNewHiresGoal ?? plan.yearlyNewHiresGoal,
+                yearlyActiveAgentsGoal: brokerPlan?.yearlyActiveAgentsGoal ?? plan.yearlyActiveAgentsGoal,
+                netGainGoal: brokerPlan?.netGainGoal ?? plan.netGainGoal,
+              }),
             }),
-          });
+            fetch('/api/broker/recruiting-metrics', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                action: 'savePlan',
+                year,
+                netMarginGoal: updates.netMarginGoal,
+                companyRetentionPct: updates.companyRetentionPct,
+                avgCompanyFeePerDealOverride: updates.avgCompanyFeePerDealOverride,
+                conversionRates: updates.conversionRates,
+                yearlyNewHiresGoal: brokerPlan?.yearlyNewHiresGoal ?? plan.yearlyNewHiresGoal,
+                yearlyActiveAgentsGoal: brokerPlan?.yearlyActiveAgentsGoal ?? plan.yearlyActiveAgentsGoal,
+                netGainGoal: brokerPlan?.netGainGoal ?? plan.netGainGoal,
+              }),
+            }),
+          ]);
           fetchData();
         }}
       />

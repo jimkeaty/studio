@@ -1460,7 +1460,7 @@ export function BrokerDashboardInner() {
           <span className="text-sm font-medium">Broker Business Plan</span>
           <span className="text-xs text-muted-foreground hidden sm:inline">— Set all goals &amp; assumptions in one place</span>
         </div>
-        <a href="/dashboard/admin/broker-plan" className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
+        <a href="/dashboard/admin/broker-business-plan" className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
           Open Plan <ExternalLink className="h-3 w-3" />
         </a>
       </div>
