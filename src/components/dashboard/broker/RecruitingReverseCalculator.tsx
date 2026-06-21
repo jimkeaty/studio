@@ -31,6 +31,8 @@ interface RecruitingReverseCalculatorProps {
   // Live data from API
   liveAvgCompanyFeePerDeal: number | null;
   liveAvgDealsPerAgentPerMonth: number;
+  liveAvgSalePrice: number | null;
+  liveAvgCommissionPct: number | null;
   currentActiveAgents: number;
   conversionRates: ConversionRates;
   companyRetentionPct: number;           // default 0.29
@@ -149,6 +151,8 @@ function AssumptionRow({
 export function RecruitingReverseCalculator({
   liveAvgCompanyFeePerDeal,
   liveAvgDealsPerAgentPerMonth,
+  liveAvgSalePrice,
+  liveAvgCommissionPct,
   currentActiveAgents,
   conversionRates: initialConversionRates,
   companyRetentionPct: initialRetentionPct,
@@ -165,6 +169,16 @@ export function RecruitingReverseCalculator({
   // ── State: company assumptions ─────────────────────────────────────────────
   const [retentionPct, setRetentionPct] = useState<string>(
     String(Math.round((initialRetentionPct ?? 0.29) * 100))
+  );
+  // Avg Sale Price
+  const [useLiveSalePrice, setUseLiveSalePrice] = useState<boolean>(liveAvgSalePrice != null);
+  const [salePriceOverride, setSalePriceOverride] = useState<string>(
+    String(liveAvgSalePrice ?? 229449)
+  );
+  // Avg Commission %
+  const [useLiveCommissionPct, setUseLiveCommissionPct] = useState<boolean>(liveAvgCommissionPct != null);
+  const [commissionPctOverride, setCommissionPctOverride] = useState<string>(
+    String(liveAvgCommissionPct ?? 2.97)
   );
   const [useLiveFee, setUseLiveFee] = useState<boolean>(avgCompanyFeePerDealOverride == null);
   const [feeOverride, setFeeOverride] = useState<string>(
@@ -183,9 +197,29 @@ export function RecruitingReverseCalculator({
   // ── Derived calculations ───────────────────────────────────────────────────
   const netMarginNum = parseFloat(netMarginGoal) || 0;
   const retentionNum = (parseFloat(retentionPct) || 29) / 100;
+
+  // Avg sale price (live or override)
+  const avgSalePriceNum = useLiveSalePrice && liveAvgSalePrice != null
+    ? liveAvgSalePrice
+    : (parseFloat(salePriceOverride) || 229449);
+
+  // Avg commission % (live or override)
+  const avgCommissionPctNum = useLiveCommissionPct && liveAvgCommissionPct != null
+    ? liveAvgCommissionPct
+    : (parseFloat(commissionPctOverride) || 2.97);
+
+  // Avg GCI per deal = avg sale price × avg commission %
+  const avgGCIPerDeal = avgSalePriceNum * (avgCommissionPctNum / 100);
+
+  // Avg company fee per deal = avg GCI per deal × retention %
+  // (This is the DERIVED company fee — used for display reference)
+  const derivedCompanyFeePerDeal = avgGCIPerDeal * retentionNum;
+
+  // If user has a live/override fee they want to use directly, respect it
   const feeNum = useLiveFee
-    ? (liveAvgCompanyFeePerDeal ?? (parseFloat(feeOverride) || 3000))
-    : (parseFloat(feeOverride) || 3000);
+    ? (liveAvgCompanyFeePerDeal ?? derivedCompanyFeePerDeal)
+    : (parseFloat(feeOverride) || derivedCompanyFeePerDeal);
+
   const dealsPerAgentMonthNum = useLiveDeals
     ? (liveAvgDealsPerAgentPerMonth ?? (parseFloat(dealsOverride) || 0.78))
     : (parseFloat(dealsOverride) || 0.78);
@@ -196,7 +230,11 @@ export function RecruitingReverseCalculator({
   const totalCompanyCommissionNeeded = retentionNum > 0 ? netMarginNum / retentionNum : 0;
 
   // Step 2: Total deals needed
-  const dealsNeeded = feeNum > 0 ? Math.ceil(totalCompanyCommissionNeeded / feeNum) : 0;
+  // Correct formula: Net Margin Goal ÷ (Avg Sale Price × Avg Commission % × Retention %)
+  // = Net Margin Goal ÷ derivedCompanyFeePerDeal
+  // OR if user overrides fee directly: totalCompanyCommissionNeeded ÷ feeNum
+  const effectiveFeeForDeals = avgGCIPerDeal > 0 ? avgGCIPerDeal * retentionNum : feeNum;
+  const dealsNeeded = effectiveFeeForDeals > 0 ? Math.ceil(netMarginNum / effectiveFeeForDeals) : 0;
 
   // Step 3: Agents needed (deals needed ÷ deals/agent/month ÷ 12 months)
   const agentsNeeded = dealsPerAgentMonthNum > 0
@@ -301,7 +339,7 @@ export function RecruitingReverseCalculator({
             icon={<FileText className="h-5 w-5" />}
             label="Total Deals Needed"
             value={fmtN(dealsNeeded)}
-            sublabel={`÷ ${fmt$(feeNum)} avg company fee`}
+            sublabel={`${fmt$(netMarginNum)} ÷ ${fmt$(Math.round(effectiveFeeForDeals))} co. fee/deal`}
             arrow
           />
           <CascadeStep
@@ -371,16 +409,41 @@ export function RecruitingReverseCalculator({
                     suffix="%"
                   />
                   <AssumptionRow
-                    label="Avg Company Fee Per Deal"
-                    hint="Average company commission earned per closed transaction"
-                    liveValue={liveAvgCompanyFeePerDeal != null ? fmt$(liveAvgCompanyFeePerDeal) : null}
-                    value={feeOverride}
-                    useLive={useLiveFee}
-                    canUseLive={liveAvgCompanyFeePerDeal != null}
-                    onChange={setFeeOverride}
-                    onToggleLive={setUseLiveFee}
+                    label="Avg Sale Price"
+                    hint="Average closed sale price per transaction this year"
+                    liveValue={liveAvgSalePrice != null ? fmt$(liveAvgSalePrice) : null}
+                    value={salePriceOverride}
+                    useLive={useLiveSalePrice}
+                    canUseLive={liveAvgSalePrice != null}
+                    onChange={setSalePriceOverride}
+                    onToggleLive={setUseLiveSalePrice}
                     prefix="$"
                   />
+                  <AssumptionRow
+                    label="Avg Commission %"
+                    hint="Average total commission % per transaction (e.g. 2.97%)"
+                    liveValue={liveAvgCommissionPct != null ? fmtN(liveAvgCommissionPct, 2) + '%' : null}
+                    value={commissionPctOverride}
+                    useLive={useLiveCommissionPct}
+                    canUseLive={liveAvgCommissionPct != null}
+                    onChange={setCommissionPctOverride}
+                    onToggleLive={setUseLiveCommissionPct}
+                    suffix="%"
+                  />
+                  <div className="flex items-center gap-3 py-2 border-b">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Avg GCI Per Deal <span className="text-muted-foreground font-normal">(derived)</span></p>
+                      <p className="text-xs text-muted-foreground">Avg Sale Price × Avg Commission % — used to calculate deals needed</p>
+                    </div>
+                    <span className="text-sm font-semibold text-primary">{fmt$(Math.round(avgGCIPerDeal))}</span>
+                  </div>
+                  <div className="flex items-center gap-3 py-2 border-b">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Avg Company Fee Per Deal <span className="text-muted-foreground font-normal">(derived)</span></p>
+                      <p className="text-xs text-muted-foreground">Avg GCI × Retention % — company&apos;s cut per deal</p>
+                    </div>
+                    <span className="text-sm font-semibold">{fmt$(Math.round(derivedCompanyFeePerDeal))}</span>
+                  </div>
                   <AssumptionRow
                     label="Avg Deals / Agent / Month"
                     hint="Average closed deals per active agent per month"

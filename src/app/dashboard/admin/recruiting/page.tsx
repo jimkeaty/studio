@@ -1784,6 +1784,8 @@ export default function RecruitingDashboardPage() {
       <RecruitingReverseCalculator
         liveAvgCompanyFeePerDeal={data.liveData?.avgCompanyFeePerDeal ?? null}
         liveAvgDealsPerAgentPerMonth={data.liveData?.avgDealsPerAgentPerMonth ?? totals.avgDealsPerAgent ?? 0.78}
+        liveAvgSalePrice={data.liveData?.avgSalePrice ?? null}
+        liveAvgCommissionPct={data.liveData?.avgCommissionPct ?? null}
         currentActiveAgents={realActiveAgents}
         conversionRates={plan.conversionRates ?? {
           callToInterview: 0.20,

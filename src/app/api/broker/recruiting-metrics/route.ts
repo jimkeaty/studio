@@ -119,6 +119,9 @@ export async function GET(req: NextRequest) {
     const monthlyDeals: number[] = new Array(12).fill(0);
     let totalCompanyRetained = 0;
     let companyRetainedCount = 0;
+    let totalSaleVolume = 0;
+    let totalGCI = 0;
+    let volumeCount = 0;
     txSnap.docs.forEach(d => {
       const t = d.data();
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
@@ -142,10 +145,25 @@ export async function GET(req: NextRequest) {
         totalCompanyRetained += companyRetained;
         companyRetainedCount += 1;
       }
+      // Accumulate sale price and GCI for avg sale price / avg commission % calc
+      const sp = t.salePrice ?? t.soldPrice ?? t.listPrice ?? null;
+      const gci = t.splitSnapshot?.totalGrossCommission ?? t.grossCommission ?? t.gci ?? null;
+      if (sp != null && Number(sp) > 0) {
+        totalSaleVolume += Number(sp);
+        volumeCount += 1;
+      }
+      if (gci != null && Number(gci) > 0) {
+        totalGCI += Number(gci);
+      }
     });
     // Avg company fee per deal (from live data)
     const liveAvgCompanyFeePerDeal = companyRetainedCount > 0
       ? Math.round(totalCompanyRetained / companyRetainedCount)
+      : null;
+    // Avg sale price and avg commission % (from live data)
+    const liveAvgSalePrice = volumeCount > 0 ? Math.round(totalSaleVolume / volumeCount) : null;
+    const liveAvgCommissionPct = totalSaleVolume > 0 && totalGCI > 0
+      ? parseFloat(((totalGCI / totalSaleVolume) * 100).toFixed(2))
       : null;
 
     // 5. Get available years
@@ -416,6 +434,8 @@ export async function GET(req: NextRequest) {
         avgCompanyFeePerDeal: liveAvgCompanyFeePerDeal,
         avgDealsPerAgentPerMonth: avgDealsPerAgent,
         totalTransactionsWithFeeData: companyRetainedCount,
+        avgSalePrice: liveAvgSalePrice,
+        avgCommissionPct: liveAvgCommissionPct,
       },
       funnelTargets,
       grades,
