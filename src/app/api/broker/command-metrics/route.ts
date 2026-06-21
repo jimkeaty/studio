@@ -681,6 +681,58 @@ export async function GET(req: NextRequest) {
       return { year: y, months: cMonths };
     });
 
+    // ── All-time summary from pre-computed collection ──────────────────────
+    let allTimeSummary: {
+      totalDeals: number;
+      totalVolume: number;
+      totalCommissionsPaid: number;
+      totalAgentsEver: number;
+      activeAgentsToday: number;
+    } = {
+      totalDeals: 0,
+      totalVolume: 0,
+      totalCommissionsPaid: 0,
+      totalAgentsEver: 0,
+      activeAgentsToday: 0,
+    };
+    try {
+      const allTimeDoc = await adminDb.collection('brokerAllTimeSummary').doc('totals').get();
+      if (allTimeDoc.exists) {
+        const d = allTimeDoc.data()!;
+        allTimeSummary = {
+          totalDeals:           Number(d.totalDeals || 0),
+          totalVolume:          Number(d.totalVolume || 0),
+          totalCommissionsPaid: Number(d.totalCommissionsPaid || 0),
+          totalAgentsEver:      Number(d.totalAgentsEver || 0),
+          activeAgentsToday:    Number(d.activeAgentsToday || 0),
+        };
+      }
+    } catch { /* non-fatal */ }
+
+    // ── Year-by-year agent history ───────────────────────────────────────────
+    let agentHistory: Array<{
+      year: number;
+      rosterCount: number;
+      closedCount: number;
+      totalDeals: number;
+      totalVolume: number;
+      rosterSource: string;
+    }> = [];
+    try {
+      const summarySnap = await adminDb.collection('agentYearlySummary').orderBy('year', 'asc').get();
+      agentHistory = summarySnap.docs.map(d => {
+        const data = d.data();
+        return {
+          year:         Number(data.year),
+          rosterCount:  Number(data.rosterCount || 0),
+          closedCount:  Number(data.closedCount || 0),
+          totalDeals:   Number(data.totalDeals || 0),
+          totalVolume:  Number(data.totalVolume || 0),
+          rosterSource: String(data.rosterSource || 'mls_inferred'),
+        };
+      });
+    } catch { /* non-fatal */ }
+
     const result: BrokerCommandMetrics = {
       overview,
       prevYearStats,
@@ -691,6 +743,8 @@ export async function GET(req: NextRequest) {
       contractsByMonth: contractsByMonthMap,
       contractsByMonthComparison,
       pendingCloseRatio,
+      allTimeSummary,
+      agentHistory,
       ...(teamLeaderEarnings ? { teamLeaderEarnings } : {}),
     };
 

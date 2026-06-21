@@ -243,6 +243,23 @@ export type BrokerCommandMetrics = {
   contractsByMonthComparison?: { year: number; months: ContractsByMonthData[] }[]; // up to 4 prior years
   // Pending-to-close ratio (YTD, resolved deals only)
   pendingCloseRatio?: PendingCloseRatio;
+  // All-time brokerage totals (from brokerAllTimeSummary/totals)
+  allTimeSummary?: {
+    totalDeals: number;
+    totalVolume: number;
+    totalCommissionsPaid: number;
+    totalAgentsEver: number;
+    activeAgentsToday: number;
+  };
+  // Year-by-year agent history (from agentYearlySummary)
+  agentHistory?: Array<{
+    year: number;
+    rosterCount: number;
+    closedCount: number;
+    totalDeals: number;
+    totalVolume: number;
+    rosterSource: string;
+  }>;
   // Legacy fields (kept for backward compatibility)
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;

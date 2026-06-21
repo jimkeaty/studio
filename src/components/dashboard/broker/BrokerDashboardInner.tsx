@@ -7,10 +7,12 @@ import {
 import {
   DollarSign, TrendingUp, Target, AlertCircle, Percent, Clock,
   ChevronDown, ChevronUp, Save, BarChart3, Banknote, Building2, ExternalLink,
+  Users, Award, History,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Cell,
   Legend, Tooltip, ResponsiveContainer, PieChart, Pie,
+  LineChart, Line,
 } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend,
@@ -1516,6 +1518,54 @@ export function BrokerDashboardInner() {
         );
       })()}
 
+      {/* ── All-Time Legacy Row ───────────────────────────────────────────── */}
+      {data.allTimeSummary && (
+        <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 dark:border-amber-900/40 dark:from-amber-950/20 dark:to-yellow-950/20 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <History className="h-4 w-4 text-amber-600" />
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+              All-Time Brokerage Totals — {2004}–{new Date().getFullYear()}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* All-time volume */}
+            <div className="text-center">
+              <p className="text-xs text-amber-600/80 dark:text-amber-400/70 uppercase tracking-wide font-medium">Total Sales Volume</p>
+              <p className="text-xl font-black text-amber-900 dark:text-amber-100 leading-tight mt-0.5">
+                {formatCurrency(data.allTimeSummary.totalVolume, true)}
+              </p>
+              <p className="text-xs text-amber-600/60 mt-0.5">all time</p>
+            </div>
+            {/* All-time deals */}
+            <div className="text-center">
+              <p className="text-xs text-amber-600/80 dark:text-amber-400/70 uppercase tracking-wide font-medium">Total Transactions</p>
+              <p className="text-xl font-black text-amber-900 dark:text-amber-100 leading-tight mt-0.5">
+                {formatNumber(data.allTimeSummary.totalDeals)}
+              </p>
+              <p className="text-xs text-amber-600/60 mt-0.5">closed deals</p>
+            </div>
+            {/* All-time commissions */}
+            <div className="text-center">
+              <p className="text-xs text-amber-600/80 dark:text-amber-400/70 uppercase tracking-wide font-medium">Commissions Paid Out</p>
+              <p className="text-xl font-black text-amber-900 dark:text-amber-100 leading-tight mt-0.5">
+                {formatCurrency(data.allTimeSummary.totalCommissionsPaid, true)}
+              </p>
+              <p className="text-xs text-amber-600/60 mt-0.5">to agents, all time</p>
+            </div>
+            {/* All-time agents */}
+            <div className="text-center">
+              <p className="text-xs text-amber-600/80 dark:text-amber-400/70 uppercase tracking-wide font-medium">Agents Ever Active</p>
+              <p className="text-xl font-black text-amber-900 dark:text-amber-100 leading-tight mt-0.5">
+                {formatNumber(data.allTimeSummary.totalAgentsEver)}
+              </p>
+              <p className="text-xs text-amber-600/60 mt-0.5">
+                {formatNumber(data.allTimeSummary.activeAgentsToday)} active today
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── YTD Summary Hero Row ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Total Team Volume YTD */}
@@ -1580,6 +1630,113 @@ export function BrokerDashboardInner() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Agent History Chart (roster vs closed, 2004–present) ──────────────── */}
+      {data.agentHistory && data.agentHistory.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  Agent Count History
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Agents on roster vs. agents who closed at least one deal — 2004 to present
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-6 h-0.5 bg-blue-500 rounded"></span>
+                  On Roster
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-6 h-0.5 bg-emerald-500 rounded" style={{borderTop:'2px dashed'}}></span>
+                  Closed a Deal
+                </span>
+                <span className="flex items-center gap-1 text-amber-600">
+                  <span className="inline-block w-3 h-3 rounded-sm bg-amber-200 border border-amber-400"></span>
+                  MLS-inferred
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={data.agentHistory} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="year"
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={28}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const row = data.agentHistory!.find(r => r.year === label);
+                    const isMls = row?.rosterSource === 'mls_inferred';
+                    return (
+                      <div className="rounded-lg border bg-background p-2 shadow-md text-xs">
+                        <p className="font-semibold mb-1">{label}{isMls ? ' (MLS data)' : ''}</p>
+                        {payload.map((p: any) => (
+                          <p key={p.dataKey} style={{ color: p.color }}>
+                            {p.name}: {p.value}
+                          </p>
+                        ))}
+                        {isMls && (
+                          <p className="text-amber-600 mt-1">Roster = closed count (MLS years)</p>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+                {/* Shade MLS years */}
+                {data.agentHistory
+                  .filter(r => r.rosterSource === 'mls_inferred')
+                  .map(r => (
+                    <ReferenceLine
+                      key={r.year}
+                      x={r.year}
+                      stroke="hsl(var(--amber-200, 43 96% 56% / 0.15))"
+                      strokeWidth={18}
+                      strokeOpacity={0.25}
+                    />
+                  ))
+                }
+                <Line
+                  type="monotone"
+                  dataKey="rosterCount"
+                  name="On Roster"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: '#3b82f6' }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="closedCount"
+                  name="Closed a Deal"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  dot={{ r: 3, fill: '#10b981' }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              Shaded years (2004–2022) use MLS transaction data only — roster count equals agents who closed a deal that year.
+              Solid years (2023+) reflect actual profile roster data.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Team Tabs */}
       {(data.teams ?? []).length > 0 && (
