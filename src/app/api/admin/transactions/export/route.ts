@@ -1,9 +1,10 @@
 // GET /api/admin/transactions/export
 // Returns a CSV file of all transactions (admin-only).
 // Query params:
-//   ?agentId=<id>   — filter to a single agent (optional)
-//   ?year=<year>    — filter to a calendar year (optional)
-//   ?status=<s>     — filter to a status (optional)
+//   ?year=<year>|all   — filter to a calendar year (optional; default = all)
+//   ?status=<s>        — filter to a status (optional)
+//   ?agentName=<name>  — filter by agent display name (optional)
+//   ?ids=<id1,id2,...> — export only specific transaction IDs (optional)
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
@@ -44,9 +45,16 @@ function csvCell(val: any): string {
   return s;
 }
 
-function csvRow(cells: string[]): string {
+function csvRow(cells: any[]): string {
   return cells.map(csvCell).join(',');
 }
+
+// Statuses that must always be included even when filtering by year
+// (active/pending deals don't always have a year field matching the current year)
+const ALWAYS_INCLUDE_STATUSES = new Set([
+  'active', 'pending', 'coming_soon', 'coming soon',
+  'temporary_off_market', 'temp_off_market', 'temp off market',
+]);
 
 // ── CSV column definitions ─────────────────────────────────────────────
 
@@ -135,7 +143,8 @@ function txToRow(id: string, t: any): string {
   const cells = [
     id,
     t.status,
-    t.address,
+    // Normalize address — transactions may store it as 'address' or 'propertyAddress'
+    t.address || t.propertyAddress,
     t.agentDisplayName,
     t.agentId,
     t.closingType,
@@ -186,7 +195,7 @@ function txToRow(id: string, t: any): string {
     t.otherAgentName,
     t.otherAgentEmail,
     t.otherAgentPhone,
-    t.otherBrokerage,
+    t.otherBrokerage || t.otherAgentBrokerage,
     t.mortgageCompany,
     t.loanOfficer,
     t.loanOfficerEmail,
@@ -223,40 +232,75 @@ export async function GET(req: NextRequest) {
     if (!decoded) return jsonError(403, 'Forbidden: Admin only');
 
     const { searchParams } = new URL(req.url);
-    const agentIdFilter = searchParams.get('agentId') || '';
-    const yearFilter = searchParams.get('year') || '';
+    const yearParam   = searchParams.get('year') || 'all';
     const statusFilter = searchParams.get('status') || '';
+    // Agent filter is now the display name (matches the frontend dropdown)
+    const agentNameFilter = searchParams.get('agentName') || '';
+    // Optional: export only specific IDs (comma-separated)
+    const idsParam = searchParams.get('ids') || '';
+    const specificIds = idsParam ? idsParam.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-    // Build Firestore query — start with the full collection
-    let query: FirebaseFirestore.Query = adminDb.collection('transactions');
+    let docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
 
-    // Apply server-side filters where possible (Firestore only supports equality filters
-    // without composite indexes, so we apply agentId and year server-side and status client-side)
-    if (agentIdFilter) {
-      query = query.where('agentId', '==', agentIdFilter);
-    }
-    if (yearFilter) {
-      const y = Number(yearFilter);
-      if (Number.isFinite(y) && y > 0) {
-        query = query.where('year', '==', y);
+    if (specificIds.length > 0) {
+      // Export specific transactions by ID (batch fetch in chunks of 30)
+      const chunks: string[][] = [];
+      for (let i = 0; i < specificIds.length; i += 30) {
+        chunks.push(specificIds.slice(i, i + 30));
+      }
+      const snaps = await Promise.all(
+        chunks.map(chunk =>
+          adminDb.collection('transactions').where('__name__', 'in', chunk).get()
+        )
+      );
+      const seen = new Set<string>();
+      for (const snap of snaps) {
+        for (const doc of snap.docs) {
+          if (!seen.has(doc.id)) { seen.add(doc.id); docs.push(doc); }
+        }
+      }
+    } else if (yearParam === 'all') {
+      // Full collection scan — no year filter
+      const snap = await adminDb.collection('transactions').get();
+      docs = snap.docs;
+    } else {
+      // Year-filtered: fetch transactions for the target year AND all open/active deals
+      // (active/pending transactions may not have a matching year field)
+      const targetYear = Number(yearParam);
+      if (!Number.isFinite(targetYear) || targetYear <= 0) {
+        return jsonError(400, `Invalid year: ${yearParam}`);
+      }
+      const [yearSnap, openSnap] = await Promise.all([
+        adminDb.collection('transactions').where('year', '==', targetYear).get(),
+        adminDb.collection('transactions')
+          .where('status', 'in', ['active', 'pending', 'coming_soon', 'temp_off_market'])
+          .get(),
+      ]);
+      const seen = new Set<string>();
+      for (const doc of [...yearSnap.docs, ...openSnap.docs]) {
+        if (!seen.has(doc.id)) { seen.add(doc.id); docs.push(doc); }
       }
     }
 
-    const snap = await query.get();
-
-    // Apply remaining filters client-side
+    // Build CSV rows — apply remaining client-side filters
     const rows: string[] = [HEADERS.join(',')];
-    for (const doc of snap.docs) {
+    for (const doc of docs) {
       const t = doc.data() || {};
+
+      // Status filter
       if (statusFilter && t.status !== statusFilter) continue;
+
+      // Agent name filter (display name match)
+      if (agentNameFilter && (t.agentDisplayName ?? '') !== agentNameFilter) continue;
+
       rows.push(txToRow(doc.id, t));
     }
 
     // Build filename
     const parts = ['transactions'];
-    if (agentIdFilter) parts.push(`agent-${agentIdFilter}`);
-    if (yearFilter) parts.push(yearFilter);
+    if (yearParam !== 'all') parts.push(yearParam);
     if (statusFilter) parts.push(statusFilter);
+    if (agentNameFilter) parts.push(agentNameFilter.replace(/\s+/g, '-').toLowerCase());
     const filename = `${parts.join('_')}.csv`;
 
     const csv = rows.join('\r\n') + '\r\n';

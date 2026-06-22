@@ -283,9 +283,19 @@ export default function AdminTransactionLedgerPage() {
     try {
       const token = await user.getIdToken();
       const params = new URLSearchParams();
-      if (agentFilter !== 'all') params.set('agentId', agentFilter);
-      if (yearFilter !== 'all') params.set('year', yearFilter);
-      if (statusFilter !== 'all') params.set('status', statusFilter);
+
+      if (selectedIds.size > 0) {
+        // Export only the selected rows — pass their IDs directly so the server
+        // fetches exactly those documents regardless of year/status filters.
+        params.set('ids', Array.from(selectedIds).join(','));
+      } else {
+        // Export the current filtered view
+        // NOTE: agentFilter stores the display name (not agentId), so use agentName param
+        if (agentFilter !== 'all') params.set('agentName', agentFilter);
+        if (yearFilter !== 'all') params.set('year', yearFilter);
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+      }
+
       const url = `/api/admin/transactions/export${params.toString() ? `?${params}` : ''}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
@@ -578,10 +588,10 @@ export default function AdminTransactionLedgerPage() {
             variant="outline"
             onClick={handleExport}
             disabled={exporting}
-            title={`Export current view to CSV`}
+            title={selectedIds.size > 0 ? `Export ${selectedIds.size} selected transaction${selectedIds.size !== 1 ? 's' : ''} to CSV` : `Export all ${filtered.length} filtered transactions to CSV`}
           >
             <Download className={`mr-2 h-4 w-4 ${exporting ? 'animate-pulse' : ''}`} />
-            {exporting ? 'Exporting…' : 'Export CSV'}
+            {exporting ? 'Exporting…' : selectedIds.size > 0 ? `Export ${selectedIds.size} Selected` : `Export CSV (${filtered.length})`}
           </Button>
           <Link href="/dashboard/transactions/new">
             <Button><Plus className="mr-2 h-4 w-4" /> Add Transaction</Button>
