@@ -212,6 +212,14 @@ export default function AdminToolsPage() {
     notFoundList?: { address: string; agent: string }[]; error?: string;
   } | null>(null);
 
+  // Bulk Accept MLS Duplicates by Year Range
+  const [mlsAcceptYearFrom, setMlsAcceptYearFrom] = useState('2004');
+  const [mlsAcceptYearTo, setMlsAcceptYearTo] = useState('2020');
+  const [mlsAcceptSource, setMlsAcceptSource] = useState('all');
+  const [mlsAcceptRunning, setMlsAcceptRunning] = useState(false);
+  const [mlsAcceptDryRunResult, setMlsAcceptDryRunResult] = useState<any | null>(null);
+  const [mlsAcceptResult, setMlsAcceptResult] = useState<any | null>(null);
+
   // Firestore Seed / Validate
   const [seedAuditResult, setSeedAuditResult] = useState<any | null>(null);
   const [seedRunning, setSeedRunning] = useState(false);
@@ -569,6 +577,161 @@ export default function AdminToolsPage() {
           >
             {bulkAcceptRunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running…</> : 'Accept All 91 Groups'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Bulk Accept MLS Duplicates by Year Range */}
+      <Card className="border-amber-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-amber-600" />
+              <div>
+                <CardTitle className="text-base">Bulk Accept MLS Duplicate Groups by Year Range</CardTitle>
+                <CardDescription className="mt-1">
+                  Scans all transactions in the selected year range, finds every duplicate group
+                  (same agent + address appearing 2+ times), and marks them all as legitimate in
+                  Firestore. Use this to clear the duplicate finder of MLS historical imports
+                  (e.g. 2004–2020). Run a Dry Run first to preview how many groups will be accepted.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-amber-300 text-amber-700">Safe</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Year From</label>
+              <input
+                type="number"
+                min={2000}
+                max={2030}
+                value={mlsAcceptYearFrom}
+                onChange={e => setMlsAcceptYearFrom(e.target.value)}
+                className="w-24 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Year To</label>
+              <input
+                type="number"
+                min={2000}
+                max={2030}
+                value={mlsAcceptYearTo}
+                onChange={e => setMlsAcceptYearTo(e.target.value)}
+                className="w-24 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Source Filter</label>
+              <select
+                value={mlsAcceptSource}
+                onChange={e => setMlsAcceptSource(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              >
+                <option value="all">All Sources</option>
+                <option value="mls_import">MLS Import Only</option>
+                <option value="import">CSV Import Only</option>
+              </select>
+            </div>
+          </div>
+          {mlsAcceptDryRunResult && !mlsAcceptResult && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertTitle className="text-amber-800">Dry Run Preview</AlertTitle>
+              <AlertDescription className="text-amber-700">
+                <div className="space-y-1 text-sm">
+                  <p>Transactions scanned: <strong>{mlsAcceptDryRunResult.totalTransactionsScanned?.toLocaleString()}</strong></p>
+                  <p>Duplicate groups found: <strong>{mlsAcceptDryRunResult.dupGroupsFound}</strong></p>
+                  <p>Already accepted: <strong>{mlsAcceptDryRunResult.alreadyAccepted}</strong></p>
+                  <p>Would newly accept: <strong>{mlsAcceptDryRunResult.wouldAccept}</strong></p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          {mlsAcceptResult && (
+            <Alert variant={mlsAcceptResult.ok ? 'default' : 'destructive'} className={mlsAcceptResult.ok ? 'border-green-200 bg-green-50' : ''}>
+              {mlsAcceptResult.ok ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle className={mlsAcceptResult.ok ? 'text-green-800' : ''}>
+                {mlsAcceptResult.ok ? 'Bulk Accept Complete' : 'Bulk Accept Failed'}
+              </AlertTitle>
+              <AlertDescription className={mlsAcceptResult.ok ? 'text-green-700' : ''}>
+                {mlsAcceptResult.ok ? (
+                  <div className="space-y-1 text-sm">
+                    <p>✓ Transactions scanned: <strong>{mlsAcceptResult.totalTransactionsScanned?.toLocaleString()}</strong></p>
+                    <p>✓ Duplicate groups found: <strong>{mlsAcceptResult.dupGroupsFound}</strong></p>
+                    <p>✓ Already accepted (skipped): <strong>{mlsAcceptResult.alreadyAccepted}</strong></p>
+                    <p>✓ Newly accepted: <strong>{mlsAcceptResult.newlyAccepted}</strong></p>
+                  </div>
+                ) : mlsAcceptResult.error}
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (!user) return;
+                setMlsAcceptRunning(true);
+                setMlsAcceptDryRunResult(null);
+                setMlsAcceptResult(null);
+                try {
+                  const token = await getToken();
+                  const res = await fetch('/api/admin/migrations/bulk-accept-mls-duplicates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({
+                      yearFrom: Number(mlsAcceptYearFrom),
+                      yearTo: Number(mlsAcceptYearTo),
+                      sourceFilter: mlsAcceptSource,
+                      dryRun: true,
+                    }),
+                  });
+                  const data = await res.json();
+                  setMlsAcceptDryRunResult(data);
+                } catch (err: any) {
+                  setMlsAcceptDryRunResult({ ok: false, error: err?.message });
+                } finally {
+                  setMlsAcceptRunning(false);
+                }
+              }}
+              disabled={mlsAcceptRunning}
+            >
+              {mlsAcceptRunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running…</> : 'Dry Run (Preview)'}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!user) return;
+                const count = mlsAcceptDryRunResult?.wouldAccept ?? '?';
+                if (!confirm(`This will mark ${count} duplicate group(s) from ${mlsAcceptYearFrom}–${mlsAcceptYearTo} as legitimate in Firestore. They will no longer appear in the duplicate finder. Continue?`)) return;
+                setMlsAcceptRunning(true);
+                setMlsAcceptResult(null);
+                try {
+                  const token = await getToken();
+                  const res = await fetch('/api/admin/migrations/bulk-accept-mls-duplicates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({
+                      yearFrom: Number(mlsAcceptYearFrom),
+                      yearTo: Number(mlsAcceptYearTo),
+                      sourceFilter: mlsAcceptSource,
+                      dryRun: false,
+                    }),
+                  });
+                  const data = await res.json();
+                  setMlsAcceptResult(data);
+                } catch (err: any) {
+                  setMlsAcceptResult({ ok: false, error: err?.message });
+                } finally {
+                  setMlsAcceptRunning(false);
+                }
+              }}
+              disabled={mlsAcceptRunning}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {mlsAcceptRunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running…</> : `Accept All Duplicates (${mlsAcceptYearFrom}–${mlsAcceptYearTo})`}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
