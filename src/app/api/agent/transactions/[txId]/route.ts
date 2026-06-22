@@ -87,32 +87,46 @@ export async function PATCH(
     // Admins can edit any transaction.
     const isAdmin = await isAdminLike(uid);
     if (!isAdmin) {
-      // Resolve all possible agentId values for this user
+      // Resolve all possible agentId values for this user.
+      // The transaction's agentId field may be stored as:
+      //   (a) the Firebase UID directly,
+      //   (b) the agentProfiles document ID (slug),
+      //   (c) a custom agentId field value.
+      // We collect ALL of these into ownIds so any match grants access.
       const ownIds = new Set<string>([uid]);
       let callerTeamId: string | null = null;
       try {
-        // Strategy 1: direct doc lookup
+        // Strategy 1: direct doc lookup by Firebase UID
         const byDocId = await adminDb.collection('agentProfiles').doc(uid).get();
         if (byDocId.exists) {
           const d = byDocId.data() || {};
           if (d.agentId) ownIds.add(String(d.agentId));
+          if (d.firebaseUid) ownIds.add(String(d.firebaseUid));
+          ownIds.add(byDocId.id); // the doc ID itself is a valid agentId
           if (d.teamRole === 'leader' && d.primaryTeamId) callerTeamId = String(d.primaryTeamId);
         }
-        // Strategy 2: agentId slug field
+        // Strategy 2: agentId slug field matches Firebase UID
         const byField = await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get();
         if (!byField.empty) {
           ownIds.add(byField.docs[0].id);
           const fd = byField.docs[0].data() || {};
+          if (fd.agentId) ownIds.add(String(fd.agentId));
+          if (fd.firebaseUid) ownIds.add(String(fd.firebaseUid));
           if (!callerTeamId && fd.teamRole === 'leader' && fd.primaryTeamId) callerTeamId = String(fd.primaryTeamId);
         }
-        // Strategy 3: firebaseUid field
-        if (!callerTeamId) {
-          const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get();
-          if (!byFbUid.empty) {
-            const fd = byFbUid.docs[0].data() || {};
-            if (fd.teamRole === 'leader' && fd.primaryTeamId) callerTeamId = String(fd.primaryTeamId);
-          }
+        // Strategy 3: firebaseUid field matches Firebase UID
+        const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get();
+        if (!byFbUid.empty) {
+          const fd = byFbUid.docs[0].data() || {};
+          ownIds.add(byFbUid.docs[0].id); // doc ID is a valid agentId
+          if (fd.agentId) ownIds.add(String(fd.agentId));
+          if (fd.firebaseUid) ownIds.add(String(fd.firebaseUid));
+          if (!callerTeamId && fd.teamRole === 'leader' && fd.primaryTeamId) callerTeamId = String(fd.primaryTeamId);
         }
+        // Strategy 4: the transaction itself may store agentId as the Firebase UID
+        // (transactions submitted directly by the agent before profile normalization).
+        // If the transaction's agentId matches the caller's Firebase UID, that is sufficient.
+        // This is handled implicitly because uid is already in ownIds from initialization.
       } catch (_) {}
 
       const txAgentId = String(txData.agentId || '');
