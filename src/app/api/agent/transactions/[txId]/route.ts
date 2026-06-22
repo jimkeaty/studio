@@ -8,6 +8,8 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAllStaffUids, getTcUids } from '@/lib/notifications/getRecipientUids';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
+import { resolveGCI } from '@/lib/commissions';
+import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -44,6 +46,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   // Dates
   'optionExpiration', 'inspectionDeadline', 'projectedCloseDate',
   // Commission
+  'commissionPercent', 'commissionBasePrice', 'gci', 'transactionFee',
   'sellerCommissionPct', 'buyerCommissionPct',
   // Notes
   'notes', 'additionalComments',
@@ -196,6 +199,64 @@ export async function PATCH(
       if (!isNaN(sp) && sp > 0) {
         updates.dealValue = sp;
       }
+    }
+
+    // ── Auto-calculate GCI and splitSnapshot whenever commission-relevant fields change ──
+    // Triggered when: salePrice, commissionPercent, commissionBasePrice, or gci is edited.
+    // This mirrors what the TC approval route does so the transaction ledger always shows
+    // the correct commission breakdown without requiring a TC to re-approve.
+    const commissionFieldsChanged = (
+      updates.salePrice !== undefined ||
+      updates.commissionPercent !== undefined ||
+      updates.commissionBasePrice !== undefined ||
+      updates.gci !== undefined
+    );
+    if (commissionFieldsChanged) {
+      try {
+        const mergedForCalc = { ...txData, ...updates };
+        const rawGci = resolveGCI({
+          commissionBasePrice: mergedForCalc.commissionBasePrice ?? null,
+          salePrice: mergedForCalc.salePrice ?? null,
+          commissionPercent: mergedForCalc.commissionPercent ?? null,
+          gci: mergedForCalc.gci ?? null,
+        });
+        if (rawGci > 0) {
+          // Store the computed GCI on the transaction so the ledger can display it
+          updates.gci = rawGci;
+          // Resolve the full split snapshot (agent tier, broker split, etc.)
+          const agentIdForCalc = String(txData.agentId || uid);
+          const agentDisplayNameForCalc = String(txData.agentDisplayName || '');
+          const txDate = mergedForCalc.closedDate || mergedForCalc.contractDate || null;
+          try {
+            const calc = await resolveTransactionCalculation({
+              agentId: agentIdForCalc,
+              agentDisplayName: agentDisplayNameForCalc,
+              commission: rawGci,
+              transactionDate: txDate,
+            });
+            updates.splitSnapshot = calc.splitSnapshot;
+            updates.creditSnapshot = calc.creditSnapshot;
+            // Store top-level convenience fields so the ledger can sort/filter by them
+            updates.grossCommission = calc.splitSnapshot.grossCommission ?? rawGci;
+            updates.agentNetCommission = calc.splitSnapshot.agentNetCommission ?? null;
+            updates.companyRetained = calc.splitSnapshot.companyRetained ?? null;
+          } catch (calcErr: any) {
+            // Non-fatal: commission profile may not exist yet — save GCI but skip split
+            console.warn('[agent PATCH] resolveTransactionCalculation failed (non-fatal):', calcErr?.message);
+          }
+        }
+      } catch (gciErr: any) {
+        console.warn('[agent PATCH] GCI calculation failed (non-fatal):', gciErr?.message);
+      }
+    }
+
+    // ── Recalculate year field when closedDate changes ──
+    // The year field drives the transaction ledger year filter and leaderboard rollups.
+    if (updates.closedDate) {
+      try {
+        const yr = new Date(updates.closedDate).getFullYear();
+        if (yr >= 2000 && yr <= 2100) updates.year = yr;
+      } catch (_) {}
     }
 
     // Save updates to the transaction document
@@ -450,6 +511,32 @@ export async function PATCH(
           console.warn('[api/agent/transactions] Co-agent split failed (non-fatal):', splitErr?.message);
         }
       }
+    }
+
+    // ── Rebuild leaderboard rollup when transaction is closed or commission changes on a closed tx ──
+    // This keeps the agent's YTD GCI, volume, and tier progression in sync immediately
+    // without waiting for a nightly job, matching what TC approval does.
+    const isNowClosed = updates.status === 'closed';
+    const wasAlreadyClosed = txData.status === 'closed' && commissionFieldsChanged;
+    if (isNowClosed || wasAlreadyClosed) {
+      void (async () => {
+        try {
+          const { rebuildAgentRollup } = await import('@/lib/rollups/rebuildAgentRollup');
+          const freshSnap2 = await txRef.get();
+          const freshData2 = freshSnap2.data() as any;
+          const rollupAgentId = String(freshData2?.agentId || txData.agentId || uid);
+          const rollupYear = Number(
+            freshData2?.year ||
+            (freshData2?.closedDate ? new Date(freshData2.closedDate).getFullYear() : null) ||
+            new Date().getFullYear()
+          );
+          if (rollupAgentId && rollupYear >= 2000) {
+            await rebuildAgentRollup(adminDb as any, rollupAgentId, rollupYear);
+          }
+        } catch (rollupErr: any) {
+          console.warn('[agent PATCH] rollup rebuild failed (non-fatal):', rollupErr?.message);
+        }
+      })();
     }
 
     return NextResponse.json({ ok: true, updated: Object.keys(updates), resubmitted: shouldResubmitToTc });
