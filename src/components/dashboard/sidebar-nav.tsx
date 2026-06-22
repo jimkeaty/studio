@@ -54,6 +54,7 @@ import {
   Wifi,
   Tv,
   Zap,
+  History,
   type LucideIcon,
 } from 'lucide-react';
 import { useAgentPlugins } from '@/hooks/useAgentPlugins';
@@ -180,6 +181,7 @@ const adminMenuGroups = [
       { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
       { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
       { href: '/dashboard/admin/import-mls', label: 'MLS Data Import', icon: Upload },
+      { href: '/dashboard/admin/import-history', label: 'Import History', icon: History },
       { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
     ],
   },
