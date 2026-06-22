@@ -220,6 +220,13 @@ export default function AdminToolsPage() {
   const [mlsAcceptDryRunResult, setMlsAcceptDryRunResult] = useState<any | null>(null);
   const [mlsAcceptResult, setMlsAcceptResult] = useState<any | null>(null);
 
+  // Operation A — MLS Date Field Fix
+  const [opADryRunResult, setOpADryRunResult] = useState<any | null>(null);
+  const [opAExecResult, setOpAExecResult] = useState<any | null>(null);
+  const [opARunning, setOpARunning] = useState(false);
+  const [opAYearFrom, setOpAYearFrom] = useState('');
+  const [opAYearTo, setOpAYearTo] = useState('');
+
   // Firestore Seed / Validate
   const [seedAuditResult, setSeedAuditResult] = useState<any | null>(null);
   const [seedRunning, setSeedRunning] = useState(false);
@@ -730,6 +737,192 @@ export default function AdminToolsPage() {
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               {mlsAcceptRunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running…</> : `Accept All Duplicates (${mlsAcceptYearFrom}–${mlsAcceptYearTo})`}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Operation A — MLS Date Field Fix */}
+      <Card className="border-teal-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-teal-600" />
+              <div>
+                <CardTitle className="text-base">Operation A — MLS Date Field Fix</CardTitle>
+                <CardDescription className="mt-1">
+                  Copies <code className="text-xs bg-muted px-1 rounded">closeDate</code> → <code className="text-xs bg-muted px-1 rounded">closedDate</code> and{' '}
+                  <code className="text-xs bg-muted px-1 rounded">underContractDate</code> → <code className="text-xs bg-muted px-1 rounded">contractDate</code> for all MLS-imported transactions
+                  where the main date fields are blank. Validates dates before writing. Run Dry Run first.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-teal-300 text-teal-700">Safe — Dry Run First</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Year From (optional)</label>
+              <input
+                type="number" min={2000} max={2030} value={opAYearFrom}
+                onChange={e => setOpAYearFrom(e.target.value)}
+                placeholder="All"
+                className="w-24 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Year To (optional)</label>
+              <input
+                type="number" min={2000} max={2030} value={opAYearTo}
+                onChange={e => setOpAYearTo(e.target.value)}
+                placeholder="All"
+                className="w-24 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+          </div>
+
+          {opADryRunResult && !opAExecResult && (
+            <Alert className="border-teal-200 bg-teal-50">
+              <AlertTitle className="text-teal-800">Dry Run Preview — No changes written</AlertTitle>
+              <AlertDescription className="text-teal-700">
+                <div className="space-y-1 text-sm mt-1">
+                  <p>MLS transactions scanned: <strong>{opADryRunResult.summary?.totalMlsTransactionsScanned?.toLocaleString()}</strong></p>
+                  <p>Already have closedDate (no change needed): <strong>{opADryRunResult.summary?.alreadyHaveClosedDate?.toLocaleString()}</strong></p>
+                  <p>No source date available (cannot fix): <strong>{opADryRunResult.summary?.noSourceDateAvailable?.toLocaleString()}</strong></p>
+                  <p className="font-semibold">Would be updated: <strong>{opADryRunResult.summary?.willBeUpdated?.toLocaleString()}</strong></p>
+                  <p>— closedDate fixes: <strong>{opADryRunResult.summary?.closedDateFixes?.toLocaleString()}</strong></p>
+                  <p>— contractDate fixes: <strong>{opADryRunResult.summary?.contractDateFixes?.toLocaleString()}</strong></p>
+                  <p>— year field changes: <strong>{opADryRunResult.summary?.yearChanges?.toLocaleString()}</strong></p>
+                  <p className="text-amber-700">Validation failures (will NOT be updated): <strong>{opADryRunResult.summary?.validationFailed?.toLocaleString()}</strong></p>
+                </div>
+                {opADryRunResult.preview?.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold mb-1">Sample records that would be updated (first 10):</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-1 pr-3">Address</th>
+                            <th className="text-left py-1 pr-3">Agent</th>
+                            <th className="text-left py-1 pr-3">Current closedDate</th>
+                            <th className="text-left py-1 pr-3">Source closeDate</th>
+                            <th className="text-left py-1 pr-3">Proposed closedDate</th>
+                            <th className="text-left py-1 pr-3">Year Change</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {opADryRunResult.preview.slice(0, 10).map((r: any) => (
+                            <tr key={r.id} className="border-b last:border-0">
+                              <td className="py-1 pr-3 max-w-[160px] truncate">{r.address || '—'}</td>
+                              <td className="py-1 pr-3 max-w-[120px] truncate">{r.agentDisplayName || '—'}</td>
+                              <td className="py-1 pr-3 font-mono text-red-600">{r.currentClosedDate || '(blank)'}</td>
+                              <td className="py-1 pr-3 font-mono text-blue-600">{r.sourceCloseDate || '—'}</td>
+                              <td className="py-1 pr-3 font-mono text-green-700">{r.proposedClosedDate || '—'}</td>
+                              <td className="py-1 pr-3">{r.yearWillChange ? <span className="text-amber-700">{r.currentYear} → {r.proposedYear}</span> : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {opADryRunResult.previewTruncated && (
+                      <p className="text-xs text-muted-foreground mt-1">Showing first 10 of {opADryRunResult.summary?.willBeUpdated?.toLocaleString()} records.</p>
+                    )}
+                  </div>
+                )}
+                {opADryRunResult.validationFailures?.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold text-amber-700 mb-1">Validation failures (will be skipped — first 5):</p>
+                    {opADryRunResult.validationFailures.slice(0, 5).map((r: any) => (
+                      <p key={r.id} className="text-xs text-amber-700">{r.address} — {r.validationIssues.join(', ')}</p>
+                    ))}
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {opAExecResult && (
+            <Alert variant={opAExecResult.ok ? 'default' : 'destructive'} className={opAExecResult.ok ? 'border-green-200 bg-green-50' : ''}>
+              {opAExecResult.ok ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertTriangle className="h-4 w-4" />}
+              <AlertTitle className={opAExecResult.ok ? 'text-green-800' : ''}>
+                {opAExecResult.ok ? 'Operation A Complete' : 'Operation A Failed'}
+              </AlertTitle>
+              <AlertDescription className={opAExecResult.ok ? 'text-green-700' : ''}>
+                {opAExecResult.ok ? (
+                  <div className="space-y-1 text-sm">
+                    <p>✓ Records updated: <strong>{opAExecResult.summary?.updated?.toLocaleString()}</strong></p>
+                    <p>✓ closedDate fixes applied: <strong>{opAExecResult.summary?.closedDateFixes?.toLocaleString()}</strong></p>
+                    <p>✓ contractDate fixes applied: <strong>{opAExecResult.summary?.contractDateFixes?.toLocaleString()}</strong></p>
+                    <p>✓ Year field recalculations: <strong>{opAExecResult.summary?.yearChanges?.toLocaleString()}</strong></p>
+                    <p>✓ Leaderboard rollups rebuilt: <strong>{opAExecResult.rollupRebuilds?.toLocaleString()}</strong></p>
+                    <p className="text-amber-700">Skipped (validation failures): <strong>{opAExecResult.summary?.validationFailed?.toLocaleString()}</strong></p>
+                  </div>
+                ) : opAExecResult.error}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (!user) return;
+                setOpARunning(true);
+                setOpADryRunResult(null);
+                setOpAExecResult(null);
+                try {
+                  const token = await getToken();
+                  const body: any = { dryRun: true };
+                  if (opAYearFrom) body.yearFrom = Number(opAYearFrom);
+                  if (opAYearTo) body.yearTo = Number(opAYearTo);
+                  const res = await fetch('/api/admin/migrations/mls-date-field-fix', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(body),
+                  });
+                  const data = await res.json();
+                  setOpADryRunResult(data);
+                } catch (err: any) {
+                  setOpADryRunResult({ ok: false, error: err?.message });
+                } finally {
+                  setOpARunning(false);
+                }
+              }}
+              disabled={opARunning}
+            >
+              {opARunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Scanning…</> : 'Dry Run (Preview Only)'}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!user) return;
+                if (!opADryRunResult) { alert('Please run a Dry Run first to preview the changes before executing.'); return; }
+                const count = opADryRunResult?.summary?.willBeUpdated ?? '?';
+                if (!confirm(`This will update ${count} MLS transaction(s) — copying closeDate → closedDate and underContractDate → contractDate. Leaderboard rollups will be rebuilt automatically. Continue?`)) return;
+                setOpARunning(true);
+                setOpAExecResult(null);
+                try {
+                  const token = await getToken();
+                  const body: any = { dryRun: false };
+                  if (opAYearFrom) body.yearFrom = Number(opAYearFrom);
+                  if (opAYearTo) body.yearTo = Number(opAYearTo);
+                  const res = await fetch('/api/admin/migrations/mls-date-field-fix', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(body),
+                  });
+                  const data = await res.json();
+                  setOpAExecResult(data);
+                } catch (err: any) {
+                  setOpAExecResult({ ok: false, error: err?.message });
+                } finally {
+                  setOpARunning(false);
+                }
+              }}
+              disabled={opARunning}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              {opARunning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Applying…</> : `Apply Fix${opADryRunResult ? ` (${opADryRunResult.summary?.willBeUpdated?.toLocaleString() ?? '?'} records)` : ''}`}
             </Button>
           </div>
         </CardContent>
