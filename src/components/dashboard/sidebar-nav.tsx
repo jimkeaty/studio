@@ -211,7 +211,6 @@ const adminMenuGroups = [
     label: 'System',
     items: [
       { href: '/dashboard/admin/tools', label: 'Admin Tools', icon: Wrench },
-      { href: '/dashboard/admin/duplicate-analysis', label: 'Duplicate Analysis', icon: GitMerge },
       { href: '/dashboard/admin/plugins', label: 'Plugin Manager', icon: Puzzle },
     ],
   },

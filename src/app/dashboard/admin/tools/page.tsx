@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck, KeyRound, Mail } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck, KeyRound, Mail, ChevronDown, ChevronRight, Search, Download, GitMerge } from 'lucide-react';
 
 interface MigrationResult {
   ok: boolean;
@@ -219,6 +219,98 @@ export default function AdminToolsPage() {
   const [mlsAcceptRunning, setMlsAcceptRunning] = useState(false);
   const [mlsAcceptDryRunResult, setMlsAcceptDryRunResult] = useState<any | null>(null);
   const [mlsAcceptResult, setMlsAcceptResult] = useState<any | null>(null);
+
+  // Duplicate Analysis
+  const [dupYearFrom, setDupYearFrom] = useState('2004');
+  const [dupYearTo, setDupYearTo] = useState(String(new Date().getFullYear()));
+  const [dupCategoryFilter, setDupCategoryFilter] = useState('all');
+  const [dupLoading, setDupLoading] = useState(false);
+  const [dupResult, setDupResult] = useState<any | null>(null);
+  const [dupExpandedKeys, setDupExpandedKeys] = useState<Set<string>>(new Set());
+  const [dupAcceptingCategory, setDupAcceptingCategory] = useState<string | null>(null);
+  const [dupAcceptResult, setDupAcceptResult] = useState<{ category: string; accepted: number } | null>(null);
+  const [dupSearchText, setDupSearchText] = useState('');
+
+  const DUP_CATEGORY_META: Record<string, { label: string; color: string; badgeClass: string }> = {
+    TRUE_DUPLICATE: { label: 'True Duplicate', color: 'text-red-700', badgeClass: 'border-red-300 text-red-700 bg-red-50' },
+    DIFF_DATE: { label: 'Different Date', color: 'text-green-700', badgeClass: 'border-green-300 text-green-700 bg-green-50' },
+    DIFF_PRICE: { label: 'Different Price', color: 'text-blue-700', badgeClass: 'border-blue-300 text-blue-700 bg-blue-50' },
+    DIFF_AGENT: { label: 'Different Agent', color: 'text-purple-700', badgeClass: 'border-purple-300 text-purple-700 bg-purple-50' },
+    MISSING_DATES: { label: 'Missing Dates', color: 'text-amber-700', badgeClass: 'border-amber-300 text-amber-700 bg-amber-50' },
+    ALREADY_ACCEPTED: { label: 'Already Accepted', color: 'text-gray-500', badgeClass: 'border-gray-300 text-gray-500 bg-gray-50' },
+  };
+
+  async function runDupAnalysis() {
+    if (!user) return;
+    setDupLoading(true);
+    setDupResult(null);
+    setDupAcceptResult(null);
+    try {
+      const token = await getToken();
+      const params = new URLSearchParams({ yearFrom: dupYearFrom, yearTo: dupYearTo, category: dupCategoryFilter, limit: '1000' });
+      const res = await fetch(`/api/admin/duplicate-analysis?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      setDupResult(await res.json());
+    } catch (err: any) {
+      setDupResult({ ok: false, error: err?.message });
+    } finally {
+      setDupLoading(false);
+    }
+  }
+
+  async function dupBulkAcceptCategory(category: string) {
+    if (!dupResult) return;
+    const groups = dupResult.groups?.filter((g: any) => g.category === category) ?? [];
+    if (!confirm(`Mark all ${groups.length} "${DUP_CATEGORY_META[category]?.label}" groups as legitimate?`)) return;
+    setDupAcceptingCategory(category);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/admin/migrations/bulk-accept-mls-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ yearFrom: Number(dupYearFrom), yearTo: Number(dupYearTo), dryRun: false }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDupAcceptResult({ category, accepted: data.newlyAccepted ?? groups.length });
+        await runDupAnalysis();
+      }
+    } catch (err: any) { alert(`Failed: ${err?.message}`); }
+    finally { setDupAcceptingCategory(null); }
+  }
+
+  async function dupAcceptSingle(key: string) {
+    if (!user) return;
+    try {
+      const token = await getToken();
+      await fetch('/api/admin/accepted-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ key }),
+      });
+      setDupResult((prev: any) => prev ? {
+        ...prev,
+        groups: prev.groups.filter((g: any) => g.key !== key),
+      } : prev);
+    } catch (err: any) { alert(`Failed: ${err?.message}`); }
+  }
+
+  function dupExportCsv() {
+    if (!dupResult) return;
+    const rows = [
+      ['Category', 'Address', 'Agent', 'Reason', 'TX Count', 'TX IDs', 'Close Dates', 'Sale Prices'],
+      ...(dupResult.groups ?? []).map((g: any) => [
+        g.category, g.addressRaw, g.agentRaw, g.reason, String(g.txCount),
+        g.transactions.map((t: any) => t.id).join(' | '),
+        g.transactions.map((t: any) => t.closeDate ?? '').join(' | '),
+        g.transactions.map((t: any) => t.salePrice ? String(t.salePrice) : '').join(' | '),
+      ]),
+    ];
+    const csv = rows.map((r: any) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `duplicate-analysis-${dupYearFrom}-${dupYearTo}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
 
   // Operation A — MLS Date Field Fix
   const [opADryRunResult, setOpADryRunResult] = useState<any | null>(null);
@@ -1683,6 +1775,218 @@ export default function AdminToolsPage() {
             <ArrowRight className="mr-2 h-4 w-4" />
             Open Update Contacts Tool
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Duplicate Analysis */}
+      <Card className="border-indigo-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <GitMerge className="h-5 w-5 text-indigo-600" />
+              <div>
+                <CardTitle className="text-base">Duplicate Transaction Analysis</CardTitle>
+                <CardDescription className="mt-1">
+                  Review all duplicate groups and understand why each was flagged — before accepting or deleting anything.
+                  Categorizes by True Duplicate, Different Date, Different Price, Different Agent, or Missing Dates.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-indigo-300 text-indigo-700">Review</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Controls */}
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Year From</label>
+              <input type="number" min={2000} max={2030} value={dupYearFrom} onChange={e => setDupYearFrom(e.target.value)}
+                className="w-24 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Year To</label>
+              <input type="number" min={2000} max={2030} value={dupYearTo} onChange={e => setDupYearTo(e.target.value)}
+                className="w-24 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Category</label>
+              <select value={dupCategoryFilter} onChange={e => setDupCategoryFilter(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm">
+                <option value="all">All Categories</option>
+                <option value="TRUE_DUPLICATE">True Duplicates Only</option>
+                <option value="DIFF_DATE">Different Date</option>
+                <option value="DIFF_PRICE">Different Price</option>
+                <option value="DIFF_AGENT">Different Agent</option>
+                <option value="MISSING_DATES">Missing Dates</option>
+                <option value="ALREADY_ACCEPTED">Already Accepted</option>
+              </select>
+            </div>
+            <Button onClick={runDupAnalysis} disabled={dupLoading} className="gap-2">
+              {dupLoading ? <><Loader2 className="h-4 w-4 animate-spin" />Scanning…</> : <><Search className="h-4 w-4" />Run Analysis</>}
+            </Button>
+            {dupResult?.ok && (
+              <Button variant="outline" onClick={dupExportCsv} className="gap-2">
+                <Download className="h-4 w-4" />Export CSV
+              </Button>
+            )}
+          </div>
+
+          {/* Summary Cards */}
+          {dupResult?.ok && dupResult.summary && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {Object.keys(DUP_CATEGORY_META).map(cat => (
+                <button key={cat}
+                  onClick={() => setDupCategoryFilter(cat === dupCategoryFilter ? 'all' : cat)}
+                  className={`rounded-lg border p-3 text-left transition-all hover:shadow-sm ${dupCategoryFilter === cat ? 'ring-2 ring-offset-1 ring-indigo-400' : ''}`}>
+                  <div className="text-2xl font-bold">{dupResult.summary[cat] ?? 0}</div>
+                  <div className={`text-xs font-medium mt-0.5 ${DUP_CATEGORY_META[cat].color}`}>{DUP_CATEGORY_META[cat].label}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {dupAcceptResult && (
+            <Alert className="border-green-200 bg-green-50">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertTitle className="text-green-800">Bulk Accept Complete</AlertTitle>
+              <AlertDescription className="text-green-700">
+                {dupAcceptResult.accepted} group(s) accepted as legitimate.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {dupResult && !dupResult.ok && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Analysis Failed</AlertTitle>
+              <AlertDescription>{dupResult.error}</AlertDescription>
+            </Alert>
+          )}
+
+          {dupResult?.ok && (() => {
+            const displayGroups = (dupResult.groups ?? []).filter((g: any) => {
+              if (!dupSearchText) return true;
+              const q = dupSearchText.toLowerCase();
+              return g.addressRaw?.toLowerCase().includes(q) || g.agentRaw?.toLowerCase().includes(q);
+            });
+            return (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    Scanned <strong>{dupResult.totalTransactionsScanned?.toLocaleString()}</strong> transactions ·{' '}
+                    Showing <strong>{displayGroups.length}</strong> of <strong>{dupResult.totalFiltered}</strong> groups
+                    {dupResult.truncated && <span className="text-amber-600"> (truncated at 1,000)</span>}
+                  </div>
+                  <input type="text" placeholder="Search address or agent…" value={dupSearchText}
+                    onChange={e => setDupSearchText(e.target.value)}
+                    className="h-8 w-56 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm" />
+                </div>
+
+                {(dupResult.summary?.DIFF_DATE > 0 || dupResult.summary?.DIFF_PRICE > 0 || dupResult.summary?.DIFF_AGENT > 0) && (
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                    <p className="text-sm font-medium text-green-800 mb-2">These groups are safe to bulk-accept — they are NOT true duplicates:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {dupResult.summary?.DIFF_DATE > 0 && (
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={dupAcceptingCategory !== null}
+                          onClick={() => dupBulkAcceptCategory('DIFF_DATE')}>
+                          {dupAcceptingCategory === 'DIFF_DATE' ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                          Accept All Different-Date ({dupResult.summary.DIFF_DATE})
+                        </Button>
+                      )}
+                      {dupResult.summary?.DIFF_PRICE > 0 && (
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" disabled={dupAcceptingCategory !== null}
+                          onClick={() => dupBulkAcceptCategory('DIFF_PRICE')}>
+                          {dupAcceptingCategory === 'DIFF_PRICE' ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                          Accept All Different-Price ({dupResult.summary.DIFF_PRICE})
+                        </Button>
+                      )}
+                      {dupResult.summary?.DIFF_AGENT > 0 && (
+                        <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white" disabled={dupAcceptingCategory !== null}
+                          onClick={() => dupBulkAcceptCategory('DIFF_AGENT')}>
+                          {dupAcceptingCategory === 'DIFF_AGENT' ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                          Accept All Different-Agent ({dupResult.summary.DIFF_AGENT})
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {displayGroups.map((group: any) => {
+                    const meta = DUP_CATEGORY_META[group.category] ?? { label: group.category, color: 'text-gray-600', badgeClass: 'border-gray-300 text-gray-600' };
+                    const isExpanded = dupExpandedKeys.has(group.key);
+                    return (
+                      <div key={group.key} className="rounded-lg border bg-card shadow-sm overflow-hidden">
+                        <button className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                          onClick={() => setDupExpandedKeys(prev => { const next = new Set(prev); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })}>
+                          {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{group.addressRaw}</div>
+                            <div className="text-xs text-muted-foreground truncate">{group.agentRaw} · {group.reason}</div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant="outline" className={`text-xs ${meta.badgeClass}`}>{meta.label}</Badge>
+                            <span className="text-xs text-muted-foreground">{group.txCount} txs</span>
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t px-4 py-3 space-y-3">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Agent</th>
+                                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Status</th>
+                                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Close Date</th>
+                                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Contract Date</th>
+                                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Sale Price</th>
+                                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Year</th>
+                                    <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Source</th>
+                                    <th className="text-left py-1 font-medium text-muted-foreground">MLS #</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {group.transactions.map((tx: any) => (
+                                    <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30">
+                                      <td className="py-1.5 pr-3 max-w-[120px] truncate">{tx.agentRaw}</td>
+                                      <td className="py-1.5 pr-3">
+                                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                          tx.status === 'closed' ? 'bg-green-100 text-green-800' :
+                                          tx.status === 'active' ? 'bg-blue-100 text-blue-800' :
+                                          tx.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-700'
+                                        }`}>{tx.status}</span>
+                                      </td>
+                                      <td className="py-1.5 pr-3 font-mono">{tx.closeDate ?? '—'}</td>
+                                      <td className="py-1.5 pr-3 font-mono">{tx.contractDate ?? '—'}</td>
+                                      <td className="py-1.5 pr-3">{tx.salePrice ? `$${Number(tx.salePrice).toLocaleString()}` : '—'}</td>
+                                      <td className="py-1.5 pr-3">{tx.year ?? '—'}</td>
+                                      <td className="py-1.5 pr-3">
+                                        {tx.source ? <span className={`px-1.5 py-0.5 rounded text-xs ${tx.source === 'mls_import' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>{tx.source}</span> : '—'}
+                                      </td>
+                                      <td className="py-1.5 font-mono text-muted-foreground">{tx.mlsListNumber ?? '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {group.category !== 'ALREADY_ACCEPTED' && (
+                              <Button size="sm" variant="outline" className="text-xs border-green-300 text-green-700 hover:bg-green-50"
+                                onClick={() => dupAcceptSingle(group.key)}>
+                                <CheckCircle2 className="h-3 w-3 mr-1" />Accept as Legitimate
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {displayGroups.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">No groups found for the selected filters.</div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
