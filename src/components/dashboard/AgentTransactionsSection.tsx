@@ -76,6 +76,8 @@ type AgentTx = {
   buyerCommissionPct?: number;
   sellerPayingListingAgent?: number | null;
   sellerPayingBuyerAgent?: number | null;
+  commissionPercent?: number | null;
+  agentSplitPercent?: number | null;
   optionExpiration?: string | null;
   inspectionDeadline?: string | null;
   projectedCloseDate?: string | null;
@@ -1252,10 +1254,11 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       const isCoAgentView = !!(t as any)._isCoAgentView;
                       const canEdit = (t.status !== 'closed' || !!isAdminViewer) && !isCoAgentView; // admin viewers can edit closed; co-agent views are always read-only
                       const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
-                      const listingPct = Number(t.sellerPayingListingAgent) || 0;
+                      // listingPct: prefer sellerPayingListingAgent, fall back to commissionPercent (already set to listing side %)
+                      const listingPct = Number(t.sellerPayingListingAgent ?? t.commissionPercent) || 0;
                       const lp = Number(t.listPrice) || 0;
-                      // Estimated net to agent: use splitSnapshot agentSplitPercent if available, else fall back to agentPct
-                      const agentSplitPct = Number((t.splitSnapshot as any)?.agentSplitPercent ?? (t as any).agentPct) || 0;
+                      // agentSplitPct: pipeline API exposes this for active listings
+                      const agentSplitPct = Number(t.agentSplitPercent ?? (t.splitSnapshot as any)?.agentSplitPercent ?? (t as any).agentPct) || 0;
                       const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? lp * listingPct / 100 : null;
                       const estimatedNet = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
                       return (

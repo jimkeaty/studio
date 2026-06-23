@@ -173,6 +173,15 @@ export async function GET(req: NextRequest) {
       const snap = tx.splitSnapshot as any;
       const netIncome = snap?.agentNetCommission ?? tx.netCommission ?? null;
       if (netIncome !== null) safe.netIncome = netIncome;
+      // For active listings: expose commission fields needed to estimate net to agent
+      // (sellerPayingListingAgent = listing side %, agentSplitPercent = agent's take-home %)
+      if (tx.status === 'active') {
+        if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
+        if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
+        if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
+        const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? null;
+        if (agentSplitPct != null) safe.agentSplitPercent = agentSplitPct;
+      }
       return safe;
     }
 
