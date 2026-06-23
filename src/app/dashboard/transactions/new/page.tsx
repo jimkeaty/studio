@@ -1504,6 +1504,7 @@ export default function AddTransactionPage() {
               type="button"
               onClick={() => {
                 form.setValue('closingType', 'listing');
+                form.setValue('status', 'active'); // listings default to Active
                 setPdfStep('upload');
               }}
               className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-green-200 bg-green-50 hover:border-green-500 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:hover:border-green-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
@@ -1827,8 +1828,8 @@ export default function AddTransactionPage() {
               )}
             </Grid2>
 
-            {/* ── Listing Commission block (active listings only) ── */}
-            {isActiveListing && watchedClosingType === 'listing' && (() => {
+            {/* ── Listing Commission block (listing transactions) ── */}
+            {watchedClosingType === 'listing' && (() => {
               const listingPct = Number(watchedSellerPayingListing) || 0;
               const buyerPct = Number(watchedSellerPayingBuyer) || 0;
               const totalPct = listingPct + buyerPct;
