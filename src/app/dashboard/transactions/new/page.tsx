@@ -3500,23 +3500,159 @@ export default function AddTransactionPage() {
             </div>
           </Section>}
 
-          {/* ── Additional Information ───────────────────────────────────────────────────────────────────
-              Positioned here (above Buyer Closing Cost / Commission) so that
-              any answers that affect commission calculations are filled in first.
+          {/* ── Additional Info (warranty / compliance / occupancy / shortage) ──────────────────────────
+              Moved above Buyer Closing Cost so agents fill in these details before entering commission.
           ─────────────────────────────────────────────────────────────────── */}
-          <Section title="Additional Information">
-            <FormField control={form.control} name="additionalComments" render={({ field }) => (
+          {watchedClosingType !== 'referral' && watchedClosingType !== 'listing' && !isActiveListing && <Section title="Additional Info">
+            {/* Warranty */}
+            <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
               <FormItem>
-                <FormControl>
-                  <Textarea
-                    placeholder="Any additional comments, special conditions, contingencies, HOA info, key location, anything important..."
-                    className="min-h-[100px]"
-                    {...field}
-                  />
-                </FormControl>
+                <FormLabel>Warranty Paid at Closing?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
               </FormItem>
             )} />
-          </Section>
+            {warrantyAtClosing === 'yes' && (
+              <div className="flex flex-wrap gap-4">
+                <div className="max-w-xs">
+                  <FormField control={form.control} name="warrantyPaidBy" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Who is paying?</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="buyer">Buyer</SelectItem>
+                          <SelectItem value="seller">Seller</SelectItem>
+                          <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
+                <div className="max-w-xs">
+                  <FormField control={form.control} name="warrantyAmount" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Not to Exceed ($)</FormLabel>
+                      <FormControl>
+                        <CurrencyInput
+                          value={field.value as any}
+                          onChange={(val) => field.onChange(val)}
+                          placeholder="700"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Transaction Compliance Fee */}
+            <FormField control={form.control} name="txComplianceFee" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Transaction Compliance Fee?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {txComplianceFee === 'yes' && (
+              <Grid2>
+                <FormField control={form.control} name="txComplianceFeeAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>How much? ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="txComplianceFeePaidBy" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Who is paying for it?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="buyer">Buyer</SelectItem>
+                        <SelectItem value="seller">Seller</SelectItem>
+                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+              </Grid2>
+            )}
+
+            <Separator />
+
+            {/* Occupancy Agreement */}
+            <FormField control={form.control} name="occupancyAgreement" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Occupancy Agreement?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {occupancyAgreement === 'yes' && (
+              <FormField control={form.control} name="occupancyDates" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>When does occupancy start &amp; end?</FormLabel>
+                  <FormControl><Input placeholder="e.g. 3/15/2026 - 4/15/2026" {...field} /></FormControl>
+                </FormItem>
+              )} />
+            )}
+
+            <Separator />
+
+            {/* Shortage in Commission */}
+            <FormField control={form.control} name="shortageInCommission" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Shortage in Commission?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {shortageInCommission === 'yes' && (
+              <Grid2>
+                <FormField control={form.control} name="shortageAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>How much? ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Buyer will bring to closing ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
+                  </FormItem>
+                )} />
+              </Grid2>
+            )}
+          </Section>}
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 5 — COMMISSION & FEES (buyer/dual only)
@@ -4096,159 +4232,22 @@ export default function AddTransactionPage() {
             )}
           </Section>}
 
-          {/* ═══════════════════════════════════════════════════════════════════
-              SECTION 6 — ADDITIONAL INFO / COMMENTS (hidden for referral, listing, and active listings)
-          ═══════════════════════════════════════════════════════════════════ */}
-          {watchedClosingType !== 'referral' && watchedClosingType !== 'listing' && !isActiveListing && <Section title="Additional Info">
-            {/* Warranty */}
-            <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
+          {/* ── Additional Information (free-text comments) ───────────────────────────────────────────────────
+              Moved below commission section.
+          ─────────────────────────────────────────────────────────────────── */}
+          <Section title="Additional Information">
+            <FormField control={form.control} name="additionalComments" render={({ field }) => (
               <FormItem>
-                <FormLabel>Warranty Paid at Closing?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <Textarea
+                    placeholder="Any additional comments, special conditions, contingencies, HOA info, key location, anything important..."
+                    className="min-h-[100px]"
+                    {...field}
+                  />
+                </FormControl>
               </FormItem>
             )} />
-            {warrantyAtClosing === 'yes' && (
-              <div className="flex flex-wrap gap-4">
-                <div className="max-w-xs">
-                  <FormField control={form.control} name="warrantyPaidBy" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Who is paying?</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="buyer">Buyer</SelectItem>
-                          <SelectItem value="seller">Seller</SelectItem>
-                          <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )} />
-                </div>
-                <div className="max-w-xs">
-                  <FormField control={form.control} name="warrantyAmount" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Not to Exceed ($)</FormLabel>
-                      <FormControl>
-                        <CurrencyInput
-                          value={field.value as any}
-                          onChange={(val) => field.onChange(val)}
-                          placeholder="700"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )} />
-                </div>
-              </div>
-            )}
-
-            <Separator />
-
-            {/* Transaction Compliance Fee */}
-            <FormField control={form.control} name="txComplianceFee" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Transaction Compliance Fee?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )} />
-            {txComplianceFee === 'yes' && (
-              <Grid2>
-                <FormField control={form.control} name="txComplianceFeeAmount" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>How much? ($)</FormLabel>
-                    <FormControl>
-                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                    </FormControl>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="txComplianceFeePaidBy" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Who is paying for it?</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="buyer">Buyer</SelectItem>
-                        <SelectItem value="seller">Seller</SelectItem>
-                        <SelectItem value="agent">Agent</SelectItem>
-                        <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )} />
-              </Grid2>
-            )}
-
-            <Separator />
-
-            {/* Occupancy Agreement */}
-            <FormField control={form.control} name="occupancyAgreement" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Occupancy Agreement?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )} />
-            {occupancyAgreement === 'yes' && (
-              <FormField control={form.control} name="occupancyDates" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>When does occupancy start &amp; end?</FormLabel>
-                  <FormControl><Input placeholder="e.g. 3/15/2026 - 4/15/2026" {...field} /></FormControl>
-                </FormItem>
-              )} />
-            )}
-
-            <Separator />
-
-            {/* Shortage in Commission */}
-            <FormField control={form.control} name="shortageInCommission" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Shortage in Commission?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )} />
-            {shortageInCommission === 'yes' && (
-              <Grid2>
-                <FormField control={form.control} name="shortageAmount" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>How much? ($)</FormLabel>
-                    <FormControl>
-                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                    </FormControl>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Buyer will bring to closing ($)</FormLabel>
-                    <FormControl>
-                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                    </FormControl>
-                  </FormItem>
-                )} />
-              </Grid2>
-            )}
-          </Section>}
+          </Section>
 
           {/* ── Documents ────────────────────────────────────────────────────────────────── */}
           <Card>
