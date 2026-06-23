@@ -292,10 +292,16 @@ export async function GET(req: NextRequest) {
       .where('status', '==', 'closed')
       .get();
     const brokeragePrevTx: Transaction[] = brokeragePrevSnap.docs.map(d => d.data() as Transaction);
-    // In all-years mode, include ALL closed transactions; for single year, filter normally
+    // In all-years mode, include ALL closed + open transactions.
+    // In single-year mode, include:
+    //   • Closed transactions whose year matches the selected year
+    //   • ALL open-status transactions (pending, under_contract, active, temp_off_market)
+    //     regardless of year — these have no year field yet (they haven't closed) so
+    //     getTxYear() returns null, causing them to be silently excluded without this fix.
+    const OPEN_STATUSES = new Set(['pending', 'under_contract', 'active', 'temp_off_market']);
     const transactions = isAllYears
       ? allAgentTx.filter(t => t.status === 'closed' || t.status === 'pending' || t.status === 'under_contract')
-      : allAgentTx.filter(t => getTxYear(t) === year);
+      : allAgentTx.filter(t => OPEN_STATUSES.has(t.status) || getTxYear(t) === year);
     const prevTransactions = allAgentTx.filter(t => getTxYear(t) === prevYear);
 
     // ── Brokerage seasonality (all agents, prevYear) ──────────────────────
