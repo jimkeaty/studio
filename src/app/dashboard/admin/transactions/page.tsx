@@ -973,7 +973,7 @@ export default function AdminTransactionLedgerPage() {
                     const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                     const listingPct = Number(t.sellerPayingListingAgent) || 0;
                     const lp = Number((t as any).listPrice) || 0;
-                    const estimatedGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
+                    const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
                     return (
                       <TableRow
                         key={t.id}
@@ -1083,14 +1083,11 @@ export default function AdminTransactionLedgerPage() {
                         <TableCell className="min-w-[130px] whitespace-nowrap">{formatDate((t as any).projectedCloseDate) || '—'}</TableCell>
                         <TableCell className="min-w-[110px] whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">
-                          {isActiveListing
-                            ? (lp > 0 ? <span className="text-muted-foreground text-xs">{formatCurrency(lp)} <span className="text-[10px]">(list)</span></span> : '—')
-                            : (((t as any).salePrice || t.dealValue) ? formatCurrency((t as any).salePrice || t.dealValue) : '—')
-                          }
+                          {((t as any).salePrice || (t as any).listPrice || t.dealValue) ? formatCurrency((t as any).salePrice || (t as any).listPrice || t.dealValue) : '—'}
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">
                           {isActiveListing
-                            ? (estimatedGci !== null ? <span className="text-green-600 dark:text-green-400 text-xs font-medium">~{formatCurrency(estimatedGci)} <span className="text-[10px] font-normal">(est.)</span></span> : '—')
+                            ? (estimatedGrossGci !== null ? <span title="Estimated based on list price">~{formatCurrency(estimatedGrossGci)}</span> : '—')
                             : (gross ? formatCurrency(gross) : '—')
                           }
                         </TableCell>

@@ -1254,7 +1254,10 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                       const listingPct = Number(t.sellerPayingListingAgent) || 0;
                       const lp = Number(t.listPrice) || 0;
-                      const estimatedGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
+                      // Estimated net to agent: use splitSnapshot agentSplitPercent if available, else fall back to agentPct
+                      const agentSplitPct = Number((t.splitSnapshot as any)?.agentSplitPercent ?? (t as any).agentPct) || 0;
+                      const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? lp * listingPct / 100 : null;
+                      const estimatedNet = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
                       return (
                         <TableRow
                           key={t.id}
@@ -1341,14 +1344,13 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.projectedCloseDate) || '—'}</TableCell>
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.inspectionDeadline) || '—'}</TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap text-sm">
-                            {isActiveListing
-                              ? (lp > 0 ? <span className="text-muted-foreground text-xs">{formatCurrency(lp)} <span className="text-[10px]">(list)</span></span> : '—')
-                              : ((t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—')
-                            }
+                            {(t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—'}
                           </TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap font-semibold text-primary text-sm">
                             {isActiveListing
-                              ? (estimatedGci !== null ? <span className="text-green-600 dark:text-green-400 text-xs font-medium">~{formatCurrency(estimatedGci)} <span className="text-[10px] font-normal">(est.)</span></span> : '—')
+                              ? (estimatedNet !== null
+                                  ? <span title="Estimated based on list price">~{formatCurrency(estimatedNet)}</span>
+                                  : (net ? formatCurrency(net) : '—'))
                               : (net ? formatCurrency(net) : '—')
                             }
                           </TableCell>
