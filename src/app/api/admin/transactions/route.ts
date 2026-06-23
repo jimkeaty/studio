@@ -227,6 +227,16 @@ export async function PATCH(req: NextRequest) {
       updates.dealSource = normalizeDealSource(updates.dealSource) || updates.dealSource;
     }
 
+    // Coerce empty-string numeric commission fields to null so they don't overwrite saved values
+    for (const field of ['sellerPayingListingAgent', 'sellerPayingBuyerAgent', 'commissionPercent', 'listPrice', 'salePrice']) {
+      if (field in updates && (updates[field] === '' || updates[field] === null || updates[field] === undefined)) {
+        updates[field] = null;
+      } else if (field in updates && updates[field] !== null) {
+        const n = Number(updates[field]);
+        if (!isNaN(n)) updates[field] = n;
+      }
+    }
+
     if (Object.keys(updates).length === 0) {
       return jsonError(400, 'No valid fields to update');
     }

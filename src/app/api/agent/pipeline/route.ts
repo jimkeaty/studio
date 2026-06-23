@@ -182,6 +182,14 @@ export async function GET(req: NextRequest) {
         // Prefer split % stored on the transaction; fall back to agent's current plan split %
         const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
         if (agentSplitPct != null) safe.agentSplitPercent = agentSplitPct;
+        console.log('[pipeline] active listing debug', {
+          id: tx.id, address: tx.address,
+          sellerPayingListingAgent: tx.sellerPayingListingAgent,
+          listPrice: tx.listPrice,
+          agentSplitPct,
+          agentCurrentSplitPct,
+          closingType: tx.closingType,
+        });
       }
       return safe;
     }
