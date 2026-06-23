@@ -143,7 +143,19 @@ function getTransactionDateForEarned(t: any): Date | null {
 }
 
 function getTransactionDateForPending(t: any): Date | null {
-  return toDate(t?.contractDate || t?.pendingDate || t?.underContractDate || null);
+  // Try all date fields that indicate when a deal went pending.
+  // MLS-imported transactions store the contract date as 'underContractDate';
+  // manually entered transactions use 'contractDate'.
+  // Fall back to listingDate or createdAt so a pending deal is never silently
+  // dropped from the chart just because a contract date wasn't entered yet.
+  return toDate(
+    t?.contractDate ||
+    t?.pendingDate ||
+    t?.underContractDate ||
+    t?.listingDate ||
+    t?.createdAt ||
+    null
+  );
 }
 
 export async function GET(req: NextRequest) {
@@ -373,11 +385,21 @@ export async function GET(req: NextRequest) {
     // Wrap in a compatible object for the existing activitySnap.docs usage below
     const activitySnap = { docs: Array.from(activityDocMap.entries()).map(([id, data]) => ({ id, data: () => data })) };
 
+    // Fetch year-matched closed transactions AND all open-status transactions regardless of year.
+    // Pending/active transactions often have no 'year' field (they haven't closed yet), so a
+    // year-only query silently misses them — exactly why charts showed blank pending data.
+    // This mirrors the dual-query strategy used by the admin transaction ledger.
+    const OPEN_STATUSES = ['active', 'pending', 'under_contract', 'coming_soon', 'temp_off_market', 'temporary_off_market'];
     await Promise.all(
       txQueryIdList.map(async (agentIdVal) => {
         try {
-          const snap = await adminDb.collection("transactions").where("agentId","==",agentIdVal).where("year","==",yearNum).get();
-          snap.docs.forEach(d => { if (!txDocMap.has(d.id)) txDocMap.set(d.id, d.data() || {}); });
+          const [yearSnap, openSnap] = await Promise.all([
+            adminDb.collection("transactions").where("agentId","==",agentIdVal).where("year","==",yearNum).get(),
+            adminDb.collection("transactions").where("agentId","==",agentIdVal).where("status","in",OPEN_STATUSES).get(),
+          ]);
+          for (const d of [...yearSnap.docs, ...openSnap.docs]) {
+            if (!txDocMap.has(d.id)) txDocMap.set(d.id, d.data() || {});
+          }
         } catch(e) { console.warn('[dashboard] tx query failed for '+agentIdVal, e); }
       })
     );

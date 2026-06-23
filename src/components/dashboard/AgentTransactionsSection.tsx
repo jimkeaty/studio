@@ -912,7 +912,9 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
   const pendingCount = transactions.filter(t => t.status === 'pending').length;
   const closedCount = transactions.filter(t => t.status === 'closed').length;
   const netPending = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
+  const pendingVolume = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.salePrice || t.listPrice || t.dealValue || 0), 0);
   const netClosed = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
+  const closedVolume = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.salePrice || t.listPrice || t.dealValue || 0), 0);
 
   /* ─── Render ─────────────────────────────────────────────────────────── */
 
@@ -939,12 +941,14 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
         <Card className="p-4">
           <p className="text-xs text-muted-foreground font-medium">Pending</p>
           <p className="text-2xl font-bold text-yellow-600 mt-1">{pendingCount}</p>
-          {netPending > 0 && <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(netPending)} net</p>}
+          {pendingVolume > 0 && <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(pendingVolume)} vol</p>}
+          {netPending > 0 && <p className="text-xs text-muted-foreground">{formatCurrency(netPending)} net</p>}
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground font-medium">Closed (All)</p>
           <p className="text-2xl font-bold text-green-600 mt-1">{closedCount}</p>
-          {netClosed > 0 && <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(netClosed)} net</p>}
+          {closedVolume > 0 && <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(closedVolume)} vol</p>}
+          {netClosed > 0 && <p className="text-xs text-muted-foreground">{formatCurrency(netClosed)} net</p>}
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground font-medium">Total Transactions</p>
