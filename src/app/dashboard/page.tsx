@@ -2503,7 +2503,10 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 label: m.label,
                 netIncome: (!isFuture && !isPartial) ? income : null,
                 partialNetIncome: isPartial ? income : null,
-                pendingNetIncome: (showPending && !isFuture) ? (monthlyPendingNetIncome[i] || 0) : null,
+                // Pending bars show in ALL months including future — a pending deal
+                // with a projected close in July should appear in July even though
+                // July is a "future" month. That is the purpose of the pending bar.
+                pendingNetIncome: showPending ? (monthlyPendingNetIncome[i] || 0) : null,
                 // In rolling view, show goal bars for all 12 months (the whole point of rolling view).
                 // In calendar year view, suppress future months to avoid a goal bar with no actuals.
                 incomeGoal: showGoals ? (rollingView ? m.grossMarginGoal : m.grossMarginGoal) : null,
@@ -2632,7 +2635,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 ...m,
                 closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
                 partialClosedVolume: isPartial ? m.closedVolume : null,
-                pendingVolume: (showPending && !isFuture) ? m.pendingVolume : null,
+                pendingVolume: showPending ? m.pendingVolume : null,
                 volumeGoal: showGoals ? m.volumeGoal : null,
                 compareVolume: compareYear ? (perfData.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
                 projectedVolume: showProjected ? (projVolume[i] ?? null) : null,
@@ -2759,7 +2762,7 @@ function ChartsSection({ perfData, perfLoading, perfError, year, compareYear, se
                 ...m,
                 closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
                 partialClosedCount: isPartial ? m.closedCount : null,
-                pendingCount: (showPending && !isFuture) ? m.pendingCount : null,
+                pendingCount: showPending ? m.pendingCount : null,
                 salesCountGoal: showGoals ? m.salesCountGoal : null,
                 compareCount: compareYear ? (perfData.comparisonData?.months?.[i]?.closedCount ?? null) : null,
                 projectedCount: showProjected ? (projSales[i] ?? null) : null,
