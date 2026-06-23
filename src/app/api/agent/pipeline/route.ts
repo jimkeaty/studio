@@ -179,10 +179,33 @@ export async function GET(req: NextRequest) {
         if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
         if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
         if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
-        const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? null;
+        // Prefer split % stored on the transaction; fall back to agent's current plan split %
+        const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
         if (agentSplitPct != null) safe.agentSplitPercent = agentSplitPct;
       }
       return safe;
+    }
+
+    // Fetch the agent's current split % from their profile (for active listing estimates)
+    // We look up the first agentId that has a profile with tiers or flat plan.
+    let agentCurrentSplitPct: number | null = null;
+    if (!isAdminCaller) {
+      try {
+        for (const agentId of agentIds) {
+          const profileSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
+          const profileData = profileSnap.exists ? profileSnap.data() : null;
+          if (profileData) {
+            if ((profileData as any).commissionMode === 'flat') {
+              agentCurrentSplitPct = Number((profileData as any).flatAgentPercent ?? 0) || null;
+            } else if (Array.isArray((profileData as any).tiers) && (profileData as any).tiers.length > 0) {
+              // Use the first (lowest) tier as a conservative estimate
+              const firstTier = (profileData as any).tiers[0];
+              agentCurrentSplitPct = Number(firstTier.agentSplitPercent ?? 0) || null;
+            }
+            if (agentCurrentSplitPct) break;
+          }
+        }
+      } catch { /* non-fatal */ }
     }
 
     // Fetch transactions for all resolved IDs and merge results
