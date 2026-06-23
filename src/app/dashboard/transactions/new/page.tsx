@@ -944,6 +944,7 @@ export default function AddTransactionPage() {
   const watchedCBP = form.watch('commissionBasePrice');
   const watchedSellerPayingListing = form.watch('sellerPayingListingAgent');
   const watchedSellerPayingBuyer = form.watch('sellerPayingBuyerAgent');
+  const watchedListPrice = form.watch('listPrice');
 
   const cbpManuallyEdited = useRef(false);
   const commPctManuallyEdited = useRef(false);
@@ -1825,6 +1826,64 @@ export default function AddTransactionPage() {
                 )} />
               )}
             </Grid2>
+
+            {/* ── Listing Commission block (active listings only) ── */}
+            {isActiveListing && watchedClosingType === 'listing' && (() => {
+              const listingPct = Number(watchedSellerPayingListing) || 0;
+              const buyerPct = Number(watchedSellerPayingBuyer) || 0;
+              const totalPct = listingPct + buyerPct;
+              const lp = Number(watchedListPrice) || 0;
+              const estimatedGci = lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
+              return (
+                <div className="space-y-4 rounded-lg border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-950/20 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-green-800 dark:text-green-300">Listing Commission</p>
+                    {estimatedGci !== null && (
+                      <span className="text-sm font-bold text-green-700 dark:text-green-400">
+                        Est. GCI: ${estimatedGci.toLocaleString('en-US')}
+                      </span>
+                    )}
+                  </div>
+                  <Grid2>
+                    <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>% Seller Paying Listing Agent</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="3" />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                          </div>
+                        </FormControl>
+                        <FormDescription>Your listing side commission %</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>% Seller Paying Buyer&apos;s Agent</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="3" />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                          </div>
+                        </FormControl>
+                        <FormDescription>Offered to buyer&apos;s agent</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </Grid2>
+                  {totalPct > 0 && (
+                    <div className="flex items-center gap-6 text-sm text-green-700 dark:text-green-400">
+                      <span>Total commission: <strong>{totalPct}%</strong></span>
+                      {lp > 0 && <span>= <strong>${Math.round(lp * totalPct / 100).toLocaleString('en-US')}</strong> total</span>}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Estimated based on list price — will be recalculated at closing.
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* ── Commercial Lease/Sale fields ── */}
             {isCommercialListing && (

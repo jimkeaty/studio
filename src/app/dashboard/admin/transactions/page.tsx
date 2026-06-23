@@ -970,6 +970,10 @@ export default function AdminTransactionLedgerPage() {
                     const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
                     const broker = t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0;
                     const sc = statusConfig[t.status] || statusConfig.pending;
+                    const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
+                    const listingPct = Number(t.sellerPayingListingAgent) || 0;
+                    const lp = Number((t as any).listPrice) || 0;
+                    const estimatedGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
                     return (
                       <TableRow
                         key={t.id}
@@ -1078,8 +1082,18 @@ export default function AdminTransactionLedgerPage() {
                         <TableCell className="min-w-[120px] whitespace-nowrap">{formatDate(t.contractDate)}</TableCell>
                         <TableCell className="min-w-[130px] whitespace-nowrap">{formatDate((t as any).projectedCloseDate) || '—'}</TableCell>
                         <TableCell className="min-w-[110px] whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
-                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{((t as any).salePrice || t.dealValue) ? formatCurrency((t as any).salePrice || t.dealValue) : '—'}</TableCell>
-                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{gross ? formatCurrency(gross) : '—'}</TableCell>
+                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">
+                          {isActiveListing
+                            ? (lp > 0 ? <span className="text-muted-foreground text-xs">{formatCurrency(lp)} <span className="text-[10px]">(list)</span></span> : '—')
+                            : (((t as any).salePrice || t.dealValue) ? formatCurrency((t as any).salePrice || t.dealValue) : '—')
+                          }
+                        </TableCell>
+                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">
+                          {isActiveListing
+                            ? (estimatedGci !== null ? <span className="text-green-600 dark:text-green-400 text-xs font-medium">~{formatCurrency(estimatedGci)} <span className="text-[10px] font-normal">(est.)</span></span> : '—')
+                            : (gross ? formatCurrency(gross) : '—')
+                          }
+                        </TableCell>
                         <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">{net ? formatCurrency(net) : '—'}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">{broker ? formatCurrency(broker) : '—'}</TableCell>
                         <TableCell className="min-w-[90px]"><Badge variant="secondary" className="text-xs capitalize">{t.source ?? 'manual'}</Badge></TableCell>

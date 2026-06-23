@@ -74,6 +74,8 @@ type AgentTx = {
   titleCompany?: string; titleOfficer?: string; titleOfficerEmail?: string; titleOfficerPhone?: string;
   sellerCommissionPct?: number;
   buyerCommissionPct?: number;
+  sellerPayingListingAgent?: number | null;
+  sellerPayingBuyerAgent?: number | null;
   optionExpiration?: string | null;
   inspectionDeadline?: string | null;
   projectedCloseDate?: string | null;
@@ -1249,6 +1251,10 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       const addr = t.address || t.propertyAddress || '—';
                       const isCoAgentView = !!(t as any)._isCoAgentView;
                       const canEdit = (t.status !== 'closed' || !!isAdminViewer) && !isCoAgentView; // admin viewers can edit closed; co-agent views are always read-only
+                      const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
+                      const listingPct = Number(t.sellerPayingListingAgent) || 0;
+                      const lp = Number(t.listPrice) || 0;
+                      const estimatedGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
                       return (
                         <TableRow
                           key={t.id}
@@ -1335,10 +1341,16 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.projectedCloseDate) || '—'}</TableCell>
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.inspectionDeadline) || '—'}</TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap text-sm">
-                            {(t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—'}
+                            {isActiveListing
+                              ? (lp > 0 ? <span className="text-muted-foreground text-xs">{formatCurrency(lp)} <span className="text-[10px]">(list)</span></span> : '—')
+                              : ((t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—')
+                            }
                           </TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap font-semibold text-primary text-sm">
-                            {net ? formatCurrency(net) : '—'}
+                            {isActiveListing
+                              ? (estimatedGci !== null ? <span className="text-green-600 dark:text-green-400 text-xs font-medium">~{formatCurrency(estimatedGci)} <span className="text-[10px] font-normal">(est.)</span></span> : '—')
+                              : (net ? formatCurrency(net) : '—')
+                            }
                           </TableCell>
                           <TableCell className="min-w-[90px] text-center" onClick={e => e.stopPropagation()}>
                             {t.documents && t.documents.length > 0 ? (
