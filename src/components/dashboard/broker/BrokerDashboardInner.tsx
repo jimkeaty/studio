@@ -2041,7 +2041,7 @@ export function BrokerDashboardInner() {
                   ...m,
                   totalGCI: (!isFuture && !isPartial) ? m.totalGCI : null,
                   partialGCI: isPartial ? m.totalGCI : null,
-                  pendingGciBar: (!showPendingGM || isFuture) ? null : (m.pendingGci ?? 0),
+                  pendingGciBar: !showPendingGM ? null : (m.pendingGci ?? 0),
                   compareGCI: compareYear ? (data.comparisonData?.months?.[i]?.totalGCI ?? null) : null,
                   // projectedGCI: use margin projection as proxy (GCI = margin / marginPct)
                   projectedGCI: showProjected ? (() => {
@@ -2149,7 +2149,7 @@ export function BrokerDashboardInner() {
                   // so it can be styled differently (amber color)
                   grossMargin: (!isFuture && !isPartial) ? m.grossMargin : null,
                   partialGrossMargin: isPartial ? m.grossMargin : null,
-                  pendingGrossMargin: (!showPendingGM || isFuture) ? null : (m.pendingGci ?? 0),
+                  pendingGrossMargin: !showPendingGM ? null : (m.pendingGci ?? 0),
                   // Show goal bars for all 12 months in both calendar and rolling view.
                   grossMarginGoal: showGoals ? m.grossMarginGoal : null,
                   compareMargin: compareYear ? (data.comparisonData?.months?.[i]?.grossMargin ?? null) : null,
@@ -2337,7 +2337,7 @@ export function BrokerDashboardInner() {
                   closedVolume: (!isFuture && !isPartial) ? m.closedVolume : null,
                   partialClosedVolume: isPartial ? m.closedVolume : null,
                   volumeGoal: showGoals ? m.volumeGoal : null,
-                  pendingVolume: (!showPending || isFuture) ? null : m.pendingVolume,
+                  pendingVolume: !showPending ? null : m.pendingVolume,
                   compareVolume: compareYear ? (data.comparisonData?.months?.[i]?.closedVolume ?? null) : null,
                   projectedVolume: showProjected ? (projectedMonthData?.volume[i] ?? null) : null,
                 };
@@ -2468,7 +2468,7 @@ export function BrokerDashboardInner() {
                   closedCount: (!isFuture && !isPartial) ? m.closedCount : null,
                   partialClosedCount: isPartial ? m.closedCount : null,
                   salesCountGoal: showGoals ? m.salesCountGoal : null,
-                  pendingCount: (!showPending || isFuture) ? null : m.pendingCount,
+                  pendingCount: !showPending ? null : m.pendingCount,
                   compareCount: compareYear ? (data.comparisonData?.months?.[i]?.closedCount ?? null) : null,
                   projectedCount: showProjected ? (projectedMonthData?.sales[i] ?? null) : null,
                 };
