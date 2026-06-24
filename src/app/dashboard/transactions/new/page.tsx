@@ -1007,12 +1007,16 @@ export default function AddTransactionPage() {
 
   // Admin: load agent list
   useEffect(() => {
-    if (!user || !isAdmin) return;
+    if (!user) return;
     const load = async () => {
       setAgentsLoading(true);
       try {
         const token = await user.getIdToken();
-        const res = await fetch('/api/admin/agents?source=profiles', {
+        // Admins use the full admin endpoint; agents use the agent-accessible endpoint
+        const endpoint = isAdmin
+          ? '/api/admin/agents?source=profiles'
+          : '/api/agent/agents-list';
+        const res = await fetch(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
