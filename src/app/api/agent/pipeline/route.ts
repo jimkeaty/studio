@@ -154,41 +154,10 @@ export async function GET(req: NextRequest) {
     const resolveEmail = (viewAs && callerIsAdmin) ? undefined : decoded.email;
     const agentIds = await resolveQueryIds(uid, resolveEmail);
 
-    // Strip commission split fields for non-admin callers.
-    // Agents only see their net income; all gross commission, broker retained,
-    // and split percentage fields are removed at the API layer.
-    const COMMISSION_FIELDS = [
-      'splitSnapshot', 'commission', 'brokerProfit', 'gci',
-      'agentPct', 'brokerPct', 'grossCommission', 'companyRetained',
-      'agentSplitPercent', 'companySplitPercent',
-    ];
-    function sanitizeForAgent(tx: any): any {
-      if (isAdminCaller) return tx;
-      const safe: any = {};
-      for (const [k, v] of Object.entries(tx)) {
-        if (COMMISSION_FIELDS.includes(k)) continue;
-        safe[k] = v;
-      }
-      // Re-attach only the agent's own net income (not the full splitSnapshot)
-      const snap = tx.splitSnapshot as any;
-      const netIncome = snap?.agentNetCommission ?? tx.netCommission ?? null;
-      if (netIncome !== null) safe.netIncome = netIncome;
-      // For active listings: expose commission fields needed to estimate net to agent
-      // (sellerPayingListingAgent = listing side %, agentSplitPercent = agent's take-home %)
-      if (tx.status === 'active') {
-        if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
-        if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
-        if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
-        // Prefer split % stored on the transaction; fall back to agent's current plan split %
-        const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
-        if (agentSplitPct != null) safe.agentSplitPercent = agentSplitPct;
-
-      }
-      return safe;
-    }
-
-    // Fetch the agent's current split % from their profile (for active listing estimates)
-    // We look up the first agentId that has a profile with tiers or flat plan.
+    // ── Fetch the agent's current split % from their profile FIRST ─────────────
+    // Must be done before sanitizeForAgent is defined so the closure captures the
+    // resolved value (not null). Active listings have no splitSnapshot, so we use
+    // the agent's current plan split % to estimate Net to Me.
     let agentCurrentSplitPct: number | null = null;
     if (!isAdminCaller) {
       try {
@@ -249,6 +218,39 @@ export async function GET(req: NextRequest) {
           }
         }
       } catch { /* non-fatal */ }
+    }
+
+    // Strip commission split fields for non-admin callers.
+    // Agents only see their net income; all gross commission, broker retained,
+    // and split percentage fields are removed at the API layer.
+    // NOTE: agentCurrentSplitPct must be resolved above before this function is defined.
+    const COMMISSION_FIELDS = [
+      'splitSnapshot', 'commission', 'brokerProfit', 'gci',
+      'agentPct', 'brokerPct', 'grossCommission', 'companyRetained',
+      'agentSplitPercent', 'companySplitPercent',
+    ];
+    function sanitizeForAgent(tx: any): any {
+      if (isAdminCaller) return tx;
+      const safe: any = {};
+      for (const [k, v] of Object.entries(tx)) {
+        if (COMMISSION_FIELDS.includes(k)) continue;
+        safe[k] = v;
+      }
+      // Re-attach only the agent's own net income (not the full splitSnapshot)
+      const snap = tx.splitSnapshot as any;
+      const netIncome = snap?.agentNetCommission ?? tx.netCommission ?? null;
+      if (netIncome !== null) safe.netIncome = netIncome;
+      // For active listings: expose commission fields needed to estimate net to agent
+      // (sellerPayingListingAgent = listing side %, agentSplitPercent = agent's take-home %)
+      if (tx.status === 'active') {
+        if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
+        if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
+        if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
+        // Prefer split % stored on the transaction; fall back to agent's current plan split %
+        const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
+        if (agentSplitPct != null) safe.agentSplitPercent = agentSplitPct;
+      }
+      return safe;
     }
 
     // Fetch transactions for all resolved IDs and merge results
