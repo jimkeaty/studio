@@ -193,16 +193,25 @@ export async function GET(req: NextRequest) {
     if (!isAdminCaller) {
       try {
         // Helper: extract split % from a profile data object
+        // Checks all known nesting paths for commission plan data.
         function extractSplitPct(pd: any): number | null {
           if (!pd) return null;
-          if (pd.commissionMode === 'flat') {
-            return Number(pd.flatAgentPercent ?? 0) || null;
+          // Unwrap nested commission plan if present
+          const plan = pd.commissionPlan || pd.commission || pd.commissionStructure || null;
+          const planType = (plan?.planType || plan?.type || pd.commissionMode || '').toLowerCase();
+          if (planType === 'flat') {
+            return Number(
+              plan?.flatAgentPercent ?? plan?.agentPercent ?? plan?.agentSplitPercent ??
+              pd.flatAgentPercent ?? pd.agentPercent ?? 0
+            ) || null;
           }
-          const tiers = pd.tiers || pd.commissionTiers || [];
+          // Tiered — try nested plan first, then top-level
+          const tiers: any[] = plan?.tiers || plan?.commissionTiers || pd.tiers || pd.commissionTiers || [];
           if (Array.isArray(tiers) && tiers.length > 0) {
             return Number(tiers[0].agentSplitPercent ?? tiers[0].agentPercent ?? 0) || null;
           }
-          return null;
+          // Last resort: direct agentSplitPercent on profile
+          return Number(pd.agentSplitPercent ?? pd.agentPercent ?? 0) || null;
         }
 
         // Strategy 1: direct doc lookup by each resolved agentId

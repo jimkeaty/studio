@@ -146,20 +146,41 @@ export async function GET(req: NextRequest) {
         await Promise.all(
           uniqueAgentIds.map(async (agentId) => {
             try {
-              const profileSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
-              if (!profileSnap.exists) return;
-              const pd = profileSnap.data() || {};
-              const plan = pd.commissionPlan || pd.commission || pd.commissionStructure;
-              if (!plan) return;
+              // Strategy 1: direct doc lookup (works when agentId === profile doc ID)
+              let pd: any = null;
+              const directSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
+              if (directSnap.exists) {
+                pd = directSnap.data() || {};
+              } else {
+                // Strategy 2: query by firebaseUid field (when agentId is a Firebase UID)
+                const byUidSnap = await adminDb.collection('agentProfiles')
+                  .where('firebaseUid', '==', agentId).limit(1).get();
+                if (!byUidSnap.empty) {
+                  pd = byUidSnap.docs[0].data() || {};
+                } else {
+                  // Strategy 3: query by agentId field
+                  const byAgentIdSnap = await adminDb.collection('agentProfiles')
+                    .where('agentId', '==', agentId).limit(1).get();
+                  if (!byAgentIdSnap.empty) {
+                    pd = byAgentIdSnap.docs[0].data() || {};
+                  }
+                }
+              }
+              if (!pd) return;
+              // Try all known commission plan field paths
+              const plan = pd.commissionPlan || pd.commission || pd.commissionStructure || pd;
               let splitPct: number | null = null;
-              if (plan.planType === 'flat' || plan.type === 'flat') {
-                splitPct = Number(plan.flatAgentPercent ?? plan.agentPercent ?? plan.agentSplitPercent ?? 0) || null;
+              const planType = plan.planType || plan.type || pd.commissionMode || '';
+              if (planType === 'flat') {
+                splitPct = Number(plan.flatAgentPercent ?? plan.agentPercent ?? plan.agentSplitPercent ?? pd.flatAgentPercent ?? 0) || null;
               } else {
                 // Tiered — use the first tier as the baseline estimate
-                const tiers = plan.tiers || plan.commissionTiers || [];
+                const tiers = plan.tiers || plan.commissionTiers || pd.tiers || [];
                 if (tiers.length > 0) {
                   splitPct = Number(tiers[0].agentSplitPercent ?? tiers[0].agentPercent ?? 0) || null;
                 }
+                // Also try direct agentSplitPercent on profile as last resort
+                if (!splitPct) splitPct = Number(pd.agentSplitPercent ?? pd.agentPercent ?? 0) || null;
               }
               if (splitPct && splitPct > 0) splitPctMap.set(agentId, splitPct);
             } catch { /* non-fatal */ }
