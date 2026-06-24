@@ -147,6 +147,11 @@ export default function StaffQueuePage() {
   // Per-submission checklist state (submissionId -> checklist)
   const [checklists, setChecklists] = useState<Record<string, { mls: boolean; boomtown: boolean; email: boolean }>>({});
   const [savingChecklist, setSavingChecklist] = useState<string | null>(null);
+  // Marketing email generator
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [emailPreviewHtml, setEmailPreviewHtml] = useState('');
+  const [emailPreviewText, setEmailPreviewText] = useState('');
+  const [generatingEmail, setGeneratingEmail] = useState(false);
 
   /* ─── Fetch transaction queue ─────────────────────────────────────────── */
 
@@ -207,6 +212,96 @@ export default function StaffQueuePage() {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
   useEffect(() => { fetchOhItems(); }, [fetchOhItems]);
+
+  /* ─── Generate marketing email content ─────────────────────────────── */
+
+  const handleGenerateEmail = useCallback(() => {
+    setGeneratingEmail(true);
+    // Group items by date
+    const groups: Record<string, OpenHouseSubmission[]> = {};
+    for (const item of ohItems) {
+      if (item.status === 'cancelled') continue;
+      const d = item.openHouseDate || 'Unknown Date';
+      if (!groups[d]) groups[d] = [];
+      groups[d].push(item);
+    }
+    const sortedDates = Object.keys(groups).sort();
+
+    const fmtTime = (t?: string) => {
+      if (!t) return '';
+      if (t.includes('AM') || t.includes('PM')) return t;
+      try {
+        const [h, m] = t.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+      } catch { return t; }
+    };
+
+    const fmtDate = (iso: string) => {
+      try { return format(parseISO(iso), 'EEEE, MMMM d'); } catch { return iso; }
+    };
+
+    // Plain text version (for Constant Contact paste)
+    let text = `Open Houses This Weekend!\n\n`;
+    text += `Does anyone else have an open house this weekend that needs to be marketed through our socials before we lock in the publish schedule?\n\n`;
+    text += `Please submit by END OF DAY TODAY!!\n\n`;
+    text += `Once scheduled out to publish, we cannot unschedule!\n\n`;
+    text += `Currently we have:\n\n`;
+    for (const date of sortedDates) {
+      text += `${fmtDate(date)}\n`;
+      for (const item of groups[date]) {
+        const firstName = item.agentName.split(' ')[0];
+        const addr = item.propertyAddress || (item.mlsNumber ? `MLS# ${item.mlsNumber}` : 'TBD');
+        const time = item.startTime ? `${fmtTime(item.startTime)}–${fmtTime(item.endTime)}` : '';
+        text += `${firstName} - ${addr}${time ? ` - ${time}` : ''}\n`;
+      }
+      text += `\n`;
+    }
+    text += `Thank you!`;
+
+    // HTML version
+    let dayRows = '';
+    for (const date of sortedDates) {
+      dayRows += `<tr><td style="padding:12px 0 4px;font-size:16px;font-weight:700;color:#1e40af;">${fmtDate(date)}</td></tr>`;
+      for (const item of groups[date]) {
+        const firstName = item.agentName.split(' ')[0];
+        const addr = item.propertyAddress || (item.mlsNumber ? `MLS# ${item.mlsNumber}` : 'TBD');
+        const time = item.startTime ? `${fmtTime(item.startTime)}–${fmtTime(item.endTime)}` : '';
+        dayRows += `<tr><td style="padding:4px 0 4px 16px;font-size:15px;color:#374151;"><strong>${firstName}</strong> &mdash; ${addr}${time ? ` &nbsp;·&nbsp; ${time}` : ''}</td></tr>`;
+      }
+    }
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f4f5;margin:0;padding:32px 16px;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table width="100%" style="max-width:560px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
+  <tr><td style="background:#1e40af;padding:24px 32px;">
+    <p style="margin:0;color:#fff;font-size:20px;font-weight:800;">Keaty Real Estate</p>
+    <p style="margin:4px 0 0;color:#bfdbfe;font-size:13px;">Open Houses This Weekend!</p>
+  </td></tr>
+  <tr><td style="padding:28px 32px;">
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">Hey all!</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">Does anyone else have an open house this weekend that needs to be marketed through Keaty Socials before we lock in the publish schedule on social media??</p>
+    <p style="margin:0 0 20px;font-size:16px;font-weight:700;color:#dc2626;">Please submit by END OF DAY TODAY!! 😎</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#6b7280;font-style:italic;">Once scheduled out to publish, we cannot unschedule!</p>
+    <p style="margin:0 0 12px;font-size:16px;font-weight:700;color:#111827;">Currently we have:</p>
+    <table width="100%" cellpadding="0" cellspacing="0">${dayRows}</table>
+    <p style="margin:24px 0 0;font-size:15px;color:#374151;">Thank you!</p>
+  </td></tr>
+  <tr><td style="padding:16px 32px;border-top:1px solid #f3f4f6;">
+    <p style="margin:0;color:#9ca3af;font-size:12px;">Keaty Real Estate &mdash; Lafayette, LA</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+
+    setEmailPreviewHtml(html);
+    setEmailPreviewText(text);
+    setShowEmailPreview(true);
+    setGeneratingEmail(false);
+  }, [ohItems]);
 
   /* ─── Checklist helpers ──────────────────────────────────────────────── */
 
@@ -399,7 +494,7 @@ export default function StaffQueuePage() {
 
           <Card>
             <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
                 <Select value={ohStatusFilter} onValueChange={setOhStatusFilter}>
                   <SelectTrigger className="sm:w-52">
                     <SelectValue placeholder="Filter by status" />
@@ -408,11 +503,74 @@ export default function StaffQueuePage() {
                     <SelectItem value="pending">Pending Review</SelectItem>
                     <SelectItem value="email_sent">Email Sent</SelectItem>
                     <SelectItem value="all">All Submissions</SelectItem>
-                  </SelectContent>
+                                    </SelectContent>
                 </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateEmail}
+                  disabled={generatingEmail || ohItems.filter(i => i.status !== 'cancelled').length === 0}
+                  className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                >
+                  {generatingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  Generate Marketing Email
+                </Button>
               </div>
             </CardContent>
           </Card>
+
+          {/* Marketing Email Preview Panel */}
+          {showEmailPreview && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base text-blue-800 flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Marketing Email Content — Ready to Copy
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => setShowEmailPreview(false)} className="h-7 text-xs">
+                    Close
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-blue-700">
+                  Copy the plain text below to paste into Constant Contact, or use the HTML source for a styled version.
+                  This content is auto-generated from all non-cancelled open house submissions above.
+                </p>
+                {/* Plain text */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Plain Text (paste into Constant Contact)</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => { navigator.clipboard.writeText(emailPreviewText); }}
+                    >
+                      Copy Text
+                    </Button>
+                  </div>
+                  <pre className="bg-white border rounded-md p-4 text-sm whitespace-pre-wrap font-mono text-gray-800 max-h-64 overflow-y-auto">{emailPreviewText}</pre>
+                </div>
+                {/* HTML source */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HTML Source (for styled email)</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => { navigator.clipboard.writeText(emailPreviewHtml); }}
+                    >
+                      Copy HTML
+                    </Button>
+                  </div>
+                  <pre className="bg-white border rounded-md p-4 text-xs whitespace-pre-wrap font-mono text-gray-600 max-h-48 overflow-y-auto">{emailPreviewHtml}</pre>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="pb-2">

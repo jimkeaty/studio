@@ -198,6 +198,7 @@ const adminMenuGroups = [
     label: 'Settings',
     items: [
       { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
+      { href: '/dashboard/admin/open-house-settings', label: 'Open House Settings', icon: Home },
       { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },
     ],
   },
