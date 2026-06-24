@@ -972,7 +972,10 @@ export default function AdminTransactionLedgerPage() {
                     const sc = statusConfig[t.status] || statusConfig.pending;
                     const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                     const listingPct = Number(t.sellerPayingListingAgent) || 0;
-                    const lp = Number((t as any).listPrice) || 0;
+                    // Use salePrice when available; only fall back to listPrice when no sale price yet
+                    const sp = Number((t as any).salePrice) || 0;
+                    const lp = sp > 0 ? sp : (Number((t as any).listPrice) || 0);
+                    const isEstimate = isActiveListing && sp === 0; // only show ~ prefix when no sale price
                     const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
                     const agentSplitPct = Number((t as any).agentCurrentSplitPct) || 0;
                     const estimatedNetAgent = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
@@ -1090,19 +1093,25 @@ export default function AdminTransactionLedgerPage() {
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">
                           {isActiveListing
-                            ? (estimatedGrossGci !== null ? <span title="Estimated based on list price">~{formatCurrency(estimatedGrossGci)}</span> : '—')
+                            ? (estimatedGrossGci !== null
+                                ? <span title={isEstimate ? 'Estimated based on list price' : 'Calculated from sale price'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedGrossGci)}</span>
+                                : '—')
                             : (gross ? formatCurrency(gross) : '—')
                           }
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">
                           {isActiveListing
-                            ? (estimatedNetAgent !== null ? <span className="text-primary" title="Estimated based on list price &amp; agent split %">~{formatCurrency(estimatedNetAgent)}</span> : '—')
+                            ? (estimatedNetAgent !== null
+                                ? <span className="text-primary" title={isEstimate ? 'Estimated based on list price & agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedNetAgent)}</span>
+                                : '—')
                             : (net ? formatCurrency(net) : '—')
                           }
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">
                           {isActiveListing
-                            ? (estimatedCoRetained !== null ? <span title="Estimated based on list price &amp; agent split %">~{formatCurrency(estimatedCoRetained)}</span> : '—')
+                            ? (estimatedCoRetained !== null
+                                ? <span title={isEstimate ? 'Estimated based on list price & agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedCoRetained)}</span>
+                                : '—')
                             : (broker ? formatCurrency(broker) : '—')
                           }
                         </TableCell>

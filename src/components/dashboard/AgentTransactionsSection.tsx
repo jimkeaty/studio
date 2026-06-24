@@ -1256,7 +1256,10 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                       // listingPct: prefer sellerPayingListingAgent, fall back to commissionPercent (already set to listing side %)
                       const listingPct = Number(t.sellerPayingListingAgent ?? t.commissionPercent) || 0;
-                      const lp = Number(t.listPrice) || 0;
+                      // Use salePrice when available; only fall back to listPrice when no sale price yet
+                      const sp = Number(t.salePrice) || 0;
+                      const lp = sp > 0 ? sp : (Number(t.listPrice) || 0);
+                      const isEstimate = isActiveListing && sp === 0; // only show ~ prefix when no sale price
                       // agentSplitPct: pipeline API exposes this for active listings
                       const agentSplitPct = Number(t.agentSplitPercent ?? (t.splitSnapshot as any)?.agentSplitPercent ?? (t as any).agentPct) || 0;
                       const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? lp * listingPct / 100 : null;
@@ -1352,7 +1355,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap font-semibold text-primary text-sm">
                             {isActiveListing
                               ? (estimatedNet !== null
-                                  ? <span title="Estimated based on list price">~{formatCurrency(estimatedNet)}</span>
+                                  ? <span title={isEstimate ? 'Estimated based on list price' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedNet)}</span>
                                   : (net ? formatCurrency(net) : '—'))
                               : (net ? formatCurrency(net) : '—')
                             }
