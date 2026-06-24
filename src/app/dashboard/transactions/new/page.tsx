@@ -758,6 +758,14 @@ export default function AddTransactionPage() {
         const existing = form.getValues('notes') || '';
         form.setValue('notes', (existing ? existing + '\n\n' : '') + '[AI Extracted]\n' + extraNotes.join('\n'));
       }
+      // ── Auto-save the uploaded PDF as a transaction document ────────────
+      if (data.savedDoc) {
+        setUploadedDocs(prev => {
+          // Avoid duplicates if the user re-uploads the same file
+          const alreadyExists = prev.some((d: UploadedDoc) => d.storagePath === data.savedDoc.storagePath);
+          return alreadyExists ? prev : [data.savedDoc as UploadedDoc, ...prev];
+        });
+      }
       setPdfStep('form');
       toast({ title: '✅ Purchase agreement scanned', description: `${Object.values(conf).filter(v => (v as number) >= 0.7).length} fields auto-filled. Review highlighted fields before submitting.` });
     } catch (err: any) {

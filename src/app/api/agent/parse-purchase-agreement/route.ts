@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase/admin';
+import { adminAuth, admin } from '@/lib/firebase/admin';
 import OpenAI from 'openai';
 
 // OpenAI client initialized inside handler — avoids build-time crash when env var is absent
@@ -383,11 +383,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AI extraction failed to return valid data. Please fill the form manually.' }, { status: 422 });
     }
 
+    // ── Save PDF to Firebase Storage so it's attached to the transaction ────
+    const BUCKET_NAME = 'smart-broker-usa.firebasestorage.app';
+    let savedDoc: { name: string; url: string; storagePath: string; uploadedAt: string } | null = null;
+    try {
+      const timestamp = Date.now();
+      const safeName = file.name
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/_{2,}/g, '_')
+        .slice(0, 80);
+      const storagePath = `transactions/documents/${uid}/${timestamp}-${safeName}`;
+      const downloadToken = crypto.randomUUID();
+      const bucket = admin.storage().bucket(BUCKET_NAME);
+      const blob = bucket.file(storagePath);
+      await blob.save(buffer, {
+        metadata: {
+          contentType: 'application/pdf',
+          metadata: {
+            firebaseStorageDownloadTokens: downloadToken,
+            uploadedBy: uid,
+            originalName: file.name,
+          },
+        },
+      });
+      const encodedPath = encodeURIComponent(storagePath);
+      const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET_NAME}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+      // Auto-name: use extracted address + doc type if available
+      const address = (extracted.fields?.address as string) || '';
+      const docType = (extracted.fields?.closingType as string) || '';
+      let autoName = file.name;
+      if (address) {
+        const typeLabel = docType === 'listing' ? 'Listing Agreement' : 'Purchase Agreement';
+        autoName = `${typeLabel} — ${address}`;
+      }
+      savedDoc = { name: autoName, url: downloadUrl, storagePath, uploadedAt: new Date().toISOString() };
+    } catch (storageErr) {
+      console.warn('[parse-purchase-agreement] Storage save failed (non-critical):', storageErr);
+    }
+
     return NextResponse.json({
       success: true,
       fields: extracted.fields || {},
       confidence: extracted._confidence || {},
       pdfName: file.name,
+      savedDoc,
     });
 
   } catch (err: unknown) {
