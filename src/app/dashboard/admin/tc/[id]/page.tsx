@@ -32,7 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, AlertTriangle, ExternalLink,
   ClipboardList, UserCheck, Clock, Activity, Archive, Trash2, DollarSign,
-  Phone, Mail, Building2, User, Users, RefreshCw, Paperclip, FileText,
+  Phone, Mail, Building2, User, Users, RefreshCw, Paperclip, FileText, UploadCloud, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -260,6 +260,12 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const [tcProfiles, setTcProfiles] = useState<TcProfile[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
 
+  // ── Documents state ───────────────────────────────────────────────────────────
+  type TcDoc = { name: string; url: string; storagePath: string; uploadedAt: string; uploadedBy?: string };
+  const [tcDocuments, setTcDocuments] = useState<TcDoc[]>([]);
+  const [tcDocUploading, setTcDocUploading] = useState(false);
+  const [tcDocUploadError, setTcDocUploadError] = useState<string | null>(null);
+
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
 
   const getToken = useCallback(async () => {
@@ -358,6 +364,8 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         if (i.archivedAt) log.push({ timestamp: i.archivedAt, action: 'Archived', detail: `Archived by ${i.archivedBy || 'admin'}${i.archiveReason ? `: ${i.archiveReason}` : ''}` });
         if (i.updatedAt && i.updatedAt !== i.submittedAt) log.push({ timestamp: i.updatedAt, action: 'Updated', detail: 'Intake data updated' });
         setActivityLog(log.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+        // Load documents
+        if (Array.isArray(i.documents)) setTcDocuments(i.documents);
       } catch (err: any) {
         toast({ title: 'Error', description: err.message, variant: 'destructive' });
       } finally {
@@ -382,6 +390,56 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     };
     if (!userLoading && user) loadProfiles();
   }, [user, userLoading]);
+  // ── Document upload / remove handlers ─────────────────────────────────────
+  const persistTcDocs = useCallback(async (newDocs: TcDoc[]) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/admin/tc/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'update', documents: newDocs }),
+      });
+    } catch { /* non-critical */ }
+  }, [user, id]);
+
+  const handleTcDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !user) return;
+    setTcDocUploading(true);
+    setTcDocUploadError(null);
+    try {
+      const token = await user.getIdToken();
+      const uploaded: TcDoc[] = [];
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/admin/staff-queue/upload-document', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || `Failed to upload ${file.name}`);
+        uploaded.push({ name: file.name, url: data.url, storagePath: data.storagePath, uploadedAt: new Date().toISOString(), uploadedBy: 'tc' });
+      }
+      const newDocs = [...tcDocuments, ...uploaded];
+      setTcDocuments(newDocs);
+      await persistTcDocs(newDocs);
+    } catch (err: any) {
+      setTcDocUploadError(err.message || 'Upload failed');
+    } finally {
+      setTcDocUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeTcDoc = async (idx: number) => {
+    const newDocs = tcDocuments.filter((_, i) => i !== idx);
+    setTcDocuments(newDocs);
+    await persistTcDocs(newDocs);
+  };
+
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const callAction = async (action: string, extra?: Record<string, any>) => {
@@ -1346,33 +1404,63 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           </SectionCard>
 
           {/* Section 11: Documents */}
-          {intake.documents && intake.documents.length > 0 && (
-            <SectionCard title="Uploaded Documents" icon={<Paperclip className="h-4 w-4" />}>
-              <div className="space-y-2">
-                {intake.documents.map((doc: any, idx: number) => (
-                  <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
-                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <a
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1"
-                      >
-                        {doc.name}
-                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                      </a>
-                      {doc.uploadedAt && (
+          <SectionCard title="Documents" icon={<Paperclip className="h-4 w-4" />}>
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Upload contracts, disclosures, or any transaction documents (PDF, Word, images — max 25 MB each).
+              </p>
+              {tcDocuments.length > 0 && (
+                <div className="space-y-2">
+                  {tcDocuments.map((doc, idx) => (
+                    <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1"
+                        >
+                          {doc.name}
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        </a>
                         <p className="text-xs text-muted-foreground">
-                          Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                          {doc.uploadedBy === 'admin' ? 'Uploaded by admin' : doc.uploadedBy === 'tc' ? 'Uploaded by TC' : doc.uploadedBy === 'staff' ? 'Uploaded by staff' : 'Uploaded by agent'}
+                          {doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ''}
                         </p>
-                      )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeTcDoc(idx)}
+                        className="ml-auto p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Remove document"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
+                  ))}
+                </div>
+              )}
+              {tcDocuments.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No documents attached yet.</p>
+              )}
+              {tcDocUploadError && (
+                <p className="text-xs text-destructive">{tcDocUploadError}</p>
+              )}
+              <label className={`flex items-center gap-2 cursor-pointer rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground hover:bg-muted/30 transition-colors${tcDocUploading ? ' opacity-50 pointer-events-none' : ''}`}>
+                <UploadCloud className="h-4 w-4" />
+                {tcDocUploading ? 'Uploading…' : 'Attach Files'}
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic"
+                  className="sr-only"
+                  onChange={handleTcDocUpload}
+                  disabled={tcDocUploading}
+                />
+              </label>
+            </div>
+          </SectionCard>
 
           {/* Save / action buttons (bottom) */}
           {!isReadOnly && (

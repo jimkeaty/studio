@@ -334,6 +334,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'primaryAgentSplitPercent', 'coAgentSplitPercent',
         // Outbound referral fee
         'outboundReferralFee',
+        // Documents
+        'documents',
       ];
       for (const field of editableFields) {
         if (field in body) {
@@ -362,6 +364,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
           'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
           'notes', 'additionalComments',
+          'documents',
         ];
         const txSyncUpdate: Record<string, any> = { updatedAt: now };
         for (const f of txSyncFields) {

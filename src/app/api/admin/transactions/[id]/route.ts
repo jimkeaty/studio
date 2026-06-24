@@ -1,4 +1,5 @@
-// GET /api/admin/transactions/[id] — fetch a single transaction by Firestore doc ID
+// GET  /api/admin/transactions/[id] — fetch a single transaction by Firestore doc ID
+// PATCH /api/admin/transactions/[id] — update documents array on a transaction
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
@@ -43,6 +44,34 @@ export async function GET(
     return NextResponse.json({ ok: true, transaction });
   } catch (err: any) {
     console.error('[api/admin/transactions/[id] GET]', err);
+    return NextResponse.json({ ok: false, error: err.message || 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+// PATCH — update documents array (used by the Documents section on the edit page)
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) return jsonError(401, 'Unauthorized');
+    const token = authHeader.slice('Bearer '.length);
+    const decoded = await adminAuth.verifyIdToken(token);
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
+
+    const { id } = await context.params;
+    if (!id) return jsonError(400, 'Transaction id is required');
+
+    const body = await req.json();
+    const update: Record<string, any> = {};
+    if (Array.isArray(body.documents)) update.documents = body.documents;
+    if (Object.keys(update).length === 0) return jsonError(400, 'No valid fields to update');
+
+    await adminDb.collection('transactions').doc(id).update(update);
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error('[api/admin/transactions/[id] PATCH]', err);
     return NextResponse.json({ ok: false, error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -34,7 +34,7 @@ import { exportToCsv } from '@/lib/exportToCsv';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
-type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string };
+type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string; uploadedBy?: string };
 
 type AgentTx = {
   id: string;
@@ -600,7 +600,10 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
                   <div key={idx} className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
                     <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                     <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate flex-1">{doc.name}</a>
-                    <span className="text-xs text-muted-foreground shrink-0">{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ''}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {doc.uploadedBy === 'admin' ? 'Admin' : doc.uploadedBy === 'tc' ? 'TC' : doc.uploadedBy === 'staff' ? 'Staff' : 'You'}
+                      {doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ''}
+                    </span>
                     <Button type="button" variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => removeDoc(idx)}><X className="h-3 w-3" /></Button>
                   </div>
                 ))}

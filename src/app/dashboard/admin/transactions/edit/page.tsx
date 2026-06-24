@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 // Opened from Transaction Ledger via /dashboard/admin/transactions/edit?id=<txId>
 // Saves directly via PATCH /api/admin/transactions (no TC Queue).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase';
 import { useIsStaff } from '@/hooks/useIsStaff';
@@ -26,7 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, AlertTriangle, ChevronLeft, ChevronRight, Check, PlusCircle, Trash2, GitMerge } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, ChevronLeft, ChevronRight, Check, PlusCircle, Trash2, GitMerge, Paperclip, FileText, UploadCloud, X, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -312,6 +312,12 @@ export default function EditTransactionPage() {
   const [overrideLeaderRetained, setOverrideLeaderRetained] = useState<string>('');
 
   // Commission override state removed — agent profile is always the source of truth
+
+  // ── Documents state ───────────────────────────────────────────────
+  type TxDoc = { name: string; url: string; storagePath: string; uploadedAt: string; uploadedBy?: string };
+  const [documents, setDocuments] = useState<TxDoc[]>([]);
+  const [docUploading, setDocUploading] = useState(false);
+  const [docUploadError, setDocUploadError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -780,6 +786,8 @@ export default function EditTransactionPage() {
           form.setValue('outboundReferralBrokerName', tx.outboundReferralFee.brokerName ?? '');
           form.setValue('outboundReferralContactName', tx.outboundReferralFee.contactName ?? '');
         }
+        // Load documents
+        if (Array.isArray(tx.documents)) setDocuments(tx.documents);
       } catch (err: any) {
         setLoadError(err.message);
       } finally {
@@ -788,6 +796,56 @@ export default function EditTransactionPage() {
     };
     load();
   }, [user, isAdmin, txId]);
+
+  // ── Document upload / remove handlers ───────────────────────────────────
+  const persistDocs = useCallback(async (newDocs: TxDoc[]) => {
+    if (!user || !txId) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/admin/transactions/${txId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ documents: newDocs }),
+      });
+    } catch { /* non-critical */ }
+  }, [user, txId]);
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !user) return;
+    setDocUploading(true);
+    setDocUploadError(null);
+    try {
+      const token = await user.getIdToken();
+      const uploaded: TxDoc[] = [];
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/admin/transactions/upload-document', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || `Failed to upload ${file.name}`);
+        uploaded.push({ name: file.name, url: data.url, storagePath: data.storagePath, uploadedAt: new Date().toISOString(), uploadedBy: 'admin' });
+      }
+      const newDocs = [...documents, ...uploaded];
+      setDocuments(newDocs);
+      await persistDocs(newDocs);
+    } catch (err: any) {
+      setDocUploadError(err.message || 'Upload failed');
+    } finally {
+      setDocUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeDoc = async (idx: number) => {
+    const newDocs = documents.filter((_, i) => i !== idx);
+    setDocuments(newDocs);
+    await persistDocs(newDocs);
+  };
 
   // Toggle inspection type checkbox
   const toggleInspectionType = (type: string) => {
@@ -2444,6 +2502,67 @@ export default function EditTransactionPage() {
                 </FormControl>
               </FormItem>
             )} />
+          </Section>
+
+          {/* ── Documents ───────────────────────────────────────────────────────────────────── */}
+          <Section title="Documents">
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Upload contracts, disclosures, or any transaction documents (PDF, Word, images — max 25 MB each).
+                Documents added by the agent or TC are also shown here.
+              </p>
+              {/* Document list */}
+              {documents.length > 0 && (
+                <div className="space-y-2">
+                  {documents.map((doc, idx) => (
+                    <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1"
+                        >
+                          {doc.name}
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        </a>
+                        <p className="text-xs text-muted-foreground">
+                          {doc.uploadedBy === 'admin' ? 'Uploaded by admin' : doc.uploadedBy === 'tc' ? 'Uploaded by TC' : doc.uploadedBy === 'staff' ? 'Uploaded by staff' : 'Uploaded by agent'}
+                          {doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ''}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeDoc(idx)}
+                        className="ml-auto p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Remove document"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {documents.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No documents attached yet.</p>
+              )}
+              {docUploadError && (
+                <p className="text-xs text-destructive">{docUploadError}</p>
+              )}
+              <label className={`flex items-center gap-2 cursor-pointer rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground hover:bg-muted/30 transition-colors${docUploading ? ' opacity-50 pointer-events-none' : ''}`}>
+                <UploadCloud className="h-4 w-4" />
+                {docUploading ? 'Uploading…' : 'Attach Files'}
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic"
+                  className="sr-only"
+                  onChange={handleDocUpload}
+                  disabled={docUploading}
+                />
+              </label>
+            </div>
           </Section>
 
           </div>{/* end Step 4 */}
