@@ -52,6 +52,8 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'notes', 'additionalComments',
   // Documents (Purchase Agreement, Listing Paperwork, etc.)
   'documents',
+  // Deal / transaction type — agents must be able to correct a misclassified deal type
+  'dealType', 'transactionType',
 ]);
 
 // Statuses an agent is allowed to set
@@ -199,6 +201,14 @@ export async function PATCH(
       if (!isNaN(sp) && sp > 0) {
         updates.dealValue = sp;
       }
+    }
+
+    // Keep dealType and transactionType in sync — both fields are used in different parts
+    // of the codebase; updating one must always update the other.
+    if (updates.dealType !== undefined) {
+      updates.transactionType = updates.dealType;
+    } else if (updates.transactionType !== undefined) {
+      updates.dealType = updates.transactionType;
     }
 
     // ── Auto-calculate GCI and splitSnapshot whenever commission-relevant fields change ──

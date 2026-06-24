@@ -106,7 +106,10 @@ const formatDate = (dateStr?: string | null) => {
 
 const txTypeLabel: Record<string, string> = {
   residential_sale: 'Residential',
+  residential_lease: 'Res. Lease',
   rental: 'Rental',
+  land: 'Land',
+  commercial_listing: 'Commercial',
   commercial_lease: 'Comm. Lease',
   commercial_sale: 'Comm. Sale',
 };
@@ -219,6 +222,8 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
   const [titleOfficer, setTitleOfficer] = useState(tx.titleOfficer || '');
   const [titleOfficerEmail, setTitleOfficerEmail] = useState(tx.titleOfficerEmail || '');
   const [titleOfficerPhone, setTitleOfficerPhone] = useState(tx.titleOfficerPhone || '');
+  // Deal type
+  const [dealType, setDealType] = useState(tx.dealType || tx.transactionType || 'residential_sale');
   // Commission
   const [sellerCommissionPct, setSellerCommissionPct] = useState(String(tx.sellerCommissionPct || ''));
   const [buyerCommissionPct, setBuyerCommissionPct] = useState(String(tx.buyerCommissionPct || ''));
@@ -257,6 +262,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
     setTitleCompany(tx.titleCompany || ''); setTitleOfficer(tx.titleOfficer || ''); setTitleOfficerEmail(tx.titleOfficerEmail || ''); setTitleOfficerPhone(tx.titleOfficerPhone || '');
     setSellerCommissionPct(String(tx.sellerCommissionPct || ''));
     setBuyerCommissionPct(String(tx.buyerCommissionPct || ''));
+    setDealType(tx.dealType || tx.transactionType || 'residential_sale');
     setNotes(tx.notes || '');
     setAdditionalComments(tx.additionalComments || '');
     setDocuments(tx.documents || []);
@@ -343,6 +349,8 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
         titleCompany, titleOfficer, titleOfficerEmail, titleOfficerPhone,
         sellerCommissionPct: sellerCommissionPct ? Number(sellerCommissionPct) : undefined,
         buyerCommissionPct: buyerCommissionPct ? Number(buyerCommissionPct) : undefined,
+        dealType,
+        transactionType: dealType,
         notes,
         additionalComments,
         documents,
@@ -359,7 +367,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to save');
 
       setSaveSuccess(true);
-      onSaved({ ...tx, status, propertyAddress, listPrice: listPrice ? Number(listPrice) : tx.listPrice, salePrice: salePrice ? Number(salePrice) : tx.salePrice, contractDate, closingDate, listingDate, sellerName, sellerEmail, sellerPhone, buyerName, buyerEmail, buyerPhone, otherAgentName, otherAgentEmail, otherAgentPhone, otherAgentBrokerage, mortgageCompany, loanOfficer, titleCompany, notes, additionalComments, documents });
+      onSaved({ ...tx, status, propertyAddress, dealType, transactionType: dealType, listPrice: listPrice ? Number(listPrice) : tx.listPrice, salePrice: salePrice ? Number(salePrice) : tx.salePrice, contractDate, closingDate, listingDate, sellerName, sellerEmail, sellerPhone, buyerName, buyerEmail, buyerPhone, otherAgentName, otherAgentEmail, otherAgentPhone, otherAgentBrokerage, mortgageCompany, loanOfficer, titleCompany, notes, additionalComments, documents });
       setTimeout(() => { setSaveSuccess(false); onClose(); }, 1200);
     } catch (err: any) {
       setSaveError(err.message || 'Failed to save');
@@ -423,6 +431,20 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
             <div className="space-y-1">
               <Label htmlFor="edit-address">Property Address</Label>
               <Input id="edit-address" value={propertyAddress} onChange={e => setPropertyAddress(e.target.value)} placeholder="123 Main St, City, TX 75001" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-deal-type">Deal Type</Label>
+              <Select value={dealType} onValueChange={setDealType}>
+                <SelectTrigger id="edit-deal-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="residential_sale">Residential Sale</SelectItem>
+                  <SelectItem value="residential_lease">Residential Lease / Rental</SelectItem>
+                  <SelectItem value="land">Land</SelectItem>
+                  <SelectItem value="commercial_listing">Commercial Lease/Sale</SelectItem>
+                  <SelectItem value="commercial_sale">Commercial Sale</SelectItem>
+                  <SelectItem value="commercial_lease">Commercial Lease</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -1153,7 +1175,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                   const sc = statusConfig[t.status] || statusConfig.pending;
                   const addr = t.address || t.propertyAddress || '—';
                   const isCoAgentViewMobile = !!(t as any)._isCoAgentView;
-                  const canEditMobile = (t.status !== 'closed' || !!isAdminViewer) && !isCoAgentViewMobile;
+                  const canEditMobile = !isCoAgentViewMobile; // agents can edit any of their own transactions including closed ones
                   return (
                     <div
                       key={t.id}
@@ -1255,7 +1277,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       const sc = statusConfig[t.status] || statusConfig.pending;
                       const addr = t.address || t.propertyAddress || '—';
                       const isCoAgentView = !!(t as any)._isCoAgentView;
-                      const canEdit = (t.status !== 'closed' || !!isAdminViewer) && !isCoAgentView; // admin viewers can edit closed; co-agent views are always read-only
+                      const canEdit = !isCoAgentView; // co-agent views are always read-only; agents can edit any of their own transactions including closed ones
                       const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                       // listingPct: prefer sellerPayingListingAgent, fall back to commissionPercent (already set to listing side %)
                       const listingPct = Number(t.sellerPayingListingAgent ?? t.commissionPercent) || 0;

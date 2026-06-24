@@ -28,7 +28,8 @@ function toStr(v: any): string | null {
 
 const VALID_CLOSING_TYPES = new Set(['buyer', 'listing', 'referral', 'dual']);
 const VALID_DEAL_TYPES = new Set([
-  'residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease',
+  'residential_sale', 'residential_lease', 'land',
+  'commercial_listing', 'commercial_sale', 'commercial_lease',
 ]);
 const VALID_SOURCES = new Set([
   'boomtown', 'referral', 'sphere', 'sign_call', 'company_gen',
