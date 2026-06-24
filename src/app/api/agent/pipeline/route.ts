@@ -158,8 +158,10 @@ export async function GET(req: NextRequest) {
     // Must be done before sanitizeForAgent is defined so the closure captures the
     // resolved value (not null). Active listings have no splitSnapshot, so we use
     // the agent's current plan split % to estimate Net to Me.
+    // NOTE: Always run this lookup — even for admin callers viewing via ?viewAs —
+    // so that the admin agent-dashboard view also shows estimated Net to Me.
     let agentCurrentSplitPct: number | null = null;
-    if (!isAdminCaller) {
+    {  // always run (removed isAdminCaller guard)
       try {
         // Helper: extract split % from a profile data object
         // Checks all known nesting paths for commission plan data.
@@ -230,7 +232,16 @@ export async function GET(req: NextRequest) {
       'agentSplitPercent', 'companySplitPercent',
     ];
     function sanitizeForAgent(tx: any): any {
-      if (isAdminCaller) return tx;
+      // Admin callers get the full transaction, but we still need to inject
+      // agentSplitPercent for active listings so the agent dashboard (viewAs) shows
+      // estimated Net to Me correctly.
+      if (isAdminCaller) {
+        const snap = tx.splitSnapshot as any;
+        if (tx.status === 'active' && agentCurrentSplitPct != null && !snap?.agentSplitPercent) {
+          return { ...tx, agentSplitPercent: agentCurrentSplitPct };
+        }
+        return tx;
+      }
       const safe: any = {};
       for (const [k, v] of Object.entries(tx)) {
         if (COMMISSION_FIELDS.includes(k)) continue;
