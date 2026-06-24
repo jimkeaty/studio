@@ -834,6 +834,16 @@ export default function EditTransactionPage() {
       // Build the payload — include splitSnapshot if split fields are set
       const payload: any = { id: txId, ...values };
 
+      // Don't overwrite saved commission % fields with empty strings — only include them
+      // if the user actually entered a value (non-empty, non-zero).
+      // An empty field means "unchanged", not "clear it".
+      if (payload.sellerPayingListingAgent === '' || payload.sellerPayingListingAgent === undefined) {
+        delete payload.sellerPayingListingAgent;
+      }
+      if (payload.sellerPayingBuyerAgent === '' || payload.sellerPayingBuyerAgent === undefined) {
+        delete payload.sellerPayingBuyerAgent;
+      }
+
       // Rebuild splitSnapshot from individual split fields
       const gci = Number(values.gci) || 0;
       const agentPct = Number(values.agentPct) || 0;
