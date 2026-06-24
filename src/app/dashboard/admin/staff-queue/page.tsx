@@ -75,6 +75,9 @@ type OpenHouseSubmission = {
   createdAt: string;
   emailSentAt?: string;
   staffQueueId?: string;
+  checklist?: { mls: boolean; boomtown: boolean; email: boolean };
+  cancelReason?: string;
+  changeHistory?: any[];
 };
 
 /* ─── Helpers ────────────────────────────────────────────────────────────────── */
@@ -141,6 +144,9 @@ export default function StaffQueuePage() {
   const [ohError, setOhError] = useState<string | null>(null);
   const [ohStatusFilter, setOhStatusFilter] = useState<string>('pending');
   const [markingEmailSent, setMarkingEmailSent] = useState<string | null>(null);
+  // Per-submission checklist state (submissionId -> checklist)
+  const [checklists, setChecklists] = useState<Record<string, { mls: boolean; boomtown: boolean; email: boolean }>>({});
+  const [savingChecklist, setSavingChecklist] = useState<string | null>(null);
 
   /* ─── Fetch transaction queue ─────────────────────────────────────────── */
 
@@ -184,7 +190,14 @@ export default function StaffQueuePage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
-      setOhItems(data.items || []);
+      const loaded: OpenHouseSubmission[] = data.items || [];
+      setOhItems(loaded);
+      // Initialize checklist state from stored data
+      const initChecklists: Record<string, { mls: boolean; boomtown: boolean; email: boolean }> = {};
+      for (const item of loaded) {
+        initChecklists[item.id] = item.checklist ?? { mls: false, boomtown: false, email: false };
+      }
+      setChecklists(prev => ({ ...prev, ...initChecklists }));
     } catch (err: any) {
       setOhError(err.message || 'Failed to load open house submissions');
     } finally {
@@ -195,21 +208,53 @@ export default function StaffQueuePage() {
   useEffect(() => { fetchItems(); }, [fetchItems]);
   useEffect(() => { fetchOhItems(); }, [fetchOhItems]);
 
-  /* ─── Mark email sent ─────────────────────────────────────────────────── */
+  /* ─── Checklist helpers ──────────────────────────────────────────────── */
 
-  const handleMarkEmailSent = async (submissionId: string) => {
+  const handleChecklistChange = (submissionId: string, key: 'mls' | 'boomtown' | 'email', value: boolean) => {
+    setChecklists(prev => ({
+      ...prev,
+      [submissionId]: { ...(prev[submissionId] ?? { mls: false, boomtown: false, email: false }), [key]: value },
+    }));
+  };
+
+  const handleSaveChecklist = async (submissionId: string) => {
     if (!user) return;
-    setMarkingEmailSent(submissionId);
+    const cl = checklists[submissionId] ?? { mls: false, boomtown: false, email: false };
+    setSavingChecklist(submissionId);
     try {
       const token = await user.getIdToken();
       const res = await fetch(`/api/admin/open-house-submissions/${submissionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'mark_email_sent' }),
+        body: JSON.stringify({ action: 'update_checklist', checklist: cl }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
-      toast({ title: '✅ Email Marked Sent', description: 'Agent has been notified to update Boomtown and MLS.' });
+      toast({ title: '✅ Checklist saved', description: 'Progress has been saved.' });
+      fetchOhItems();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setSavingChecklist(null);
+    }
+  };
+
+  /* ─── Mark all done ──────────────────────────────────────────────────── */
+
+  const handleMarkEmailSent = async (submissionId: string) => {
+    if (!user) return;
+    setMarkingEmailSent(submissionId);
+    const cl = checklists[submissionId] ?? { mls: false, boomtown: false, email: false };
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/open-house-submissions/${submissionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'mark_email_sent', checklist: cl }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+      toast({ title: '✅ Marked Complete', description: 'Agent has been notified that their open house is live.' });
       fetchOhItems();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -347,7 +392,7 @@ export default function StaffQueuePage() {
               <Home className="h-4 w-4 text-amber-600" />
               <AlertTitle className="text-amber-800">Open House Submissions Pending</AlertTitle>
               <AlertDescription className="text-amber-700">
-                {pendingOhCount} open house{pendingOhCount !== 1 ? 's' : ''} submitted — add to email blast, then click "Mark Email Sent" for each.
+                {pendingOhCount} open house{pendingOhCount !== 1 ? 's' : ''} submitted — check off MLS, Boomtown, and Email Blast for each, then click "Mark Done".
               </AlertDescription>
             </Alert>
           )}
@@ -406,6 +451,7 @@ export default function StaffQueuePage() {
                         <TableHead>Address / MLS</TableHead>
                         <TableHead>Special Notes</TableHead>
                         <TableHead>Submitted</TableHead>
+                        <TableHead>Checklist</TableHead>
                         <TableHead className="text-right">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -441,6 +487,43 @@ export default function StaffQueuePage() {
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                               {formatDateShort(item.createdAt)}
+                              {(item.changeHistory?.length ?? 0) > 0 && (
+                                <div className="text-[10px] text-amber-600 mt-0.5">edited {item.changeHistory!.length}×</div>
+                              )}
+                            </TableCell>
+                            {/* Checklist */}
+                            <TableCell>
+                              {item.status !== 'cancelled' ? (
+                                <div className="space-y-1 min-w-[140px]">
+                                  {(['mls', 'boomtown', 'email'] as const).map(key => {
+                                    const cl = checklists[item.id] ?? { mls: false, boomtown: false, email: false };
+                                    const label = key === 'mls' ? 'MLS' : key === 'boomtown' ? 'Boomtown' : 'Email Blast';
+                                    return (
+                                      <label key={key} className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cl[key]}
+                                          onChange={e => handleChecklistChange(item.id, key, e.target.checked)}
+                                          className="h-3.5 w-3.5 rounded"
+                                          disabled={item.status === 'email_sent'}
+                                        />
+                                        <span className={cn('text-xs', cl[key] ? 'line-through text-muted-foreground' : '')}>{label}</span>
+                                      </label>
+                                    );
+                                  })}
+                                  {item.status === 'pending' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-[10px] mt-1 w-full"
+                                      onClick={() => handleSaveChecklist(item.id)}
+                                      disabled={savingChecklist === item.id}
+                                    >
+                                      {savingChecklist === item.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Save'}
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : <span className="text-xs text-muted-foreground">—</span>}
                             </TableCell>
                             <TableCell className="text-right">
                               {item.status === 'pending' ? (
@@ -455,12 +538,12 @@ export default function StaffQueuePage() {
                                   ) : (
                                     <MailCheck className="h-3 w-3" />
                                   )}
-                                  Mark Email Sent
+                                  Mark Done
                                 </Button>
                               ) : item.status === 'email_sent' ? (
                                 <span className="text-xs text-green-700 font-medium flex items-center gap-1 justify-end">
                                   <MailCheck className="h-3.5 w-3.5" />
-                                  Sent {item.emailSentAt ? formatDateShort(item.emailSentAt) : ''}
+                                  Done {item.emailSentAt ? formatDateShort(item.emailSentAt) : ''}
                                 </span>
                               ) : (
                                 <span className="text-xs text-muted-foreground">—</span>
