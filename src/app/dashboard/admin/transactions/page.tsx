@@ -974,6 +974,9 @@ export default function AdminTransactionLedgerPage() {
                     const listingPct = Number(t.sellerPayingListingAgent) || 0;
                     const lp = Number((t as any).listPrice) || 0;
                     const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
+                    const agentSplitPct = Number((t as any).agentCurrentSplitPct) || 0;
+                    const estimatedNetAgent = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
+                    const estimatedCoRetained = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * (1 - agentSplitPct / 100)) : null;
                     return (
                       <TableRow
                         key={t.id}
@@ -1091,8 +1094,18 @@ export default function AdminTransactionLedgerPage() {
                             : (gross ? formatCurrency(gross) : '—')
                           }
                         </TableCell>
-                        <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">{net ? formatCurrency(net) : '—'}</TableCell>
-                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">{broker ? formatCurrency(broker) : '—'}</TableCell>
+                        <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">
+                          {isActiveListing
+                            ? (estimatedNetAgent !== null ? <span className="text-primary" title="Estimated based on list price &amp; agent split %">~{formatCurrency(estimatedNetAgent)}</span> : '—')
+                            : (net ? formatCurrency(net) : '—')
+                          }
+                        </TableCell>
+                        <TableCell className="min-w-[110px] text-right whitespace-nowrap">
+                          {isActiveListing
+                            ? (estimatedCoRetained !== null ? <span title="Estimated based on list price &amp; agent split %">~{formatCurrency(estimatedCoRetained)}</span> : '—')
+                            : (broker ? formatCurrency(broker) : '—')
+                          }
+                        </TableCell>
                         <TableCell className="min-w-[90px]"><Badge variant="secondary" className="text-xs capitalize">{t.source ?? 'manual'}</Badge></TableCell>
                         <TableCell className="min-w-[90px]" onClick={e => e.stopPropagation()}>
                           {t.documents && t.documents.length > 0 ? (

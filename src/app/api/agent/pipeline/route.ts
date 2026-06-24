@@ -182,14 +182,7 @@ export async function GET(req: NextRequest) {
         // Prefer split % stored on the transaction; fall back to agent's current plan split %
         const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
         if (agentSplitPct != null) safe.agentSplitPercent = agentSplitPct;
-        console.log('[pipeline] active listing debug', {
-          id: tx.id, address: tx.address,
-          sellerPayingListingAgent: tx.sellerPayingListingAgent,
-          listPrice: tx.listPrice,
-          agentSplitPct,
-          agentCurrentSplitPct,
-          closingType: tx.closingType,
-        });
+
       }
       return safe;
     }
@@ -199,18 +192,51 @@ export async function GET(req: NextRequest) {
     let agentCurrentSplitPct: number | null = null;
     if (!isAdminCaller) {
       try {
+        // Helper: extract split % from a profile data object
+        function extractSplitPct(pd: any): number | null {
+          if (!pd) return null;
+          if (pd.commissionMode === 'flat') {
+            return Number(pd.flatAgentPercent ?? 0) || null;
+          }
+          const tiers = pd.tiers || pd.commissionTiers || [];
+          if (Array.isArray(tiers) && tiers.length > 0) {
+            return Number(tiers[0].agentSplitPercent ?? tiers[0].agentPercent ?? 0) || null;
+          }
+          return null;
+        }
+
+        // Strategy 1: direct doc lookup by each resolved agentId
         for (const agentId of agentIds) {
           const profileSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
-          const profileData = profileSnap.exists ? profileSnap.data() : null;
-          if (profileData) {
-            if ((profileData as any).commissionMode === 'flat') {
-              agentCurrentSplitPct = Number((profileData as any).flatAgentPercent ?? 0) || null;
-            } else if (Array.isArray((profileData as any).tiers) && (profileData as any).tiers.length > 0) {
-              // Use the first (lowest) tier as a conservative estimate
-              const firstTier = (profileData as any).tiers[0];
-              agentCurrentSplitPct = Number(firstTier.agentSplitPercent ?? 0) || null;
+          if (profileSnap.exists) {
+            const pct = extractSplitPct(profileSnap.data());
+            if (pct) { agentCurrentSplitPct = pct; break; }
+          }
+        }
+
+        // Strategy 2: query by firebaseUid field (for agents whose profile doc ID is a slug)
+        if (!agentCurrentSplitPct) {
+          for (const agentId of agentIds) {
+            const byUid = await adminDb.collection('agentProfiles')
+              .where('firebaseUid', '==', agentId)
+              .limit(1).get();
+            if (!byUid.empty) {
+              const pct = extractSplitPct(byUid.docs[0].data());
+              if (pct) { agentCurrentSplitPct = pct; break; }
             }
-            if (agentCurrentSplitPct) break;
+          }
+        }
+
+        // Strategy 3: query by agentId field
+        if (!agentCurrentSplitPct) {
+          for (const agentId of agentIds) {
+            const byAgentId = await adminDb.collection('agentProfiles')
+              .where('agentId', '==', agentId)
+              .limit(1).get();
+            if (!byAgentId.empty) {
+              const pct = extractSplitPct(byAgentId.docs[0].data());
+              if (pct) { agentCurrentSplitPct = pct; break; }
+            }
           }
         }
       } catch { /* non-fatal */ }

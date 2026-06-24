@@ -131,6 +131,55 @@ export async function GET(req: NextRequest) {
       }
     } catch { /* non-fatal — display name resolution is best-effort */ }
 
+    // ── Inject agentCurrentSplitPct for active listing transactions ─────────
+    // Active listings have no splitSnapshot (they haven't closed), so we look up
+    // the agent's current commission plan split % and attach it so the ledger
+    // can calculate estimated Net to Agent and Co. Retained.
+    try {
+      const activeListings = transactions.filter(
+        (t: any) => t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual') &&
+        t.agentId && !t.splitSnapshot?.agentSplitPercent
+      );
+      if (activeListings.length > 0) {
+        const uniqueAgentIds = Array.from(new Set(activeListings.map((t: any) => String(t.agentId))));
+        const splitPctMap = new Map<string, number>(); // agentId → split %
+        await Promise.all(
+          uniqueAgentIds.map(async (agentId) => {
+            try {
+              const profileSnap = await adminDb.collection('agentProfiles').doc(agentId).get();
+              if (!profileSnap.exists) return;
+              const pd = profileSnap.data() || {};
+              const plan = pd.commissionPlan || pd.commission || pd.commissionStructure;
+              if (!plan) return;
+              let splitPct: number | null = null;
+              if (plan.planType === 'flat' || plan.type === 'flat') {
+                splitPct = Number(plan.flatAgentPercent ?? plan.agentPercent ?? plan.agentSplitPercent ?? 0) || null;
+              } else {
+                // Tiered — use the first tier as the baseline estimate
+                const tiers = plan.tiers || plan.commissionTiers || [];
+                if (tiers.length > 0) {
+                  splitPct = Number(tiers[0].agentSplitPercent ?? tiers[0].agentPercent ?? 0) || null;
+                }
+              }
+              if (splitPct && splitPct > 0) splitPctMap.set(agentId, splitPct);
+            } catch { /* non-fatal */ }
+          })
+        );
+        if (splitPctMap.size > 0) {
+          transactions = transactions.map((t: any) => {
+            if (
+              t.status === 'active' &&
+              (t.closingType === 'listing' || t.closingType === 'dual') &&
+              t.agentId && splitPctMap.has(String(t.agentId))
+            ) {
+              return { ...t, agentCurrentSplitPct: splitPctMap.get(String(t.agentId)) };
+            }
+            return t;
+          });
+        }
+      }
+    } catch { /* non-fatal — split % injection is best-effort */ }
+
     transactions.sort((a: any, b: any) => {
       const da = a.createdAt ?? '';
       const db = b.createdAt ?? '';
