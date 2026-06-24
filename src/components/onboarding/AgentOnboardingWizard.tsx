@@ -1,20 +1,18 @@
-'use client';
+"use client";
 // AgentOnboardingWizard
 // Used for: agent role (inside a brokerage — no branding step)
-// Steps: Welcome → Dashboard Tour → Business Plan Goals → Conversion Rates → Data Uploads → Done
+// Steps: Welcome → Dashboard Tour → Business Plan (redirect to full plan) → Data Uploads → Done
 
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@/firebase';
-import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 import { WizardShell, WizardStep } from './WizardShell';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import {
   Zap, LayoutDashboard, Target, Activity, Upload, CheckCircle2,
-  BarChart3, Phone, Calendar, TrendingUp, DollarSign, Info,
-  ChevronRight, ChevronLeft, BookOpen, ClipboardList,
+  BarChart3, Calendar, BookOpen, ClipboardList, ExternalLink,
+  ArrowRight, CheckCircle,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 // ── Tour slides ───────────────────────────────────────────────────────────────
 
@@ -61,64 +59,10 @@ const TOUR_SLIDES = [
 const STEPS: WizardStep[] = [
   { id: 'welcome', title: 'Welcome', subtitle: 'Get started' },
   { id: 'tour', title: 'Dashboard Tour', subtitle: 'See what you have' },
-  { id: 'goals', title: 'Business Plan Goals', subtitle: 'Income & closing targets' },
-  { id: 'rates', title: 'Conversion Rates', subtitle: 'Activity assumptions' },
+  { id: 'plan', title: 'Business Plan', subtitle: 'Set up your full plan' },
   { id: 'uploads', title: 'Data Uploads', subtitle: 'Optional', optional: true },
   { id: 'done', title: 'All Done!', subtitle: 'Setup complete' },
 ];
-
-// ── Helper components ─────────────────────────────────────────────────────────
-
-function Field({
-  label, value, onChange, type = 'text', prefix, suffix, hint, placeholder,
-}: {
-  label: string; value: string; onChange: (v: string) => void;
-  type?: string; prefix?: string; suffix?: string; hint?: string; placeholder?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium">{label}</Label>
-      <div className="relative flex items-center">
-        {prefix && <span className="absolute left-3 text-muted-foreground text-sm select-none">{prefix}</span>}
-        <Input
-          type={type}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          className={prefix ? 'pl-7' : suffix ? 'pr-10' : ''}
-        />
-        {suffix && <span className="absolute right-3 text-muted-foreground text-sm select-none">{suffix}</span>}
-      </div>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
-function RateField({
-  label, value, onChange, hint,
-}: {
-  label: string; value: string; onChange: (v: string) => void; hint?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
-      <div className="flex-1">
-        <p className="text-sm font-medium">{label}</p>
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-      </div>
-      <div className="relative flex items-center w-24 shrink-0">
-        <Input
-          type="number"
-          min="0"
-          max="100"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          className="pr-7 text-right"
-        />
-        <span className="absolute right-2.5 text-muted-foreground text-sm">%</span>
-      </div>
-    </div>
-  );
-}
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
@@ -129,97 +73,20 @@ type Props = {
 
 export function AgentOnboardingWizard({ onComplete, onSkip }: Props) {
   const { user } = useUser();
-  const { toast } = useToast();
+  const router = useRouter();
   const [stepIndex, setStepIndex] = useState(0);
   const [tourSlide, setTourSlide] = useState(0);
   const [saving, setSaving] = useState(false);
-  const currentYear = new Date().getFullYear();
+  const [planVisited, setPlanVisited] = useState(false);
 
-  // ── Business plan goals ─────────────────────────────────────────────────────
-  const [incomeGoal, setIncomeGoal] = useState('');
-  const [avgCommission, setAvgCommission] = useState('');
-  const [workingDaysPerMonth, setWorkingDaysPerMonth] = useState('21');
-  const [weeksOff, setWeeksOff] = useState('4');
-
-  // ── Conversion rates (pre-filled with broker defaults) ──────────────────────
-  const [rates, setRates] = useState({
-    callToEngagement: '15',
-    engagementToApptSet: '3',
-    apptSetToHeld: '65',
-    apptHeldToContract: '50',
-    contractToClosing: '85',
-  });
-
-  // Fetch broker defaults on mount
-  useEffect(() => {
-    if (!user) return;
-    const load = async () => {
-      try {
-        const token = await user.getIdToken();
-        const res = await fetch(`/api/admin/broker-plan?year=${currentYear}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.ok && data.plan?.agentConversionRates) {
-          const cr = data.plan.agentConversionRates;
-          setRates({
-            callToEngagement: cr.callToEngagement != null ? String(Math.round(cr.callToEngagement * 100)) : '15',
-            engagementToApptSet: cr.engagementToAppointmentSet != null ? String(Math.round(cr.engagementToAppointmentSet * 100)) : '3',
-            apptSetToHeld: cr.appointmentSetToHeld != null ? String(Math.round(cr.appointmentSetToHeld * 100)) : '65',
-            apptHeldToContract: cr.appointmentHeldToContract != null ? String(Math.round(cr.appointmentHeldToContract * 100)) : '50',
-            contractToClosing: cr.contractToClosing != null ? String(Math.round(cr.contractToClosing * 100)) : '85',
-          });
-        }
-        // Also pre-fill avg commission from broker plan
-        if (data.ok && data.plan?.avgCommissionPct) {
-          setAvgCommission(String(data.plan.avgCommissionPct));
-        }
-      } catch {
-        // Use defaults
-      }
-    };
-    load();
-  }, [user, currentYear]);
-
-  // ── Save ────────────────────────────────────────────────────────────────────
+  // ── Save / finish ────────────────────────────────────────────────────────────
   const saveAll = async () => {
     if (!user) return;
     setSaving(true);
     try {
-      const token = await user.getIdToken();
-
-      // Save agent business plan via the existing plan API
-      const income = parseFloat(incomeGoal.replace(/,/g, '')) || 0;
-      const commission = parseFloat(avgCommission.replace(/,/g, '')) || 0;
-
-      if (income > 0 && commission > 0) {
-        await fetch('/api/agent/plan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            year: currentYear,
-            annualIncomeGoal: income,
-            assumptions: {
-              avgCommission: commission,
-              workingDaysPerMonth: parseInt(workingDaysPerMonth) || 21,
-              weeksOff: parseInt(weeksOff) || 4,
-              conversionRates: {
-                callToEngagement: parseFloat(rates.callToEngagement) / 100,
-                engagementToAppointmentSet: parseFloat(rates.engagementToApptSet) / 100,
-                appointmentSetToHeld: parseFloat(rates.apptSetToHeld) / 100,
-                appointmentHeldToContract: parseFloat(rates.apptHeldToContract) / 100,
-                contractToClosing: parseFloat(rates.contractToClosing) / 100,
-              },
-            },
-          }),
-        });
-      }
-
-      toast({ title: 'Setup complete!', description: 'Your business plan has been saved.' });
       await onComplete();
     } catch (err) {
       console.error('[AgentWizard] save error', err);
-      toast({ title: 'Save failed', description: 'Please try again.', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -229,109 +96,101 @@ export function AgentOnboardingWizard({ onComplete, onSkip }: Props) {
   const renderStep = () => {
     const stepId = STEPS[stepIndex].id;
 
-    // ── WELCOME ──────────────────────────────────────────────────────────────
+    // ── WELCOME ───────────────────────────────────────────────────────────────
     if (stepId === 'welcome') {
       return (
         <div className="space-y-6">
-          <div className="text-center py-4">
-            <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mx-auto mb-4">
-              <Zap className="h-8 w-8" />
-            </div>
-            <h3 className="text-2xl font-bold mb-2">Welcome to Your Dashboard!</h3>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              Let&apos;s get you set up in about 3 minutes. We&apos;ll show you around the dashboard,
-              set your income goal, and configure your activity assumptions.
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mx-auto">
+            <Zap className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <h3 className="text-2xl font-bold mb-2">Welcome to Smart Broker!</h3>
+            <p className="text-muted-foreground max-w-sm mx-auto">
+              Let&apos;s get you set up in just a few minutes. We&apos;ll show you around the platform,
+              set up your full business plan, and get your data imported.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { icon: LayoutDashboard, label: 'Dashboard Tour', desc: 'See what each section does' },
-              { icon: Target, label: 'Business Plan Goals', desc: 'Set your income & closing targets' },
-              { icon: Activity, label: 'Conversion Rates', desc: 'Pre-filled from your broker — adjust if needed' },
-              { icon: Upload, label: 'Data Uploads', desc: 'Optional — import past transactions & activity' },
+              { icon: LayoutDashboard, label: 'Dashboard Tour', desc: 'See your command center' },
+              { icon: Target, label: 'Business Plan', desc: 'Set up your full plan' },
+              { icon: Upload, label: 'Data Uploads', desc: 'Import your history' },
             ].map(item => (
-              <div key={item.label} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
-                <item.icon className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.desc}</p>
-                </div>
+              <div key={item.label} className="flex flex-col items-center gap-2 p-4 rounded-lg border bg-muted/30 text-center">
+                <item.icon className="h-5 w-5 text-primary" />
+                <span className="text-sm font-semibold">{item.label}</span>
+                <span className="text-xs text-muted-foreground">{item.desc}</span>
               </div>
             ))}
-          </div>
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800">
-            <Info className="h-4 w-4 shrink-0" />
-            <p className="text-xs">
-              Your conversion rates are pre-filled with your broker&apos;s defaults.
-              You can adjust them to match your personal track record.
-            </p>
           </div>
         </div>
       );
     }
 
-    // ── DASHBOARD TOUR ────────────────────────────────────────────────────────
+    // ── TOUR ─────────────────────────────────────────────────────────────────
     if (stepId === 'tour') {
       const slide = TOUR_SLIDES[tourSlide];
-      const SlideIcon = slide.icon;
+      const Icon = slide.icon;
       return (
         <div className="space-y-5">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-base">Dashboard Tour</h3>
-            <span className="text-xs text-muted-foreground">
-              {tourSlide + 1} / {TOUR_SLIDES.length}
-            </span>
-          </div>
-          {/* Slide */}
-          <div className="rounded-xl border bg-gradient-to-br from-primary/5 to-background p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 text-primary shrink-0">
-                <SlideIcon className="h-5 w-5" />
-              </div>
-              <h4 className="font-bold text-base">{slide.title}</h4>
+          <div className="flex items-start gap-3 mb-2">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 text-primary shrink-0 mt-0.5">
+              <LayoutDashboard className="h-4.5 w-4.5" />
             </div>
-            <p className="text-sm text-muted-foreground leading-relaxed">{slide.description}</p>
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/10">
-              <span className="text-primary text-sm">💡</span>
-              <p className="text-xs font-medium text-primary">{slide.highlight}</p>
+            <div>
+              <h3 className="font-semibold text-base">Dashboard Tour</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                A quick overview of your key tools. ({tourSlide + 1}/{TOUR_SLIDES.length})
+              </p>
             </div>
           </div>
-          {/* Slide nav dots */}
-          <div className="flex items-center justify-center gap-2">
-            <button
+          <div className="rounded-xl border bg-muted/30 p-6 space-y-4">
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary mx-auto">
+              <Icon className="h-6 w-6" />
+            </div>
+            <div className="text-center space-y-2">
+              <h4 className="font-semibold text-base">{slide.title}</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">{slide.description}</p>
+            </div>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/10">
+              <Zap className="h-4 w-4 text-primary shrink-0" />
+              <p className="text-sm font-medium text-primary">{slide.highlight}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost" size="sm"
               onClick={() => setTourSlide(i => Math.max(0, i - 1))}
               disabled={tourSlide === 0}
-              className="p-1 rounded-full hover:bg-muted disabled:opacity-30"
             >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            {TOUR_SLIDES.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setTourSlide(i)}
-                className={`w-2 h-2 rounded-full transition-all ${i === tourSlide ? 'bg-primary w-4' : 'bg-muted-foreground/30'}`}
-              />
-            ))}
-            <button
+              ← Previous
+            </Button>
+            <div className="flex gap-1.5">
+              {TOUR_SLIDES.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setTourSlide(i)}
+                  className={`w-2 h-2 rounded-full transition-colors ${i === tourSlide ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                />
+              ))}
+            </div>
+            <Button
+              variant="ghost" size="sm"
               onClick={() => setTourSlide(i => Math.min(TOUR_SLIDES.length - 1, i + 1))}
               disabled={tourSlide === TOUR_SLIDES.length - 1}
-              className="p-1 rounded-full hover:bg-muted disabled:opacity-30"
             >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+              Next →
+            </Button>
           </div>
           <p className="text-xs text-center text-muted-foreground">
-            Click through all slides or press Next to continue to your business plan setup.
+            Click through all slides or press <strong>Next</strong> to continue to your business plan setup.
           </p>
         </div>
       );
     }
 
-    // ── BUSINESS PLAN GOALS ───────────────────────────────────────────────────
-    if (stepId === 'goals') {
-      const income = parseFloat(incomeGoal.replace(/,/g, '')) || 0;
-      const commission = parseFloat(avgCommission.replace(/,/g, '')) || 0;
-      const estimatedClosings = commission > 0 ? Math.ceil(income / commission) : 0;
+    // ── BUSINESS PLAN (redirect to full plan page) ────────────────────────────
+    if (stepId === 'plan') {
       return (
         <div className="space-y-5">
           <div className="flex items-start gap-3 mb-2">
@@ -339,81 +198,74 @@ export function AgentOnboardingWizard({ onComplete, onSkip }: Props) {
               <Target className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h3 className="font-semibold text-base">Business Plan Goals</h3>
+              <h3 className="font-semibold text-base">Set Up Your Business Plan</h3>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Set your {currentYear} income goal. The plan will calculate exactly how many closings,
-                appointments, and calls you need each day.
+                Your business plan is the foundation of everything — income goals, closing targets,
+                daily activity requirements, and your plan start date.
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Annual Income Goal" value={incomeGoal} onChange={setIncomeGoal}
-              prefix="$" placeholder="150,000"
-              hint="Your target GCI (gross commission income) for the year" />
-            <Field label="Avg Net Commission Per Transaction" value={avgCommission} onChange={setAvgCommission}
-              prefix="$" placeholder="8,500"
-              hint="Your average take-home commission per closed deal" />
+
+          <div className="rounded-xl border bg-muted/30 p-5 space-y-4">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              We&apos;ll open your full Business Plan page where you can set:
+            </p>
+            <div className="space-y-2">
+              {[
+                'Annual income goal & average commission',
+                'Plan start date (when your year begins)',
+                'Conversion rate assumptions (calls → closings)',
+                'Working days per month & weeks off',
+                'Monthly seasonality weights',
+              ].map(item => (
+                <div key={item} className="flex items-center gap-2.5 text-sm">
+                  <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          {estimatedClosings > 0 && (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
-              <TrendingUp className="h-4 w-4 text-primary shrink-0" />
-              <p className="text-sm">
-                To earn <strong>${income.toLocaleString()}</strong>, you need approximately{' '}
-                <strong>{estimatedClosings} closings</strong> this year
-                ({Math.ceil(estimatedClosings / 12)} per month).
-              </p>
+
+          {planVisited ? (
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-200">
+              <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-green-800">Business Plan page opened!</p>
+                <p className="text-xs text-green-700 mt-0.5">
+                  Complete your plan setup there, then come back here and click <strong>Next</strong> to continue.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-blue-50 border border-blue-200">
+              <Target className="h-5 w-5 text-blue-600 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Ready to set up your plan?</p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  Click the button below to open the full Business Plan setup. Come back here when done.
+                </p>
+              </div>
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Working Days Per Month" value={workingDaysPerMonth}
-              onChange={setWorkingDaysPerMonth} placeholder="21"
-              hint="Used to calculate your daily activity targets" />
-            <Field label="Weeks Off Per Year" value={weeksOff} onChange={setWeeksOff}
-              placeholder="4" hint="Vacation weeks excluded from weekly targets" />
-          </div>
-        </div>
-      );
-    }
 
-    // ── CONVERSION RATES ──────────────────────────────────────────────────────
-    if (stepId === 'rates') {
-      return (
-        <div className="space-y-5">
-          <div className="flex items-start gap-3 mb-2">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 text-primary shrink-0 mt-0.5">
-              <Activity className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-base">Conversion Rate Assumptions</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Pre-filled from your broker&apos;s defaults. Adjust these to match your personal track record
-                for more accurate daily targets.
-              </p>
-            </div>
-          </div>
-          <div className="rounded-lg border divide-y overflow-hidden">
-            <RateField label="Call → Engagement" value={rates.callToEngagement}
-              onChange={v => setRates(p => ({ ...p, callToEngagement: v }))}
-              hint="% of calls that result in a meaningful conversation" />
-            <RateField label="Engagement → Appointment Set" value={rates.engagementToApptSet}
-              onChange={v => setRates(p => ({ ...p, engagementToApptSet: v }))}
-              hint="% of engagements that become a scheduled appointment" />
-            <RateField label="Appointment Set → Held" value={rates.apptSetToHeld}
-              onChange={v => setRates(p => ({ ...p, apptSetToHeld: v }))}
-              hint="% of scheduled appointments that are actually held" />
-            <RateField label="Appointment Held → Contract" value={rates.apptHeldToContract}
-              onChange={v => setRates(p => ({ ...p, apptHeldToContract: v }))}
-              hint="% of held appointments that result in a signed contract" />
-            <RateField label="Contract → Closing" value={rates.contractToClosing}
-              onChange={v => setRates(p => ({ ...p, contractToClosing: v }))}
-              hint="% of contracts that successfully close" />
-          </div>
-          <div className="p-3 rounded-lg bg-muted/50 border">
-            <p className="text-xs text-muted-foreground">
-              <strong>Tip:</strong> If you&apos;re new to tracking, leave these at the defaults.
-              After 3–6 months of logging activity, you&apos;ll have real data to update these with.
+          <Button
+            className="w-full gap-2"
+            variant={planVisited ? 'outline' : 'default'}
+            onClick={() => {
+              setPlanVisited(true);
+              window.open('/dashboard/plan', '_blank');
+            }}
+          >
+            <ExternalLink className="h-4 w-4" />
+            {planVisited ? 'Re-open Business Plan' : 'Open Full Business Plan Setup'}
+            <ArrowRight className="h-4 w-4 ml-auto" />
+          </Button>
+
+          {!planVisited && (
+            <p className="text-xs text-center text-muted-foreground">
+              You can also skip this now and set up your plan later from the sidebar.
             </p>
-          </div>
+          )}
         </div>
       );
     }
@@ -495,7 +347,7 @@ export function AgentOnboardingWizard({ onComplete, onSkip }: Props) {
           <div>
             <h3 className="text-2xl font-bold mb-2">You&apos;re all set!</h3>
             <p className="text-muted-foreground max-w-sm mx-auto">
-              Your business plan is saved. Here&apos;s where to go next:
+              Your setup is complete. Here&apos;s where to go next:
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
@@ -530,15 +382,14 @@ export function AgentOnboardingWizard({ onComplete, onSkip }: Props) {
     <WizardShell
       steps={STEPS}
       currentStepIndex={stepIndex}
-      onBack={handleBack}
       onNext={handleNext}
+      onFinish={() => { saveAll(); }}
+      onBack={handleBack}
       onSkipStep={STEPS[stepIndex].optional ? () => setStepIndex(i => i + 1) : undefined}
-      onSkipAll={onSkip}
-      onFinish={saveAll}
+      onSkipAll={() => { onSkip(); }}
       saving={saving}
       wizardTitle="Agent Setup"
-      wizardSubtitle={`${currentYear} Business Plan`}
-      headerIcon={<Target className="h-5 w-5" />}
+      wizardSubtitle="Welcome to Smart Broker"
     >
       {renderStep()}
     </WizardShell>
