@@ -24,7 +24,8 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
 import type { SavedContact } from '@/hooks/useContactSearch';
@@ -399,7 +400,7 @@ const schema = z.object({
   titleOffice: z.string().optional(),
 
   // TC Working File
-  tcWorking: z.enum(['yes', 'no']).optional(),
+  tcWorking: z.enum(['yes', 'no'], { required_error: 'Please select Yes or No.' }),
 
   // Client Type
   clientType: z.enum(['buyer', 'seller', 'dual']).optional(),
@@ -2084,15 +2085,43 @@ export default function AddTransactionPage() {
             {/* TC Working File */}
             <FormField control={form.control} name="tcWorking" render={({ field }) => (
               <FormItem>
-                <FormLabel>Send to TC Working File?</FormLabel>
+                <div className="flex items-center gap-1.5">
+                  <FormLabel>
+                    Are you working with a TC?{' '}
+                    <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <TooltipProvider delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors">
+                          <Info className="h-3.5 w-3.5" />
+                          <span className="sr-only">TC info</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs text-sm leading-snug">
+                        <p className="font-semibold mb-1">Working with a Transaction Coordinator?</p>
+                        <p>
+                          Select <strong>Yes</strong> if a TC will be assisting with this file at any stage —
+                          including <strong>listings</strong> and <strong>under-contract</strong> transactions.
+                          Even if the TC only steps in later, select Yes now so the file is routed to the
+                          TC queue from the start.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
+                    <SelectItem value="yes">Yes — TC will be working this file</SelectItem>
+                    <SelectItem value="no">No — I am handling this myself</SelectItem>
                   </SelectContent>
                 </Select>
-                <FormDescription>If Yes, this transaction will appear in the TC Queue for processing.</FormDescription>
+                <FormDescription>
+                  Required. If Yes, this transaction will be routed to the TC queue for processing.
+                  Select Yes even for listings if a TC will be involved at any point.
+                </FormDescription>
+                <FormMessage />
               </FormItem>
             )} />
           </Section>
