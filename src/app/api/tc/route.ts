@@ -100,6 +100,11 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
 
+    // Hoist these flags early so they can gate TC intake creation below.
+    // The form sends tcWorking='yes'/'no'; also accept workingWithTc boolean for API callers.
+    const workingWithTc = body.workingWithTc === true || body.workingWithTc === 'true' || body.tcWorking === 'yes';
+    const isListingType = closingType === 'listing' || closingType === 'dual';
+
     const intake: Record<string, any> = {
       agentId,
       agentDisplayName,
@@ -264,7 +269,13 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
-    const ref = await adminDb.collection('tcIntakes').add(intake);
+    // ── TC Intake — only create when agent is working with a TC on a listing/dual ──
+    // If workingWithTc is false, skip tcIntakes entirely. The transaction doc is still
+    // created below so the agent sees it in their ledger immediately.
+    let ref: FirebaseFirestore.DocumentReference | null = null;
+    if (workingWithTc && isListingType) {
+      ref = await adminDb.collection('tcIntakes').add(intake);
+    }
 
     // ── Create a transactions doc immediately so the agent sees it right away ──
     // The doc is marked reviewStatus:'pending_review' so the admin ledger can
@@ -357,53 +368,55 @@ export async function POST(req: NextRequest) {
       outboundReferralPercent: toNum(body.outboundReferralPercent) || null,
       outboundReferralDollar: toNum(body.outboundReferralDollar) || null,
       outboundReferralRecipient: toStr(body.outboundReferralRecipient) || null,
-      // Review status flags — cleared when TC approves
-      reviewStatus: 'pending_review',
-      tcIntakeId: ref.id,
+      // Review status flags — only set reviewStatus/tcIntakeId when TC intake was created
+      ...(ref ? { reviewStatus: 'pending_review', tcIntakeId: ref.id } : {}),
       year: new Date().getFullYear(),
       source: 'agent_submission',
       createdAt: now,
       updatedAt: now,
     };
     const txRef = await adminDb.collection('transactions').add(txDoc);
-    // Link the tcIntake back to this transaction so approval updates it in place
-    await ref.update({ approvedTransactionId: txRef.id });
 
-    // Create default checklist items as a subcollection (same as admin-created intakes)
-    const defaultChecklist = [
-      { order: 1, label: 'Contract received & verified' },
-      { order: 2, label: 'Earnest money deposit confirmed' },
-      { order: 3, label: 'Title company ordered' },
-      { order: 4, label: 'Home inspection scheduled' },
-      { order: 5, label: 'Home inspection completed' },
-      { order: 6, label: 'Appraisal ordered' },
-      { order: 7, label: 'Appraisal received' },
-      { order: 8, label: 'Loan approval received' },
-      { order: 9, label: 'Title commitment reviewed' },
-      { order: 10, label: 'Survey ordered/received' },
-      { order: 11, label: 'HOA docs requested (if applicable)' },
-      { order: 12, label: 'Final walkthrough scheduled' },
-      { order: 13, label: 'Closing disclosure reviewed' },
-      { order: 14, label: 'Closing documents prepared' },
-      { order: 15, label: 'Commission disbursement verified' },
-      { order: 16, label: 'File closed & archived' },
-    ];
-    const batch = adminDb.batch();
-    for (const item of defaultChecklist) {
-      const itemRef = adminDb
-        .collection('tcIntakes')
-        .doc(ref.id)
-        .collection('checklist')
-        .doc(`item_${String(item.order).padStart(2, '0')}`);
-      batch.set(itemRef, {
-        order: item.order,
-        label: item.label,
-        completed: false,
-        completedBy: null,
-        completedAt: null,
-      });
+    if (ref) {
+      // Link the tcIntake back to this transaction so approval updates it in place
+      await ref.update({ approvedTransactionId: txRef.id });
+
+      // Create default checklist items as a subcollection (same as admin-created intakes)
+      const defaultChecklist = [
+        { order: 1, label: 'Contract received & verified' },
+        { order: 2, label: 'Earnest money deposit confirmed' },
+        { order: 3, label: 'Title company ordered' },
+        { order: 4, label: 'Home inspection scheduled' },
+        { order: 5, label: 'Home inspection completed' },
+        { order: 6, label: 'Appraisal ordered' },
+        { order: 7, label: 'Appraisal received' },
+        { order: 8, label: 'Loan approval received' },
+        { order: 9, label: 'Title commitment reviewed' },
+        { order: 10, label: 'Survey ordered/received' },
+        { order: 11, label: 'HOA docs requested (if applicable)' },
+        { order: 12, label: 'Final walkthrough scheduled' },
+        { order: 13, label: 'Closing disclosure reviewed' },
+        { order: 14, label: 'Closing documents prepared' },
+        { order: 15, label: 'Commission disbursement verified' },
+        { order: 16, label: 'File closed & archived' },
+      ];
+      const batch = adminDb.batch();
+      for (const item of defaultChecklist) {
+        const itemRef = adminDb
+          .collection('tcIntakes')
+          .doc(ref.id)
+          .collection('checklist')
+          .doc(`item_${String(item.order).padStart(2, '0')}`);
+        batch.set(itemRef, {
+          order: item.order,
+          label: item.label,
+          completed: false,
+          completedBy: null,
+          completedAt: null,
+        });
+      }
+      await batch.commit();
     }
-    await batch.commit();
 
     // ── Queue routing ─────────────────────────────────────────────────────────
     // Rules:
@@ -412,14 +425,11 @@ export async function POST(req: NextRequest) {
     //   - Staff queue: ALL listings go here (regardless of TC flag) so staff always sees new listings.
     //     Buyer/referral transactions are NOT added to the staff queue on new submission — they appear
     //     in the transaction ledger and only hit the staff queue when they close.
-    const workingWithTc = !!body.workingWithTc;
-    const isListingType = closingType === 'listing' || closingType === 'dual';
-
     // Staff queue — always for listings
     if (isListingType) {
       const staffQueueItem: Record<string, any> = {
         transactionId: txRef.id, // Link immediately since we create the transaction doc above
-        tcIntakeId: workingWithTc ? ref.id : null, // Only link TC intake when agent is using TC
+        tcIntakeId: (workingWithTc && ref) ? ref.id : null, // Only link TC intake when agent is using TC
         agentId,
         agentName: agentDisplayName,
         submittedBy: uid,
@@ -540,7 +550,7 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    return NextResponse.json({ ok: true, id: ref.id, transactionId: txRef.id });
+    return NextResponse.json({ ok: true, id: ref?.id ?? txRef.id, transactionId: txRef.id });
   } catch (err: any) {
     console.error('[POST /api/tc]', err);
     return jsonError(500, err.message || 'Internal Server Error');

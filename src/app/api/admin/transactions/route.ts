@@ -471,8 +471,10 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
-      // Any edit (not just status) → notify TC so they stay in sync
-      if (agentIdSlug) {
+      // Any edit (not just status) → notify TC, but ONLY if this transaction is in the TC workflow
+      // (i.e. it was submitted with workingWithTc=true and has a tcIntakeId linking it to a TC intake)
+      const hasTcIntake = !!(txData?.tcIntakeId || txData?.workingWithTc);
+      if (agentIdSlug && hasTcIntake) {
         const tcUids = await getTcUids(adminDb);
         if (tcUids.length > 0) {
           const changeDesc = statusChanged
