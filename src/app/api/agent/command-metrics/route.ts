@@ -1177,8 +1177,13 @@ export async function GET(req: NextRequest) {
       // Aggregated stats (available to all callers)
       aggregateStats: {
         isAllYears,
-        avgCommissionPct: isAdminCaller ? avgCommissionPct : null, // GCI% — admin only
-        avgNetCommissionPct,  // Agent net % of volume — safe for agents
+        // avgCommissionPct = total GCI ÷ closed volume (e.g. 2.8%).
+        // This reflects the commission rate on the SALE PRICE — what the
+        // seller agreed to pay — not the agent's net payout. It is the
+        // agent's own GCI rate, not a broker margin metric, so it is safe
+        // to show to the agent themselves and to admins.
+        avgCommissionPct,  // GCI ÷ Volume — shown to all callers
+        avgNetCommissionPct,  // Agent net ÷ Volume — kept for reference
         totalClosedVolume: totals.closedVolume,
         totalClosedCount: totals.closedCount,
         totalNetIncome: totals.netIncome,
