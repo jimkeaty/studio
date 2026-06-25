@@ -68,6 +68,18 @@ type BoardItem = {
   openHouseDate?: string;
   openHouseTime?: string;
   openHouseEndTime?: string;
+  // Compensation (open house opportunities)
+  compensation?: number | null;
+  compensationNote?: string;
+  // Claim fields
+  claimedByUid?: string | null;
+  claimedByName?: string | null;
+  claimedByPhone?: string | null;
+  claimedByEmail?: string | null;
+  claimedDate?: string | null;
+  claimedTime?: string | null;
+  claimedEndTime?: string | null;
+  claimedAt?: string | null;
   // Buyer need
   area?: string;
   minPrice?: number;
@@ -98,7 +110,7 @@ const ALL_COMMUNITY_SECTIONS: { id: string; label: string; emoji: string; desc: 
   { id: 'leaderboard', label: 'Leaderboard',     emoji: '🏆', desc: 'Production rankings with auto-scroll' },
   { id: 'coming-soon', label: 'Coming Soon',     emoji: '🕐', desc: 'Listings hitting the market soon' },
   { id: 'buyer-needs', label: 'Buyer Needs',     emoji: '🔍', desc: 'Active buyer searches' },
-  { id: 'open-houses', label: 'Open Houses',     emoji: '🏠', desc: 'Upcoming open house events' },
+  { id: 'open-houses', label: 'Open House Opportunities', emoji: '🏠', desc: 'Open house opportunities for agents to claim' },
   { id: 'competition', label: 'Competition',     emoji: '🏎️', desc: 'Live competition scoreboard (NASCAR, Golf, etc.)' },
   { id: 'agent-help',  label: 'Agent Help Needed', emoji: '🤝', desc: 'Agents seeking showing/inspection/closing help' },
 ];
@@ -176,6 +188,11 @@ export default function TvModePage() {
   const [editingItem, setEditingItem] = useState<BoardItem | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
+  // Open House Opportunity claim state
+  const [showOHClaimDialog, setShowOHClaimDialog] = useState(false);
+  const [claimingOHItem, setClaimingOHItem] = useState<BoardItem | null>(null);
+  const [ohClaimForm, setOhClaimForm] = useState<{ claimantName: string; claimantPhone: string; claimantEmail: string; claimedDate: string; claimedTime: string; claimedEndTime: string }>({ claimantName: '', claimantPhone: '', claimantEmail: '', claimedDate: '', claimedTime: '', claimedEndTime: '' });
+  const [ohClaimSaving, setOhClaimSaving] = useState(false);
   // Search/filter state
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -321,6 +338,36 @@ export default function TvModePage() {
     } catch (e) { console.error(e); } finally { setEditSaving(false); }
   };
 
+  // ── Open House Opportunity claim handlers ──────────────────────────────────────────
+  const openOHClaimDialog = (item: BoardItem) => {
+    setClaimingOHItem(item);
+    setOhClaimForm({
+      claimantName: '',
+      claimantPhone: '',
+      claimantEmail: '',
+      claimedDate: item.openHouseDate || '',
+      claimedTime: item.openHouseTime || '',
+      claimedEndTime: item.openHouseEndTime || '',
+    });
+    setShowOHClaimDialog(true);
+  };
+
+  const handleOHClaim = async () => {
+    if (!claimingOHItem) return;
+    setOhClaimSaving(true);
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch(`/api/community/open-houses/${claimingOHItem.id}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(ohClaimForm),
+      });
+      const json = await res.json();
+      if (json.ok) { setShowOHClaimDialog(false); setClaimingOHItem(null); loadItems(); }
+      else alert(json.error || 'Failed to claim');
+    } catch (e) { console.error(e); } finally { setOhClaimSaving(false); }
+  };
+
   // ── Agent Help handlers ────────────────────────────────────────────────────
   const loadHelpItems = useCallback(async () => {
     setHelpLoading(true);
@@ -456,7 +503,7 @@ export default function TvModePage() {
   };
 
   const tabConfig = {
-    'open-houses': { label: 'Open Houses',       icon: Home,       color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+    'open-houses': { label: 'Open House Opportunities', icon: Home,       color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
     'buyer-needs': { label: 'Buyer Needs',        icon: Users,      color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20'   },
     'coming-soon': { label: 'Coming Soon',        icon: Clock,      color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
     'agent-help':  { label: 'Agent Help Needed',  icon: Handshake,  color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/20'  },
@@ -733,8 +780,18 @@ export default function TvModePage() {
                           {item.maxPrice && !item.minPrice && <span>Up to {fmt$(item.maxPrice)}</span>}
                           {item.beds && <span>{item.beds} bd</span>}
                           {item.baths && <span>{item.baths} ba</span>}
-                          {item.openHouseDate && <span>📅 {item.openHouseDate}</span>}
+                          {item.openHouseDate && <span>📅 {item.openHouseDate}{item.openHouseTime ? ` at ${item.openHouseTime}` : ''}</span>}
                           {item.expectedDate && <span>📅 Expected {item.expectedDate}</span>}
+                          {tab === 'open-houses' && item.compensation && item.compensation > 0 && (
+                            <span className="bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full font-medium">
+                              💵 ${item.compensation} offered
+                            </span>
+                          )}
+                          {tab === 'open-houses' && item.claimedByUid && (
+                            <span className="bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full font-medium">
+                              ✓ Claimed by {item.claimedByName}
+                            </span>
+                          )}
                         </div>
                         {/* Agent */}
                         <div className="flex items-center gap-1 mt-2 text-gray-500 text-xs">
@@ -750,6 +807,16 @@ export default function TvModePage() {
                       </div>
                       {/* Actions */}
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Open House Opportunity — Claim button for non-owners */}
+                        {tab === 'open-houses' && !isOwner && !item.claimedByUid && (
+                          <Button
+                            size="sm"
+                            className="bg-orange-600 hover:bg-orange-700 text-white text-xs h-7"
+                            onClick={() => openOHClaimDialog(item)}
+                          >
+                            <Home className="h-3 w-3 mr-1" />Claim
+                          </Button>
+                        )}
                         {needsConfirm && (
                           <Button
                             size="sm"
@@ -803,7 +870,7 @@ export default function TvModePage() {
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="bg-gray-900 border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className={tc.color}>Add {tab === 'open-houses' ? 'Open House' : tab === 'buyer-needs' ? 'Buyer Need' : 'Coming Soon Listing'}</DialogTitle>
+            <DialogTitle className={tc.color}>Add {tab === 'open-houses' ? 'Open House Opportunity' : tab === 'buyer-needs' ? 'Buyer Need' : 'Coming Soon Listing'}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -854,9 +921,19 @@ export default function TvModePage() {
                     <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
+                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensation || '')} onChange={(e) => setForm((f) => ({ ...f, compensation: e.target.value }))} placeholder="e.g. 50" />
+                  </div>
+                  <div>
+                    <Label className="text-gray-300 text-xs">Compensation Note</Label>
+                    <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensationNote || '')} onChange={(e) => setForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+                  </div>
+                </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Notes / Description</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville..." rows={3} />
+                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville. Need someone to host 1–4pm Sunday." rows={3} />
                 </div>
               </>
             )}
@@ -993,7 +1070,7 @@ export default function TvModePage() {
         <DialogContent className="bg-gray-900 border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className={tc.color}>
-              Edit {tab === 'open-houses' ? 'Open House' : tab === 'buyer-needs' ? 'Buyer Need' : 'Coming Soon Listing'}
+              Edit {tab === 'open-houses' ? 'Open House Opportunity' : tab === 'buyer-needs' ? 'Buyer Need' : 'Coming Soon Listing'}
             </DialogTitle>
           </DialogHeader>
 
@@ -1045,9 +1122,19 @@ export default function TvModePage() {
                     <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
+                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensation || '')} onChange={(e) => setForm((f) => ({ ...f, compensation: e.target.value }))} placeholder="e.g. 50" />
+                  </div>
+                  <div>
+                    <Label className="text-gray-300 text-xs">Compensation Note</Label>
+                    <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensationNote || '')} onChange={(e) => setForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+                  </div>
+                </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Notes / Description</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville..." rows={3} />
+                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville. Need someone to host 1–4pm Sunday." rows={3} />
                 </div>
               </>
             )}
@@ -1357,6 +1444,63 @@ export default function TvModePage() {
             <Button variant="ghost" className="text-gray-400" onClick={() => { setShowClaimDialog(false); setClaimingItem(null); }}>Cancel</Button>
             <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleClaim} disabled={claimSaving || !claimForm.claimantName || !claimForm.claimantPhone}>
               {claimSaving ? 'Claiming...' : '✓ I will Help!'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* ─── Open House Opportunity Claim Dialog ─────────────────────────── */}
+      <Dialog open={showOHClaimDialog} onOpenChange={(o) => { if (!o) { setShowOHClaimDialog(false); setClaimingOHItem(null); } }}>
+        <DialogContent className="bg-gray-900 border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-orange-400">Claim Open House Opportunity</DialogTitle>
+            {claimingOHItem && (
+              <p className="text-gray-400 text-sm mt-1">{claimingOHItem.address}</p>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {claimingOHItem && (
+              <div className="bg-gray-800 rounded-lg p-3 text-sm space-y-1">
+                {claimingOHItem.openHouseDate && (
+                  <div className="text-gray-300">📅 Suggested: {claimingOHItem.openHouseDate}{claimingOHItem.openHouseTime ? ` at ${claimingOHItem.openHouseTime}` : ''}{claimingOHItem.openHouseEndTime ? ` – ${claimingOHItem.openHouseEndTime}` : ''}</div>
+                )}
+                {claimingOHItem.compensation && claimingOHItem.compensation > 0 && (
+                  <div className="text-yellow-300">💵 ${claimingOHItem.compensation} offered{claimingOHItem.compensationNote ? ` · ${claimingOHItem.compensationNote}` : ''}</div>
+                )}
+              </div>
+            )}
+            <div>
+              <Label className="text-gray-300 text-xs">Your Name *</Label>
+              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantName} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your full name" />
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Your Phone *</Label>
+              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantPhone} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Your Email</Label>
+              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantEmail} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantEmail: e.target.value }))} placeholder="you@example.com" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Date</Label>
+                <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedDate} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedDate: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Start Time</Label>
+                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedTime} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedTime: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">End Time</Label>
+                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedEndTime} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedEndTime: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" className="text-gray-400" onClick={() => { setShowOHClaimDialog(false); setClaimingOHItem(null); }}>Cancel</Button>
+            <Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleOHClaim} disabled={ohClaimSaving || !ohClaimForm.claimantName || !ohClaimForm.claimantPhone}>
+              {ohClaimSaving ? 'Claiming...' : 'Claim Open House'}
             </Button>
           </DialogFooter>
         </DialogContent>

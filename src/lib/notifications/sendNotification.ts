@@ -36,9 +36,11 @@ export type NotificationType =
   | 'tx_status_change'      // transaction status changed → agent notified
   | 'tx_new_agent'          // new transaction added by agent → TC/staff notified
   | 'co_agent_split'        // co-agent transaction split on close → both agents notified
-  | 'agent_help_request'    // agent posted a help-needed request → all agents notified
-  | 'agent_help_claimed'    // another agent claimed a help request → requester notified
-  | 'system';               // generic system notification
+  | 'agent_help_request'              // agent posted a help-needed request → all agents notified
+  | 'agent_help_claimed'              // another agent claimed a help request → requester notified
+  | 'open_house_opportunity'          // agent posted an open house opportunity → all agents notified
+  | 'open_house_opportunity_claimed'  // another agent claimed an open house opportunity → poster notified
+  | 'system';                         // generic system notification
 
 export interface NotificationPayload {
   type: NotificationType;
@@ -289,9 +291,11 @@ function buildEmailHtml(
     tx_status_change:      'Status Update',
     tx_new_agent:          'New Transaction',
     co_agent_split:        'Transaction Split',
-    agent_help_request:    'Agent Help Needed',
-    agent_help_claimed:    'Help Claimed',
-    system:                'System',
+    agent_help_request:             'Agent Help Needed',
+    agent_help_claimed:             'Help Claimed',
+    open_house_opportunity:         'Open House Opportunity',
+    open_house_opportunity_claimed: 'Open House Claimed',
+    system:                         'System',
   };
   const badge = typeLabel[type] ?? 'Notification';
 

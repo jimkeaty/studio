@@ -30,6 +30,8 @@ type OpenHouseListing = {
   beds?: number | null; baths?: number | null; sqft?: number | null;
   notes?: string; agentName: string; agentPhone: string;
   openHouseDate?: string | null; openHouseTime?: string; openHouseEndTime?: string;
+  compensation?: number | null; compensationNote?: string;
+  claimedByName?: string | null; claimedByPhone?: string | null; claimedAt?: string | null;
 };
 
 type ActivityItem = {
@@ -62,7 +64,7 @@ const ALL_SECTION_DEFS: Record<string, { label: string; color: string; dot: stri
   'leaderboard':  { label: 'Leaderboard',     color: 'bg-yellow-500',   dot: 'bg-yellow-400',   bgColor: 'from-yellow-900/30' },
   'coming-soon':  { label: 'Coming Soon',     color: 'bg-purple-500',   dot: 'bg-purple-400',   bgColor: 'from-purple-900/30' },
   'buyer-needs':  { label: 'Buyer Needs',     color: 'bg-blue-500',     dot: 'bg-blue-400',     bgColor: 'from-blue-900/30' },
-  'open-houses':  { label: 'Open Houses',     color: 'bg-orange-500',   dot: 'bg-orange-400',   bgColor: 'from-orange-900/30' },
+  'open-houses':  { label: 'Open House Opportunities', color: 'bg-orange-500', dot: 'bg-orange-400', bgColor: 'from-orange-900/30' },
   'competition':  { label: 'Competition',     color: 'bg-red-500',      dot: 'bg-red-400',      bgColor: 'from-red-900/30' },
 };
 
@@ -729,11 +731,11 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
           <Home className="h-6 w-6 text-orange-400" />
         </div>
         <div>
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">Open Houses</h2>
-          <p className="text-gray-400 text-sm">Upcoming open house events — come see these homes!</p>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Open House Opportunities</h2>
+          <p className="text-gray-400 text-sm">Open house opportunities available for agents to claim</p>
         </div>
         <div className="ml-auto bg-orange-500/20 text-orange-300 text-sm font-bold px-3 py-1 rounded-full">
-          {items.length} open house{items.length !== 1 ? 's' : ''}
+          {items.length} opportunit{items.length !== 1 ? 'ies' : 'y'}
         </div>
       </div>
       <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6" style={{ scrollBehavior: 'auto' }}>
@@ -742,8 +744,8 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Home className="h-20 w-20 text-gray-700" />
-            <p className="text-gray-500 text-3xl font-semibold">No Open Houses Scheduled</p>
-            <p className="text-gray-600 text-lg">Submit an open house from the dashboard</p>
+            <p className="text-gray-500 text-3xl font-semibold">No Open House Opportunities Posted</p>
+            <p className="text-gray-600 text-lg">Post an open house opportunity from the dashboard</p>
           </div>
         ) : (
           <div ref={innerRef}>
@@ -757,10 +759,17 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
                       </div>
                       {item.price && <div className="text-white text-3xl font-bold mt-1">{fmt$(item.price)}</div>}
                     </div>
-                    <div className="flex-shrink-0 bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-center">
-                      <div className="text-orange-400 text-xs font-semibold uppercase">Open House</div>
+                    <div className="flex-shrink-0 bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-center min-w-[130px]">
+                      {item.claimedByName ? (
+                        <div className="text-green-400 text-xs font-semibold uppercase">✓ Claimed</div>
+                      ) : (
+                        <div className="text-orange-400 text-xs font-semibold uppercase">Available</div>
+                      )}
                       {item.openHouseDate && <div className="text-white font-bold text-sm">{fmtDate(item.openHouseDate)}</div>}
                       {item.openHouseTime && <div className="text-gray-300 text-xs">{item.openHouseTime}{item.openHouseEndTime ? ` – ${item.openHouseEndTime}` : ''}</div>}
+                      {item.compensation && item.compensation > 0 && (
+                        <div className="text-yellow-300 text-xs font-bold mt-1">💵 ${item.compensation}</div>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-gray-300 text-sm">
@@ -771,10 +780,16 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
                   {item.notes && <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-base">{item.agentName.charAt(0)}</div>
-                    <div>
+                    <div className="flex-1">
                       <div className="text-white text-sm font-semibold">{item.agentName}</div>
                       <div className="text-gray-400 text-xs flex items-center gap-1"><Phone className="h-3 w-3" />{item.agentPhone}</div>
                     </div>
+                    {item.claimedByName && (
+                      <div className="text-right">
+                        <div className="text-green-400 text-xs font-semibold">✓ {item.claimedByName}</div>
+                        {item.claimedByPhone && <div className="text-gray-500 text-xs">{item.claimedByPhone}</div>}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
