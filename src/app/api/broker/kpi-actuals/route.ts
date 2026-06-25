@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { todayInCompanyTz } from '@/lib/config';
 
 function jsonError(s: number, e: string) {
   return NextResponse.json({ ok: false, error: e }, { status: s });
@@ -26,15 +27,15 @@ export async function GET(req: NextRequest) {
   if (!decoded) return jsonError(401, 'Unauthorized');
   try {
     const { searchParams } = new URL(req.url);
-    const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()), 10);
-    const today = new Date();
-    const isCurrentYear = year === today.getFullYear();
+    // Use company timezone (America/Chicago) so that "today" rolls over at
+    // midnight CDT/CST, not midnight UTC.
+    const { year: todayYear, month: todayMonth, day: todayDay, dateStr: todayStr } = todayInCompanyTz();
+    const year = parseInt(searchParams.get('year') || String(todayYear), 10);
+    const isCurrentYear = year === todayYear;
 
     // Build date range: Jan 1 – today (or Dec 31 for past years)
     const startDate = `${year}-01-01`;
-    const endDate = isCurrentYear
-      ? today.toISOString().slice(0, 10)
-      : `${year}-12-31`;
+    const endDate = isCurrentYear ? todayStr : `${year}-12-31`;
 
     // Load demo agent IDs to exclude from aggregation
     const demoSnap = await adminDb.collection('agentProfiles')
@@ -82,7 +83,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Recruiting actuals from recruitingTracking (YTD sum)
-    const currentMonth = isCurrentYear ? today.getMonth() + 1 : 12;
+    const currentMonth = isCurrentYear ? todayMonth : 12;
     const recruitingSnap = await adminDb.collection('recruitingTracking')
       .where('year', '==', year)
       .where('month', '<=', currentMonth)
@@ -112,10 +113,11 @@ export async function GET(req: NextRequest) {
       agentCountActual = Number(latestRecruitingSnap.docs[0].data().activeAgents ?? 0);
     }
 
-    // Days elapsed for YTD pace calculation
-    const startOfYear = new Date(year, 0, 1);
+    // Days elapsed for YTD pace calculation (using company timezone date)
+    const startOfYear = new Date(Date.UTC(year, 0, 1));
+    const todayUtcForElapsed = new Date(Date.UTC(todayYear, todayMonth - 1, todayDay));
     const daysElapsed = isCurrentYear
-      ? Math.floor((today.getTime() - startOfYear.getTime()) / 86400000) + 1
+      ? Math.floor((todayUtcForElapsed.getTime() - startOfYear.getTime()) / 86400000) + 1
       : 365;
     const daysInYear = ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0) ? 366 : 365;
     const ytdFraction = daysElapsed / daysInYear;

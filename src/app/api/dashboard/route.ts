@@ -4,6 +4,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getAnniversaryCycle, isInCycle, formatCycleLabel } from '@/lib/agents/anniversaryCycle';
 import type { AgentDashboardData, BusinessPlan } from "@/lib/types";
+import { todayUtcInCompanyTz } from '@/lib/config';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -280,8 +281,10 @@ export async function GET(req: NextRequest) {
     const yearStart = startOfYear(yearNum);
     const yearEnd = endOfYear(yearNum);
 
-    const today = new Date();
-    const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    // Use company timezone (America/Chicago) so that "today" rolls over at
+    // midnight CDT/CST, not midnight UTC. Without this, agents active after
+    // 7 PM CDT would see tomorrow's goal added to today's dashboard.
+    const todayUtc = todayUtcInCompanyTz();
     const asOf = minDate(todayUtc, yearEnd);
 
     const derivedPlanStart = toDate(
@@ -341,6 +344,9 @@ export async function GET(req: NextRequest) {
     if (agentFirebaseUid && agentFirebaseUid !== uid) activityQueryIds.add(agentFirebaseUid);
     if (agentProfileDocId && agentProfileDocId !== uid) activityQueryIds.add(agentProfileDocId);
     if (_ap?.agentId && _ap.agentId !== uid) activityQueryIds.add(String(_ap.agentId));
+    // Also include the agent's stored firebaseUid field — critical for admin viewAs when the
+    // viewAs param is a slug but daily_activity docs were saved under the agent's Firebase UID.
+    if (_ap?.firebaseUid && _ap.firebaseUid !== uid) activityQueryIds.add(String(_ap.firebaseUid));
     const activityIdList = Array.from(activityQueryIds);
 
     const txDocMap = new Map();

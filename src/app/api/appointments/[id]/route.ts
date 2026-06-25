@@ -39,16 +39,54 @@ function isDateEditable(dateStr: string, role: string): boolean {
     return diff <= EDIT_WINDOW_DAYS;
 }
 
+/**
+ * Build the full set of agentId values for a given uid.
+ * Appointments may be stored under the Firebase UID, the Firestore profile doc ID,
+ * or the agentId slug — this resolves all three so permission checks work regardless
+ * of which ID was used when the appointment was created.
+ */
+async function buildAgentIdSet(uid: string): Promise<Set<string>> {
+  const agentIdSet = new Set([uid]);
+  try {
+    const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+    if (profileByIdSnap.exists) {
+      const d = profileByIdSnap.data();
+      if (d?.agentId) agentIdSet.add(String(d.agentId));
+      if (d?.firebaseUid) agentIdSet.add(String(d.firebaseUid));
+    } else {
+      // uid might be a slug
+      const profileBySlugSnap = await adminDb.collection('agentProfiles')
+        .where('agentId', '==', uid).limit(1).get();
+      if (!profileBySlugSnap.empty) {
+        agentIdSet.add(profileBySlugSnap.docs[0].id);
+        const d = profileBySlugSnap.docs[0].data();
+        if (d?.firebaseUid) agentIdSet.add(String(d.firebaseUid));
+      }
+      // uid might be a Firebase UID stored in the firebaseUid field
+      const profileByFbUidSnap = await adminDb.collection('agentProfiles')
+        .where('firebaseUid', '==', uid).limit(1).get();
+      if (!profileByFbUidSnap.empty) {
+        agentIdSet.add(profileByFbUidSnap.docs[0].id);
+        const d = profileByFbUidSnap.docs[0].data();
+        if (d?.agentId) agentIdSet.add(String(d.agentId));
+      }
+    }
+  } catch { /* ignore profile lookup errors */ }
+  return agentIdSet;
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { uid: callerUid, role } = await requireUser(req);
     const { id } = await params;
     const body = await req.json();
 
-    // Admin can patch on behalf of any agent
+    const callerIsAdmin = await isAdminLike(callerUid);
+    const effectiveRole = callerIsAdmin ? 'admin' : role;
+
+    // Admin can patch on behalf of any agent via body.viewAs
     const viewAs = body?.viewAs;
-    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
-    const effectiveRole = await isAdminLike(callerUid) ? 'admin' : role;
+    const uid = (callerIsAdmin && viewAs) ? viewAs : callerUid;
 
     const docRef = adminDb.collection('appointments').doc(id);
     const docSnap = await docRef.get();
@@ -58,8 +96,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const data = docSnap.data()!;
-    if (data.agentId !== uid) {
-      return jsonError(403, 'You do not have permission to edit this appointment');
+
+    // Build full agentId set so the check works regardless of which ID was stored
+    if (!callerIsAdmin) {
+      const agentIdSet = await buildAgentIdSet(callerUid);
+      if (!agentIdSet.has(data.agentId)) {
+        return jsonError(403, 'You do not have permission to edit this appointment');
+      }
+    } else if (uid !== callerUid) {
+      // Admin impersonating — verify the target agent owns this appointment
+      const agentIdSet = await buildAgentIdSet(uid);
+      if (!agentIdSet.has(data.agentId)) {
+        return jsonError(403, 'You do not have permission to edit this appointment');
+      }
     }
 
     // Check edit window on the original date
@@ -67,7 +116,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return jsonError(403, 'Edits are locked after 45 days.', 'edit_window_expired');
     }
     // Also check if the date is being changed to a locked date
-    if (body.date && !isDateEditable(body.date, role)) {
+    if (body.date && !isDateEditable(body.date, effectiveRole)) {
         return jsonError(403, 'Cannot move appointment to a date that is locked for edits.', 'edit_window_expired');
     }
 
@@ -85,9 +134,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { uid: callerUid, role } = await requireUser(req);
     const { id } = await params;
 
-    // For DELETE, check if the doc belongs to the impersonated agent
     const isAdmin = await isAdminLike(callerUid);
     const effectiveRole = isAdmin ? 'admin' : role;
+
+    // Admin can delete on behalf of any agent via ?viewAs= query param
+    const viewAs = new URL(req.url).searchParams.get('viewAs');
+    const uid = (isAdmin && viewAs) ? viewAs : callerUid;
 
     const docRef = adminDb.collection('appointments').doc(id);
     const docSnap = await docRef.get();
@@ -97,9 +149,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     const data = docSnap.data()!;
-    // Admin can delete any appointment; agents can only delete their own
-    if (!isAdmin && data.agentId !== callerUid) {
-      return jsonError(403, 'You do not have permission to delete this appointment');
+
+    // Admin can delete any appointment; agents can only delete their own.
+    // Build a full set of agentId values (Firebase UID, profile doc ID, slug)
+    // so the check works regardless of which ID was stored on the appointment.
+    if (!isAdmin) {
+      const agentIdSet = await buildAgentIdSet(callerUid);
+      if (!agentIdSet.has(data.agentId)) {
+        return jsonError(403, 'You do not have permission to delete this appointment');
+      }
+    } else if (uid !== callerUid) {
+      // Admin impersonating — verify the target agent owns this appointment
+      const agentIdSet = await buildAgentIdSet(uid);
+      if (!agentIdSet.has(data.agentId)) {
+        return jsonError(403, 'You do not have permission to delete this appointment');
+      }
     }
 
     if (!isDateEditable(data.date, effectiveRole)) {

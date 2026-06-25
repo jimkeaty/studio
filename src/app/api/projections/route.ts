@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { todayUtcInCompanyTz } from '@/lib/config';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,9 +63,9 @@ export async function GET(req: NextRequest) {
     }
 
     const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
-    const now = new Date();
-    // Use start-of-today as "as of" date
-    const asOf = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    // Use company timezone (America/Chicago) so that "today" rolls over at
+    // midnight CDT/CST, not midnight UTC.
+    const asOf = todayUtcInCompanyTz();
 
     // ── 1. Load Business Plan ────────────────────────────────────────────────
     // The Business Plan page saves to: dashboards/{year}/agent/{uid}/plans/plan
