@@ -670,22 +670,42 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
   const avgCommissionPct = aggregateStats?.avgCommissionPct ?? null;
   const avgNetCommissionPct = aggregateStats?.avgNetCommissionPct ?? 0;
 
-  // YTD-prorated goal logic (apples-to-apples: compare YTD actuals to YTD goal)
+  // YTD-prorated goal logic — use the server's plan-start-aware values from /api/dashboard
+  // instead of recomputing from Jan 1. The server already applies measurementMode so that
+  // mid-year plans are graded from their start date, not from January 1.
   const todayPerf = new Date();
   const currentYearPerf = todayPerf.getFullYear();
   const isCurrentYearPerf = year === currentYearPerf;
-  const daysInYearPerf = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
-  const daysElapsedPerf = Math.floor((todayPerf.getTime() - new Date(year, 0, 1).getTime()) / 86400000) + 1;
-  const ytdFractionPerf = isCurrentYearPerf ? Math.min(1, daysElapsedPerf / daysInYearPerf) : 1;
   const currentMonthIdxPerf = isCurrentYearPerf ? todayPerf.getMonth() : 11;
 
-  const yearlyIncomeGoal = overview.months.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) || null;
-  const yearlyVolumeGoal = overview.months.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) || null;
-  const yearlySalesGoal = overview.months.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) || null;
+  // effectiveStartDate is returned by /api/dashboard and reflects measurementMode:
+  //   'plan_start' mode → plan start date  |  'calendar_year' mode → Jan 1
+  const effectiveStartStr = dashboard?.effectiveStartDate ?? `${year}-01-01`;
+  const effectiveStartPerf = new Date(effectiveStartStr + 'T00:00:00Z');
+
+  // Compute elapsed days from the effective start (not always Jan 1)
+  const daysInYearPerf = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 366 : 365;
+  const daysElapsedPerf = isCurrentYearPerf
+    ? Math.max(1, Math.floor((todayPerf.getTime() - effectiveStartPerf.getTime()) / 86400000) + 1)
+    : daysInYearPerf;
+  // Total days in the measurement window (from effective start to year end)
+  const yearEnd = new Date(Date.UTC(year, 11, 31));
+  const windowDaysPerf = Math.max(1, Math.floor((yearEnd.getTime() - effectiveStartPerf.getTime()) / 86400000) + 1);
+  const ytdFractionPerf = isCurrentYearPerf ? Math.min(1, daysElapsedPerf / windowDaysPerf) : 1;
+
+  // Sum only the goal months that fall on or after the effective start month
+  const effectiveStartMonthPerf = effectiveStartPerf.getUTCMonth(); // 0-based
+  const yearlyIncomeGoal = overview.months.reduce((s, m, i) => s + (i >= effectiveStartMonthPerf ? (m.grossMarginGoal ?? 0) : 0), 0) || null;
+  const yearlyVolumeGoal = overview.months.reduce((s, m, i) => s + (i >= effectiveStartMonthPerf ? (m.volumeGoal ?? 0) : 0), 0) || null;
+  const yearlySalesGoal = overview.months.reduce((s, m, i) => s + (i >= effectiveStartMonthPerf ? (m.salesCountGoal ?? 0) : 0), 0) || null;
   const ytdIncomeGoal = yearlyIncomeGoal ? Math.round(yearlyIncomeGoal * ytdFractionPerf) : null;
   const ytdVolumeGoal = yearlyVolumeGoal ? Math.round(yearlyVolumeGoal * ytdFractionPerf) : null;
   const ytdSalesGoal = yearlySalesGoal ? Math.round(yearlySalesGoal * ytdFractionPerf * 10) / 10 : null;
-  const gradeVsGoal = ytdIncomeGoal ? Math.round((totals.netIncome / ytdIncomeGoal) * 100) : null;
+
+  // Use dashboard.netEarned (plan-start-filtered) instead of totals.netIncome (Jan-1 YTD)
+  // so the grade reflects only transactions on/after the effective start date.
+  const perfNetEarned = dashboard?.netEarned ?? totals.netIncome;
+  const gradeVsGoal = ytdIncomeGoal ? Math.round((perfNetEarned / ytdIncomeGoal) * 100) : null;
   const gradeVsVolume = ytdVolumeGoal ? Math.round((totals.closedVolume / ytdVolumeGoal) * 100) : null;
   const gradeVsSales = ytdSalesGoal ? Math.round((totals.closedCount / ytdSalesGoal) * 100) : null;
 
@@ -1593,30 +1613,49 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
       </div>
     );
   }
-  // Use perfData for income/volume/sales so grades are consistent with MyPerformanceSection and ChartsSection.
-  // Fall back to dashboard fields only when perfData hasn't loaded yet.
+  // Report Card income/volume/sales grades — use the server's plan-start-aware values from
+  // /api/dashboard so that mid-year plans are graded from their start date, not from Jan 1.
+  // The server applies measurementMode and returns effectiveStartDate, netEarned (filtered to
+  // plan start), and expectedYTDIncomeGoal (summed from plan start month only).
   const today = new Date();
   const currentYear = today.getFullYear();
   const isCurrentYearRC = perfYear === currentYear;
+
+  // Use the same effectiveStartDate that MyPerformanceSection uses (from /api/dashboard)
+  const rcEffectiveStartStr = dashboard.effectiveStartDate ?? `${perfYear}-01-01`;
+  const rcEffectiveStart = new Date(rcEffectiveStartStr + 'T00:00:00Z');
+  const rcEffectiveStartMonth = rcEffectiveStart.getUTCMonth(); // 0-based
+
   const daysInYearRC = (perfYear % 4 === 0 && (perfYear % 100 !== 0 || perfYear % 400 === 0)) ? 366 : 365;
-  const daysElapsedRC = Math.floor((today.getTime() - new Date(perfYear, 0, 1).getTime()) / 86400000) + 1;
-  const ytdFractionRC = isCurrentYearRC ? Math.min(1, daysElapsedRC / daysInYearRC) : 1;
+  const daysElapsedRC = isCurrentYearRC
+    ? Math.max(1, Math.floor((today.getTime() - rcEffectiveStart.getTime()) / 86400000) + 1)
+    : daysInYearRC;
+  const rcYearEnd = new Date(Date.UTC(perfYear, 11, 31));
+  const rcWindowDays = Math.max(1, Math.floor((rcYearEnd.getTime() - rcEffectiveStart.getTime()) / 86400000) + 1);
+  const ytdFractionRC = isCurrentYearRC ? Math.min(1, daysElapsedRC / rcWindowDays) : 1;
 
   const rcTotals = perfData?.overview?.totals;
   const rcMonths = perfData?.overview?.months;
 
-  // Compute YTD goals from monthly goal data (same formula as MyPerformanceSection)
-  const rcYearlyIncomeGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.grossMarginGoal ?? 0), 0) : 0;
-  const rcYearlyVolumeGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.volumeGoal ?? 0), 0) : 0;
-  const rcYearlySalesGoal = rcMonths ? rcMonths.reduce((s, m) => s + (m.salesCountGoal ?? 0), 0) : 0;
+  // Sum only goal months on/after the effective start month (mirrors MyPerformanceSection)
+  const rcYearlyIncomeGoal = rcMonths ? rcMonths.reduce((s, m, i) => s + (i >= rcEffectiveStartMonth ? (m.grossMarginGoal ?? 0) : 0), 0) : 0;
+  const rcYearlyVolumeGoal = rcMonths ? rcMonths.reduce((s, m, i) => s + (i >= rcEffectiveStartMonth ? (m.volumeGoal ?? 0) : 0), 0) : 0;
+  const rcYearlySalesGoal = rcMonths ? rcMonths.reduce((s, m, i) => s + (i >= rcEffectiveStartMonth ? (m.salesCountGoal ?? 0) : 0), 0) : 0;
 
-  // Use perfData values when available, fall back to dashboard
-  const netEarned = rcTotals ? rcTotals.netIncome : dashboard.netEarned;
-  const netPending = rcTotals ? rcTotals.pendingNetIncome : dashboard.netPending;
+  // netEarned: use dashboard.netEarned (plan-start-filtered) so pre-plan transactions
+  // don't inflate the actuals side of the grade. Fall back to rcTotals only if dashboard
+  // hasn't loaded (which shouldn't happen since both load together).
+  const netEarned = dashboard.netEarned ?? (rcTotals ? rcTotals.netIncome : 0);
+  const netPending = dashboard.netPending ?? (rcTotals ? rcTotals.pendingNetIncome : 0);
   const ytdTotalPotential = netEarned + netPending;
-  const ytdIncomeGoal = rcYearlyIncomeGoal > 0
-    ? Math.round(rcYearlyIncomeGoal * ytdFractionRC)
-    : dashboard.expectedYTDIncomeGoal;
+
+  // ytdIncomeGoal: prefer the server's already-computed value (plan-start-aware monthly sum)
+  // over a client-side fraction of the yearly total.
+  const ytdIncomeGoal = (dashboard.expectedYTDIncomeGoal && dashboard.expectedYTDIncomeGoal > 0)
+    ? dashboard.expectedYTDIncomeGoal
+    : rcYearlyIncomeGoal > 0
+      ? Math.round(rcYearlyIncomeGoal * ytdFractionRC)
+      : 0;
 
   const incomeDelta = ytdIncomeGoal > 0 ? netEarned - ytdIncomeGoal : 0;
   const incomePct = ytdIncomeGoal > 0 ? Math.round((netEarned / ytdIncomeGoal) * 100) : 0;
