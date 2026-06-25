@@ -7,7 +7,7 @@ import {
   Tv, Home, Users, Clock, ExternalLink, Plus, Trash2, CheckCircle,
   AlertCircle, Settings, ChevronDown, ChevronUp, Phone, MapPin,
   Bed, Bath, Square, DollarSign, Calendar, Droplets, Zap, Building2,
-  RefreshCw, Pencil, Search
+  RefreshCw, Pencil, Search, Handshake
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,32 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Agent Help Types ────────────────────────────────────────────────────────
+type HelpType = 'showing' | 'inspection' | 'closing' | 'other';
+
+type AgentHelpItem = {
+  id: string;
+  helpType: HelpType;
+  description: string;
+  propertyAddress?: string;
+  needDate?: string;
+  needTime?: string;
+  compensation?: number;
+  compensationNote?: string;
+  agentName: string;
+  agentPhone: string;
+  agentEmail?: string;
+  agentProfileId?: string;
+  createdByUid?: string;
+  status: 'active' | 'removed';
+  claimedByUid?: string | null;
+  claimedByName?: string | null;
+  claimedByPhone?: string | null;
+  claimedByEmail?: string | null;
+  claimedAt?: string | null;
+  createdAt: string;
+};
+
 type BoardItem = {
   id: string;
   agentName: string;
@@ -74,9 +100,10 @@ const ALL_COMMUNITY_SECTIONS: { id: string; label: string; emoji: string; desc: 
   { id: 'buyer-needs', label: 'Buyer Needs',     emoji: '🔍', desc: 'Active buyer searches' },
   { id: 'open-houses', label: 'Open Houses',     emoji: '🏠', desc: 'Upcoming open house events' },
   { id: 'competition', label: 'Competition',     emoji: '🏎️', desc: 'Live competition scoreboard (NASCAR, Golf, etc.)' },
+  { id: 'agent-help',  label: 'Agent Help Needed', emoji: '🤝', desc: 'Agents seeking showing/inspection/closing help' },
 ];
 
-const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses'];
+const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses', 'agent-help'];
 
 function fmt$(n?: number | null) {
   if (!n) return null;
@@ -94,7 +121,22 @@ export default function TvModePage() {
   const { user } = useUser();
   const router = useRouter();
 
-  const [tab, setTab] = useState<'open-houses' | 'buyer-needs' | 'coming-soon'>('open-houses');
+  const [tab, setTab] = useState<'open-houses' | 'buyer-needs' | 'coming-soon' | 'agent-help'>('open-houses');
+
+  // ── Agent Help state ──────────────────────────────────────────────────────
+  const [helpItems, setHelpItems] = useState<AgentHelpItem[]>([]);
+  const [helpLoading, setHelpLoading] = useState(false);
+  const [showHelpAddDialog, setShowHelpAddDialog] = useState(false);
+  const [helpForm, setHelpForm] = useState<Partial<AgentHelpItem & { compensation: string }>>({});
+  const [helpSaving, setHelpSaving] = useState(false);
+  const [editingHelpItem, setEditingHelpItem] = useState<AgentHelpItem | null>(null);
+  const [showHelpEditDialog, setShowHelpEditDialog] = useState(false);
+  const [helpEditSaving, setHelpEditSaving] = useState(false);
+  const [deletingHelpId, setDeletingHelpId] = useState<string | null>(null);
+  const [showClaimDialog, setShowClaimDialog] = useState(false);
+  const [claimingItem, setClaimingItem] = useState<AgentHelpItem | null>(null);
+  const [claimForm, setClaimForm] = useState<{ claimantName: string; claimantPhone: string; claimantEmail: string }>({ claimantName: '', claimantPhone: '', claimantEmail: '' });
+  const [claimSaving, setClaimSaving] = useState(false);
   const [items, setItems] = useState<BoardItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [tvConfig, setTvConfig] = useState<TvConfig>({ rotationIntervalSeconds: 30, communityBoardIntervalSeconds: 30, enabledPages: ['activity', 'leaderboard', 'community'], communitySections: DEFAULT_COMMUNITY_SECTIONS, pinnedCompetitionId: null });
@@ -137,7 +179,7 @@ export default function TvModePage() {
   // Search/filter state
   const [searchQuery, setSearchQuery] = useState('');
 
-  const apiPath = tab === 'open-houses' ? 'open-houses' : tab === 'buyer-needs' ? 'buyer-needs' : 'coming-soon';
+  const apiPath = tab === 'open-houses' ? 'open-houses' : tab === 'buyer-needs' ? 'buyer-needs' : tab === 'coming-soon' ? 'coming-soon' : 'agent-help';
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -279,6 +321,97 @@ export default function TvModePage() {
     } catch (e) { console.error(e); } finally { setEditSaving(false); }
   };
 
+  // ── Agent Help handlers ────────────────────────────────────────────────────
+  const loadHelpItems = useCallback(async () => {
+    setHelpLoading(true);
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch('/api/community/agent-help', { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.ok) setHelpItems(json.items || []);
+    } catch (e) { console.error(e); } finally { setHelpLoading(false); }
+  }, [user]);
+
+  useEffect(() => { if (tab === 'agent-help') loadHelpItems(); }, [tab, loadHelpItems]);
+
+  const handleHelpAdd = async () => {
+    setHelpSaving(true);
+    try {
+      const token = await user!.getIdToken();
+      const body = { ...helpForm, compensation: helpForm.compensation ? Number(helpForm.compensation) : 0 };
+      const res = await fetch('/api/community/agent-help', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.ok) { setShowHelpAddDialog(false); setHelpForm({}); loadHelpItems(); }
+    } catch (e) { console.error(e); } finally { setHelpSaving(false); }
+  };
+
+  const handleHelpDelete = async (id: string) => {
+    setDeletingHelpId(id);
+    try {
+      const token = await user!.getIdToken();
+      await fetch(`/api/community/agent-help/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      loadHelpItems();
+    } catch (e) { console.error(e); } finally { setDeletingHelpId(null); }
+  };
+
+  const openHelpEditDialog = (item: AgentHelpItem) => {
+    setEditingHelpItem(item);
+    setHelpForm({
+      helpType: item.helpType,
+      description: item.description,
+      propertyAddress: item.propertyAddress || '',
+      needDate: item.needDate || '',
+      needTime: item.needTime || '',
+      compensation: item.compensation ? String(item.compensation) : '',
+      compensationNote: item.compensationNote || '',
+      agentName: item.agentName,
+      agentPhone: item.agentPhone,
+      agentEmail: item.agentEmail || '',
+    } as any);
+    setShowHelpEditDialog(true);
+  };
+
+  const handleHelpSaveEdit = async () => {
+    if (!editingHelpItem) return;
+    setHelpEditSaving(true);
+    try {
+      const token = await user!.getIdToken();
+      const body = { ...helpForm, compensation: helpForm.compensation ? Number(helpForm.compensation) : 0 };
+      const res = await fetch(`/api/community/agent-help/${editingHelpItem.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.ok) { setShowHelpEditDialog(false); setEditingHelpItem(null); setHelpForm({}); loadHelpItems(); }
+    } catch (e) { console.error(e); } finally { setHelpEditSaving(false); }
+  };
+
+  const openClaimDialog = (item: AgentHelpItem) => {
+    setClaimingItem(item);
+    setClaimForm({ claimantName: '', claimantPhone: '', claimantEmail: '' });
+    setShowClaimDialog(true);
+  };
+
+  const handleClaim = async () => {
+    if (!claimingItem) return;
+    setClaimSaving(true);
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch(`/api/community/agent-help/${claimingItem.id}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(claimForm),
+      });
+      const json = await res.json();
+      if (json.ok) { setShowClaimDialog(false); setClaimingItem(null); loadHelpItems(); }
+    } catch (e) { console.error(e); } finally { setClaimSaving(false); }
+  };
+
   const saveTvConfig = async () => {
     try {
       const token = await user!.getIdToken();
@@ -323,9 +456,10 @@ export default function TvModePage() {
   };
 
   const tabConfig = {
-    'open-houses': { label: 'Open Houses', icon: Home, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-    'buyer-needs': { label: 'Buyer Needs', icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-    'coming-soon': { label: 'Coming Soon', icon: Clock, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+    'open-houses': { label: 'Open Houses',       icon: Home,       color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+    'buyer-needs': { label: 'Buyer Needs',        icon: Users,      color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20'   },
+    'coming-soon': { label: 'Coming Soon',        icon: Clock,      color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+    'agent-help':  { label: 'Agent Help Needed',  icon: Handshake,  color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/20'  },
   };
 
   const tc = tabConfig[tab];
@@ -340,7 +474,7 @@ export default function TvModePage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">TV Mode</h1>
-            <p className="text-gray-400 text-sm">Manage office boards · Open Houses · Buyer Needs · Coming Soon</p>
+            <p className="text-gray-400 text-sm">Manage office boards · Open Houses · Buyer Needs · Coming Soon · Agent Help</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -407,7 +541,12 @@ export default function TvModePage() {
         <div className="p-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-sm">{items.length} active listing{items.length !== 1 ? 's' : ''}</span>
+              <span className="text-gray-400 text-sm">
+                {tab === 'agent-help'
+                  ? `${helpItems.length} active request${helpItems.length !== 1 ? 's' : ''}`
+                  : `${items.length} active listing${items.length !== 1 ? 's' : ''}`
+                }
+              </span>
               <button onClick={loadItems} className="text-gray-600 hover:text-gray-400">
                 <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
               </button>
@@ -415,9 +554,13 @@ export default function TvModePage() {
             <Button
               size="sm"
               className="bg-orange-500 hover:bg-orange-600 text-white"
-              onClick={() => { setForm({}); setShowAddDialog(true); }}
+              onClick={() => {
+                if (tab === 'agent-help') { setHelpForm({}); setShowHelpAddDialog(true); }
+                else { setForm({}); setShowAddDialog(true); }
+              }}
             >
-              <Plus className="h-4 w-4 mr-1" />Add {tc.label.slice(0, -1)}
+              <Plus className="h-4 w-4 mr-1" />
+              {tab === 'agent-help' ? 'Post Help Request' : `Add ${tc.label.slice(0, -1)}`}
             </Button>
           </div>
           {/* Search bar */}
@@ -431,7 +574,122 @@ export default function TvModePage() {
             />
           </div>
 
-          {loading ? (
+          {/* ── Agent Help tab content ────────────────────────────────────────────────── */}
+          {tab === 'agent-help' ? (
+            helpLoading ? (
+              <div className="py-12 text-center text-gray-500">Loading...</div>
+            ) : helpItems.length === 0 ? (
+              <div className="py-12 text-center">
+                <Handshake className="h-10 w-10 text-gray-700 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No help requests posted yet</p>
+                <p className="text-gray-600 text-sm mt-1">Click “Post Help Request” to ask fellow agents for help</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {helpItems
+                  .filter((item) => {
+                    if (!searchQuery.trim()) return true;
+                    const q = searchQuery.toLowerCase();
+                    return (
+                      (item.agentName || '').toLowerCase().includes(q) ||
+                      (item.description || '').toLowerCase().includes(q) ||
+                      (item.propertyAddress || '').toLowerCase().includes(q) ||
+                      (item.helpType || '').toLowerCase().includes(q)
+                    );
+                  })
+                  .map((item) => {
+                    const isOwner = !!(myProfileIds.size > 0 && (
+                      myProfileIds.has(item.createdByUid ?? '') ||
+                      myProfileIds.has(item.agentProfileId ?? '')
+                    ));
+                    const isClaimed = !!item.claimedByUid;
+                    const helpTypeLabel: Record<string, string> = {
+                      showing: '🏠 Showing',
+                      inspection: '🔍 Inspection',
+                      closing: '📝 Closing',
+                      other: '🤝 Other Help',
+                    };
+                    return (
+                      <div key={item.id} className={`bg-gray-800 border rounded-xl p-4 ${
+                        isClaimed ? 'border-green-500/30' : 'border-white/10'
+                      }`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            {/* Type badge + date */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-green-400 font-semibold text-sm">{helpTypeLabel[item.helpType] || item.helpType}</span>
+                              {item.needDate && (
+                                <span className="text-gray-400 text-xs">📅 {item.needDate}{item.needTime ? ` at ${item.needTime}` : ''}</span>
+                              )}
+                              {item.compensation && item.compensation > 0 && (
+                                <span className="bg-yellow-500/20 text-yellow-300 text-xs px-2 py-0.5 rounded-full font-medium">
+                                  💵 ${item.compensation} offered
+                                </span>
+                              )}
+                              {isClaimed && (
+                                <span className="bg-green-500/20 text-green-300 text-xs px-2 py-0.5 rounded-full font-medium">
+                                  ✓ Claimed by {item.claimedByName}
+                                </span>
+                              )}
+                            </div>
+                            {/* Property address */}
+                            {item.propertyAddress && (
+                              <div className="text-gray-300 text-sm mt-1 font-medium">{item.propertyAddress}</div>
+                            )}
+                            {/* Description */}
+                            <div className="text-gray-400 text-xs mt-1 line-clamp-2">{item.description}</div>
+                            {/* Agent info */}
+                            <div className="flex items-center gap-1 mt-2 text-gray-500 text-xs">
+                              <span>{item.agentName}</span>
+                              <span>·</span>
+                              <Phone className="h-3 w-3" />
+                              <span>{item.agentPhone}</span>
+                              {item.compensationNote && (
+                                <><span>·</span><span className="text-yellow-400">{item.compensationNote}</span></>
+                              )}
+                            </div>
+                          </div>
+                          {/* Actions */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {!isClaimed && !isOwner && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white text-xs h-7"
+                                onClick={() => openClaimDialog(item)}
+                              >
+                                <Handshake className="h-3 w-3 mr-1" />I Can Help
+                              </Button>
+                            )}
+                            {isOwner && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-gray-500 hover:text-blue-400 h-7 w-7 p-0"
+                                onClick={() => openHelpEditDialog(item)}
+                                title="Edit this request"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {isOwner && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-gray-600 hover:text-red-400 h-7 w-7 p-0"
+                                onClick={() => handleHelpDelete(item.id)}
+                                disabled={deletingHelpId === item.id}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )
+          ) : loading ? (
             <div className="py-12 text-center text-gray-500">Loading...</div>
           ) : items.length === 0 ? (
             <div className="py-12 text-center">
@@ -916,6 +1174,189 @@ export default function TvModePage() {
             <Button variant="ghost" className="text-gray-400" onClick={() => { setShowEditDialog(false); setEditingItem(null); setForm({}); }}>Cancel</Button>
             <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveEdit} disabled={editSaving}>
               {editSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* ─── Agent Help — Add Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showHelpAddDialog} onOpenChange={setShowHelpAddDialog}>
+        <DialogContent className="bg-gray-900 border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-green-400">🤝 Post Agent Help Request</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Your Name *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentName || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Your Phone *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentPhone || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Your Email</Label>
+              <Input type="email" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentEmail || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentEmail: e.target.value }))} placeholder="you@example.com" />
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Type of Help Needed *</Label>
+              <Select value={String(helpForm.helpType || '')} onValueChange={(v) => setHelpForm((f) => ({ ...f, helpType: v as HelpType }))}>
+                <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1"><SelectValue placeholder="Select type..." /></SelectTrigger>
+                <SelectContent className="bg-gray-800 border-white/10 text-white">
+                  <SelectItem value="showing">🏠 Showing — cover a showing for me</SelectItem>
+                  <SelectItem value="inspection">🔍 Inspection — open door for inspection</SelectItem>
+                  <SelectItem value="closing">📝 Closing — attend closing on my behalf</SelectItem>
+                  <SelectItem value="other">🤝 Other — describe below</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Property Address (optional)</Label>
+              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.propertyAddress || '')} onChange={(e) => setHelpForm((f) => ({ ...f, propertyAddress: e.target.value }))} placeholder="123 Main St, Lafayette, LA" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Date Needed</Label>
+                <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needDate || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needDate: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Time Needed</Label>
+                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needTime || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needTime: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
+                <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensation || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensation: e.target.value as any }))} placeholder="e.g. 50" />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Compensation Note</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensationNote || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Description / Details *</Label>
+              <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.description || '')} onChange={(e) => setHelpForm((f) => ({ ...f, description: e.target.value }))} placeholder="I'm out of town and need someone to show 123 Main St on Friday at 2pm. Buyer is pre-approved. Easy showing." rows={4} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" className="text-gray-400" onClick={() => setShowHelpAddDialog(false)}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleHelpAdd} disabled={helpSaving}>
+              {helpSaving ? 'Posting...' : '🤝 Post Help Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Agent Help — Edit Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showHelpEditDialog} onOpenChange={(open) => { if (!open) { setShowHelpEditDialog(false); setEditingHelpItem(null); setHelpForm({}); } }}>
+        <DialogContent className="bg-gray-900 border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-blue-400">Edit Help Request</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Your Name *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentName || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Your Phone *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentPhone || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Type of Help Needed *</Label>
+              <Select value={String(helpForm.helpType || '')} onValueChange={(v) => setHelpForm((f) => ({ ...f, helpType: v as HelpType }))}>
+                <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1"><SelectValue placeholder="Select type..." /></SelectTrigger>
+                <SelectContent className="bg-gray-800 border-white/10 text-white">
+                  <SelectItem value="showing">🏠 Showing</SelectItem>
+                  <SelectItem value="inspection">🔍 Inspection</SelectItem>
+                  <SelectItem value="closing">📝 Closing</SelectItem>
+                  <SelectItem value="other">🤝 Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Property Address</Label>
+              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.propertyAddress || '')} onChange={(e) => setHelpForm((f) => ({ ...f, propertyAddress: e.target.value }))} placeholder="123 Main St" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Date Needed</Label>
+                <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needDate || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needDate: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Time Needed</Label>
+                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needTime || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needTime: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
+                <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensation || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensation: e.target.value as any }))} placeholder="e.g. 50" />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Compensation Note</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensationNote || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-gray-300 text-xs">Description / Details *</Label>
+              <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.description || '')} onChange={(e) => setHelpForm((f) => ({ ...f, description: e.target.value }))} rows={4} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" className="text-gray-400" onClick={() => { setShowHelpEditDialog(false); setEditingHelpItem(null); setHelpForm({}); }}>Cancel</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleHelpSaveEdit} disabled={helpEditSaving}>
+              {helpEditSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Agent Help — Claim Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showClaimDialog} onOpenChange={(open) => { if (!open) { setShowClaimDialog(false); setClaimingItem(null); } }}>
+        <DialogContent className="bg-gray-900 border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-green-400">🤝 Claim Help Request</DialogTitle>
+          </DialogHeader>
+          {claimingItem && (
+            <div className="space-y-4 py-2">
+              <div className="bg-gray-800 rounded-lg p-3 border border-white/10">
+                <div className="text-green-400 font-semibold text-sm">
+                  {claimingItem.helpType === 'showing' ? '🏠 Showing' : claimingItem.helpType === 'inspection' ? '🔍 Inspection' : claimingItem.helpType === 'closing' ? '📝 Closing' : '🤝 Other'}
+                </div>
+                {claimingItem.propertyAddress && <div className="text-white text-sm mt-0.5">{claimingItem.propertyAddress}</div>}
+                {claimingItem.needDate && <div className="text-gray-400 text-xs mt-0.5">📅 {claimingItem.needDate}{claimingItem.needTime ? ` at ${claimingItem.needTime}` : ''}</div>}
+                {claimingItem.compensation && claimingItem.compensation > 0 && (
+                  <div className="text-yellow-300 text-xs mt-0.5">💵 ${claimingItem.compensation} compensation offered</div>
+                )}
+                <div className="text-gray-400 text-xs mt-1">{claimingItem.description}</div>
+                <div className="text-gray-500 text-xs mt-1">Posted by {claimingItem.agentName} · {claimingItem.agentPhone}</div>
+              </div>
+              <p className="text-gray-400 text-sm">Enter your contact info so {claimingItem.agentName} knows who is helping them.</p>
+              <div>
+                <Label className="text-gray-300 text-xs">Your Name *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={claimForm.claimantName} onChange={(e) => setClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your name" />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Your Phone *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={claimForm.claimantPhone} onChange={(e) => setClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Your Email</Label>
+                <Input type="email" className="bg-gray-800 border-white/10 text-white mt-1" value={claimForm.claimantEmail} onChange={(e) => setClaimForm((f) => ({ ...f, claimantEmail: e.target.value }))} placeholder="you@example.com" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" className="text-gray-400" onClick={() => { setShowClaimDialog(false); setClaimingItem(null); }}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleClaim} disabled={claimSaving || !claimForm.claimantName || !claimForm.claimantPhone}>
+              {claimSaving ? 'Claiming...' : '✓ I will Help!'}
             </Button>
           </DialogFooter>
         </DialogContent>
