@@ -59,6 +59,7 @@ function DashboardSection({
   icon: Icon,
   children,
   headerExtra,
+  id,
 }: {
   storageKey: string;
   defaultOpen: boolean;
@@ -66,6 +67,7 @@ function DashboardSection({
   icon: React.ElementType;
   children: React.ReactNode;
   headerExtra?: React.ReactNode;
+  id?: string;
 }) {
   const [open, setOpen] = useState<boolean>(() => {
     if (typeof window === 'undefined') return defaultOpen;
@@ -80,7 +82,7 @@ function DashboardSection({
 
   return (
     <Collapsible open={open} onOpenChange={toggle}>
-      <div className="flex items-center justify-between px-1 mb-2">
+      <div id={id} className="flex items-center justify-between px-1 mb-2">
         <h2 className="text-base font-semibold flex items-center gap-2 text-foreground">
           <Icon className="h-4 w-4 text-primary" />
           {title}
@@ -541,6 +543,7 @@ function AgentDashboardPage() {
               4. KPIs — All 6 with uniform activity-tracker style
              ════════════════════════════════════════════════════════════════ */}
           <DashboardSection
+            id="goals"
             storageKey="dash-kpi-open"
             defaultOpen={true}
             title="KPI Tracker"
@@ -3599,7 +3602,7 @@ function PipelineKanban({
   ];
 
   return (
-    <div className="space-y-3">
+    <div id="pipeline" className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">My Pipeline</h2>
