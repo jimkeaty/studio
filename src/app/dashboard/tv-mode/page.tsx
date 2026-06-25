@@ -105,6 +105,29 @@ export default function TvModePage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Current user's profile IDs — used for isOwner checks on community board items
+  // We collect all possible IDs (Firebase UID, profile doc ID, agentId slug) so that
+  // items created under any of these IDs are correctly identified as "owned" by this user.
+  const [myProfileIds, setMyProfileIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!user) return;
+    const ids = new Set<string>();
+    ids.add(user.uid);
+    // Fetch the canonical profile doc ID and agentId slug
+    user.getIdToken().then((token) => {
+      fetch('/api/agent/profile', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.ok && json.profile) {
+            if (json.profile.docId) ids.add(json.profile.docId);
+            if (json.profile.agentId) ids.add(json.profile.agentId);
+          }
+          setMyProfileIds(new Set(ids));
+        })
+        .catch(() => setMyProfileIds(new Set(ids)));
+    });
+  }, [user]);
+
   // Form state
   const [form, setForm] = useState<Record<string, string | boolean | number>>({});
   // Edit state
@@ -433,7 +456,10 @@ export default function TvModePage() {
                 .map((item) => {
                 const days = daysSince(item.lastConfirmedAt || item.createdAt);
                 const needsConfirm = days >= 7;
-                const isOwner = !!(user && (item.createdByUid === user.uid || item.agentProfileId === user.uid));
+                const isOwner = !!(myProfileIds.size > 0 && (
+                  myProfileIds.has(item.createdByUid ?? '') ||
+                  myProfileIds.has(item.agentProfileId ?? '')
+                ));
                 return (
                   <div key={item.id} className={`bg-gray-800 border rounded-xl p-4 ${needsConfirm ? 'border-yellow-500/40' : 'border-white/10'}`}>
                     <div className="flex items-start justify-between gap-3">

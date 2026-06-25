@@ -1206,6 +1206,7 @@ export async function GET(req: NextRequest) {
         planGracePeriodMonths,
         goalStartMonth,
         closingGoalStartMonth,
+        profileDocId,
         // Team view extras
         activeAgentCount: view === 'team' ? activeAgentCount : undefined,
         totalTeamMembers: view === 'team' ? totalTeamMembers : undefined,
