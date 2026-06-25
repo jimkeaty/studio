@@ -269,11 +269,12 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
-    // ── TC Intake — only create when agent is working with a TC on a listing/dual ──
+    // ── TC Intake — create whenever agent is working with a TC, regardless of transaction type ──
+    // This includes buyer transactions, listings, dual agency, and referrals.
     // If workingWithTc is false, skip tcIntakes entirely. The transaction doc is still
     // created below so the agent sees it in their ledger immediately.
     let ref: FirebaseFirestore.DocumentReference | null = null;
-    if (workingWithTc && isListingType) {
+    if (workingWithTc) {
       ref = await adminDb.collection('tcIntakes').add(intake);
     }
 
@@ -423,8 +424,8 @@ export async function POST(req: NextRequest) {
 
     // ── Queue routing ─────────────────────────────────────────────────────────
     // Rules:
-    //   - TC queue (tcIntakes): ONLY listings (closingType = 'listing' or 'dual') where the agent
-    //     toggled "Working with TC" ON. Buyer/referral transactions never go to the TC queue.
+    //   - TC queue (tcIntakes): ANY transaction type (buyer, listing, dual, referral) where the
+    //     agent toggled "Working with TC" ON. The TC queue handles all transaction types.
     //   - Staff queue: ALL listings go here (regardless of TC flag) so staff always sees new listings.
     //     Buyer/referral transactions are NOT added to the staff queue on new submission — they appear
     //     in the transaction ledger and only hit the staff queue when they close.
@@ -454,21 +455,21 @@ export async function POST(req: NextRequest) {
       };
       await adminDb.collection('staffQueue').add(staffQueueItem);
     }
-    // Buyer/referral transactions are saved to the transaction ledger only (no staff queue or TC queue entry on new submission)
+    // Buyer/referral transactions with workingWithTc=false are saved to the transaction ledger only (no staff queue or TC queue entry on new submission)
 
     // ── Notifications ────────────────────────────────────────────────────────
     // Fire-and-forget: don't let notification errors block the response
     void (async () => {
       try {
-        // TC notification: only for listings with workingWithTc enabled
-        if (isListingType && workingWithTc) {
+        // TC notification: whenever workingWithTc is enabled (any transaction type)
+        if (workingWithTc) {
           const tcUids = await getTcUids(adminDb);
           if (tcUids.length > 0) {
             await sendNotification(adminDb, {
               type: 'tc_new_intake',
               recipientUids: tcUids,
               title: 'New TC Intake Submitted',
-              body: `${agentDisplayName} submitted a new listing: ${address}`,
+              body: `${agentDisplayName} submitted a new ${isListingType ? 'listing' : 'buyer'} transaction: ${address}`,
               url: '/dashboard/admin/tc',
             });
           }

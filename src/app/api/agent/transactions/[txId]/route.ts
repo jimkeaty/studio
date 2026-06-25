@@ -315,14 +315,14 @@ export async function PATCH(
     }
 
     // If agent is moving from active → pending AND is working with TC, re-submit to TC queue.
-    // Only listings (closingType = 'listing' or 'dual') with workingWithTc=true go to the TC queue.
-    // Buyer/referral transactions and listings without TC never create a tcIntake on status change.
+    // Any transaction type (buyer, listing, dual) with workingWithTc=true goes to the TC queue.
+    // Transactions without TC (workingWithTc=false) never create a tcIntake on status change.
     // IMPORTANT: check updates.workingWithTc first (the value being saved in this request) because
     // the agent may be toggling TC on at the same time as changing the status. Fall back to the
     // existing txData value if the field was not included in this update.
     const effectiveWorkingWithTc =
       updates.workingWithTc !== undefined ? !!updates.workingWithTc : !!txData.workingWithTc;
-    const shouldResubmitToTc = !!resubmitToTc && isListingTx && effectiveWorkingWithTc;
+    const shouldResubmitToTc = !!resubmitToTc && effectiveWorkingWithTc;
     if (shouldResubmitToTc) {
       const mergedData = { ...txData, ...updates };
       const intake: Record<string, any> = {
