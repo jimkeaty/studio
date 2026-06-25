@@ -161,10 +161,10 @@ function useAutoScroll(items: any[], active: boolean) {
 // ─── Activity Column Card (standalone so refs are stable) ────────────────────
 
 function ActivityColCard({
-  title, items, accentColor, icon: Icon, active,
+  title, items, accentColor, icon: Icon, active, showAddress = true,
 }: {
   title: string; items: ActivityItem[]; accentColor: string;
-  icon: React.ElementType; active: boolean;
+  icon: React.ElementType; active: boolean; showAddress?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -236,7 +236,7 @@ function ActivityColCard({
             {doubled.map((item, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
                 <div className="flex-1 min-w-0">
-                  <div className="text-white font-semibold text-sm truncate">{item.addressShort}</div>
+                  {showAddress && <div className="text-white font-semibold text-sm truncate">{item.addressShort}</div>}
                   <div className="text-gray-400 text-xs">{item.agentDisplayName} · {fmtShortDate(item.date)}</div>
                 </div>
                 <div className={`text-sm font-bold flex-shrink-0 ${accentColor}`}>{fmtCompact(item.price)}</div>
@@ -257,21 +257,27 @@ function ActivityBoardSection({ active }: { active: boolean }) {
   const [recentSold, setRecentSold] = useState<ActivityItem[]>([]);
   const [ytd, setYtd] = useState<YtdTotals | null>(null);
   const [loading, setLoading] = useState(true);
+  const [boardTitle, setBoardTitle] = useState('Activity Board');
+  const [showAddress, setShowAddress] = useState(true);
 
   useEffect(() => {
     const year = new Date().getFullYear();
-    fetch(`/api/rollups/new-activity?year=${year}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.ok) {
-          setNewListings(d.newActiveListings || []);
-          setUnderContract(d.underContracts || []);
-          setRecentSold(d.recentSold || []);
-          setYtd(d.ytdTotals || null);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    // Fetch board config and activity data in parallel
+    Promise.all([
+      fetch('/api/board-config?board=activityBoard').then(r => r.json()).catch(() => ({})),
+      fetch(`/api/rollups/new-activity?year=${year}`).then(r => r.json()).catch(() => ({}))
+    ]).then(([cfg, d]) => {
+      if (cfg?.ok && cfg.config) {
+        setBoardTitle(cfg.config.title || 'Activity Board');
+        setShowAddress(cfg.config.showAddress !== false);
+      }
+      if (d?.ok) {
+        setNewListings(d.newActiveListings || []);
+        setUnderContract(d.underContracts || []);
+        setRecentSold(d.recentSold || []);
+        setYtd(d.ytdTotals || null);
+      }
+    }).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -282,7 +288,7 @@ function ActivityBoardSection({ active }: { active: boolean }) {
           <BarChart2 className="h-6 w-6 text-emerald-400" />
         </div>
         <div>
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">Activity Board</h2>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">{boardTitle}</h2>
           <p className="text-gray-400 text-sm">New listings, under contract & recent closings</p>
         </div>
         {loading ? (
@@ -307,9 +313,9 @@ function ActivityBoardSection({ active }: { active: boolean }) {
 
       {/* Three columns — each is a stable component with its own scroll loop */}
       <div className="flex-1 flex gap-4 px-8 py-5 min-h-0">
-        <ActivityColCard title="New Listings" items={newListings} accentColor="text-blue-400" icon={Home} active={active} />
-        <ActivityColCard title="Under Contract" items={underContract} accentColor="text-amber-400" icon={Calendar} active={active} />
-        <ActivityColCard title="Recent Sold" items={recentSold} accentColor="text-emerald-400" icon={DollarSign} active={active} />
+        <ActivityColCard title="New Listings" items={newListings} accentColor="text-blue-400" icon={Home} active={active} showAddress={showAddress} />
+        <ActivityColCard title="Under Contract" items={underContract} accentColor="text-amber-400" icon={Calendar} active={active} showAddress={showAddress} />
+        <ActivityColCard title="Recent Sold" items={recentSold} accentColor="text-emerald-400" icon={DollarSign} active={active} showAddress={showAddress} />
       </div>
     </div>
   );
@@ -317,23 +323,113 @@ function ActivityBoardSection({ active }: { active: boolean }) {
 
 // ─── Leaderboard Section ──────────────────────────────────────────────────────
 
+type LBConfig = {
+  title: string;
+  subtitle: string;
+  year: number;
+  periodType: string;
+  primaryMetricKey: string;
+  showTopN: number;
+  showSales: boolean;
+  showVolume: boolean;
+  showGCI: boolean;
+  showAgentNet: boolean;
+  showPending: boolean;
+};
+
+const LB_DEFAULTS: LBConfig = {
+  title: 'Production Leaderboard',
+  subtitle: '',
+  year: new Date().getFullYear(),
+  periodType: 'yearly',
+  primaryMetricKey: 'closed',
+  showTopN: 10,
+  showSales: true,
+  showVolume: true,
+  showGCI: true,
+  showAgentNet: true,
+  showPending: true,
+};
+
+function getMetricValue(agent: LeaderRow, key: string): number {
+  switch (key) {
+    case 'volume': return agent.closedVolume;
+    case 'gci': return agent.totalGCI;
+    case 'agentNet': return agent.agentNetCommission;
+    case 'pending': return agent.pending;
+    default: return agent.closed;
+  }
+}
+
+function getMetricLabel(key: string): string {
+  switch (key) {
+    case 'volume': return 'volume';
+    case 'gci': return 'GCI';
+    case 'agentNet': return 'net comm.';
+    case 'pending': return 'pending';
+    default: return 'closed';
+  }
+}
+
+function formatMetricValue(val: number, key: string): string {
+  if (key === 'volume' || key === 'gci' || key === 'agentNet') return fmtCompact(val);
+  return String(val);
+}
+
 function LeaderboardSection({ active }: { active: boolean }) {
   const [rows, setRows] = useState<LeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cfg, setCfg] = useState<LBConfig>(LB_DEFAULTS);
   const { containerRef, innerRef } = useAutoScroll(rows, active);
 
   useEffect(() => {
-    const year = new Date().getFullYear();
-    fetch(`/api/rollups/leaderboard?year=${year}&period=yearly`)
+    // First fetch the admin config, then use it to fetch the right leaderboard data
+    fetch('/api/board-config?board=leaderboard')
       .then(r => r.json())
-      .then(d => { if (d.ok) setRows((d.rows || []).slice(0, 25)); })
+      .then(json => {
+        const c: LBConfig = {
+          title: json?.config?.title || LB_DEFAULTS.title,
+          subtitle: json?.config?.subtitle || LB_DEFAULTS.subtitle,
+          year: json?.config?.year || LB_DEFAULTS.year,
+          periodType: json?.config?.periodType || LB_DEFAULTS.periodType,
+          primaryMetricKey: json?.config?.primaryMetricKey || LB_DEFAULTS.primaryMetricKey,
+          showTopN: json?.config?.showTopN || LB_DEFAULTS.showTopN,
+          showSales: json?.config?.showSales !== false,
+          showVolume: json?.config?.showVolume !== false,
+          showGCI: json?.config?.showGCI !== false,
+          showAgentNet: json?.config?.showAgentNet !== false,
+          showPending: json?.config?.showPending !== false,
+        };
+        setCfg(c);
+        return fetch(`/api/rollups/leaderboard?year=${c.year}&period=${c.periodType}`)
+          .then(r => r.json())
+          .then(d => {
+            if (d.ok) {
+              const sorted = (d.rows || []).sort((a: LeaderRow, b: LeaderRow) => {
+                const aVal = getMetricValue(a, c.primaryMetricKey);
+                const bVal = getMetricValue(b, c.primaryMetricKey);
+                return bVal - aVal;
+              });
+              setRows(sorted.slice(0, c.showTopN));
+            }
+          });
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const totalVolume = rows.reduce((s, r) => s + r.closedVolume, 0);
   const totalClosed = rows.reduce((s, r) => s + r.closed, 0);
   const totalPaidOut = rows.reduce((s, r) => s + r.agentNetCommission, 0);
+  const totalGCI = rows.reduce((s, r) => s + r.totalGCI, 0);
+  const totalPending = rows.reduce((s, r) => s + r.pending, 0);
+
+  const periodLabel = cfg.periodType === 'yearly'
+    ? `${cfg.year} Year-to-Date Rankings`
+    : cfg.periodType === 'quarterly'
+    ? `${cfg.year} Quarterly Rankings`
+    : `${cfg.year} Monthly Rankings`;
 
   return (
     <div className="flex flex-col h-full">
@@ -343,22 +439,38 @@ function LeaderboardSection({ active }: { active: boolean }) {
           <Trophy className="h-6 w-6 text-yellow-400" />
         </div>
         <div>
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">Production Leaderboard</h2>
-          <p className="text-gray-400 text-sm">{new Date().getFullYear()} Year-to-Date Rankings</p>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">{cfg.title}</h2>
+          <p className="text-gray-400 text-sm">{cfg.subtitle || periodLabel}</p>
         </div>
         <div className="ml-auto flex items-center gap-6">
-          <div className="text-center">
-            <div className="text-2xl font-black text-white">{totalClosed}</div>
-            <div className="text-xs text-gray-400">Team Closings</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-black text-emerald-400">{fmtCompact(totalVolume)}</div>
-            <div className="text-xs text-gray-400">Team Volume</div>
-          </div>
-          {totalPaidOut > 0 && (
+          {cfg.showSales && (
+            <div className="text-center">
+              <div className="text-2xl font-black text-white">{totalClosed}</div>
+              <div className="text-xs text-gray-400">Team Closings</div>
+            </div>
+          )}
+          {cfg.showVolume && (
+            <div className="text-center">
+              <div className="text-2xl font-black text-emerald-400">{fmtCompact(totalVolume)}</div>
+              <div className="text-xs text-gray-400">Team Volume</div>
+            </div>
+          )}
+          {cfg.showGCI && totalGCI > 0 && (
+            <div className="text-center">
+              <div className="text-2xl font-black text-blue-400">{fmtCompact(totalGCI)}</div>
+              <div className="text-xs text-gray-400">Team GCI</div>
+            </div>
+          )}
+          {cfg.showAgentNet && totalPaidOut > 0 && (
             <div className="text-center">
               <div className="text-2xl font-black text-yellow-400">{fmtCompact(totalPaidOut)}</div>
-              <div className="text-xs text-gray-400">{new Date().getFullYear()} Paid Out to Agents</div>
+              <div className="text-xs text-gray-400">{cfg.year} Paid Out to Agents</div>
+            </div>
+          )}
+          {cfg.showPending && totalPending > 0 && (
+            <div className="text-center">
+              <div className="text-2xl font-black text-amber-400">{totalPending}</div>
+              <div className="text-xs text-gray-400">Team Pending</div>
             </div>
           )}
         </div>
@@ -375,8 +487,9 @@ function LeaderboardSection({ active }: { active: boolean }) {
             <div className="space-y-3">
               {[...rows, ...rows].map((agent, i) => {
                 const realIndex = i % rows.length;
-                const leaderClosed = rows[0]?.closed || 1;
-                const progress = Math.round((agent.closed / leaderClosed) * 100);
+                const primaryVal = getMetricValue(agent, cfg.primaryMetricKey);
+                const leaderVal = getMetricValue(rows[0], cfg.primaryMetricKey) || 1;
+                const progress = Math.round((primaryVal / leaderVal) * 100);
                 const isTop = realIndex === 0;
                 const isSecond = realIndex === 1;
                 const isThird = realIndex === 2;
@@ -405,12 +518,22 @@ function LeaderboardSection({ active }: { active: boolean }) {
                       {agent.displayName.charAt(0).toUpperCase()}
                     </div>
 
-                    {/* Name + progress */}
+                    {/* Name + secondary stats + progress bar */}
                     <div className="flex-1 min-w-0">
                       <div className="text-white font-bold text-lg truncate">{agent.displayName}</div>
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-white/50 mt-0.5">
-                        {agent.closedVolume > 0 && <span>Vol: <span className="text-white/80 font-semibold">{fmtCompact(agent.closedVolume)}</span></span>}
-                        {agent.pending > 0 && <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>}
+                        {cfg.showVolume && agent.closedVolume > 0 && cfg.primaryMetricKey !== 'volume' && (
+                          <span>Vol: <span className="text-white/80 font-semibold">{fmtCompact(agent.closedVolume)}</span></span>
+                        )}
+                        {cfg.showGCI && agent.totalGCI > 0 && cfg.primaryMetricKey !== 'gci' && (
+                          <span>GCI: <span className="text-blue-300 font-semibold">{fmtCompact(agent.totalGCI)}</span></span>
+                        )}
+                        {cfg.showPending && agent.pending > 0 && cfg.primaryMetricKey !== 'pending' && (
+                          <span>Pending: <span className="text-amber-400 font-semibold">{agent.pending}</span></span>
+                        )}
+                        {cfg.showAgentNet && agent.agentNetCommission > 0 && cfg.primaryMetricKey !== 'agentNet' && (
+                          <span>Net: <span className="text-yellow-300 font-semibold">{fmtCompact(agent.agentNetCommission)}</span></span>
+                        )}
                       </div>
                       <div className="mt-1.5 h-1.5 bg-white/10 rounded-full overflow-hidden">
                         <div
@@ -420,10 +543,10 @@ function LeaderboardSection({ active }: { active: boolean }) {
                       </div>
                     </div>
 
-                    {/* Closed count */}
+                    {/* Primary metric value */}
                     <div className="flex-shrink-0 text-right">
-                      <div className="text-2xl font-black text-white tabular-nums">{agent.closed}</div>
-                      <div className="text-xs text-white/50">closed</div>
+                      <div className="text-2xl font-black text-white tabular-nums">{formatMetricValue(primaryVal, cfg.primaryMetricKey)}</div>
+                      <div className="text-xs text-white/50">{getMetricLabel(cfg.primaryMetricKey)}</div>
                     </div>
                   </div>
                 );
