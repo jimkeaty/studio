@@ -468,6 +468,75 @@ export async function PATCH(
             });
           }
         }
+        // ── TC: document uploaded ────────────────────────────────────────────
+        // When the agent saves a new document (documents array changed) and the
+        // transaction is marked workingWithTc, notify the TC so they know a new
+        // file is available to review.
+        if (effectiveWorkingWithTc && updates.documents !== undefined) {
+          const prevDocs: any[] = Array.isArray(txData.documents) ? txData.documents : [];
+          const newDocs: any[] = Array.isArray(updates.documents) ? updates.documents : [];
+          if (newDocs.length > prevDocs.length) {
+            const addedCount = newDocs.length - prevDocs.length;
+            const tcUids = await getTcUids(adminDb);
+            if (tcUids.length > 0) {
+              await sendNotification(adminDb, {
+                type: 'tc_document_uploaded',
+                recipientUids: tcUids,
+                title: 'New Document Uploaded',
+                body: `${agentName} uploaded ${addedCount === 1 ? 'a document' : `${addedCount} documents`} to ${txAddress}.`,
+                url: '/dashboard/admin/tc',
+              });
+            }
+          }
+        }
+
+        // ── TC: meaningful field change ──────────────────────────────────────
+        // When the agent edits important fields (not just status or documents,
+        // which are handled above) on a TC-assigned transaction, notify the TC
+        // so they can review the updated details.
+        const TC_WATCHED_FIELDS = new Set([
+          'propertyAddress', 'address',
+          'salePrice', 'listPrice', 'commissionPercent', 'commissionBasePrice', 'gci',
+          'transactionFee', 'sellerCommissionPct', 'buyerCommissionPct',
+          'closingDate', 'closedDate', 'contractDate', 'listingDate',
+          'optionExpiration', 'inspectionDeadline', 'projectedCloseDate',
+          'clientName', 'clientEmail', 'clientPhone',
+          'sellerName', 'sellerEmail', 'sellerPhone',
+          'buyerName', 'buyerEmail', 'buyerPhone',
+          'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
+          'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
+          'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherAgentBrokerage',
+          'notes', 'additionalComments',
+          'dealType', 'transactionType', 'closingType',
+        ]);
+        const watchedFieldsChanged = Object.keys(updates).some(k => TC_WATCHED_FIELDS.has(k));
+        // Only fire this notification when there is NO status change (status changes are
+        // already notified above) and the documents array did not change (handled above).
+        // This avoids duplicate notifications when multiple things change in one save.
+        const isStatusChangeOnly = !!(newStatus && newStatus !== previousStatus);
+        const isDocumentChangeOnly = updates.documents !== undefined;
+        if (
+          effectiveWorkingWithTc &&
+          watchedFieldsChanged &&
+          !isStatusChangeOnly &&
+          !isDocumentChangeOnly
+        ) {
+          const changedFieldNames = Object.keys(updates)
+            .filter(k => TC_WATCHED_FIELDS.has(k))
+            .slice(0, 3)
+            .join(', ');
+          const tcUids = await getTcUids(adminDb);
+          if (tcUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'tc_field_update',
+              recipientUids: tcUids,
+              title: 'Transaction Details Updated',
+              body: `${agentName} updated ${txAddress} (${changedFieldNames}${Object.keys(updates).filter(k => TC_WATCHED_FIELDS.has(k)).length > 3 ? ' and more' : ''}).`,
+              url: '/dashboard/admin/tc',
+            });
+          }
+        }
+
         // Active → Pending listing with contract details: notify agent + all staff + assigned TC
         if (notifyPendingContract && newStatus === 'pending' && previousStatus !== 'pending') {
           // Notify the agent themselves

@@ -28,6 +28,8 @@ export type NotificationType =
   | 'tc_new_intake'         // new transaction submitted to TC queue
   | 'tc_approved'           // TC intake approved → agent notified
   | 'tc_rejected'           // TC intake rejected → agent notified
+  | 'tc_document_uploaded'  // agent uploaded a document on a TC-assigned transaction
+  | 'tc_field_update'       // agent edited fields on a TC-assigned transaction
   | 'staff_queue_new'       // new item added to staff queue
   | 'staff_queue_resolved'  // staff queue item resolved → agent notified
   | 'staff_queue_attention' // staff queue item needs agent attention
@@ -277,6 +279,8 @@ function buildEmailHtml(
     tc_new_intake:         'TC Queue',
     tc_approved:           'TC Approved',
     tc_rejected:           'TC Rejected',
+    tc_document_uploaded:  'TC Document',
+    tc_field_update:       'TC Update',
     staff_queue_new:       'Staff Queue',
     staff_queue_resolved:  'Resolved',
     staff_queue_attention: 'Action Required',
