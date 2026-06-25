@@ -54,6 +54,8 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'documents',
   // Deal / transaction type — agents must be able to correct a misclassified deal type
   'dealType', 'transactionType',
+  // TC flag — agents must be able to toggle "Working with TC" on/off when editing
+  'workingWithTc',
 ]);
 
 // Statuses an agent is allowed to set
@@ -315,7 +317,12 @@ export async function PATCH(
     // If agent is moving from active → pending AND is working with TC, re-submit to TC queue.
     // Only listings (closingType = 'listing' or 'dual') with workingWithTc=true go to the TC queue.
     // Buyer/referral transactions and listings without TC never create a tcIntake on status change.
-    const shouldResubmitToTc = !!resubmitToTc && isListingTx && !!txData.workingWithTc;
+    // IMPORTANT: check updates.workingWithTc first (the value being saved in this request) because
+    // the agent may be toggling TC on at the same time as changing the status. Fall back to the
+    // existing txData value if the field was not included in this update.
+    const effectiveWorkingWithTc =
+      updates.workingWithTc !== undefined ? !!updates.workingWithTc : !!txData.workingWithTc;
+    const shouldResubmitToTc = !!resubmitToTc && isListingTx && effectiveWorkingWithTc;
     if (shouldResubmitToTc) {
       const mergedData = { ...txData, ...updates };
       const intake: Record<string, any> = {
@@ -432,9 +439,10 @@ export async function PATCH(
         const txAddress = String(txData.propertyAddress || txData.address || 'your transaction');
         const agentName = String(txData.agentDisplayName || 'Agent');
         // Notify TC/staff about the status change
+        // Use effectiveWorkingWithTc (which prefers the incoming update value over stale txData)
+        // so that toggling TC on and changing status in the same save correctly routes to TC.
         if (newStatus && newStatus !== previousStatus) {
-          const workingWithTc = !!txData.workingWithTc;
-          const recipientUids = workingWithTc
+          const recipientUids = effectiveWorkingWithTc
             ? await getTcUids(adminDb)
             : await getAllStaffUids(adminDb);
           if (recipientUids.length > 0) {

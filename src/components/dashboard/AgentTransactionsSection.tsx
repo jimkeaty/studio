@@ -227,6 +227,8 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
   // Commission
   const [sellerCommissionPct, setSellerCommissionPct] = useState(String(tx.sellerCommissionPct || ''));
   const [buyerCommissionPct, setBuyerCommissionPct] = useState(String(tx.buyerCommissionPct || ''));
+  // TC flag
+  const [workingWithTc, setWorkingWithTc] = useState<boolean>(!!tx.workingWithTc);
   // Notes
   const [notes, setNotes] = useState(tx.notes || '');
   const [additionalComments, setAdditionalComments] = useState(tx.additionalComments || '');
@@ -263,6 +265,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
     setSellerCommissionPct(String(tx.sellerCommissionPct || ''));
     setBuyerCommissionPct(String(tx.buyerCommissionPct || ''));
     setDealType(tx.dealType || tx.transactionType || 'residential_sale');
+    setWorkingWithTc(!!tx.workingWithTc);
     setNotes(tx.notes || '');
     setAdditionalComments(tx.additionalComments || '');
     setDocuments(tx.documents || []);
@@ -351,6 +354,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
         buyerCommissionPct: buyerCommissionPct ? Number(buyerCommissionPct) : undefined,
         dealType,
         transactionType: dealType,
+        workingWithTc,
         notes,
         additionalComments,
         documents,
@@ -601,6 +605,25 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
                 <Input id="edit-buyer-comm" type="number" step="0.01" value={buyerCommissionPct} onChange={e => setBuyerCommissionPct(e.target.value)} placeholder="3.0" />
               </div>
             </div>
+          </div>
+
+          {/* TC Flag */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-1">Transaction Coordinator</h3>
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={workingWithTc}
+                onChange={e => setWorkingWithTc(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-foreground">
+                Working with a TC
+                <span className="block text-xs text-muted-foreground">
+                  When checked and status moves to Pending, this transaction is routed to the TC Queue and your TC is notified.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* Notes */}

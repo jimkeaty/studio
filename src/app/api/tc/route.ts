@@ -328,7 +328,10 @@ export async function POST(req: NextRequest) {
       documents: Array.isArray(body.documents)
         ? body.documents.filter((d: any) => d?.url && d?.name)
         : [],
-      workingWithTc: !!body.workingWithTc,
+      // Use the already-resolved workingWithTc boolean (derived from body.workingWithTc OR
+      // body.tcWorking==='yes' at line 105) so the transaction doc always reflects the correct
+      // TC flag regardless of which field name the form used.
+      workingWithTc,
       // Co-agent fields — mirrored from intake so the split can fire on TC approval
       hasCoAgent: !!body.hasCoAgent,
       ...(body.hasCoAgent && toStr(body.coAgentId) ? {
