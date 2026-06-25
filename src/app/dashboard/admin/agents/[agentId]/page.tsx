@@ -66,7 +66,7 @@ export default function AgentDetailPage({ params }: AgentPageProps) {
       }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Invite failed');
 
-      if (data.status === 'invited') {
+      if (data.status === 'invited' || data.status === 'reinvited') {
         setInviteStatus('done');
         setInviteMsg(data.message || `Invite sent to ${data.email}`);
       } else if (data.status === 'already_exists') {
