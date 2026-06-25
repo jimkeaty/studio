@@ -455,7 +455,7 @@ export async function PATCH(
             });
           }
         }
-        // Notify TC about resubmission (only if listing + workingWithTc)
+        // Notify TC about resubmission (any transaction type with workingWithTc=true)
         if (shouldResubmitToTc) {
           const tcUids = await getTcUids(adminDb);
           if (tcUids.length > 0) {
