@@ -20,6 +20,27 @@ async function requireAuth(req: NextRequest) {
   }
 }
 
+/**
+ * Resolve the canonical profile doc ID for a uid.
+ * Resolution order: direct doc lookup → agentId slug → firebaseUid field.
+ * Returns profileDocId if found, otherwise the original uid.
+ */
+async function resolveProfileDocId(uid: string): Promise<string> {
+  try {
+    const byId = await adminDb.collection('agentProfiles').doc(uid).get();
+    if (byId.exists) return byId.id;
+
+    const bySlug = await adminDb.collection('agentProfiles')
+      .where('agentId', '==', uid).limit(1).get();
+    if (!bySlug.empty) return bySlug.docs[0].id;
+
+    const byFbUid = await adminDb.collection('agentProfiles')
+      .where('firebaseUid', '==', uid).limit(1).get();
+    if (!byFbUid.empty) return byFbUid.docs[0].id;
+  } catch { /* non-fatal */ }
+  return uid;
+}
+
 // Check if user can write to the given segment
 async function canWriteSegment(uid: string, segment: string): Promise<boolean> {
   // Admin can write anything — including agent_* segments when impersonating
@@ -107,13 +128,24 @@ export async function POST(req: NextRequest) {
     if (!decoded) return jsonError(401, 'Unauthorized');
 
     const body = await req.json();
-    const { year, month, segment = 'TOTAL', grossMarginGoal, volumeGoal, salesCountGoal } = body;
+    let { year, month, segment = 'TOTAL', grossMarginGoal, volumeGoal, salesCountGoal } = body;
 
     if (!year || !month || month < 1 || month > 12) {
       return jsonError(400, 'year and month (1-12) are required');
     }
 
-    // Check permissions
+    // Normalize agent segments to use the canonical profile doc ID.
+    // This ensures goals are always stored under agent_{profileDocId} regardless
+    // of whether the caller passed a Firebase UID, a slug, or a profile doc ID.
+    if (segment && segment.startsWith('agent_')) {
+      const rawId = segment.replace('agent_', '');
+      const canonicalId = await resolveProfileDocId(rawId);
+      if (canonicalId !== rawId) {
+        segment = `agent_${canonicalId}`;
+      }
+    }
+
+    // Check permissions (against the normalized segment)
     const allowed = await canWriteSegment(decoded.uid, segment);
     if (!allowed) return jsonError(403, 'You do not have permission to set goals for this segment');
 

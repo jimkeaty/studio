@@ -42,6 +42,20 @@ export interface BusinessPlan {
   isNewAgent?: boolean; // true = grace period applies before closing goals start
   gracePeriodMonths?: number; // default 3 for new agents, 0 for existing
 
+  /**
+   * Controls how the dashboard grades the agent's performance.
+   *
+   * 'plan_start' (default when planStartDate is set and not Jan 1):
+   *   - Grades only from the plan start date forward.
+   *   - Pre-plan actuals are shown in charts but excluded from grading.
+   *   - Prevents F grades for agents who set their plan mid-year.
+   *
+   * 'calendar_year':
+   *   - Grades from January 1 of the plan year.
+   *   - All YTD actuals count toward the grade.
+   */
+  measurementMode?: 'plan_start' | 'calendar_year';
+
   // Financial & Timing block — average sale price and commission percentages
   goalAvgSalePrice?: number;
   goalAvgCommPct?: number;

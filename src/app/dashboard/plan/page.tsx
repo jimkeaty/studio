@@ -304,6 +304,9 @@ export default function BusinessPlanPage() {
   const [yearlyIncome, setYearlyIncome] = useState('');
   const [isNewAgent, setIsNewAgent] = useState(false);
   const [gracePeriodMonths, setGracePeriodMonths] = useState(3);
+  // 'plan_start': grade only from plan start date forward (default for mid-year plans)
+  // 'calendar_year': grade from Jan 1 (full calendar year)
+  const [measurementMode, setMeasurementMode] = useState<'plan_start' | 'calendar_year'>('plan_start');
 
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
@@ -753,6 +756,15 @@ export default function BusinessPlanPage() {
           if (plan.yearlyIncome != null && plan.yearlyIncome > 0) setYearlyIncome(String(plan.yearlyIncome));
           if (plan.isNewAgent != null) setIsNewAgent(!!plan.isNewAgent);
           if (plan.gracePeriodMonths != null) setGracePeriodMonths(plan.gracePeriodMonths);
+          // Restore measurementMode — default to 'plan_start' when planStartDate is set
+          // and is not January 1 (i.e., a mid-year plan). Otherwise default to 'calendar_year'.
+          if ((plan as any).measurementMode) {
+            setMeasurementMode((plan as any).measurementMode as 'plan_start' | 'calendar_year');
+          } else if (plan.planStartDate && !plan.planStartDate.endsWith('-01-01')) {
+            setMeasurementMode('plan_start');
+          } else {
+            setMeasurementMode('calendar_year');
+          }
           // Restore seasonality weights so the volume column populates correctly
           const restoredWeights: Record<number, { salesPct: string; volumePct: string }> = {};
           if ((plan as any).seasonWeights && typeof (plan as any).seasonWeights === 'object') {
@@ -891,6 +903,7 @@ export default function BusinessPlanPage() {
         resetStartDate: data.resetStartDate || undefined,
         isNewAgent,
         gracePeriodMonths: isNewAgent ? gracePeriodMonths : 0,
+        measurementMode,
         // Financial & Timing block — persist so they reload correctly
         ...(goalAvgSalePrice > 0 ? { goalAvgSalePrice } : {}),
         ...(goalAvgCommPct > 0 ? { goalAvgCommPct } : {}),
@@ -1374,6 +1387,40 @@ export default function BusinessPlanPage() {
                   </select>
                 </div>
               )}
+            </div>
+            {/* Goal Measurement Mode toggle */}
+            <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+              <p className="text-sm font-medium">How should your goals be measured?</p>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="measurementMode"
+                    value="plan_start"
+                    checked={measurementMode === 'plan_start'}
+                    onChange={() => setMeasurementMode('plan_start')}
+                    className="mt-0.5 h-4 w-4 accent-primary"
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium">From Plan Start Date</span>
+                    <span className="text-muted-foreground"> — Only grades your performance from your plan start date forward. Activity before your plan start is shown in charts but not counted against your grade. Best for agents starting mid-year.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="measurementMode"
+                    value="calendar_year"
+                    checked={measurementMode === 'calendar_year'}
+                    onChange={() => setMeasurementMode('calendar_year')}
+                    className="mt-0.5 h-4 w-4 accent-primary"
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium">Full Calendar Year</span>
+                    <span className="text-muted-foreground"> — Grades your performance from January 1. All year-to-date activity counts toward your grade.</span>
+                  </span>
+                </label>
+              </div>
             </div>
             <p className="text-sm text-muted-foreground">
               Use Plan Start Date for a new agent or the beginning of this year&apos;s plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year. Check &quot;New Agent&quot; to suppress closing goals during the grace period — activity goals (calls, engagements, appointments) start immediately.

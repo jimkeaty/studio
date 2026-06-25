@@ -291,8 +291,26 @@ export async function GET(req: NextRequest) {
       plan.resetStartDate || plan.planStartDate || `${year}-01-01`
     ) || yearStart;
 
+    // measurementMode controls how grading and goal-to-date are computed:
+    //   'plan_start' (default for mid-year plans): grade only from plan start date forward.
+    //     Pre-plan actuals are shown in charts but excluded from grading.
+    //   'calendar_year': grade from Jan 1. All YTD actuals count.
+    // Default: 'plan_start' when planStartDate is set and not Jan 1; otherwise 'calendar_year'.
+    const rawMeasurementMode = (plan as any).measurementMode as string | undefined;
+    const isJanFirst = (plan.planStartDate ?? `${year}-01-01`).endsWith('-01-01');
+    const measurementMode: 'plan_start' | 'calendar_year' =
+      rawMeasurementMode === 'calendar_year'
+        ? 'calendar_year'
+        : rawMeasurementMode === 'plan_start'
+          ? 'plan_start'
+          : isJanFirst ? 'calendar_year' : 'plan_start';
+
+    // In 'calendar_year' mode, effectiveStart is always Jan 1 so all YTD actuals count.
+    // In 'plan_start' mode, effectiveStart is the plan start date (current behavior).
+    const gradingStart = measurementMode === 'calendar_year' ? yearStart : derivedPlanStart;
+
     const effectiveStart = maxDate(
-      new Date(Date.UTC(derivedPlanStart.getUTCFullYear(), derivedPlanStart.getUTCMonth(), derivedPlanStart.getUTCDate())),
+      new Date(Date.UTC(gradingStart.getUTCFullYear(), gradingStart.getUTCMonth(), gradingStart.getUTCDate())),
       yearStart
     );
 
@@ -754,6 +772,11 @@ export async function GET(req: NextRequest) {
         }
       }
     }
+    // In 'plan_start' mode, only count goal months from the plan start month onward.
+    // In 'calendar_year' mode, count all months from Jan 1 (goalFloorMonth = 1).
+    const planStartMonth = effectiveStart.getUTCMonth() + 1; // 1-based
+    const goalFloorMonth = measurementMode === 'calendar_year' ? 1 : planStartMonth;
+
     for (const gDoc of allGoalDocs) {
       const g = gDoc.data();
       const gMonth = asNumber(g.month); // 1-12
@@ -762,14 +785,16 @@ export async function GET(req: NextRequest) {
       yearlyVolumeGoal += asNumber(g.volumeGoal);
       yearlySalesGoal += asNumber(g.salesCountGoal);
       yearlyIncomeGoalFromMonthly += asNumber(g.grossMarginGoal);
-      // Sum goals for months 1 through current month for YTD targets
-      if (gMonth >= 1 && gMonth <= currentMonth) {
+      // Sum goals for months from goalFloorMonth through current month for YTD targets.
+      // In 'plan_start' mode this excludes pre-plan months so the agent isn't penalized
+      // for months before their plan started.
+      if (gMonth >= goalFloorMonth && gMonth <= currentMonth) {
         volumeGoalToDate += asNumber(g.volumeGoal);
         salesGoalToDate += asNumber(g.salesCountGoal);
         incomeGoalToDate += asNumber(g.grossMarginGoal);
       }
       // Sum goals through projected month (when pending deals close)
-      if (gMonth >= 1 && gMonth <= projectedMonth) {
+      if (gMonth >= goalFloorMonth && gMonth <= projectedMonth) {
         projectedIncomeGoal += asNumber(g.grossMarginGoal);
         projectedVolumeGoal += asNumber(g.volumeGoal);
         projectedSalesGoal += asNumber(g.salesCountGoal);
