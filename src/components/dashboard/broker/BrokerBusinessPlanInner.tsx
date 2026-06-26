@@ -118,17 +118,19 @@ function calcCascade(plan: BrokerPlan) {
   const commPct = avgCommissionPct / 100;
   const attrPct = attritionPct / 100;
 
-  // Step 1: Company commission needed to hit net margin
+  // Step 1: Company commission needed to hit net margin (total GCI the office must earn)
   const totalCompanyCommissionNeeded = retPct > 0 ? netMarginGoal / retPct : 0;
 
   // Step 2: Avg GCI per deal
   const avgGCIPerDeal = avgSalePrice * commPct;
 
-  // Step 3: Avg company fee per deal
+  // Step 3: Avg company fee per deal (what the company keeps after paying the agent)
   const avgCompanyFeePerDeal = avgGCIPerDeal * retPct;
 
   // Step 4: Deals needed
-  const dealsNeeded = avgCompanyFeePerDeal > 0 ? totalCompanyCommissionNeeded / avgCompanyFeePerDeal : 0;
+  // Correct formula: netMarginGoal / avgCompanyFeePerDeal
+  // (do NOT divide totalCompanyCommissionNeeded by avgCompanyFeePerDeal — that applies retPct twice)
+  const dealsNeeded = avgCompanyFeePerDeal > 0 ? netMarginGoal / avgCompanyFeePerDeal : 0;
 
   // Step 5: Agents needed (based on deals per agent per month)
   const agentsNeededForDeals = avgDealsPerAgentPerMonth > 0
@@ -735,12 +737,12 @@ export function BrokerBusinessPlanInner() {
                 <AssumptionRow
                   label="Avg Sale Price" value={avgSalePrice} onChange={setAvgSalePrice}
                   prefix="$" step="1000"
-                  liveValue={liveData?.avgSalePrice ? fmtCurrency(liveData.avgSalePrice) : null}
+                  liveValue={liveData?.avgSalePrice ? String(Math.round(liveData.avgSalePrice)) : null}
                 />
                 <AssumptionRow
                   label="Avg Commission %" value={avgCommissionPct} onChange={setAvgCommissionPct}
                   suffix="%" step="0.01" min="0" max="10"
-                  liveValue={liveData?.avgCommissionPct ? `${liveData.avgCommissionPct.toFixed(2)}%` : null}
+                  liveValue={liveData?.avgCommissionPct ? liveData.avgCommissionPct.toFixed(2) : null}
                 />
                 <div className="py-2 flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Avg GCI Per Deal <span className="text-xs">(derived)</span></span>
