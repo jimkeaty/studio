@@ -120,7 +120,9 @@ export async function GET(req: NextRequest) {
     for (const doc of txSnap.docs) {
       const t = doc.data();
       const sp = t.salePrice || t.salesPrice || t.soldPrice || 0;
-      const gci = t.splitSnapshot?.totalGCI || t.grossCommission || 0;
+      // splitSnapshot.grossCommission is the total GCI before any agent/broker split
+      // (splitSnapshot.totalGCI does not exist — that was a field name bug)
+      const gci = t.splitSnapshot?.grossCommission || t.grossCommission || 0;
       const retained = t.splitSnapshot?.companyRetained || t.brokerProfit || 0;
 
       if (sp > 0) { totalVolume += sp; volumeCount++; }
