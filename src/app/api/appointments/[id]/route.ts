@@ -120,8 +120,90 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return jsonError(403, 'Cannot move appointment to a date that is locked for edits.', 'edit_window_expired');
     }
 
-    const dataToUpdate = { ...body, updatedAt: FieldValue.serverTimestamp() };
+    // Strip community-board-only fields before writing to appointment doc
+    const { postToCommunity, communityArea, agentNameOverride, agentPhoneOverride, ...appointmentFields } = body;
+    const dataToUpdate = { ...appointmentFields, updatedAt: FieldValue.serverTimestamp() };
     await docRef.update(dataToUpdate);
+
+    // ── Community board auto-post on edit ───────────────────────────────────────────
+    if (postToCommunity) {
+      try {
+        const effectiveUid = uid;
+        let agentName = agentNameOverride as string | undefined;
+        let agentPhone = agentPhoneOverride as string | undefined;
+        let agentProfileId = effectiveUid;
+
+        if (!agentName || !agentPhone) {
+          const profileSnap = await adminDb.collection('agentProfiles').doc(effectiveUid).get();
+          if (profileSnap.exists) {
+            const pd = profileSnap.data()!;
+            agentName = agentName || [pd.firstName, pd.lastName].filter(Boolean).join(' ') || pd.displayName || pd.agentId || effectiveUid;
+            agentPhone = agentPhone || pd.phone || pd.phoneNumber || '';
+            agentProfileId = profileSnap.id;
+          } else {
+            const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', effectiveUid).limit(1).get();
+            if (!byFbUid.empty) {
+              const pd = byFbUid.docs[0].data();
+              agentName = agentName || [pd.firstName, pd.lastName].filter(Boolean).join(' ') || pd.displayName || effectiveUid;
+              agentPhone = agentPhone || pd.phone || pd.phoneNumber || '';
+              agentProfileId = byFbUid.docs[0].id;
+            }
+          }
+        }
+
+        // Use updated fields where available, fall back to stored doc fields
+        const category = (body.category || data.category) as string;
+        const listingAddress = body.listingAddress ?? data.listingAddress;
+        const notes = body.notes ?? data.notes;
+        const priceRangeLow = body.priceRangeLow ?? data.priceRangeLow;
+        const priceRangeHigh = body.priceRangeHigh ?? data.priceRangeHigh;
+        const now = FieldValue.serverTimestamp();
+
+        if (category === 'buyer') {
+          const area = listingAddress || notes || 'Area TBD';
+          await adminDb.collection('buyerNeeds').add({
+            agentName: (agentName || effectiveUid).trim(),
+            agentPhone: (agentPhone || '').trim(),
+            agentProfileId,
+            createdByUid: callerUid,
+            area,
+            minPrice: priceRangeLow ? Number(priceRangeLow) : null,
+            maxPrice: priceRangeHigh ? Number(priceRangeHigh) : null,
+            beds: null,
+            baths: null,
+            notes: notes || null,
+            sourceAppointmentId: id,
+            active: true,
+            lastConfirmedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else if (category === 'seller') {
+          const area = communityArea || notes || 'Area TBD';
+          await adminDb.collection('comingSoon').add({
+            agentName: (agentName || effectiveUid).trim(),
+            agentPhone: (agentPhone || '').trim(),
+            agentProfileId,
+            createdByUid: callerUid,
+            address: null,
+            area,
+            price: priceRangeLow ? Number(priceRangeLow) : (priceRangeHigh ? Number(priceRangeHigh) : null),
+            beds: null,
+            baths: null,
+            notes: notes || null,
+            expectedDate: null,
+            sourceAppointmentId: id,
+            active: true,
+            lastConfirmedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      } catch (communityErr) {
+        console.error('[API/appointments/[id]] community board post failed:', communityErr);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {

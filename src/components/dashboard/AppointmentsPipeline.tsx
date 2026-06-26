@@ -128,8 +128,8 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
         priceRangeHigh: form.priceRangeHigh ? Number(form.priceRangeHigh) : null,
         estimatedCommission: form.estimatedCommission ? Number(form.estimatedCommission) : null,
         notes: form.notes || null,
-        // Community board auto-post (new appointments only)
-        postToCommunity: !initial && postToCommunity,
+        // Community board auto-post
+        postToCommunity: postToCommunity,
         communityArea: communityArea.trim() || null,
       };
       if (viewAs) payload.viewAs = viewAs;
@@ -247,8 +247,8 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
               placeholder="Any notes about this appointment…" />
           </div>
 
-          {/* ─ Community Board Auto-Post (new appointments only) ─ */}
-          {!initial && (form.category === 'buyer' || form.category === 'seller') && (
+          {/* ─ Community Board Auto-Post ─ */}
+          {(form.category === 'buyer' || form.category === 'seller') && (
             <div className="rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <input
