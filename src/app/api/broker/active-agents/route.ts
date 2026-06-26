@@ -210,6 +210,7 @@ export async function GET(req: NextRequest) {
       agentId: string;
       activationMonth: string | null;
       endMonth: string | null;
+      hasExplicitEndDate: boolean; // true only when an actual endDate field was set
       firstDealMonth: string | null;
       startDate: string | null;
       teamGroup: string | null;
@@ -228,14 +229,20 @@ export async function GET(req: NextRequest) {
       const activationMonth = getActivationMonth(startDate, firstDeal);
 
       let endMonth: string | null = null;
+      let hasExplicitEndDate = false;
       if (endDate) {
         // Explicit end date set — use it (agent drops out the month after)
         const ed = parseDate(endDate);
-        if (ed) endMonth = toYearMonth(addMonths(ed, 1));
+        if (ed) {
+          endMonth = toYearMonth(addMonths(ed, 1));
+          hasExplicitEndDate = true;
+        }
       } else if (INACTIVE_STATUSES.has(profileStatus)) {
         // Agent marked inactive/out in profile but no end date set.
         // Treat today as their effective end so they are excluded from the
         // current month onwards, but all historical months remain correct.
+        // NOTE: hasExplicitEndDate stays false — we don't count these as
+        // departure events because we don't know when they actually left.
         endMonth = toYearMonth(new Date());
       }
 
@@ -249,6 +256,7 @@ export async function GET(req: NextRequest) {
         agentId,
         activationMonth,
         endMonth,
+        hasExplicitEndDate,
         firstDealMonth: firstDeal,
         startDate,
         teamGroup: a.teamGroup || null,
@@ -404,10 +412,10 @@ export async function GET(req: NextRequest) {
       return ar.activationMonth.startsWith(String(year)) && ar.activationMonth <= currentYM;
     }).length;
     const ytdDepartures = agentRecords.filter(ar => {
-      if (!ar.endMonth) return false;
+      // Only count agents with an EXPLICIT endDate set — not agents who are
+      // merely marked inactive with no date (we don't know when they left).
+      if (!ar.hasExplicitEndDate || !ar.endMonth) return false;
       // Only count as a departure if the agent was ever actually activated
-      // (had an activationMonth). Agents marked inactive who were never
-      // onboarded/activated should not inflate the departure count.
       if (!ar.activationMonth) return false;
       return ar.endMonth.startsWith(String(year)) && ar.endMonth <= currentYM;
     }).length;
