@@ -70,6 +70,12 @@ env:
       - BUILD
       - RUNTIME
 
+  # ── Cron security ──────────────────────────────────────────────────────────
+  - variable: CRON_SECRET
+    value: "sbusa-cron-2025"
+    availability:
+      - RUNTIME
+
   # ── Twilio SMS ────────────────────────────────────────────────────────────
   - variable: TWILIO_ACCOUNT_SID
     value: "AC0921c42c35fee25c393448b4549c700"
