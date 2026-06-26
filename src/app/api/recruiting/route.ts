@@ -3,6 +3,7 @@
 // annual recurring qualification progress and correct Tier 2 upline payout rollup.
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import { addMonths, addYears, differenceInDays, startOfYear, endOfYear } from "date-fns";
 import type { DownlineMember, QualificationProgress, AnniversaryYearProgress, RecruitingSummary } from "@/lib/types/incentives";
 import type { RecruitingIncentiveConfig } from '@/lib/types/recruitingConfig';
@@ -197,7 +198,11 @@ export async function GET(req: NextRequest) {
     }
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const callerUid = decoded.uid;
+
+    // Support admin viewAs impersonation (same pattern as /api/plan)
+    const viewAs = req.nextUrl.searchParams.get('viewAs');
+    const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
 
     // Load incentive config and resolve referrer IDs in parallel
     const [config, profileByIdSnap] = await Promise.all([
