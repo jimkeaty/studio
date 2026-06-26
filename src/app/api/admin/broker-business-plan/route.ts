@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
     const liveAvgCommissionPct = (volumeCount > 0 && totalVolume > 0)
       ? (totalGCI / totalVolume) * 100 : null;
     const liveAvgCompanyFeePerDeal = retainedCount > 0 ? totalCompanyRetained / retainedCount : null;
-    const liveAvgDealsPerAgentPerMonth = txSnap.size > 0 ? txSnap.size / 12 / Math.max(1, volumeCount > 0 ? 1 : 1) : null;
+    // liveAvgDealsPerAgentPerMonth is computed below, after rosterCount is available
 
     // Load all-time summary
     const allTimeSnap = await adminDb.collection('brokerAllTimeSummary').doc('summary').get();
@@ -142,6 +142,11 @@ export async function GET(req: NextRequest) {
     const agentHistSnap = await adminDb.collection('agentYearlyActivity')
       .where('year', '==', year).get();
     const rosterCount = agentHistSnap.docs.filter(d => d.data().onRoster).length;
+    // Correct formula: total closed deals ÷ 12 months ÷ active agents on roster
+    // Previously this always divided by 1 (bug), giving ~29 instead of ~0.7
+    const liveAvgDealsPerAgentPerMonth = (txSnap.size > 0 && rosterCount > 0)
+      ? txSnap.size / 12 / rosterCount
+      : null;
 
     // Load seasonality
     const seasonSnap = await adminDb.collection('brokerCommandGoals')
