@@ -505,6 +505,84 @@ export function UnifiedRecruitingReportCard({ year: yearProp, initialOpen = true
 
               </div>
 
+              {/* ── YTD Agent Name Lists ───────────────────────────── */}
+              {(() => {
+                const newHiresList: Array<{ name: string; agentId: string; startDate: string | null; activationMonth: string | null; teamGroup: string | null }> = kpi?.ytdNewHiresList ?? [];
+                const departuresList: Array<{ name: string; agentId: string; endDate: string | null; endMonth: string | null; teamGroup: string | null }> = kpi?.ytdDeparturesList ?? [];
+                if (newHiresList.length === 0 && departuresList.length === 0) return null;
+                const fmtDate = (d: string | null) => {
+                  if (!d) return null;
+                  try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; }
+                };
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    {/* New Hires List */}
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-100 dark:bg-emerald-900/40 border-b border-emerald-200 dark:border-emerald-800">
+                        <UserPlus className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                          {year} New Hires ({newHiresList.length})
+                        </span>
+                      </div>
+                      {newHiresList.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-muted-foreground">No new hires recorded for {year}</p>
+                      ) : (
+                        <ul className="divide-y divide-emerald-100 dark:divide-emerald-900/40 max-h-64 overflow-y-auto">
+                          {newHiresList.map((a, i) => (
+                            <li key={a.agentId + i} className="flex items-center justify-between px-4 py-2 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30 transition-colors">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold shrink-0">
+                                  {a.name.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="text-sm font-medium text-foreground truncate">{a.name}</span>
+                                {a.teamGroup && (
+                                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">{a.teamGroup}</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                                {fmtDate(a.startDate) ?? a.activationMonth ?? ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {/* Departures List */}
+                    <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-red-100 dark:bg-red-900/40 border-b border-red-200 dark:border-red-800">
+                        <UserMinus className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">
+                          {year} Departures ({departuresList.length})
+                        </span>
+                      </div>
+                      {departuresList.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-muted-foreground">No recorded departures for {year}</p>
+                      ) : (
+                        <ul className="divide-y divide-red-100 dark:divide-red-900/40 max-h-64 overflow-y-auto">
+                          {departuresList.map((a, i) => (
+                            <li key={a.agentId + i} className="flex items-center justify-between px-4 py-2 hover:bg-red-100/60 dark:hover:bg-red-900/30 transition-colors">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold shrink-0">
+                                  {a.name.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="text-sm font-medium text-foreground truncate">{a.name}</span>
+                                {a.teamGroup && (
+                                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">{a.teamGroup}</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                                {fmtDate(a.endDate) ?? a.endMonth ?? ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Grade scale legend */}
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
                 <span className="font-medium text-foreground">Grade Scale:</span>

@@ -208,11 +208,13 @@ export async function GET(req: NextRequest) {
     // ── 5. Build per-agent activation/deactivation info ──────────────────────
     type AgentRecord = {
       agentId: string;
+      name: string;
       activationMonth: string | null;
       endMonth: string | null;
       hasExplicitEndDate: boolean; // true only when an actual endDate field was set
       firstDealMonth: string | null;
       startDate: string | null;
+      endDate: string | null;
       teamGroup: string | null;
       graceEndMonth: string | null; // YYYY-MM when 90-day grace ends
     };
@@ -222,6 +224,7 @@ export async function GET(req: NextRequest) {
 
     const agentRecords: AgentRecord[] = agents.map((a: any) => {
       const agentId = a.agentId || a.id;
+      const name = String(a.displayName || a.name || a.firstName && a.lastName ? `${a.firstName || ''} ${a.lastName || ''}`.trim() : '').trim() || agentId;
       const startDate = a.startDate || null;
       const endDate = a.endDate || null;
       const profileStatus = String(a.status || a.agentStatus || '').toLowerCase();
@@ -254,11 +257,13 @@ export async function GET(req: NextRequest) {
       }
       return {
         agentId,
+        name,
         activationMonth,
         endMonth,
         hasExplicitEndDate,
         firstDealMonth: firstDeal,
         startDate,
+        endDate,
         teamGroup: a.teamGroup || null,
         graceEndMonth,
       };
@@ -407,18 +412,39 @@ export async function GET(req: NextRequest) {
       }
     } catch { /* non-fatal */ }
     const prevMonthData = months.find(m => m.month === (currentMonthData.month - 1)) || null;
-    const ytdNewHires = agentRecords.filter(ar => {
+    const ytdNewHiresRecords = agentRecords.filter(ar => {
       if (!ar.activationMonth) return false;
       return ar.activationMonth.startsWith(String(year)) && ar.activationMonth <= currentYM;
-    }).length;
-    const ytdDepartures = agentRecords.filter(ar => {
+    });
+    const ytdNewHires = ytdNewHiresRecords.length;
+    const ytdNewHiresList = ytdNewHiresRecords
+      .sort((a, b) => (a.activationMonth ?? '').localeCompare(b.activationMonth ?? ''))
+      .map(ar => ({
+        name: ar.name,
+        agentId: ar.agentId,
+        startDate: ar.startDate,
+        activationMonth: ar.activationMonth,
+        teamGroup: ar.teamGroup,
+      }));
+
+    const ytdDeparturesRecords = agentRecords.filter(ar => {
       // Only count agents with an EXPLICIT endDate set — not agents who are
       // merely marked inactive with no date (we don't know when they left).
       if (!ar.hasExplicitEndDate || !ar.endMonth) return false;
       // Only count as a departure if the agent was ever actually activated
       if (!ar.activationMonth) return false;
       return ar.endMonth.startsWith(String(year)) && ar.endMonth <= currentYM;
-    }).length;
+    });
+    const ytdDepartures = ytdDeparturesRecords.length;
+    const ytdDeparturesList = ytdDeparturesRecords
+      .sort((a, b) => (a.endDate ?? '').localeCompare(b.endDate ?? ''))
+      .map(ar => ({
+        name: ar.name,
+        agentId: ar.agentId,
+        endDate: ar.endDate,
+        endMonth: ar.endMonth,
+        teamGroup: ar.teamGroup,
+      }));
 
     // YTD deals per agent: total closed deals YTD / current established (past grace) agents only
     // Uses actual deal count (not just whether agent had a deal)
@@ -565,6 +591,8 @@ export async function GET(req: NextRequest) {
         prevMonthActive: prevMonthData?.totalActive ?? null,
         ytdNewHires,
         ytdDepartures,
+        ytdNewHiresList,
+        ytdDeparturesList,
         pipelineCount: pipeline.length,
         ytdDealsPerAgent,
         avgMonthlyDealsPerAgent,
