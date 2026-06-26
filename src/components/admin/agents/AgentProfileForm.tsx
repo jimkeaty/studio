@@ -340,12 +340,25 @@ export default function AgentProfileForm({
   const [teamPlans, setTeamPlans] = useState<TeamPlanOption[]>([]);
   const [memberPlans, setMemberPlans] = useState<MemberPlanOption[]>([]);
   const [isLoadingTeamOptions, setIsLoadingTeamOptions] = useState(false);
+  // For the referring agent searchable dropdown
+  const [allAgents, setAllAgents] = useState<{ agentId: string; displayName: string }[]>([]);
+  const [referringAgentSearch, setReferringAgentSearch] = useState('');
+  const [referringDropdownOpen, setReferringDropdownOpen] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [createTeamError, setCreateTeamError] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamOffice, setNewTeamOffice] = useState('');
   const [newTeamNotes, setNewTeamNotes] = useState('');
+
+  // Sync the search box display name when initialValues load (edit mode)
+  useEffect(() => {
+    if (initialValues?.referringAgentDisplayNameSnapshot) {
+      setReferringAgentSearch(initialValues.referringAgentDisplayNameSnapshot);
+    } else if (initialValues?.referringAgentId) {
+      setReferringAgentSearch(initialValues.referringAgentId);
+    }
+  }, [initialValues?.referringAgentId, initialValues?.referringAgentDisplayNameSnapshot]);
 
   useEffect(() => {
     if (!initialValues) return;
@@ -390,6 +403,21 @@ export default function AgentProfileForm({
         const token = await currentUser.getIdToken();
 
         const options = await fetchTeamOptions(token);
+
+        // Also fetch the full agent list for the referring agent dropdown
+        const agentsRes = await fetch('/api/admin/agent-profiles', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (agentsRes.ok) {
+          const agentsJson = await agentsRes.json();
+          if (isMounted && agentsJson.agents) {
+            setAllAgents(
+              (agentsJson.agents as any[])
+                .filter((a) => a.agentId && a.displayName)
+                .map((a) => ({ agentId: a.agentId as string, displayName: a.displayName as string }))
+            );
+          }
+        }
 
         if (!isMounted) return;
 
@@ -2078,29 +2106,82 @@ export default function AgentProfileForm({
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Relationships</h2>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Referring Agent ID</label>
+        <div className="mt-4">
+          <label className="mb-1 block text-sm font-medium">Referring Agent</label>
+          <p className="mb-2 text-xs text-gray-500">
+            Select the agent who recruited this person. Their agent ID is stored automatically.
+          </p>
+          {/* Searchable dropdown */}
+          <div className="relative">
             <input
               className="w-full rounded-md border px-3 py-2"
-              value={values.referringAgentId}
-              onChange={(e) => updateField('referringAgentId', e.target.value)}
-              placeholder="Optional"
+              placeholder="Search by name…"
+              value={referringAgentSearch}
+              onChange={(e) => {
+                setReferringAgentSearch(e.target.value);
+                setReferringDropdownOpen(true);
+                // Clear the saved IDs if the user is typing a new search
+                if (!e.target.value) {
+                  updateField('referringAgentId', '');
+                  updateField('referringAgentDisplayNameSnapshot', '');
+                }
+              }}
+              onFocus={() => setReferringDropdownOpen(true)}
+              onBlur={() => setTimeout(() => setReferringDropdownOpen(false), 200)}
             />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium">
-              Referring Agent Name Snapshot
-            </label>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              value={values.referringAgentDisplayNameSnapshot}
-              onChange={(e) =>
-                updateField('referringAgentDisplayNameSnapshot', e.target.value)
-              }
-              placeholder="Optional"
-            />
+            {/* Show the locked agent ID badge when a valid agent is selected */}
+            {values.referringAgentId && (
+              <div className="mt-1 flex items-center gap-2">
+                <span className="rounded bg-green-50 border border-green-200 px-2 py-0.5 text-xs text-green-700 font-mono">
+                  ID: {values.referringAgentId}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-red-500 hover:text-red-700"
+                  onClick={() => {
+                    updateField('referringAgentId', '');
+                    updateField('referringAgentDisplayNameSnapshot', '');
+                    setReferringAgentSearch('');
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            {/* Dropdown list */}
+            {referringDropdownOpen && referringAgentSearch.length > 0 && (
+              <ul className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-white shadow-lg">
+                {allAgents
+                  .filter(
+                    (a) =>
+                      a.displayName
+                        .toLowerCase()
+                        .includes(referringAgentSearch.toLowerCase()) &&
+                      a.agentId !== values.referringAgentId
+                  )
+                  .slice(0, 20)
+                  .map((a) => (
+                    <li
+                      key={a.agentId}
+                      className="cursor-pointer px-3 py-2 text-sm hover:bg-blue-50"
+                      onMouseDown={() => {
+                        updateField('referringAgentId', a.agentId);
+                        updateField('referringAgentDisplayNameSnapshot', a.displayName);
+                        setReferringAgentSearch(a.displayName);
+                        setReferringDropdownOpen(false);
+                      }}
+                    >
+                      <span className="font-medium">{a.displayName}</span>
+                      <span className="ml-2 text-xs text-gray-400 font-mono">{a.agentId}</span>
+                    </li>
+                  ))}
+                {allAgents.filter((a) =>
+                  a.displayName.toLowerCase().includes(referringAgentSearch.toLowerCase())
+                ).length === 0 && (
+                  <li className="px-3 py-2 text-sm text-gray-400">No agents found</li>
+                )}
+              </ul>
+            )}
           </div>
         </div>
       </section>
