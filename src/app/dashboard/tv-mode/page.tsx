@@ -23,6 +23,37 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+// ─── Time helpers ────────────────────────────────────────────────────────────
+const TIME_OPTIONS: string[] = [];
+for (let h = 7; h <= 20; h++) {
+  for (const m of [0, 30]) {
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    TIME_OPTIONS.push(`${h12}:${String(m).padStart(2, '0')} ${ampm}`);
+  }
+}
+
+function toMinutes(t: string): number {
+  if (!t) return -1;
+  const upper = t.toUpperCase().trim();
+  const isPM = upper.includes('PM');
+  const isAM = upper.includes('AM');
+  const clean = upper.replace(/AM|PM/g, '').trim();
+  const [hStr, mStr] = clean.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr || '0', 10);
+  if (isPM && h !== 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  return h * 60 + m;
+}
+
+function fmtDate(d: string): string {
+  if (!d) return '';
+  try {
+    return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  } catch { return d; }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 // ─── Agent Help Types ────────────────────────────────────────────────────────
 type HelpType = 'showing' | 'inspection' | 'closing' | 'other';
@@ -50,6 +81,18 @@ type AgentHelpItem = {
   createdAt: string;
 };
 
+type OHClaim = {
+  claimId: string;
+  claimedByUid: string;
+  claimantName: string;
+  claimantPhone: string;
+  claimantEmail?: string;
+  claimedDate: string;
+  claimedStartTime: string;
+  claimedEndTime: string;
+  claimedAt: string;
+};
+
 type BoardItem = {
   id: string;
   agentName: string;
@@ -71,7 +114,7 @@ type BoardItem = {
   // Compensation (open house opportunities)
   compensation?: number | null;
   compensationNote?: string;
-  // Claim fields
+  // Claim fields (legacy single-claim)
   claimedByUid?: string | null;
   claimedByName?: string | null;
   claimedByPhone?: string | null;
@@ -80,6 +123,8 @@ type BoardItem = {
   claimedTime?: string | null;
   claimedEndTime?: string | null;
   claimedAt?: string | null;
+  // Multi-slot claims array
+  claims?: OHClaim[];
   // Buyer need
   area?: string;
   minPrice?: number;
@@ -191,7 +236,7 @@ export default function TvModePage() {
   // Open House Opportunity claim state
   const [showOHClaimDialog, setShowOHClaimDialog] = useState(false);
   const [claimingOHItem, setClaimingOHItem] = useState<BoardItem | null>(null);
-  const [ohClaimForm, setOhClaimForm] = useState<{ claimantName: string; claimantPhone: string; claimantEmail: string; claimedDate: string; claimedTime: string; claimedEndTime: string }>({ claimantName: '', claimantPhone: '', claimantEmail: '', claimedDate: '', claimedTime: '', claimedEndTime: '' });
+  const [ohClaimForm, setOhClaimForm] = useState<{ claimantName: string; claimantPhone: string; claimantEmail: string; claimedDate: string; claimedStartTime: string; claimedEndTime: string }>({ claimantName: '', claimantPhone: '', claimantEmail: '', claimedDate: '', claimedStartTime: '', claimedEndTime: '' });
   const [ohClaimSaving, setOhClaimSaving] = useState(false);
   // Search/filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -346,7 +391,7 @@ export default function TvModePage() {
       claimantPhone: '',
       claimantEmail: '',
       claimedDate: item.openHouseDate || '',
-      claimedTime: item.openHouseTime || '',
+      claimedStartTime: item.openHouseTime || '',
       claimedEndTime: item.openHouseEndTime || '',
     });
     setShowOHClaimDialog(true);
@@ -787,12 +832,22 @@ export default function TvModePage() {
                               💵 ${item.compensation} offered
                             </span>
                           )}
-                          {tab === 'open-houses' && item.claimedByUid && (
+                          {tab === 'open-houses' && (item.claims || []).length > 0 && (
                             <span className="bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full font-medium">
-                              ✓ Claimed by {item.claimedByName}
+                              ✓ {(item.claims || []).length} slot{(item.claims || []).length > 1 ? 's' : ''} claimed
                             </span>
                           )}
                         </div>
+                        {/* Multi-slot availability for open house opportunities */}
+                        {tab === 'open-houses' && (item.claims || []).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(item.claims || []).map((c) => (
+                              <span key={c.claimId} className="bg-red-900/30 border border-red-500/20 text-red-300 text-xs px-2 py-0.5 rounded">
+                                {fmtDate(c.claimedDate)} · {c.claimedStartTime}–{c.claimedEndTime} · {c.claimantName}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         {/* Agent */}
                         <div className="flex items-center gap-1 mt-2 text-gray-500 text-xs">
                           <span>{item.agentName}</span>
@@ -807,14 +862,14 @@ export default function TvModePage() {
                       </div>
                       {/* Actions */}
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {/* Open House Opportunity — Claim button for non-owners */}
-                        {tab === 'open-houses' && !isOwner && !item.claimedByUid && (
+                        {/* Open House Opportunity — Claim button for non-owners (always available for partial slots) */}
+                        {tab === 'open-houses' && !isOwner && (
                           <Button
                             size="sm"
                             className="bg-orange-600 hover:bg-orange-700 text-white text-xs h-7"
                             onClick={() => openOHClaimDialog(item)}
                           >
-                            <Home className="h-3 w-3 mr-1" />Claim
+                            <Home className="h-3 w-3 mr-1" />Claim Slot
                           </Button>
                         )}
                         {needsConfirm && (
@@ -1450,63 +1505,141 @@ export default function TvModePage() {
       </Dialog>
 
 
-      {/* ─── Open House Opportunity Claim Dialog ─────────────────────────── */}
+      {/* ─── Open House Opportunity Claim Dialog ─────────────────── */}
       <Dialog open={showOHClaimDialog} onOpenChange={(o) => { if (!o) { setShowOHClaimDialog(false); setClaimingOHItem(null); } }}>
-        <DialogContent className="bg-gray-900 border-white/10 text-white max-w-md">
+        <DialogContent className="bg-gray-900 border-white/10 text-white max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-orange-400">Claim Open House Opportunity</DialogTitle>
             {claimingOHItem && (
               <p className="text-gray-400 text-sm mt-1">{claimingOHItem.address}</p>
             )}
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
+
+            {/* ─ Listing info + compensation ─ */}
             {claimingOHItem && (
               <div className="bg-gray-800 rounded-lg p-3 text-sm space-y-1">
                 {claimingOHItem.openHouseDate && (
-                  <div className="text-gray-300">📅 Suggested: {claimingOHItem.openHouseDate}{claimingOHItem.openHouseTime ? ` at ${claimingOHItem.openHouseTime}` : ''}{claimingOHItem.openHouseEndTime ? ` – ${claimingOHItem.openHouseEndTime}` : ''}</div>
+                  <div className="text-gray-300">📅 Available: {fmtDate(claimingOHItem.openHouseDate)}{claimingOHItem.openHouseTime ? ` · ${claimingOHItem.openHouseTime}` : ''}{claimingOHItem.openHouseEndTime ? ` – ${claimingOHItem.openHouseEndTime}` : ''}</div>
                 )}
                 {claimingOHItem.compensation && claimingOHItem.compensation > 0 && (
                   <div className="text-yellow-300">💵 ${claimingOHItem.compensation} offered{claimingOHItem.compensationNote ? ` · ${claimingOHItem.compensationNote}` : ''}</div>
                 )}
               </div>
             )}
-            <div>
-              <Label className="text-gray-300 text-xs">Your Name *</Label>
-              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantName} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your full name" />
-            </div>
-            <div>
-              <Label className="text-gray-300 text-xs">Your Phone *</Label>
-              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantPhone} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
+
+            {/* ─ Existing time-slot claims (availability) ─ */}
+            {claimingOHItem && (claimingOHItem.claims || []).length > 0 && (
+              <div>
+                <Label className="text-gray-300 text-xs font-semibold uppercase tracking-wide">Already Claimed Time Slots</Label>
+                <div className="mt-2 space-y-1">
+                  {(claimingOHItem.claims || []).map((c) => (
+                    <div key={c.claimId} className="flex items-center gap-2 bg-red-900/30 border border-red-500/20 rounded px-3 py-1.5 text-xs">
+                      <span className="text-red-400 font-medium">🚫 {fmtDate(c.claimedDate)}</span>
+                      <span className="text-red-300">{c.claimedStartTime} – {c.claimedEndTime}</span>
+                      <span className="text-gray-400 ml-auto">{c.claimantName}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-gray-500 text-xs mt-1">Pick a time slot that does not overlap with the above.</p>
+              </div>
+            )}
+
+            {/* ─ Agent info ─ */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-gray-300 text-xs">Your Name *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantName} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your full name" />
+              </div>
+              <div>
+                <Label className="text-gray-300 text-xs">Your Phone *</Label>
+                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantPhone} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
+              </div>
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Your Email</Label>
               <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantEmail} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantEmail: e.target.value }))} placeholder="you@example.com" />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+
+            {/* ─ Date + time slot dropdowns ─ */}
+            <div>
+              <Label className="text-gray-300 text-xs">Date *</Label>
+              <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedDate} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedDate: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-gray-300 text-xs">Date</Label>
-                <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedDate} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedDate: e.target.value }))} />
+                <Label className="text-gray-300 text-xs">Start Time *</Label>
+                <Select value={ohClaimForm.claimedStartTime} onValueChange={(v) => setOhClaimForm((f) => ({ ...f, claimedStartTime: v }))}>
+                  <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1">
+                    <SelectValue placeholder="Select start" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-white/10 text-white max-h-48 overflow-y-auto">
+                    {TIME_OPTIONS.map((t) => (
+                      <SelectItem key={t} value={t} className="text-white hover:bg-gray-700">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label className="text-gray-300 text-xs">Start Time</Label>
-                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedTime} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedTime: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-gray-300 text-xs">End Time</Label>
-                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedEndTime} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedEndTime: e.target.value }))} />
+                <Label className="text-gray-300 text-xs">End Time *</Label>
+                <Select value={ohClaimForm.claimedEndTime} onValueChange={(v) => setOhClaimForm((f) => ({ ...f, claimedEndTime: v }))}>
+                  <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1">
+                    <SelectValue placeholder="Select end" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-white/10 text-white max-h-48 overflow-y-auto">
+                    {TIME_OPTIONS.filter((t) => !ohClaimForm.claimedStartTime || toMinutes(t) > toMinutes(ohClaimForm.claimedStartTime)).map((t) => (
+                      <SelectItem key={t} value={t} className="text-white hover:bg-gray-700">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {/* ─ Conflict / availability indicator ─ */}
+            {ohClaimForm.claimedDate && ohClaimForm.claimedStartTime && ohClaimForm.claimedEndTime && (() => {
+              const ns = toMinutes(ohClaimForm.claimedStartTime);
+              const ne = toMinutes(ohClaimForm.claimedEndTime);
+              const conflict = (claimingOHItem?.claims || []).find((c) => {
+                if (c.claimedDate !== ohClaimForm.claimedDate) return false;
+                const cs = toMinutes(c.claimedStartTime);
+                const ce = toMinutes(c.claimedEndTime);
+                return ns < ce && ne > cs;
+              });
+              return conflict ? (
+                <div className="bg-red-900/40 border border-red-500/30 rounded px-3 py-2 text-xs text-red-300">
+                  ⚠️ Conflicts with {conflict.claimantName}’s slot ({conflict.claimedStartTime}–{conflict.claimedEndTime}). Please choose a different time.
+                </div>
+              ) : (
+                <div className="bg-green-900/30 border border-green-500/20 rounded px-3 py-2 text-xs text-green-300">
+                  ✓ Time slot is available!
+                </div>
+              );
+            })()}
+
           </div>
           <DialogFooter>
             <Button variant="ghost" className="text-gray-400" onClick={() => { setShowOHClaimDialog(false); setClaimingOHItem(null); }}>Cancel</Button>
-            <Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleOHClaim} disabled={ohClaimSaving || !ohClaimForm.claimantName || !ohClaimForm.claimantPhone}>
-              {ohClaimSaving ? 'Claiming...' : 'Claim Open House'}
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleOHClaim}
+              disabled={ohClaimSaving || !ohClaimForm.claimantName || !ohClaimForm.claimantPhone || !ohClaimForm.claimedDate || !ohClaimForm.claimedStartTime || !ohClaimForm.claimedEndTime || !!(() => {
+                const ns = toMinutes(ohClaimForm.claimedStartTime);
+                const ne = toMinutes(ohClaimForm.claimedEndTime);
+                return (claimingOHItem?.claims || []).find((c) => {
+                  if (c.claimedDate !== ohClaimForm.claimedDate) return false;
+                  const cs = toMinutes(c.claimedStartTime);
+                  const ce = toMinutes(c.claimedEndTime);
+                  return ns < ce && ne > cs;
+                });
+              })()}
+            >
+              {ohClaimSaving ? 'Claiming...' : 'Claim This Time Slot'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ─── TV Settings Dialog ──────────────────────────────────────────── */}
+            {/* ─── TV Settings Dialog ──────────────────────────────────────────── */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="bg-gray-900 border-white/10 text-white max-w-md">
           <DialogHeader>
