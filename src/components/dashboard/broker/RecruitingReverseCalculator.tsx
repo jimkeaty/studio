@@ -39,6 +39,9 @@ interface RecruitingReverseCalculatorProps {
   avgCompanyFeePerDealOverride: number | null;
   netMarginGoal: number | null;
   year: number;
+  // Saved plan assumptions (used as manual defaults; live data is opt-in)
+  avgSalePrice?: number | null;
+  avgCommissionPct?: number | null;
   // Callbacks
   onSavePlan?: (updates: {
     netMarginGoal: number;
@@ -158,6 +161,8 @@ export function RecruitingReverseCalculator({
   companyRetentionPct: initialRetentionPct,
   avgCompanyFeePerDealOverride,
   netMarginGoal: initialNetMarginGoal,
+  avgSalePrice,
+  avgCommissionPct,
   year,
   onSavePlan,
 }: RecruitingReverseCalculatorProps) {
@@ -170,15 +175,15 @@ export function RecruitingReverseCalculator({
   const [retentionPct, setRetentionPct] = useState<string>(
     String(Math.round((initialRetentionPct ?? 0.29) * 100))
   );
-  // Avg Sale Price
-  const [useLiveSalePrice, setUseLiveSalePrice] = useState<boolean>(liveAvgSalePrice != null);
+  // Avg Sale Price — default to manual (saved assumption); live is opt-in reference only
+  const [useLiveSalePrice, setUseLiveSalePrice] = useState<boolean>(false);
   const [salePriceOverride, setSalePriceOverride] = useState<string>(
-    String(liveAvgSalePrice ?? 229449)
+    String(avgSalePrice ?? 229449)
   );
-  // Avg Commission %
-  const [useLiveCommissionPct, setUseLiveCommissionPct] = useState<boolean>(liveAvgCommissionPct != null);
+  // Avg Commission % — default to manual (saved assumption); live is opt-in reference only
+  const [useLiveCommissionPct, setUseLiveCommissionPct] = useState<boolean>(false);
   const [commissionPctOverride, setCommissionPctOverride] = useState<string>(
-    String(liveAvgCommissionPct ?? 2.97)
+    String(avgCommissionPct ?? 2.97)
   );
   const [useLiveFee, setUseLiveFee] = useState<boolean>(avgCompanyFeePerDealOverride == null);
   const [feeOverride, setFeeOverride] = useState<string>(

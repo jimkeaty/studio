@@ -1798,6 +1798,8 @@ export default function RecruitingDashboardPage() {
         liveAvgDealsPerAgentPerMonth={brokerPlanLiveData?.avgDealsPerAgentPerMonth ?? data.liveData?.avgDealsPerAgentPerMonth ?? totals.avgDealsPerAgent ?? 0.78}
         liveAvgSalePrice={brokerPlanLiveData?.avgSalePrice ?? data.liveData?.avgSalePrice ?? null}
         liveAvgCommissionPct={brokerPlanLiveData?.avgCommissionPct ?? data.liveData?.avgCommissionPct ?? null}
+        avgSalePrice={brokerPlan?.avgSalePrice ?? null}
+        avgCommissionPct={brokerPlan?.avgCommissionPct ?? null}
         currentActiveAgents={realActiveAgents}
         conversionRates={brokerPlan?.conversionRates
           ? {
