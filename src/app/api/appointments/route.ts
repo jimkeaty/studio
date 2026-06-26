@@ -221,6 +221,90 @@ export async function POST(req: NextRequest) {
 
     const docRef = await adminDb.collection('appointments').add(dataToSave);
 
+    // ── Community board auto-post ──────────────────────────────────────────────
+    // If the agent checked "Post to Buyer Needs" (buyer appt) or
+    // "Post to Coming Soon" (seller appt), create the community doc now.
+    const postToCommunity = body.postToCommunity as boolean | undefined;
+    if (postToCommunity) {
+      try {
+        // Fetch agent profile to get display name + phone
+        let agentName = body.agentNameOverride as string | undefined;
+        let agentPhone = body.agentPhoneOverride as string | undefined;
+        let agentProfileId = uid;
+
+        if (!agentName || !agentPhone) {
+          // Try profile doc by uid first
+          const profileSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+          if (profileSnap.exists) {
+            const pd = profileSnap.data()!;
+            agentName = agentName || [pd.firstName, pd.lastName].filter(Boolean).join(' ') || pd.displayName || pd.agentId || uid;
+            agentPhone = agentPhone || pd.phone || pd.phoneNumber || '';
+            agentProfileId = profileSnap.id;
+          } else {
+            // Try by firebaseUid field
+            const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get();
+            if (!byFbUid.empty) {
+              const pd = byFbUid.docs[0].data();
+              agentName = agentName || [pd.firstName, pd.lastName].filter(Boolean).join(' ') || pd.displayName || uid;
+              agentPhone = agentPhone || pd.phone || pd.phoneNumber || '';
+              agentProfileId = byFbUid.docs[0].id;
+            }
+          }
+        }
+
+        const category = body.category as string;
+        const now = FieldValue.serverTimestamp();
+
+        if (category === 'buyer') {
+          // Post to buyerNeeds
+          const area = body.listingAddress || body.notes || 'Area TBD';
+          await adminDb.collection('buyerNeeds').add({
+            agentName: (agentName || uid).trim(),
+            agentPhone: (agentPhone || '').trim(),
+            agentProfileId,
+            createdByUid: callerUid,
+            area,
+            minPrice: body.priceRangeLow ? Number(body.priceRangeLow) : null,
+            maxPrice: body.priceRangeHigh ? Number(body.priceRangeHigh) : null,
+            beds: null,
+            baths: null,
+            notes: body.notes || null,
+            sourceAppointmentId: docRef.id,
+            active: true,
+            lastConfirmedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else if (category === 'seller') {
+          // Post to comingSoon — omit address, use area/notes only
+          const area = body.communityArea || body.notes || 'Area TBD';
+          await adminDb.collection('comingSoon').add({
+            agentName: (agentName || uid).trim(),
+            agentPhone: (agentPhone || '').trim(),
+            agentProfileId,
+            createdByUid: callerUid,
+            // address intentionally omitted for privacy
+            address: null,
+            area,
+            price: body.priceRangeLow ? Number(body.priceRangeLow) : (body.priceRangeHigh ? Number(body.priceRangeHigh) : null),
+            beds: null,
+            baths: null,
+            notes: body.notes || null,
+            expectedDate: null,
+            sourceAppointmentId: docRef.id,
+            active: true,
+            lastConfirmedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      } catch (communityErr) {
+        // Non-fatal — appointment was saved; log and continue
+        console.error('[API/appointments] community board post failed:', communityErr);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json({ ok: true, id: docRef.id });
   } catch (err: any) {
     console.error(`[API/appointments] POST failed:`, err);

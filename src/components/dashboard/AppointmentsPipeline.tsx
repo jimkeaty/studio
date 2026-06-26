@@ -101,6 +101,10 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
     notes: initial?.notes ?? '',
   });
 
+  // Community board auto-post state
+  const [postToCommunity, setPostToCommunity] = useState(false);
+  const [communityArea, setCommunityArea] = useState('');  // seller-only: area description without address
+
   const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   async function handleSave() {
@@ -124,6 +128,9 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
         priceRangeHigh: form.priceRangeHigh ? Number(form.priceRangeHigh) : null,
         estimatedCommission: form.estimatedCommission ? Number(form.estimatedCommission) : null,
         notes: form.notes || null,
+        // Community board auto-post (new appointments only)
+        postToCommunity: !initial && postToCommunity,
+        communityArea: communityArea.trim() || null,
       };
       if (viewAs) payload.viewAs = viewAs;
 
@@ -239,6 +246,64 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
               className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
               placeholder="Any notes about this appointment…" />
           </div>
+
+          {/* ─ Community Board Auto-Post (new appointments only) ─ */}
+          {!initial && (form.category === 'buyer' || form.category === 'seller') && (
+            <div className="rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <input
+                  id="postToCommunity"
+                  type="checkbox"
+                  checked={postToCommunity}
+                  onChange={e => setPostToCommunity(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <div>
+                  <label htmlFor="postToCommunity" className="block text-sm font-semibold text-blue-800 cursor-pointer">
+                    {form.category === 'buyer'
+                      ? '🏠 Post to Buyer Needs Board'
+                      : '⏳ Post to Coming Soon Board'}
+                  </label>
+                  <p className="text-xs text-blue-600 mt-0.5">
+                    {form.category === 'buyer'
+                      ? 'Automatically adds this buyer’s search criteria to the TV Mode Buyer Needs board so all agents can see it.'
+                      : 'Automatically adds this seller to the TV Mode Coming Soon board. The address will NOT be shown — only the area and property details.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Seller: area description field (no address shown) */}
+              {postToCommunity && form.category === 'seller' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Area / Property Description for Board <span className="text-gray-400">(no street address)</span>
+                  </label>
+                  <input
+                    value={communityArea}
+                    onChange={e => setCommunityArea(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder="e.g. 4BR in Youngsville, pool, 2-car garage, ~$450K"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">This is what agents will see. Do not include the street address.</p>
+                </div>
+              )}
+
+              {/* Buyer: preview of what will be posted */}
+              {postToCommunity && form.category === 'buyer' && (
+                <div className="bg-white rounded-lg border border-blue-100 px-3 py-2 text-xs text-gray-600">
+                  <span className="font-semibold text-gray-700">Will post: </span>
+                  {form.listingAddress || form.notes || 'Area TBD'}
+                  {(form.priceRangeLow || form.priceRangeHigh) && (
+                    <span className="ml-2 text-blue-700">
+                      {form.priceRangeLow ? `$${Number(form.priceRangeLow).toLocaleString()}` : ''}
+                      {form.priceRangeLow && form.priceRangeHigh ? '–' : ''}
+                      {form.priceRangeHigh ? `$${Number(form.priceRangeHigh).toLocaleString()}` : ''}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="border-t px-6 py-4 flex justify-end gap-3 bg-gray-50">
           <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">Cancel</button>
