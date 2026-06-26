@@ -6,7 +6,6 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { FieldValue, DocumentData } from "firebase-admin/firestore";
 import { differenceInDays } from "date-fns";
 
-const EDIT_WINDOW_DAYS = 45;
 
 function jsonError(status: number, error: string, code?: string, details?: unknown) {
   return NextResponse.json(
@@ -41,12 +40,10 @@ async function requireUser(req: Request): Promise<{ uid: string; role: string }>
 
 /**
  * Prevent saving future dates.
- * - Admin can edit anything
- * - Agents can only edit dates 0..45 days ago (inclusive)
+ * - All users can edit any past date (no rolling lock window)
+ * - Future dates are still blocked
  */
-function isDateEditable(dateStr: string, role: string): boolean {
-  if (role === "admin") return true;
-
+function isDateEditable(dateStr: string, _role: string): boolean {
   const date = new Date(dateStr + "T00:00:00");
   const today = new Date();
 
@@ -55,7 +52,8 @@ function isDateEditable(dateStr: string, role: string): boolean {
     new Date(date.getFullYear(), date.getMonth(), date.getDate())
   );
 
-  return diff >= 0 && diff <= EDIT_WINDOW_DAYS;
+  // Only block future dates (diff < 0); all past dates are editable
+  return diff >= 0;
 }
 
 function emptyDailyActivity(date: string) {
