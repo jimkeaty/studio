@@ -11,9 +11,10 @@ import { FieldValue } from 'firebase-admin/firestore';
 // Protected by CRON_SECRET header
 
 const COLLECTIONS = [
-  { name: 'openHouseListings', label: 'Open House', emoji: '🏠' },
-  { name: 'buyerNeeds', label: 'Buyer Need', emoji: '🔍' },
-  { name: 'comingSoonListings', label: 'Coming Soon Listing', emoji: '⏰' },
+  { name: 'openHouseListings',  label: 'Open House Opportunity', emoji: '🏠' },
+  { name: 'buyerNeeds',         label: 'Buyer Need',             emoji: '🔍' },
+  { name: 'comingSoonListings', label: 'Coming Soon Listing',     emoji: '⏰' },
+  { name: 'agentHelpRequests',  label: 'Agent Help Request',     emoji: '🤝' },
 ] as const;
 
 async function sendInAppNotification(agentProfileId: string, title: string, body: string) {
@@ -114,7 +115,12 @@ export async function POST(req: NextRequest) {
         warned++;
 
         const itemDescription = data.address || data.area || `${data.beds ? data.beds + 'bd ' : ''}${data.baths ? data.baths + 'ba' : ''}`.trim() || col.label;
-        const confirmUrl = `${appBaseUrl}/dashboard/tv-mode/${col.name === 'openHouseListings' ? 'open-houses' : col.name === 'buyerNeeds' ? 'buyer-needs' : 'coming-soon'}?confirm=${doc.id}`;
+        const sectionSlug =
+          col.name === 'openHouseListings'  ? 'open-houses' :
+          col.name === 'buyerNeeds'         ? 'buyer-needs' :
+          col.name === 'comingSoonListings' ? 'coming-soon' :
+          'agent-help';
+        const confirmUrl = `${appBaseUrl}/dashboard/tv-mode?tab=${sectionSlug}&confirm=${doc.id}`;
 
         // In-app notification
         if (data.agentProfileId) {

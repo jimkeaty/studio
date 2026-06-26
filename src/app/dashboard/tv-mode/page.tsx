@@ -964,18 +964,19 @@ export default function TvModePage() {
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <Label className="text-gray-300 text-xs">Open House Date</Label>
+                    <Label className="text-gray-300 text-xs">Preferred Date <span className="text-gray-500 font-normal">(optional)</span></Label>
                     <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseDate || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseDate: e.target.value }))} />
                   </div>
                   <div>
-                    <Label className="text-gray-300 text-xs">Start Time</Label>
+                    <Label className="text-gray-300 text-xs">Preferred Start <span className="text-gray-500 font-normal">(optional)</span></Label>
                     <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseTime: e.target.value }))} />
                   </div>
                   <div>
-                    <Label className="text-gray-300 text-xs">End Time</Label>
+                    <Label className="text-gray-300 text-xs">Preferred End <span className="text-gray-500 font-normal">(optional)</span></Label>
                     <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
                   </div>
                 </div>
+                <p className="text-xs text-gray-500 -mt-1">Leave date/time blank — any agent can claim any day and time that works for them.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
@@ -1165,18 +1166,19 @@ export default function TvModePage() {
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <Label className="text-gray-300 text-xs">Open House Date</Label>
+                    <Label className="text-gray-300 text-xs">Preferred Date <span className="text-gray-500 font-normal">(optional)</span></Label>
                     <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseDate || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseDate: e.target.value }))} />
                   </div>
                   <div>
-                    <Label className="text-gray-300 text-xs">Start Time</Label>
+                    <Label className="text-gray-300 text-xs">Preferred Start <span className="text-gray-500 font-normal">(optional)</span></Label>
                     <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseTime: e.target.value }))} />
                   </div>
                   <div>
-                    <Label className="text-gray-300 text-xs">End Time</Label>
+                    <Label className="text-gray-300 text-xs">Preferred End <span className="text-gray-500 font-normal">(optional)</span></Label>
                     <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
                   </div>
                 </div>
+                <p className="text-xs text-gray-500 -mt-1">Leave date/time blank — any agent can claim any day and time that works for them.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
