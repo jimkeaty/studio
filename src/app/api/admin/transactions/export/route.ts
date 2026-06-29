@@ -16,9 +16,18 @@ function jsonError(status: number, error: string) {
 }
 
 async function verifyAdmin(req: NextRequest) {
+  // Accept token from Authorization header OR ?token= query param
+  // (query param used for POST exports to avoid HTTP 431 from large headers)
   const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length);
+  const { searchParams } = new URL(req.url);
+  const tokenParam = searchParams.get('token');
+  let token: string | null = null;
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.slice('Bearer '.length);
+  } else if (tokenParam) {
+    token = tokenParam;
+  }
+  if (!token) return null;
   const decoded = await adminAuth.verifyIdToken(token);
   if (!(await isAdminLike(decoded.uid))) return null;
   return decoded;

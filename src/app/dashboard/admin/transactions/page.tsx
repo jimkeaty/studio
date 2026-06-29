@@ -284,23 +284,27 @@ export default function AdminTransactionLedgerPage() {
       const token = await user.getIdToken();
       let res: Response;
 
-      if (selectedIds.size > 0) {
-        // Export only the selected rows — use POST to avoid HTTP 431 (URL too long)
-        // when hundreds of IDs are selected.
-        res = await fetch('/api/admin/transactions/export', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ids: Array.from(selectedIds) }),
-        });
-      } else {
-        // Export the current filtered view via GET
+      // Build filter params for GET export
+      const buildFilterParams = () => {
         const params = new URLSearchParams();
         if (agentFilter !== 'all') params.set('agentName', agentFilter);
         if (yearFilter !== 'all') params.set('year', yearFilter);
         if (statusFilter !== 'all') params.set('status', statusFilter);
+        return params;
+      };
+
+      if (selectedIds.size > 0 && selectedIds.size < filtered.length) {
+        // Partial selection — pass token as query param to avoid large Authorization header
+        // combining with POST body to exceed HTTP 431 limit.
+        const params = new URLSearchParams({ token });
+        res = await fetch(`/api/admin/transactions/export?${params}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        });
+      } else {
+        // All rows selected (or no selection) — use filter-based GET export
+        const params = buildFilterParams();
         const url = `/api/admin/transactions/export${params.toString() ? `?${params}` : ''}`;
         res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       }
