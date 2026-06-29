@@ -90,7 +90,7 @@ function normalizeStatus(v: string): string | null {
   const s = v.toLowerCase().trim();
   if (s === 'closed' || s === 'close' || s === 'sold') return 'closed';
   if (s === 'pending') return 'pending';
-  if (s === 'active') return 'pending';
+  if (s === 'active') return 'active';
   if (s === 'under contract' || s === 'under_contract' || s === 'contract') return 'under_contract';
   if (s === 'canceled' || s === 'cancelled' || s === 'cancel') return 'cancelled';
   if (s === 'expired' || s === 'expire') return 'expired';
@@ -342,23 +342,37 @@ export async function POST(req: NextRequest) {
     const fuzzyMatchedAgents: { row: number; csvName: string; matchedName: string; similarity: number }[] = [];
 
     // ── Load existing transactions for duplicate detection ─────────────────────
-    // We load all transactions (or scope to the years present in this import)
-    // to avoid creating duplicates on re-upload.
-    const existingTxSnap = await adminDb.collection('transactions').get();
-    const existingTxList: ExistingTx[] = existingTxSnap.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        agentId: String(data.agentId || ''),
-        agentDisplayName: String(data.agentDisplayName || ''),
-        address: String(data.address || ''),
-        closedDate: data.closedDate ? String(data.closedDate) : null,
-        closingType: data.closingType ? String(data.closingType) : null,
-        transactionType: data.transactionType ? String(data.transactionType) : null,
-        listPrice: data.listPrice != null ? Number(data.listPrice) : null,
-        salePrice: data.salePrice != null ? Number(data.salePrice) : null,
-      };
-    });
+    // Scope to the years present in this import batch to avoid a full collection
+    // scan (which can time out on large collections).
+    const importYears = new Set<number>();
+    for (const row of rows) {
+      const d = toDate(String(row.closedDate ?? '').trim())
+        || toDate(String(row.underContractDate ?? '').trim())
+        || toDate(String(row.listingDate ?? '').trim());
+      if (d) importYears.add(new Date(d).getFullYear());
+    }
+    // If no dates found, fall back to current year
+    if (importYears.size === 0) importYears.add(new Date().getFullYear());
+
+    // Query one year at a time and merge (Firestore doesn't support IN on arrays > 10)
+    const existingTxList: ExistingTx[] = [];
+    for (const yr of importYears) {
+      const snap = await adminDb.collection('transactions').where('year', '==', yr).get();
+      for (const d of snap.docs) {
+        const data = d.data();
+        existingTxList.push({
+          id: d.id,
+          agentId: String(data.agentId || ''),
+          agentDisplayName: String(data.agentDisplayName || ''),
+          address: String(data.address || ''),
+          closedDate: data.closedDate ? String(data.closedDate) : null,
+          closingType: data.closingType ? String(data.closingType) : null,
+          transactionType: data.transactionType ? String(data.transactionType) : null,
+          listPrice: data.listPrice != null ? Number(data.listPrice) : null,
+          salePrice: data.salePrice != null ? Number(data.salePrice) : null,
+        });
+      }
+    }
 
     // ── Process rows in Firestore batches (max 500 ops each) ─────────────────
     let batch = adminDb.batch();
@@ -607,6 +621,7 @@ export async function POST(req: NextRequest) {
 
           // Financials
           listPrice: listPrice > 0 ? listPrice : null,
+          salePrice: salePrice > 0 ? salePrice : null,
           commissionPercent: commissionPct > 0 ? commissionPct : null,
           commissionBasePrice: commissionBasePrice ?? (salePrice > 0 ? salePrice : null),
           transactionFee: transactionFee > 0 ? transactionFee : null,

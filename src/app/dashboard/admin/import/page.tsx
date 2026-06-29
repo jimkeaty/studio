@@ -1494,6 +1494,7 @@ export default function BulkImportPage() {
                 <p className="text-sm font-medium mb-2">Importing {validRows.length} transaction{validRows.length !== 1 ? 's' : ''}…{validRows.length > 500 ? ` (${Math.ceil(validRows.length / 500)} batches)` : ''}</p>
                 <Progress value={importProgress} className="h-2" />
                 <p className="text-xs text-muted-foreground mt-1">{importProgress}% complete</p>
+                <p className="text-xs text-muted-foreground mt-1">Checking for duplicates and writing to database — this may take 10–30 seconds. Do not close this page.</p>
               </CardContent>
             </Card>
           )}
@@ -1819,16 +1820,30 @@ export default function BulkImportPage() {
           {importResult.errors && importResult.errors.length > 0 && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Server-side import errors</AlertTitle>
+              <AlertTitle>{importResult.errors.length} Row{importResult.errors.length !== 1 ? 's' : ''} Failed to Import</AlertTitle>
               <AlertDescription>
-                <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
-                  {importResult.errors.slice(0, 20).map((e, i) => (
-                    <li key={i}>Row {e.row}: {e.error}</li>
-                  ))}
-                  {importResult.errors.length > 20 && (
-                    <li>…and {importResult.errors.length - 20} more</li>
+                <p className="text-sm mb-2">These rows were skipped. Common causes: invalid status value, missing agent name, or unrecognized address format.</p>
+                <div className="mt-2 max-h-64 overflow-y-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-red-300">
+                        <th className="text-left py-1 pr-3 font-medium">Row</th>
+                        <th className="text-left py-1 font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importResult.errors.slice(0, 50).map((e, i) => (
+                        <tr key={i} className="border-b border-red-200/50">
+                          <td className="py-1 pr-3 font-mono">{e.row}</td>
+                          <td className="py-1">{e.error}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {importResult.errors.length > 50 && (
+                    <p className="text-xs mt-2">…and {importResult.errors.length - 50} more rows failed.</p>
                   )}
-                </ul>
+                </div>
               </AlertDescription>
             </Alert>
           )}
