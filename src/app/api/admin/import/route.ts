@@ -114,6 +114,78 @@ function normalizeDealType(v: string): string | null {
 }
 
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
+import { nameSimilarity } from '@/lib/agents/fuzzyMatch';
+
+// ─── Transaction duplicate detection ────────────────────────────────────────
+// Normalize an address for fuzzy comparison
+function normalizeAddress(addr: string): string {
+  return addr
+    .toLowerCase()
+    .replace(/\bstreet\b/g, 'st').replace(/\bdrive\b/g, 'dr')
+    .replace(/\bavenue\b/g, 'ave').replace(/\bboulevard\b/g, 'blvd')
+    .replace(/\blane\b/g, 'ln').replace(/\broad\b/g, 'rd')
+    .replace(/\bcourt\b/g, 'ct').replace(/\bplace\b/g, 'pl')
+    .replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function addressSimilarity(a: string, b: string): number {
+  const na = normalizeAddress(a);
+  const nb = normalizeAddress(b);
+  if (na === nb) return 1.0;
+  const maxLen = Math.max(na.length, nb.length);
+  if (maxLen === 0) return 1.0;
+  // Levenshtein
+  const m = na.length, n = nb.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = na[i-1] === nb[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    }
+  }
+  return 1 - dp[m][n] / maxLen;
+}
+
+function sameMonth(d1: string | null, d2: string | null): boolean {
+  if (!d1 || !d2) return false;
+  return d1.slice(0, 7) === d2.slice(0, 7);
+}
+
+interface ExistingTx {
+  id: string;
+  agentId: string;
+  agentDisplayName: string;
+  address: string;
+  closedDate: string | null;
+  closingType: string | null;
+  transactionType: string | null;
+  listPrice: number | null;
+  salePrice: number | null;
+}
+
+/**
+ * Score how likely two transactions are the same deal.
+ * Returns 0–1. >= 0.75 = likely duplicate, >= 0.90 = almost certain.
+ * Per project rules: same address + different date/type = separate transaction.
+ */
+function dupScore(row: { address: string; agentName: string; closedDate: string | null; closingType: string | null }, ex: ExistingTx): number {
+  const addrScore = addressSimilarity(row.address, ex.address); // 0–1
+  if (addrScore < 0.5) return 0; // address too different — definitely not a dup
+  const agentScore = nameSimilarity(row.agentName, ex.agentDisplayName); // 0–1
+  // Date: exact match = 1, same month = 0.5, different = 0
+  let dateScore = 0;
+  if (row.closedDate && ex.closedDate) {
+    if (row.closedDate === ex.closedDate) dateScore = 1;
+    else if (sameMonth(row.closedDate, ex.closedDate)) dateScore = 0.5;
+  }
+  // Closing type match
+  const typeScore = (row.closingType && ex.closingType && row.closingType === ex.closingType) ? 1 : 0;
+  // Weighted: address 50%, agent 25%, date 15%, type 10%
+  return addrScore * 0.50 + agentScore * 0.25 + dateScore * 0.15 + typeScore * 0.10;
+}
+
+const DUP_THRESHOLD = 0.75; // >= this → treat as existing transaction (upsert)
 
 export interface ImportRow {
   agentName: string;
@@ -263,9 +335,30 @@ export async function POST(req: NextRequest) {
     // Unique batch ID — stamps every transaction in this upload so they can be deleted as a group
     const importBatchId = `import_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
     const imported: string[] = [];
+    const updated: string[] = [];
+    const skippedDups: { row: number; existingId: string; score: number; address: string }[] = [];
     const failed: { row: number; error: string; data: any }[] = [];
     const autoCreatedAgents: { name: string; agentId: string }[] = [];
     const fuzzyMatchedAgents: { row: number; csvName: string; matchedName: string; similarity: number }[] = [];
+
+    // ── Load existing transactions for duplicate detection ─────────────────────
+    // We load all transactions (or scope to the years present in this import)
+    // to avoid creating duplicates on re-upload.
+    const existingTxSnap = await adminDb.collection('transactions').get();
+    const existingTxList: ExistingTx[] = existingTxSnap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        agentId: String(data.agentId || ''),
+        agentDisplayName: String(data.agentDisplayName || ''),
+        address: String(data.address || ''),
+        closedDate: data.closedDate ? String(data.closedDate) : null,
+        closingType: data.closingType ? String(data.closingType) : null,
+        transactionType: data.transactionType ? String(data.transactionType) : null,
+        listPrice: data.listPrice != null ? Number(data.listPrice) : null,
+        salePrice: data.salePrice != null ? Number(data.salePrice) : null,
+      };
+    });
 
     // ── Process rows in Firestore batches (max 500 ops each) ─────────────────
     let batch = adminDb.batch();
@@ -571,10 +664,60 @@ export async function POST(req: NextRequest) {
           updatedAt: now,
         };
 
-        const ref = adminDb.collection('transactions').doc();
-        batch.set(ref, txDoc);
-        imported.push(ref.id);
-        batchCount++;
+        // ── Duplicate detection: check if this transaction already exists ──────
+        const rowForDup = {
+          address,
+          agentName: agent.displayName,
+          closedDate,
+          closingType,
+        };
+        let bestDup: { tx: ExistingTx; score: number } | null = null;
+        for (const ex of existingTxList) {
+          const score = dupScore(rowForDup, ex);
+          if (score >= DUP_THRESHOLD && (!bestDup || score > bestDup.score)) {
+            bestDup = { tx: ex, score };
+          }
+        }
+
+        if (bestDup) {
+          // Existing transaction found — upsert (update prices + key fields only)
+          const updatePayload: Record<string, any> = {
+            updatedAt: now,
+            importBatchId,
+            lastUpsertedAt: now,
+          };
+          if (listPrice > 0) updatePayload.listPrice = listPrice;
+          if (salePrice > 0) updatePayload.salePrice = salePrice;
+          if (status) updatePayload.status = status;
+          if (closedDate) updatePayload.closedDate = closedDate;
+          if (gci > 0) {
+            updatePayload.splitSnapshot = txDoc.splitSnapshot;
+            updatePayload.creditSnapshot = txDoc.creditSnapshot;
+            updatePayload.brokerProfit = companyRetained;
+          }
+          const existingRef = adminDb.collection('transactions').doc(bestDup.tx.id);
+          batch.update(existingRef, updatePayload);
+          updated.push(bestDup.tx.id);
+          batchCount++;
+        } else {
+          // No duplicate found — create new transaction
+          const ref = adminDb.collection('transactions').doc();
+          batch.set(ref, txDoc);
+          imported.push(ref.id);
+          // Add to existingTxList so subsequent rows in this same batch don't duplicate it
+          existingTxList.push({
+            id: ref.id,
+            agentId: agent.agentId,
+            agentDisplayName: agent.displayName,
+            address,
+            closedDate,
+            closingType,
+            transactionType,
+            listPrice: listPrice > 0 ? listPrice : null,
+            salePrice: salePrice > 0 ? salePrice : null,
+          });
+          batchCount++;
+        }
 
         if (batchCount >= BATCH_LIMIT) {
           await flushBatch();
@@ -590,9 +733,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       imported: imported.length,
+      updated: updated.length,
+      skippedDups: skippedDups.length,
       failed: failed.length,
       errors: failed,
       ids: imported,
+      updatedIds: updated,
       importBatchId,
       autoCreatedAgents: autoCreatedAgents.length > 0 ? autoCreatedAgents : undefined,
       fuzzyMatchedAgents: fuzzyMatchedAgents.length > 0 ? fuzzyMatchedAgents : undefined,

@@ -241,6 +241,7 @@ type ParsedRow = Record<string, any> & { __rowNum: number; __errors: string[] };
 type ImportResult = {
   ok: boolean;
   imported: number;
+  updated: number;
   failed: number;
   errors: { row: number; error: string }[];
   autoCreatedAgents?: { name: string; agentId: string }[];
@@ -665,6 +666,7 @@ export default function BulkImportPage() {
 
       const accumulated = {
         imported: 0,
+        updated: 0,
         failed: 0,
         fuzzyMatchedAgents: [] as any[],
         autoCreatedAgents: [] as any[],
@@ -696,6 +698,7 @@ export default function BulkImportPage() {
         }
 
         accumulated.imported += data.imported ?? 0;
+        accumulated.updated += data.updated ?? 0;
         accumulated.failed += data.failed ?? 0;
         accumulated.fuzzyMatchedAgents.push(...(data.fuzzyMatchedAgents ?? []));
         accumulated.autoCreatedAgents.push(...(data.autoCreatedAgents ?? []));
@@ -1742,15 +1745,24 @@ export default function BulkImportPage() {
                 <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
               )}
               <h2 className="text-2xl font-bold mb-2">
-                {importResult.imported} Transaction{importResult.imported !== 1 ? 's' : ''} Imported
+                {importResult.imported === 0 && importResult.updated === 0 && 'No Changes Made'}
+                {importResult.imported > 0 && `${importResult.imported} New Transaction${importResult.imported !== 1 ? 's' : ''} Created`}
+                {importResult.imported > 0 && importResult.updated > 0 && ' · '}
+                {importResult.updated > 0 && `${importResult.updated} Existing Transaction${importResult.updated !== 1 ? 's' : ''} Updated`}
               </h2>
               {importResult.failed > 0 && (
                 <p className="text-muted-foreground">
                   {importResult.failed} row{importResult.failed !== 1 ? 's' : ''} failed and were skipped.
                 </p>
               )}
-              {importResult.failed === 0 && (
-                <p className="text-muted-foreground">All rows imported successfully.</p>
+              {importResult.failed === 0 && importResult.updated > 0 && importResult.imported === 0 && (
+                <p className="text-muted-foreground">All rows matched existing transactions — no duplicates created.</p>
+              )}
+              {importResult.failed === 0 && importResult.imported > 0 && importResult.updated === 0 && (
+                <p className="text-muted-foreground">All rows imported as new transactions.</p>
+              )}
+              {importResult.failed === 0 && importResult.imported > 0 && importResult.updated > 0 && (
+                <p className="text-muted-foreground">Duplicate detection ran on every row — existing transactions were updated, new ones were created.</p>
               )}
             </CardContent>
           </Card>
