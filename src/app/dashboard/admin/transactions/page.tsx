@@ -955,8 +955,8 @@ export default function AdminTransactionLedgerPage() {
                     <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px]" onClick={() => toggleSort('closedDate')}>
                       <span className="flex items-center">Close Date<SortIcon col="closedDate" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('dealValue')}>
-                      <span className="flex items-center justify-end">Sale Price<SortIcon col="dealValue" /></span>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('salePrice')}>
+                      <span className="flex items-center justify-end">Sale Price<SortIcon col="salePrice" /></span>
                     </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('grossComm')}>
                       <span className="flex items-center justify-end">Gross Comm.<SortIcon col="grossComm" /></span>
