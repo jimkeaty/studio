@@ -412,13 +412,31 @@ export async function GET(req: NextRequest) {
       }
     } catch { /* non-fatal */ }
     const prevMonthData = months.find(m => m.month === (currentMonthData.month - 1)) || null;
+    // Use startDate year to determine which year an agent was hired.
+    // activationMonth = startDate + 3 months (grace period) — it must NOT be used
+    // to classify hire year. Example: agent who started Nov 2025 has
+    // activationMonth = Feb 2026, but they are a 2025 hire.
     const ytdNewHiresRecords = agentRecords.filter(ar => {
+      // Primary: use startDate year
+      if (ar.startDate) {
+        const sd = parseDate(ar.startDate);
+        if (sd) {
+          const startYM = toYearMonth(sd);
+          return startYM.startsWith(String(year)) && startYM <= currentYM;
+        }
+      }
+      // Fallback: use activationMonth only when startDate is absent
       if (!ar.activationMonth) return false;
       return ar.activationMonth.startsWith(String(year)) && ar.activationMonth <= currentYM;
     });
     const ytdNewHires = ytdNewHiresRecords.length;
     const ytdNewHiresList = ytdNewHiresRecords
-      .sort((a, b) => (a.activationMonth ?? '').localeCompare(b.activationMonth ?? ''))
+      .sort((a, b) => {
+        // Sort by startDate when available, otherwise activationMonth
+        const aKey = a.startDate ?? a.activationMonth ?? '';
+        const bKey = b.startDate ?? b.activationMonth ?? '';
+        return aKey.localeCompare(bKey);
+      })
       .map(ar => ({
         name: ar.name,
         agentId: ar.agentId,

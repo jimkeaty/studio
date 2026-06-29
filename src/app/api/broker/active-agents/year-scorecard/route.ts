@@ -90,18 +90,33 @@ export async function GET(req: NextRequest) {
     let ytdNewHires = 0;
     let ytdDepartures = 0;
 
-    for (const doc of agentsSnap.docs) {
+        for (const doc of agentsSnap.docs) {
       if (demoIds.has(doc.id)) continue;
       const a = doc.data();
 
-      // Derive activationMonth
+      // Derive activationMonth (used for year-end active count only)
       let activationMonth: string | null = a.activationMonth ?? null;
       if (!activationMonth) {
-        // Fall back to startDate
         const sd = parseDate(a.startDate ?? a.joinDate);
-        if (sd) activationMonth = toYearMonth(sd);
+        if (sd) {
+          // activationMonth = startDate + 3 months (grace period)
+          const tenureDate = new Date(sd);
+          tenureDate.setMonth(tenureDate.getMonth() + 3);
+          activationMonth = toYearMonth(tenureDate);
+        }
       }
       if (!activationMonth) continue; // never activated
+
+      // Derive startMonth — the month the agent actually JOINED the brokerage.
+      // This is separate from activationMonth and is used for new hire counting.
+      let startMonth: string | null = null;
+      const rawStart = a.startDate ?? a.joinDate;
+      if (rawStart) {
+        const sd = parseDate(rawStart);
+        if (sd) startMonth = toYearMonth(sd);
+      }
+      // Fallback: if no startDate, use activationMonth as a proxy
+      if (!startMonth) startMonth = activationMonth;
 
       // Derive endMonth
       let endMonth: string | null = a.endMonth ?? null;
@@ -117,8 +132,10 @@ export async function GET(req: NextRequest) {
       const stillActiveAtYearEnd = !endMonth || endMonth > yearEndYM;
       if (activatedByYearEnd && stillActiveAtYearEnd) yearEndActive++;
 
-      // New hires: activated during this year (activationMonth starts with this year)
-      if (activationMonth >= yearStartYM && activationMonth <= yearEndYM) ytdNewHires++;
+      // New hires: agent's START DATE (join date) falls within this year.
+      // Do NOT use activationMonth — it is startDate + 3 months and will
+      // misclassify agents who joined in Q4 as hires in the following year.
+      if (startMonth >= yearStartYM && startMonth <= yearEndYM) ytdNewHires++;
 
       // Departures: ended during this year
       if (endMonth && endMonth >= yearStartYM && endMonth <= yearEndYM) ytdDepartures++;
