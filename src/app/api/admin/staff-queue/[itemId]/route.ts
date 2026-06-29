@@ -41,7 +41,7 @@ const EDITABLE_TX_FIELDS = new Set([
   'sellerName', 'sellerEmail', 'sellerPhone', 'seller2Name', 'seller2Email', 'seller2Phone',
   'seller3Name', 'seller3Email', 'seller3Phone', 'seller4Name', 'seller4Email', 'seller4Phone',
   'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
-  'listPrice', 'salePrice', 'dealValue', 'commissionPercent', 'gci', 'transactionFee',
+  'listPrice', 'salePrice', 'commissionPercent', 'gci', 'transactionFee',
   'brokerPct', 'brokerGci', 'agentPct', 'agentDollar', 'earnestMoney',
   'listingDate', 'contractDate', 'closedDate', 'projectedCloseDate',
   'optionExpiration', 'inspectionDeadline', 'surveyDeadline',
@@ -238,14 +238,6 @@ export async function PATCH(
 
       if (Object.keys(allowed).length > 0) {
         allowed.updatedAt = now;
-
-        // Keep dealValue in sync with salePrice so volume metrics stay accurate
-        if (allowed.salePrice !== undefined) {
-          const sp = Number(allowed.salePrice);
-          if (!isNaN(sp) && sp > 0) {
-            allowed.dealValue = sp;
-          }
-        }
 
         // ── Auto-recalculate commission when financial fields change ──────────
         // If any commission-triggering field changed, recompute the splitSnapshot

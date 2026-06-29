@@ -514,7 +514,6 @@ export async function POST(req: NextRequest) {
 
           // Financials
           listPrice: listPrice > 0 ? listPrice : null,
-          dealValue: salePrice > 0 ? salePrice : listPrice > 0 ? listPrice : null,
           commissionPercent: commissionPct > 0 ? commissionPct : null,
           commissionBasePrice: commissionBasePrice ?? (salePrice > 0 ? salePrice : null),
           transactionFee: transactionFee > 0 ? transactionFee : null,

@@ -60,7 +60,7 @@ interface TeamTransaction {
   agentName: string;
   address: string;
   status: string;
-  dealValue: number;
+  salePrice: number;
   agentNetCommission: number;
   grossCommission: number;
   leaderRetained: number;
@@ -261,7 +261,7 @@ function TodaysFocusSection({ teamData, inactiveAlerts }: {
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-medium">{fmtDate(t.closedDate ?? t.contractDate)}</p>
-                  <p className="text-xs text-muted-foreground">{fmtCompact(t.dealValue)}</p>
+                  <p className="text-xs text-muted-foreground">{fmtCompact(t.salePrice)}</p>
                 </div>
               </div>
             ))}
@@ -308,7 +308,7 @@ function TeamTransactionsList({ transactions }: { transactions: TeamTransaction[
       Address: t.address || '',
       Status: t.status,
       'Transaction Type': t.transactionType ?? '',
-      'Deal Value': t.dealValue,
+      'Sale Price': t.salePrice,
       'Gross Commission': t.grossCommission,
       'Agent Net Commission': t.agentNetCommission,
       'Leader Retained': t.leaderRetained,
@@ -394,7 +394,7 @@ function TeamTransactionsList({ transactions }: { transactions: TeamTransaction[
                     </span>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground capitalize">{t.transactionType ?? '—'}</TableCell>
-                  <TableCell className="text-sm text-right">{fmtCompact(t.dealValue)}</TableCell>
+                  <TableCell className="text-sm text-right">{fmtCompact(t.salePrice)}</TableCell>
                   <TableCell className="text-sm text-right">{fmtCompact(t.grossCommission)}</TableCell>
                   <TableCell className="text-sm text-right font-medium">{fmtCompact(t.agentNetCommission)}</TableCell>
                   <TableCell className="text-sm text-right font-medium text-primary">

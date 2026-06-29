@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
           agentDisplayName: d.agentDisplayName || d.agentName || '',
           address: d.address || d.propertyAddress || '',
           contractDate: toDateStr(d.contractDate),
-          salePrice: d.salePrice ? Number(d.salePrice) : (d.dealValue ? Number(d.dealValue) : null),
+          salePrice: d.salePrice ? Number(d.salePrice) : (d.listPrice ? Number(d.listPrice) : null),
           projectedCloseDate: null,
         });
       }

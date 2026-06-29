@@ -218,7 +218,6 @@ export async function POST(req: NextRequest) {
 
       status,
       transactionType,
-      dealValue: toNumber(body.dealValue),
       address,
       contractDate,
       closedDate,

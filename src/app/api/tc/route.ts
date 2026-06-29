@@ -295,7 +295,6 @@ export async function POST(req: NextRequest) {
       dealType,
       listPrice: toNum(body.listPrice),
       salePrice: toNum(body.salePrice),
-      dealValue: toNum(body.salePrice) || toNum(body.listPrice),
       listingDate: toStr(body.listingDate) || null,
       contractDate: contractDate || null,
       closingDate: toStr(body.closedDate) || toStr(body.closingDate) || null,

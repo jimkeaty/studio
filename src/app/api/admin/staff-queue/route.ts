@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
           if (txDoc.exists) {
             const tx = txDoc.data()!;
             if (!resolvedAddress) resolvedAddress = (tx.propertyAddress || tx.address || '').trim();
-            if (salePrice == null) salePrice = tx.salePrice ?? tx.dealValue ?? null;
+            if (salePrice == null) salePrice = tx.salePrice ?? null;
             if (!closingType) closingType = tx.closingType ?? null;
             if (!dealType) dealType = tx.transactionType ?? tx.dealType ?? null;
             if (!contractDate) contractDate = tx.contractDate ?? null;

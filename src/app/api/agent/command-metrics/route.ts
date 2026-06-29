@@ -22,7 +22,6 @@ interface Transaction {
   closedDate?: admin.firestore.Timestamp | string;
   contractDate?: admin.firestore.Timestamp | string;
   brokerProfit: number;
-  dealValue: number;
   salePrice?: number | string | null;
   listPrice?: number | string | null;
   commission?: number;
@@ -312,7 +311,7 @@ export async function GET(req: NextRequest) {
       const closedDate = parseDate(t.closedDate);
       if (!closedDate || closedDate.getFullYear() !== prevYear) continue;
       const m = closedDate.getMonth();
-      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? t.dealValue ?? 0;
+      const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
       brokerageMonthly[m].closedVolume += vol;
       brokerageMonthly[m].closedCount += 1;
       brokerageTotalVolume += vol;
@@ -944,7 +943,7 @@ export async function GET(req: NextRequest) {
       agentName: string;
       address: string;
       status: string;
-      dealValue: number;
+      salePrice: number;
       agentNetCommission: number;
       grossCommission: number;
       leaderRetained: number;
@@ -1028,7 +1027,7 @@ export async function GET(req: NextRequest) {
             agentName: memberNameMap3.get((t.agentId as string) ?? '') ?? (t.agentId as string) ?? '',
             address: (raw.address ?? raw.propertyAddress ?? '') as string,
             status: (t.status ?? '') as string,
-            dealValue: ((t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0)) as number,
+            salePrice: ((t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0)) as number,
             agentNetCommission: memberPaidTx,
             grossCommission: gciTx,
             leaderRetained: leaderRetainedTx,

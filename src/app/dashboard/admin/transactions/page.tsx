@@ -66,7 +66,7 @@ const ALL_STATUSES = ['active', 'temp_off_market', 'pending', 'closed', 'cancele
 
 /* ─── Sorting ────────────────────────────────────────────────────────── */
 
-type SortKey = 'status' | 'address' | 'agent' | 'closingType' | 'dealType' | 'contractDate' | 'projectedCloseDate' | 'closedDate' | 'dealValue' | 'grossComm' | 'netAgent' | 'companyRetained' | 'source';
+type SortKey = 'status' | 'address' | 'agent' | 'closingType' | 'dealType' | 'contractDate' | 'projectedCloseDate' | 'closedDate' | 'salePrice' | 'grossComm' | 'netAgent' | 'companyRetained' | 'source';
 type SortDir = 'asc' | 'desc';
 
 function getSortValue(tx: Transaction, key: SortKey): string | number {
@@ -79,7 +79,7 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
     case 'contractDate': return tx.contractDate || '';
     case 'projectedCloseDate': return (tx as any).projectedCloseDate || '';
     case 'closedDate': return tx.closedDate || (tx as any).closingDate || '';
-    case 'dealValue': return (tx as any).salePrice || tx.dealValue || 0;
+    case 'salePrice': return (tx as any).salePrice || 0;
     case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
     case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? tx.netCommission ?? 0;
     case 'companyRetained': return tx.splitSnapshot?.companyRetained ?? tx.brokerGci ?? 0;
@@ -426,7 +426,7 @@ export default function AdminTransactionLedgerPage() {
           transactionType: transferTx.transactionType,
           address: transferTx.address,
           clientName: transferTx.clientName || null,
-          dealValue: Number(transferTx.dealValue) || 0,
+          salePrice: Number((transferTx as any).salePrice) || 0,
           commission: Number(transferTx.commission) || 0,
           contractDate: transferTx.contractDate || null,
           closedDate: transferTx.closedDate || null,
@@ -504,7 +504,7 @@ export default function AdminTransactionLedgerPage() {
       setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortKey(key);
-      setSortDir(key === 'closedDate' || key === 'dealValue' || key === 'grossComm' || key === 'netAgent' || key === 'companyRetained' ? 'desc' : 'asc');
+      setSortDir(key === 'closedDate' || key === 'salePrice' || key === 'grossComm' || key === 'netAgent' || key === 'companyRetained' ? 'desc' : 'asc');
     }
   };
 
@@ -678,7 +678,7 @@ export default function AdminTransactionLedgerPage() {
                           <td className="px-3 py-1.5 font-medium">{(tx as any).year ?? '—'}</td>
                           <td className="px-3 py-1.5">{formatDate(tx.contractDate)}</td>
                           <td className="px-3 py-1.5">{formatDate(tx.closedDate ?? (tx as any).closingDate)}</td>
-                          <td className="px-3 py-1.5">{(tx as any).salePrice ? formatCurrency((tx as any).salePrice) : (tx.dealValue ? formatCurrency(tx.dealValue) : '—')}</td>
+                          <td className="px-3 py-1.5">{(tx as any).salePrice ? formatCurrency((tx as any).salePrice) : '—'}</td>
                           <td className="px-3 py-1.5">
                             <div className="flex items-center gap-1.5">
                               <Link href={`/dashboard/admin/transactions/edit?id=${tx.id}`}>
@@ -874,7 +874,7 @@ export default function AdminTransactionLedgerPage() {
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div>
                           <p className="text-xs text-muted-foreground">Sale Price</p>
-                          <p className="text-sm font-semibold">{((t as any).salePrice || t.dealValue) ? formatCurrency((t as any).salePrice || t.dealValue) : '—'}</p>
+                          <p className="text-sm font-semibold">{(t as any).salePrice ? formatCurrency((t as any).salePrice) : '—'}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Gross GCI</p>
@@ -1089,7 +1089,7 @@ export default function AdminTransactionLedgerPage() {
                         <TableCell className="min-w-[130px] whitespace-nowrap">{formatDate((t as any).projectedCloseDate) || '—'}</TableCell>
                         <TableCell className="min-w-[110px] whitespace-nowrap">{formatDate(t.closedDate ?? (t as any).closingDate)}</TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">
-                          {((t as any).salePrice || (t as any).listPrice || t.dealValue) ? formatCurrency((t as any).salePrice || (t as any).listPrice || t.dealValue) : '—'}
+                          {((t as any).salePrice || (t as any).listPrice) ? formatCurrency((t as any).salePrice || (t as any).listPrice) : '—'}
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">
                           {isActiveListing

@@ -81,7 +81,6 @@ const HEADERS = [
   'Year',
   'List Price',
   'Sale Price',
-  'Deal Value',
   'Commission %',
   'Gross Commission',
   'Agent Net Commission',
@@ -164,7 +163,6 @@ function txToRow(id: string, t: any): string {
     t.year,
     toNum(t.listPrice),
     toNum(t.salePrice || t.dealValue),  // match UI: fall back to dealValue when salePrice is absent
-    toNum(t.dealValue),
     toNum(t.commissionPercent),
     toNum(t.splitSnapshot?.grossCommission ?? t.commission),
     toNum(t.splitSnapshot?.agentNetCommission ?? t.agentNetCommission ?? t.netCommission),

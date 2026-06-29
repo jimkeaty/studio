@@ -46,7 +46,6 @@ type TeamTx = {
   closedDate?: string | null;
   closingDate?: string | null;
   listingDate?: string | null;
-  dealValue?: number;
   listPrice?: number;
   salePrice?: number;
   splitSnapshot?: {
@@ -128,7 +127,7 @@ function getSortValue(tx: TeamTx, key: SortKey): string | number {
     case 'dealType': return tx.transactionType || '';
     case 'contractDate': return tx.contractDate || '';
     case 'closedDate': return tx.closedDate || tx.closingDate || '';
-    case 'dealValue': return tx.salePrice || tx.listPrice || tx.dealValue || 0;
+    case 'dealValue': return tx.salePrice || tx.listPrice || 0;
     case 'agentNet': return tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0;
     case 'gci': return tx.splitSnapshot?.grossCommission ?? 0;
     // NOTE: leaderRetained sort uses the raw snapshot value; the isLeaderOwnDeal

@@ -50,7 +50,6 @@ type AgentTx = {
   closedDate?: string | null;
   closingDate?: string | null;
   listingDate?: string | null;
-  dealValue?: number;
   listPrice?: number;
   salePrice?: number;
   commission?: number;
@@ -145,7 +144,7 @@ function getSortValue(tx: AgentTx, key: SortKey): string | number {
     case 'dealType': return tx.transactionType || '';
     case 'contractDate': return tx.contractDate || '';
     case 'closedDate': return tx.closedDate || tx.closingDate || '';
-    case 'dealValue': return tx.salePrice || tx.listPrice || tx.dealValue || 0;
+    case 'dealValue': return tx.salePrice || tx.listPrice || 0;
     case 'netToMe': return tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0;
     default: return '';
   }
@@ -964,9 +963,9 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
   const pendingCount = transactions.filter(t => t.status === 'pending').length;
   const closedCount = transactions.filter(t => t.status === 'closed').length;
   const netPending = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
-  const pendingVolume = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.salePrice || t.listPrice || t.dealValue || 0), 0);
+  const pendingVolume = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.salePrice || t.listPrice || 0), 0);
   const netClosed = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
-  const closedVolume = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.salePrice || t.listPrice || t.dealValue || 0), 0);
+  const closedVolume = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.salePrice || t.listPrice || 0), 0);
 
   /* ─── Render ─────────────────────────────────────────────────────────── */
 

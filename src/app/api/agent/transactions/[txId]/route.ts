@@ -196,15 +196,6 @@ export async function PATCH(
     updates.updatedAt = new Date().toISOString();
     updates.lastUpdatedBy = uid;
 
-    // Keep dealValue in sync with salePrice so volume metrics stay accurate.
-    // When salePrice is edited, dealValue must also be updated or old value persists in charts.
-    if (updates.salePrice !== undefined) {
-      const sp = Number(updates.salePrice);
-      if (!isNaN(sp) && sp > 0) {
-        updates.dealValue = sp;
-      }
-    }
-
     // Keep dealType and transactionType in sync — both fields are used in different parts
     // of the codebase; updating one must always update the other.
     if (updates.dealType !== undefined) {

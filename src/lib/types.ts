@@ -100,7 +100,6 @@ export interface Transaction {
   address: string;
   status: 'active' | 'pending' | 'canceled' | 'expired' | 'closed' | 'cancelled' | 'temp_off_market';
   transactionType?: 'residential_sale' | 'rental' | 'commercial_lease' | 'commercial_sale';
-  dealValue?: number;
   commission?: number;
   brokerProfit?: number;
   contractDate?: string | null;
