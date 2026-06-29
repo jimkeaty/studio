@@ -282,22 +282,28 @@ export default function AdminTransactionLedgerPage() {
     setExportError(null);
     try {
       const token = await user.getIdToken();
-      const params = new URLSearchParams();
+      let res: Response;
 
       if (selectedIds.size > 0) {
-        // Export only the selected rows — pass their IDs directly so the server
-        // fetches exactly those documents regardless of year/status filters.
-        params.set('ids', Array.from(selectedIds).join(','));
+        // Export only the selected rows — use POST to avoid HTTP 431 (URL too long)
+        // when hundreds of IDs are selected.
+        res = await fetch('/api/admin/transactions/export', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        });
       } else {
-        // Export the current filtered view
-        // NOTE: agentFilter stores the display name (not agentId), so use agentName param
+        // Export the current filtered view via GET
+        const params = new URLSearchParams();
         if (agentFilter !== 'all') params.set('agentName', agentFilter);
         if (yearFilter !== 'all') params.set('year', yearFilter);
         if (statusFilter !== 'all') params.set('status', statusFilter);
+        const url = `/api/admin/transactions/export${params.toString() ? `?${params}` : ''}`;
+        res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       }
-
-      const url = `/api/admin/transactions/export${params.toString() ? `?${params}` : ''}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error((data as any).error || `Export failed (${res.status})`);

@@ -316,3 +316,58 @@ export async function GET(req: NextRequest) {
     return jsonError(500, err.message || 'Internal Server Error');
   }
 }
+
+// POST /api/admin/transactions/export
+// Body: { ids: string[] }
+// Used when exporting a large selection (avoids HTTP 431 URL-too-long error)
+export async function POST(req: NextRequest) {
+  try {
+    const decoded = await verifyAdmin(req);
+    if (!decoded) return jsonError(403, 'Forbidden: Admin only');
+
+    const body = await req.json().catch(() => ({}));
+    const specificIds: string[] = Array.isArray(body.ids) ? body.ids.map(String) : [];
+
+    if (specificIds.length === 0) {
+      return jsonError(400, 'No IDs provided');
+    }
+
+    // Batch fetch in chunks of 30 (Firestore 'in' limit)
+    const chunks: string[][] = [];
+    for (let i = 0; i < specificIds.length; i += 30) {
+      chunks.push(specificIds.slice(i, i + 30));
+    }
+    const snaps = await Promise.all(
+      chunks.map(chunk =>
+        adminDb.collection('transactions').where('__name__', 'in', chunk).get()
+      )
+    );
+    const seen = new Set<string>();
+    const docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    for (const snap of snaps) {
+      for (const doc of snap.docs) {
+        if (!seen.has(doc.id)) { seen.add(doc.id); docs.push(doc); }
+      }
+    }
+
+    const rows: string[] = [HEADERS.join(',')];
+    for (const doc of docs) {
+      rows.push(txToRow(doc.id, doc.data() || {}));
+    }
+
+    const filename = `transactions_selected_${specificIds.length}.csv`;
+    const csv = rows.join('\r\n') + '\r\n';
+
+    return new NextResponse(csv, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (err: any) {
+    console.error('[api/admin/transactions/export POST]', err);
+    return jsonError(500, err.message || 'Internal Server Error');
+  }
+}
