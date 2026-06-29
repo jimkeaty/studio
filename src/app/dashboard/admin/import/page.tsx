@@ -487,6 +487,14 @@ export default function BulkImportPage() {
   const [resolving, setResolving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const errorBannerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to error banner whenever a new error appears
+  useEffect(() => {
+    if (pageError && errorBannerRef.current) {
+      errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [pageError]);
 
   // ── Load import batches for the batch-picker in the Danger Zone ────────
   // MUST be defined before any early returns (Rules of Hooks)
@@ -935,13 +943,21 @@ export default function BulkImportPage() {
         ))}
       </div>
 
-      {/* Global error */}
+      {/* Global error — auto-scrolls into view on new errors */}
       {pageError && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{pageError}</AlertDescription>
-        </Alert>
+        <div ref={errorBannerRef}>
+          <Alert variant="destructive" className="border-2 border-red-600 relative">
+            <AlertTriangle className="h-5 w-5" />
+            <AlertTitle className="text-base font-bold">Import Error — Action Required</AlertTitle>
+            <AlertDescription className="mt-1 text-sm whitespace-pre-wrap">{pageError}</AlertDescription>
+            <button
+              onClick={() => setPageError(null)}
+              className="absolute top-2 right-3 text-red-600 hover:text-red-900 text-xs underline"
+            >
+              Dismiss
+            </button>
+          </Alert>
+        </div>
       )}
 
       {/* ── STEP 1: UPLOAD ────────────────────────────────────────────────── */}
@@ -1750,23 +1766,34 @@ export default function BulkImportPage() {
           {/* Result hero */}
           <Card className={cn(
             'border-2',
-            importResult.failed === 0 ? 'border-green-500/40' : 'border-yellow-500/40'
+            importResult.imported === 0 && importResult.updated === 0
+              ? 'border-red-500/60'
+              : importResult.failed === 0 ? 'border-green-500/40' : 'border-yellow-500/40'
           )}>
             <CardContent className="pt-8 pb-8 text-center">
-              {importResult.failed === 0 ? (
+              {importResult.imported === 0 && importResult.updated === 0 ? (
+                <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              ) : importResult.failed === 0 ? (
                 <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
               ) : (
                 <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
               )}
               <h2 className="text-2xl font-bold mb-2">
-                {importResult.imported === 0 && importResult.updated === 0 && 'No Changes Made'}
+                {importResult.imported === 0 && importResult.updated === 0 && (
+                  <span className="text-red-600">Nothing Was Saved to the Database</span>
+                )}
                 {importResult.imported > 0 && `${importResult.imported} New Transaction${importResult.imported !== 1 ? 's' : ''} Created`}
                 {importResult.imported > 0 && importResult.updated > 0 && ' · '}
                 {importResult.updated > 0 && `${importResult.updated} Existing Transaction${importResult.updated !== 1 ? 's' : ''} Updated`}
               </h2>
-              {importResult.failed > 0 && (
+              {importResult.imported === 0 && importResult.updated === 0 && importResult.failed > 0 && (
+                <p className="text-red-600 font-medium">
+                  All {importResult.failed} row{importResult.failed !== 1 ? 's' : ''} failed. See the error table below for details.
+                </p>
+              )}
+              {(importResult.imported > 0 || importResult.updated > 0) && importResult.failed > 0 && (
                 <p className="text-muted-foreground">
-                  {importResult.failed} row{importResult.failed !== 1 ? 's' : ''} failed and were skipped.
+                  {importResult.failed} row{importResult.failed !== 1 ? 's' : ''} failed and were skipped. See error table below.
                 </p>
               )}
               {importResult.failed === 0 && importResult.updated > 0 && importResult.imported === 0 && (

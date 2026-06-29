@@ -249,6 +249,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const rows: ImportRow[] = body.rows ?? [];
 
+    console.log(`[import] POST received — ${rows.length} rows from uid=${decoded.uid}`);
+
     if (!Array.isArray(rows) || rows.length === 0) {
       return jsonError(400, 'No rows provided');
     }
@@ -282,6 +284,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    console.log(`[import] Loading agent profiles and teams...`);
     // ── Load all agent profiles for name → id lookup ──────────────────────────
     const [profilesSnap, teamsSnap] = await Promise.all([
       adminDb.collection('agentProfiles').get(),
@@ -342,6 +345,7 @@ export async function POST(req: NextRequest) {
     const autoCreatedAgents: { name: string; agentId: string }[] = [];
     const fuzzyMatchedAgents: { row: number; csvName: string; matchedName: string; similarity: number }[] = [];
 
+    console.log(`[import] Loaded ${profilesSnap.size} agent profiles, ${teamsSnap.size} teams`);
     // ── Load existing transactions for duplicate detection ─────────────────────
     // Scope to the years present in this import batch to avoid a full collection
     // scan (which can time out on large collections).
@@ -355,10 +359,13 @@ export async function POST(req: NextRequest) {
     // If no dates found, fall back to current year
     if (importYears.size === 0) importYears.add(new Date().getFullYear());
 
+    console.log(`[import] Import years detected: ${[...importYears].join(', ')}`);
     // Query one year at a time and merge (Firestore doesn't support IN on arrays > 10)
     const existingTxList: ExistingTx[] = [];
     for (const yr of importYears) {
+      console.log(`[import] Loading existing transactions for year=${yr}...`);
       const snap = await adminDb.collection('transactions').where('year', '==', yr).get();
+      console.log(`[import] Found ${snap.size} existing transactions for year=${yr}`);
       for (const d of snap.docs) {
         const data = d.data();
         existingTxList.push({
@@ -375,6 +382,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    console.log(`[import] Total existing transactions loaded: ${existingTxList.length}`);
+    console.log(`[import] Starting row processing — ${rows.length} rows...`);
     // ── Process rows in Firestore batches (max 500 ops each) ─────────────────
     let batch = adminDb.batch();
     let batchCount = 0;
@@ -741,16 +750,23 @@ export async function POST(req: NextRequest) {
         }
 
         if (batchCount >= BATCH_LIMIT) {
+          console.log(`[import] Flushing batch at row ${rowNum}...`);
           await flushBatch();
         }
       } catch (err: any) {
+        console.error(`[import] Row ${rowNum} failed: ${err.message}`, { agentName: row.agentName, address: row.address, status: row.status });
         failed.push({ row: rowNum, error: err.message || String(err), data: row });
       }
     }
 
     // Flush remaining
+    console.log(`[import] Flushing final batch (${batchCount} ops)...`);
     await flushBatch();
 
+    console.log(`[import] DONE — imported=${imported.length}, updated=${updated.length}, failed=${failed.length}`);
+    if (failed.length > 0) {
+      console.error(`[import] Failed rows:`, failed.map(f => ({ row: f.row, error: f.error })));
+    }
     return NextResponse.json({
       ok: true,
       imported: imported.length,
