@@ -46,21 +46,32 @@ function toYearMonth(d: Date): string {
 
 /**
  * Determine the activation month for an agent.
- * Activation = earliest of:
- *   (a) month of their first closed deal (as agentId or coAgentId)
- *   (b) startDate + 3 calendar months (tenure-based activation)
+ *
+ * For NEW agents (gracePeriodEnabled = true):
+ *   Activation = earliest of:
+ *     (a) month of their first closed deal
+ *     (b) startDate + 3 calendar months (tenure-based grace period)
+ *
+ * For EXPERIENCED agents (gracePeriodEnabled = false):
+ *   Activation = earliest of:
+ *     (a) month of their first closed deal
+ *     (b) startDate itself (no grace delay — they are immediately active)
+ *
  * Returns YYYY-MM string, or null if agent has no startDate and no deals.
  */
 function getActivationMonth(
   startDate: string | null | undefined,
-  firstDealMonth: string | null
+  firstDealMonth: string | null,
+  gracePeriodEnabled: boolean = true
 ): string | null {
   let tenureActivation: string | null = null;
   if (startDate) {
     const sd = parseDate(startDate);
     if (sd) {
-      const tenureDate = addMonths(sd, 3);
-      tenureActivation = toYearMonth(tenureDate);
+      // New agents: activate after 3-month grace period
+      // Experienced agents: activate immediately from startDate
+      const activationDate = gracePeriodEnabled ? addMonths(sd, 3) : sd;
+      tenureActivation = toYearMonth(activationDate);
     }
   }
   if (!firstDealMonth && !tenureActivation) return null;
@@ -228,8 +239,10 @@ export async function GET(req: NextRequest) {
       const startDate = a.startDate || null;
       const endDate = a.endDate || null;
       const profileStatus = String(a.status || a.agentStatus || '').toLowerCase();
+      // gracePeriodEnabled: true = new agent (3-month grace), false = experienced transfer (no grace)
+      const gracePeriodEnabled: boolean = a.gracePeriodEnabled !== false; // default true for safety
       const firstDeal = firstDealMap.get(agentId) || null;
-      const activationMonth = getActivationMonth(startDate, firstDeal);
+      const activationMonth = getActivationMonth(startDate, firstDeal, gracePeriodEnabled);
 
       let endMonth: string | null = null;
       let hasExplicitEndDate = false;
@@ -249,9 +262,11 @@ export async function GET(req: NextRequest) {
         endMonth = toYearMonth(new Date());
       }
 
-      // Grace end month: startDate + 3 months
+      // Grace end month: startDate + 3 months (only for new agents with grace period enabled).
+      // Experienced agents (gracePeriodEnabled = false) have no grace period — they are
+      // immediately active and counted in the established agent pool from day 1.
       let graceEndMonth: string | null = null;
-      if (startDate) {
+      if (gracePeriodEnabled && startDate) {
         const sd = parseDate(startDate);
         if (sd) graceEndMonth = toYearMonth(addMonths(sd, 3));
       }
