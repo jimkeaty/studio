@@ -163,7 +163,7 @@ function txToRow(id: string, t: any): string {
     t.finalLoanCommitmentDeadline,
     t.year,
     toNum(t.listPrice),
-    toNum(t.salePrice),
+    toNum(t.salePrice || t.dealValue),  // match UI: fall back to dealValue when salePrice is absent
     toNum(t.dealValue),
     toNum(t.commissionPercent),
     toNum(t.splitSnapshot?.grossCommission ?? t.commission),
