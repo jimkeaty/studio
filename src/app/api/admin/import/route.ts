@@ -233,6 +233,7 @@ export interface ImportRow {
   expenseCredits: string;
   mortgageCompany: string;
   titleCompany: string;
+  notes: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -559,6 +560,7 @@ export async function POST(req: NextRequest) {
         const coAgent3Pct = toNum(row.coAgent3Pct);
         const coAgent3Gci = toNum(row.coAgent3Gci);
         const expenseCredits = toNum(row.expenseCredits);
+        const notes = toOptStr(row.notes);
 
         const year = toYearFromDates(closedDate, contractDate, listingDate);
 
@@ -667,6 +669,9 @@ export async function POST(req: NextRequest) {
           mortgageCompany,
           titleCompany,
 
+          // Notes
+          ...(notes ? { notes } : {}),
+
           // Snapshots
           splitSnapshot,
           creditSnapshot,
@@ -710,6 +715,7 @@ export async function POST(req: NextRequest) {
             updatePayload.creditSnapshot = txDoc.creditSnapshot;
             updatePayload.brokerProfit = companyRetained;
           }
+          if (notes) updatePayload.notes = notes;
           const existingRef = adminDb.collection('transactions').doc(bestDup.tx.id);
           batch.update(existingRef, updatePayload);
           updated.push(bestDup.tx.id);

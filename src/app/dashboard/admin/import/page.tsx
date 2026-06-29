@@ -82,6 +82,7 @@ const CSV_HEADERS = [
   'Expense Credits',
   'Mortgage Company',
   'Title Company',
+  'Notes',
 ] as const;
 
 /** Normalize a header: lowercase, collapse whitespace, trim */
@@ -225,6 +226,16 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   'team': 'team',
   'team name': 'team',
   'agent team': 'team',
+
+  // Notes
+  'notes': 'notes',
+  'note': 'notes',
+  'comments': 'notes',
+  'comment': 'notes',
+  'additional comments': 'notes',
+  'additional notes': 'notes',
+  'internal notes': 'notes',
+  'memo': 'notes',
 };
 
 // Required columns — we check for these OR their aliases
@@ -416,6 +427,7 @@ const COLUMN_GUIDES: { header: string; hint: string; required?: boolean }[] = [
   { header: 'Expense Credits', hint: 'Credits paid to save a deal (informational, not deducted from calculations)' },
   { header: 'Mortgage Company', hint: 'Lender name (optional)' },
   { header: 'Title Company', hint: 'Title/escrow company (optional)' },
+  { header: 'Notes', hint: 'Internal notes or comments about this transaction (optional)' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1120,6 +1132,7 @@ export default function BulkImportPage() {
                               <option value="expenseCredits">Expense Credits</option>
                               <option value="mortgageCompany">Mortgage Company</option>
                               <option value="titleCompany">Title Company</option>
+                              <option value="notes">Notes / Comments</option>
                             </select>
                           </TableCell>
                           <TableCell className="text-center">
