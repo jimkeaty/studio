@@ -32,25 +32,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, linked: false, role: alreadyLinked.docs[0].data().role });
     }
 
-    // Look for a staffUsers record matching this email with no UID linked yet
-    const byEmail = await adminDb
+    // Look for a staffUsers record matching this email (exact lowercase match first)
+    let matchSnap = await adminDb
       .collection('staffUsers')
       .where('email', '==', email.toLowerCase())
       .where('status', '==', 'active')
       .limit(1)
       .get();
 
-    if (byEmail.empty) {
+    // Fallback: case-insensitive scan — handles emails stored with mixed case
+    // e.g. staffUsers record has "Anna@keatyrealestate.com" but Firebase token
+    // has "anna@keatyrealestate.com"
+    if (matchSnap.empty) {
+      const allActive = await adminDb
+        .collection('staffUsers')
+        .where('status', '==', 'active')
+        .get();
+      const matchDoc = allActive.docs.find(
+        (d) => (d.data().email || '').toLowerCase() === email.toLowerCase()
+      );
+      if (matchDoc) {
+        // Wrap in a compatible shape
+        matchSnap = { empty: false, docs: [matchDoc] } as any;
+        console.log(`[staff-self-link] Case-insensitive email match for uid=${uid} email=${email} → doc=${matchDoc.id}`);
+      }
+    }
+
+    if (matchSnap.empty) {
       // Not a staff user — normal agent login, no action needed
       return NextResponse.json({ ok: true, linked: false, role: null });
     }
 
-    const doc = byEmail.docs[0];
+    const doc = matchSnap.docs[0];
     const data = doc.data();
 
     // Only link if firebaseUid is not yet set (or is null/empty)
     if (data.firebaseUid && data.firebaseUid !== uid) {
       // Already linked to a different UID — don't overwrite
+      console.log(`[staff-self-link] uid=${uid} email=${email} already linked to different uid=${data.firebaseUid}`);
       return NextResponse.json({ ok: true, linked: false, role: data.role });
     }
 
@@ -60,6 +79,7 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     });
 
+    console.log(`[staff-self-link] Linked uid=${uid} email=${email} to staffUsers/${doc.id} role=${data.role}`);
     return NextResponse.json({ ok: true, linked: true, role: data.role });
   } catch (err: any) {
     console.error('[POST /api/admin/staff-self-link]', err);

@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Pencil, UserX, UserCheck, Mail, Shield, Building2, ClipboardList, AlertTriangle, CheckCircle2, Bell, MessageSquare, Smartphone } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Mail, Shield, Building2, ClipboardList, AlertTriangle, CheckCircle2, Bell, MessageSquare, Smartphone, Link2, Link2Off, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type StaffRole = 'office_admin' | 'tc_admin' | 'tc';
@@ -94,6 +94,7 @@ export default function StaffUsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<StaffUser | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [relinkingId, setRelinkingId] = useState<string | null>(null);
 
   const { isAdmin } = useIsAdminLike();
 
@@ -192,6 +193,33 @@ export default function StaffUsersPage() {
     }
   };
 
+  // Force-relink: looks up the Firebase Auth account by email and writes the
+  // firebaseUid to the staffUsers Firestore record so the role check works.
+  const handleForceRelink = async (staffUser: StaffUser) => {
+    if (!user) return;
+    setRelinkingId(staffUser.id);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/staff-users/${staffUser.id}/relink`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Failed to relink');
+      await fetchUsers();
+      showSuccess(
+        data.linked
+          ? `${staffUser.displayName} has been linked (UID: ${data.firebaseUid}). They can now log in with full access.`
+          : `${staffUser.displayName} is already linked correctly.`
+      );
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setRelinkingId(null);
+    }
+  };
+
   const openEdit = (staffUser: StaffUser) => {
     setEditingId(staffUser.id);
     setForm({
@@ -213,6 +241,9 @@ export default function StaffUsersPage() {
   const setNotifPref = (key: keyof NotifPrefs, val: boolean) => {
     setForm((f) => ({ ...f, notificationPrefs: { ...f.notificationPrefs, [key]: val } }));
   };
+
+  // Count unlinked active staff
+  const unlinkedCount = users.filter((u) => u.status === 'active' && !u.firebaseUid).length;
 
   if (!isAdmin) {
     return (
@@ -392,6 +423,24 @@ export default function StaffUsersPage() {
         </Alert>
       )}
 
+      {error && !dialogOpen && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Unlinked accounts warning */}
+      {unlinkedCount > 0 && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+          <Link2Off className="h-4 w-4" />
+          <AlertDescription>
+            <span className="font-semibold">{unlinkedCount} staff {unlinkedCount === 1 ? 'member has' : 'members have'} an unlinked account</span> — they may not have full admin access when logging in.
+            Click the <Link2 className="inline h-3 w-3" /> button next to their name to fix it.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Role legend */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {(Object.keys(ROLE_LABELS) as StaffRole[]).map((r) => {
@@ -447,10 +496,25 @@ export default function StaffUsersPage() {
                 {users.map((u) => {
                   const Icon = ROLE_ICONS[u.role];
                   const prefs = u.notificationPrefs ?? defaultNotifPrefs();
+                  const isLinked = !!u.firebaseUid;
                   return (
                     <TableRow key={u.id} className={u.status === 'inactive' ? 'opacity-50' : ''}>
                       <TableCell className="font-medium">
-                        <div>{u.displayName}</div>
+                        <div className="flex items-center gap-1.5">
+                          {u.displayName}
+                          {/* UID link status indicator */}
+                          {u.status === 'active' && (
+                            isLinked ? (
+                              <span title={`Linked (UID: ${u.firebaseUid})`}>
+                                <Link2 className="h-3 w-3 text-green-500" />
+                              </span>
+                            ) : (
+                              <span title="Not linked — click the link button to fix">
+                                <Link2Off className="h-3 w-3 text-amber-500" />
+                              </span>
+                            )
+                          )}
+                        </div>
                         {u.phone && <div className="text-xs text-muted-foreground">{u.phone}</div>}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
@@ -494,6 +558,23 @@ export default function StaffUsersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {/* Force re-link button — shown for active unlinked users */}
+                          {u.status === 'active' && !isLinked && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700"
+                              title="Fix login access — link Firebase account"
+                              onClick={() => handleForceRelink(u)}
+                              disabled={relinkingId === u.id}
+                            >
+                              {relinkingId === u.id ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Link2 className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" onClick={() => openEdit(u)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
