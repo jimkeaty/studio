@@ -310,7 +310,7 @@ function CurrencyInput({
 const schema = z.object({
   // Agent
   agentId: z.string().min(1, 'Agent is required'),
-  agentDisplayName: z.string().min(1),
+  agentDisplayName: z.string().optional(),
 
   // Status
   status: z.enum(['active', 'pending', 'closed', 'cancelled', 'temp_off_market'], { required_error: 'Please select a status to continue' }),
@@ -874,6 +874,7 @@ export default function AddTransactionPage() {
       contractDate: '',
       inspectionTypes: [],
       sellerPayingListingAgentUnknown: false,
+      tcWorking: 'yes',
       hasCoAgent: false,
       coAgentId: '',
       coAgentDisplayName: '',
@@ -1362,6 +1363,7 @@ export default function AddTransactionPage() {
                 contractDate: '',
                 inspectionTypes: [],
                 sellerPayingListingAgentUnknown: false,
+                tcWorking: 'yes',
               });
             }}>
               Add Another Deal
@@ -1691,7 +1693,16 @@ export default function AddTransactionPage() {
       )}
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
+          // Surface the first validation error as a toast so the user knows what to fix
+          const firstError = Object.values(errors)[0];
+          const message = firstError?.message || 'Please fill in all required fields before submitting.';
+          toast({ title: 'Cannot save — required field missing', description: String(message), variant: 'destructive' });
+          // Scroll to the first field with an error
+          const firstKey = Object.keys(errors)[0];
+          const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        })} className="space-y-6">
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 1 — PROPERTY / TRANSACTION DETAILS
