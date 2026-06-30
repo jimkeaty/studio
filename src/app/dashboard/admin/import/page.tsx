@@ -145,8 +145,10 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   'list price- buyer rep price': 'listPrice',
   'list price-buyer rep price': 'listPrice',
   'list price / buyer rep price': 'listPrice',
+  'list price/buyer rep price': 'listPrice',
   'list price': 'listPrice',
   'buyer rep price': 'listPrice',
+  'listing price': 'listPrice',
   'sale price': 'salePrice',
   'sales price': 'salePrice',
   'commission %': 'commissionPct',
@@ -174,8 +176,10 @@ const HEADER_TO_KEY_NORMALIZED: Record<string, string> = {
   'agent dollar': 'agentDollar',
 
   // Team members
-  'team member 1': 'teamMember1',
-  'team member1': 'teamMember1',
+  // NOTE: In the office master format, 'Team Member 1' contains free-text notes/co-agent names.
+  // Per spec, map it directly to notes rather than trying to resolve it as an agent.
+  'team member 1': 'notes',
+  'team member1': 'notes',
   '% to member1': 'teamMember1Pct',
   '% to member 1': 'teamMember1Pct',
   'member gci 1': 'teamMember1Gci',
@@ -1172,7 +1176,6 @@ export default function BulkImportPage() {
                   { key: 'agentName', label: 'Agent Name' },
                   { key: 'address', label: 'Address' },
                   { key: 'status', label: 'Status' },
-                  { key: 'closedDate', label: 'Closed Date' },
                 ].filter((f) => !mappedValues.has(f.key));
                 if (missing.length === 0) return null;
                 return (

@@ -82,19 +82,24 @@ function normalizeClosingType(v: string): string | null {
   if (s === 'buyer' || s === 'buy') return 'buyer';
   if (s === 'listing' || s === 'seller' || s === 'list') return 'listing';
   if (s === 'referral' || s === 'ref') return 'referral';
+  if (s === 'dual' || s === 'dual agency') return 'dual';
   if (s === 'lease' || s === 'rental') return 'lease';
   return null;
 }
 
 function normalizeStatus(v: string): string | null {
   const s = v.toLowerCase().trim();
-  if (s === 'closed' || s === 'close' || s === 'sold') return 'closed';
-  if (s === 'pending') return 'pending';
-  if (s === 'active') return 'active';
-  if (s === 'under contract' || s === 'under_contract' || s === 'contract') return 'under_contract';
+  if (s === 'closed' || s === 'close' || s === 'sold' || s === 'c' || s === 'cls') return 'closed';
+  if (s === 'pending' || s === 'pend' || s === 'p') return 'pending';
+  if (s === 'active' || s === 'a') return 'active';
+  if (s === 'under contract' || s === 'under_contract' || s === 'contract' || s === 'uc') return 'pending';
   if (s === 'canceled' || s === 'cancelled' || s === 'cancel') return 'cancelled';
-  if (s === 'expired' || s === 'expire') return 'expired';
+  if (s === 'expired' || s === 'expire' || s === 'exp') return 'expired';
   if (s === 'withdrawn' || s === 'withdrawn/canceled') return 'cancelled';
+  if (s === 'temp off market' || s === 'temp_off_market' || s === 'tom') return 'temp_off_market';
+  // Fallback: if the value is non-empty but unrecognized, default to 'closed' for historical imports
+  // rather than silently failing the entire row
+  if (s) return 'closed';
   return null;
 }
 
@@ -108,7 +113,7 @@ function normalizeDealType(v: string): string | null {
   if (s.includes('commercial') && s.includes('lease')) return 'commercial_lease';
   if (s.includes('commercial') && s.includes('sale')) return 'commercial_sale';
   if (s.includes('commercial') || s === 'comm') return 'commercial_sale';
-  if (s === 'land') return 'land';
+  if (s === 'land' || s.includes('land')) return 'land';
   if (s.includes('rental') || s.includes('rent') || s.includes('lease')) return 'rental';
   return null;
 }
@@ -383,6 +388,11 @@ export async function POST(req: NextRequest) {
     }
 
     console.log(`[import] Total existing transactions loaded: ${existingTxList.length}`);
+    // Log first row keys to help diagnose column mapping issues
+    if (rows.length > 0) {
+      console.log(`[import] First row keys: ${Object.keys(rows[0]).join(', ')}`);
+      console.log(`[import] First row sample: agentName=${rows[0].agentName ?? '(missing)'}, address=${rows[0].address ?? '(missing)'}, status=${rows[0].status ?? '(missing)'}, closedDate=${rows[0].closedDate ?? '(missing)'}`);
+    }
     console.log(`[import] Starting row processing — ${rows.length} rows...`);
     // ── Process rows in Firestore batches (max 500 ops each) ─────────────────
     let batch = adminDb.batch();
@@ -678,7 +688,7 @@ export async function POST(req: NextRequest) {
           mortgageCompany,
           titleCompany,
 
-          // Notes
+          // Notes (includes Team Member 1 content from office master format)
           ...(notes ? { notes } : {}),
 
           // Snapshots
