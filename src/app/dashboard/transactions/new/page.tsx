@@ -851,7 +851,7 @@ export default function AddTransactionPage() {
   const [signOrderOpen, setSignOrderOpen] = useState(false);
   const [showingTimeOpen, setShowingTimeOpen] = useState(false);
 
-  const { isAdmin: isAdminUser } = useIsAdminLike();
+  const { isAdmin: isAdminUser, loading: adminLoading } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
   // TC users (role === 'tc') get the same full commission view as admins
   const { role: staffRole } = useIsStaff();
@@ -1036,17 +1036,23 @@ export default function AddTransactionPage() {
     load();
   }, [user, isAdmin]);
 
-  // Pre-fill agent
+  // Pre-fill agent — wait for admin check to resolve before pre-filling.
+  // Without this guard, staff/admin users (e.g. office_admin) would get their
+  // Firebase UID pre-filled as agentId during the loading window when isAdmin
+  // is temporarily false, poisoning the form before the agent picker appears.
   useEffect(() => {
     if (!user) return;
+    if (adminLoading) return; // Wait until we know if this user is admin or not
     if (isImpersonating && effectiveUid && effectiveName) {
       form.setValue('agentId', effectiveUid);
       form.setValue('agentDisplayName', effectiveName);
     } else if (!isAdmin) {
+      // Only pre-fill with user.uid for confirmed non-admin users (regular agents)
       form.setValue('agentId', user.uid);
       form.setValue('agentDisplayName', user.displayName || user.email || user.uid);
     }
-  }, [user, isAdmin, isImpersonating, effectiveUid, effectiveName]);
+    // For admins: leave agentId empty — they must select from the agent picker
+  }, [user, isAdmin, adminLoading, isImpersonating, effectiveUid, effectiveName]);
 
   // Fetch agent commission structure
   const watchedAgentId = form.watch('agentId');
