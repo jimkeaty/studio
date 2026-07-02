@@ -21,6 +21,13 @@ const DEFAULT_PREFS = {
   events: {},
 };
 
+const DEFAULT_TV_PREFS = {
+  buyerNeeds:    { in_app: true, email: false, sms: false },
+  comingSoon:    { in_app: true, email: false, sms: false },
+  openHouseOpps: { in_app: true, email: false, sms: false },
+  agentHelp:     { in_app: true, email: false, sms: false },
+};
+
 export async function GET(req: NextRequest) {
   try {
     const token = extractBearer(req);
@@ -33,7 +40,22 @@ export async function GET(req: NextRequest) {
     const prefs = userData.notificationPrefs ?? DEFAULT_PREFS;
     const phone = userData.phone || '';
 
-    return NextResponse.json({ ok: true, prefs, phone });
+    // Also load tvNotificationPrefs from agentProfiles (stored there for the broadcast utility)
+    let tvNotificationPrefs = userData.tvNotificationPrefs ?? null;
+    if (!tvNotificationPrefs) {
+      // Try to find by firebaseUid in agentProfiles
+      try {
+        const profileSnap = await adminDb.collection('agentProfiles')
+          .where('firebaseUid', '==', uid)
+          .limit(1)
+          .get();
+        if (!profileSnap.empty) {
+          tvNotificationPrefs = profileSnap.docs[0].data().tvNotificationPrefs ?? null;
+        }
+      } catch { /* ignore */ }
+    }
+
+    return NextResponse.json({ ok: true, prefs, phone, tvNotificationPrefs });
   } catch (err: any) {
     return jsonError(500, err.message || 'Internal error');
   }
@@ -47,7 +69,7 @@ export async function PATCH(req: NextRequest) {
     const uid = decoded.uid;
 
     const body = await req.json();
-    const { prefs, phone } = body;
+    const { prefs, phone, tvNotificationPrefs } = body;
     if (!prefs || typeof prefs !== 'object') {
       return jsonError(400, 'Invalid preferences payload');
     }
@@ -60,7 +82,7 @@ export async function PATCH(req: NextRequest) {
     }
     delete normalisedPrefs.inApp; // remove legacy key
 
-    // Build update payload — always save prefs, optionally save phone
+    // Build update payload — always save prefs, optionally save phone and tvPrefs
     const update: Record<string, any> = {
       notificationPrefs: normalisedPrefs,
       updatedAt: new Date().toISOString(),
@@ -68,9 +90,35 @@ export async function PATCH(req: NextRequest) {
     if (typeof phone === 'string') {
       update.phone = phone.trim();
     }
+    if (tvNotificationPrefs && typeof tvNotificationPrefs === 'object') {
+      update.tvNotificationPrefs = tvNotificationPrefs;
+    }
 
     // Merge into the users/{uid} document
     await adminDb.collection('users').doc(uid).set(update, { merge: true });
+
+    // Also save tvNotificationPrefs to agentProfiles so broadcastTvPost can read it
+    if (tvNotificationPrefs && typeof tvNotificationPrefs === 'object') {
+      try {
+        // Try by firebaseUid field
+        const profileSnap = await adminDb.collection('agentProfiles')
+          .where('firebaseUid', '==', uid)
+          .limit(1)
+          .get();
+        if (!profileSnap.empty) {
+          await profileSnap.docs[0].ref.set({ tvNotificationPrefs }, { merge: true });
+        } else {
+          // Try by doc ID
+          const byId = await adminDb.collection('agentProfiles').doc(uid).get();
+          if (byId.exists) {
+            await byId.ref.set({ tvNotificationPrefs }, { merge: true });
+          }
+        }
+      } catch (e) {
+        console.error('[preferences] Failed to sync tvNotificationPrefs to agentProfiles:', e);
+        // Non-fatal — the users doc was already updated
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {

@@ -37,6 +37,36 @@ type NotificationType =
   | 'tx_new_agent'
   | 'system';
 
+// ─── TV Board post types ──────────────────────────────────────────────────────
+type TvPostType = 'buyerNeeds' | 'comingSoon' | 'openHouseOpps' | 'agentHelp';
+
+interface TvChannelPrefs {
+  in_app: boolean;
+  email: boolean;
+  sms: boolean;
+}
+
+interface TvNotificationPrefs {
+  buyerNeeds:     TvChannelPrefs;
+  comingSoon:     TvChannelPrefs;
+  openHouseOpps:  TvChannelPrefs;
+  agentHelp:      TvChannelPrefs;
+}
+
+const DEFAULT_TV_PREFS: TvNotificationPrefs = {
+  buyerNeeds:    { in_app: true, email: false, sms: false },
+  comingSoon:    { in_app: true, email: false, sms: false },
+  openHouseOpps: { in_app: true, email: false, sms: false },
+  agentHelp:     { in_app: true, email: false, sms: false },
+};
+
+const TV_POST_TYPES: { key: TvPostType; label: string; emoji: string; description: string }[] = [
+  { key: 'buyerNeeds',    label: 'Buyer Needs',              emoji: '🔍', description: 'When an agent posts a new buyer need on the office board' },
+  { key: 'comingSoon',   label: 'Coming Soon Listings',      emoji: '⏰', description: 'When an agent posts a new coming soon listing' },
+  { key: 'openHouseOpps', label: 'Open House Opportunities', emoji: '🏠', description: 'When an agent posts a new open house opportunity' },
+  { key: 'agentHelp',    label: 'Agent Help Requests',       emoji: '🤝', description: 'When an agent needs help with a showing, inspection, or closing' },
+];
+
 type ChannelKey = 'in_app' | 'push' | 'email' | 'sms';
 
 interface EventPrefs {
@@ -178,6 +208,9 @@ export default function NotificationSettingsPage() {
   const { permission, requestPermission, isRegistering } = usePushNotifications();
 
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
+  const [tvPrefs, setTvPrefs] = useState<TvNotificationPrefs>(DEFAULT_TV_PREFS);
+  const [savingTv, setSavingTv] = useState(false);
+  const [tvSaveStatus, setTvSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -205,6 +238,9 @@ export default function NotificationSettingsPage() {
           const savedPhone = data.phone || '';
           setPhone(savedPhone);
           setPhoneInput(savedPhone);
+          if (data.tvNotificationPrefs) {
+            setTvPrefs({ ...DEFAULT_TV_PREFS, ...data.tvNotificationPrefs });
+          }
         }
       } catch {
         // silently fall back to defaults
@@ -246,6 +282,39 @@ export default function NotificationSettingsPage() {
       setSaving(false);
     }
   }, [user, prefs]);
+
+  // ── Save TV board preferences ───────────────────────────────────────────────
+  const handleSaveTvPrefs = useCallback(async () => {
+    if (!user) return;
+    setSavingTv(true);
+    setTvSaveStatus('idle');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/notifications/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ prefs, tvNotificationPrefs: tvPrefs }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTvSaveStatus('success');
+        setTimeout(() => setTvSaveStatus('idle'), 3000);
+      } else {
+        setTvSaveStatus('error');
+      }
+    } catch {
+      setTvSaveStatus('error');
+    } finally {
+      setSavingTv(false);
+    }
+  }, [user, prefs, tvPrefs]);
+
+  const toggleTvPref = (postType: TvPostType, channel: keyof TvChannelPrefs) => {
+    setTvPrefs(prev => ({
+      ...prev,
+      [postType]: { ...prev[postType], [channel]: !prev[postType][channel] },
+    }));
+  };
 
   // ── Save phone number ───────────────────────────────────────────────────────
   const handleSavePhone = useCallback(async () => {
@@ -543,6 +612,74 @@ export default function NotificationSettingsPage() {
           </CardContent>
         </Card>
       ))}
+
+      {/* ── TV Board Notifications ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Monitor className="h-4 w-4" />
+            Office Board (TV Mode) Notifications
+          </CardTitle>
+          <CardDescription>
+            Choose which office board post types you want to be notified about when agents post new items.
+            In-app is always on by default. Enable email or SMS to receive notifications outside the dashboard.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-0 divide-y">
+          {TV_POST_TYPES.map((pt, idx) => (
+            <div key={pt.key} className={`py-4 ${idx === 0 ? 'pt-0' : ''}`}>
+              <div className="mb-3">
+                <p className="text-sm font-medium">{pt.emoji} {pt.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{pt.description}</p>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                {(['in_app', 'email', 'sms'] as const).map((ch) => {
+                  const icons = { in_app: Monitor, email: Mail, sms: MessageSquare };
+                  const labels = { in_app: 'In-App', email: 'Email', sms: 'SMS' };
+                  const Icon = icons[ch];
+                  const disabled = ch === 'sms' && !phone;
+                  return (
+                    <div key={ch} className="flex items-center gap-2">
+                      <Switch
+                        id={`tv-${pt.key}-${ch}`}
+                        checked={tvPrefs[pt.key][ch]}
+                        onCheckedChange={() => toggleTvPref(pt.key, ch)}
+                        disabled={disabled}
+                      />
+                      <Label
+                        htmlFor={`tv-${pt.key}-${ch}`}
+                        className={`text-xs cursor-pointer ${disabled ? 'text-muted-foreground/50' : ''}`}
+                      >
+                        <Icon className="h-3 w-3 inline mr-1" />
+                        {labels[ch]}
+                        {ch === 'sms' && !phone && (
+                          <span className="ml-1 text-amber-500">(no number)</span>
+                        )}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+        <div className="px-6 pb-4">
+          {tvSaveStatus === 'success' && (
+            <p className="text-xs text-emerald-600 flex items-center gap-1 mb-2">
+              <CheckCircle2 className="h-3.5 w-3.5" /> TV board preferences saved.
+            </p>
+          )}
+          {tvSaveStatus === 'error' && (
+            <p className="text-xs text-red-600 flex items-center gap-1 mb-2">
+              <AlertCircle className="h-3.5 w-3.5" /> Failed to save. Please try again.
+            </p>
+          )}
+          <Button size="sm" onClick={handleSaveTvPrefs} disabled={savingTv}>
+            {savingTv ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+            Save Board Preferences
+          </Button>
+        </div>
+      </Card>
 
       {/* Bottom save button */}
       <div className="flex justify-end pb-4">

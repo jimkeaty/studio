@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { broadcastTvPost } from '@/lib/notifications/broadcastTvPost';
 
 function bearer(req: NextRequest) {
   const h = req.headers.get('authorization') || '';
@@ -79,6 +80,23 @@ export async function POST(req: NextRequest) {
     };
 
     const ref = await adminDb.collection(COL).add(doc);
+
+    // Broadcast to agents who opted in to Buyer Need notifications (fire-and-forget)
+    const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+    const pricePart = (doc.minPrice || doc.maxPrice)
+      ? ` $${doc.minPrice?.toLocaleString() ?? '?'} - $${doc.maxPrice?.toLocaleString() ?? '?'}`
+      : '';
+    const bedBath = `${doc.beds ? doc.beds + 'bd ' : ''}${doc.baths ? doc.baths + 'ba' : ''}`.trim();
+    broadcastTvPost({
+      postType: 'buyerNeeds',
+      postId: ref.id,
+      label: 'Buyer Need',
+      emoji: '\u{1F50D}',
+      description: `${doc.area}${bedBath ? ' - ' + bedBath : ''}${pricePart}`,
+      agentName: doc.agentName,
+      dashboardUrl: `${appBaseUrl}/dashboard/tv-mode?tab=buyer-needs`,
+    }).catch(e => console.error('[buyer-needs] broadcast failed:', e));
+
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });

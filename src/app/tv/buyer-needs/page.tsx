@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Phone, MapPin, DollarSign, Bed, Bath, Droplets, Zap, Building2 } from 'lucide-react';
+import { PostComments } from '@/components/community/PostComments';
 
 type BuyerNeed = {
   id: string;
@@ -189,6 +190,15 @@ export default function BuyerNeedsTvPage() {
                       <Phone className="h-3 w-3" />{item.agentPhone}
                     </div>
                   </div>
+                </div>
+                {/* Comments — read-only on TV */}
+                <div className="[&_*]:text-gray-300 [&_.bg-muted\/40]:bg-white/5 [&_.border-t]:border-white/10">
+                  <PostComments
+                    collection="buyerNeeds"
+                    postId={item.id}
+                    readOnly
+                    compact
+                  />
                 </div>
               </div>
             ))}
