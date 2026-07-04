@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
       acreage: acreage ? Number(acreage) : null,
       pool: pool === true || pool === 'true',
       generator: generator === true || generator === 'true',
+      listedOnMls: body.listedOnMls === true || body.listedOnMls === 'true',
       stories: stories || null,
       otherAmenities: otherAmenities?.trim() || '',
       notes: notes?.trim() || '',

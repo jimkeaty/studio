@@ -139,6 +139,7 @@ type BoardItem = {
   // Coming soon
   expectedDate?: string;
   acreage?: number;
+  listedOnMls?: boolean;
   // Identity
   createdByUid?: string;
 };
@@ -349,12 +350,13 @@ export default function TvModePage() {
   const openEditDialog = (item: BoardItem) => {
     setEditingItem(item);
     // Pre-fill the edit form with existing values
+    // listedOnMls is included for coming-soon items
     const prefill: Record<string, string | boolean | number> = {};
     const fields: (keyof BoardItem)[] = [
       'agentName', 'agentPhone', 'address', 'price', 'beds', 'baths', 'sqft',
       'notes', 'openHouseDate', 'openHouseTime', 'openHouseEndTime',
       'area', 'minPrice', 'maxPrice', 'minAcreage', 'maxAcreage', 'pool',
-      'generator', 'stories', 'otherAmenities', 'expectedDate', 'acreage',
+      'generator', 'stories', 'otherAmenities', 'expectedDate', 'acreage', 'listedOnMls',
     ];
     fields.forEach((k) => {
       const v = item[k];
@@ -869,6 +871,11 @@ export default function TvModePage() {
                           {item.baths && <span>{item.baths} ba</span>}
                           {item.openHouseDate && <span>📅 {item.openHouseDate}{item.openHouseTime ? ` at ${item.openHouseTime}` : ''}</span>}
                           {item.expectedDate && <span>📅 Expected {item.expectedDate}</span>}
+                          {tab === 'coming-soon' && (
+                            <span className={item.listedOnMls ? 'bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full font-medium' : 'bg-gray-700/40 text-gray-400 px-2 py-0.5 rounded-full font-medium'}>
+                              {item.listedOnMls ? '✅ Listed on Coming Soon MLS' : '⏳ Not yet on MLS'}
+                            </span>
+                          )}
                           {tab === 'open-houses' && item.compensation && item.compensation > 0 && (
                             <span className="bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full font-medium">
                               💵 ${item.compensation} offered
@@ -1222,6 +1229,10 @@ export default function TvModePage() {
                     <Switch checked={Boolean(form.generator)} onCheckedChange={(v) => setForm((f) => ({ ...f, generator: v }))} />
                     <span className="text-gray-300 text-sm">Generator</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Switch checked={Boolean(form.listedOnMls)} onCheckedChange={(v) => setForm((f) => ({ ...f, listedOnMls: v }))} />
+                    <span className="text-gray-300 text-sm">Listed on Coming Soon MLS</span>
+                  </label>
                 </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Details / Notes</Label>
@@ -1423,6 +1434,10 @@ export default function TvModePage() {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Switch checked={Boolean(form.generator)} onCheckedChange={(v) => setForm((f) => ({ ...f, generator: v }))} />
                     <span className="text-gray-300 text-sm">Generator</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Switch checked={Boolean(form.listedOnMls)} onCheckedChange={(v) => setForm((f) => ({ ...f, listedOnMls: v }))} />
+                    <span className="text-gray-300 text-sm">Listed on Coming Soon MLS</span>
                   </label>
                 </div>
                 <div>

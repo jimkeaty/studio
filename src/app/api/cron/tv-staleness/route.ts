@@ -30,14 +30,19 @@ import { FieldValue } from 'firebase-admin/firestore';
 // Trigger via: POST /api/cron/tv-staleness?mode=monday  or  ?mode=wednesday
 // Protected by x-cron-secret header
 
-const COLLECTIONS = [
-  { name: 'openHouseListings',  label: 'Open House Opportunity', emoji: '🏠' },
-  { name: 'buyerNeeds',         label: 'Buyer Need',             emoji: '🔍' },
-  { name: 'comingSoonListings', label: 'Coming Soon Listing',     emoji: '⏰' },
-  { name: 'agentHelpRequests',  label: 'Agent Help Request',     emoji: '🤝' },
+// All 4 collections receive the Monday renewal prompt
+const ALL_COLLECTIONS = [
+  { name: 'openHouseListings',  label: 'Open House Opportunity', emoji: '🏠', archive: false },
+  { name: 'buyerNeeds',         label: 'Buyer Need',             emoji: '🔍', archive: true  },
+  { name: 'comingSoonListings', label: 'Coming Soon Listing',     emoji: '⏰', archive: true  },
+  { name: 'agentHelpRequests',  label: 'Agent Help Request',     emoji: '🤝', archive: false },
 ] as const;
 
+// Alias for the Monday prompt loop (all 4)
+const COLLECTIONS = ALL_COLLECTIONS;
+
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+const ONE_EIGHTY_DAYS_MS = 180 * 24 * 60 * 60 * 1000;
 
 function sectionSlug(colName: string): string {
   if (colName === 'openHouseListings')  return 'open-houses';
@@ -233,10 +238,13 @@ async function runMondayPrompts(appBaseUrl: string) {
 
 // ── Wednesday mode: archive posts that didn't respond to Monday prompt ─────────
 async function runWednesdayArchive(appBaseUrl: string) {
-  const results: Record<string, { archived: number }> = {};
+  const results: Record<string, { archived: number; purged: number }> = {};
+  const now = new Date();
+  const oneEightyDaysAgo = new Date(now.getTime() - ONE_EIGHTY_DAYS_MS);
 
-  for (const col of COLLECTIONS) {
+  for (const col of ALL_COLLECTIONS) {
     let archived = 0;
+    let purged = 0;
 
     const snapshot = await adminDb
       .collection(col.name)
@@ -254,26 +262,35 @@ async function runWednesdayArchive(appBaseUrl: string) {
       const lastConfirmed: Date = data.lastConfirmedAt?.toDate?.() ?? new Date(0);
       if (lastConfirmed > promptSentAt) continue;
 
-      // No response — archive
+      // No response — archive (buyer needs + coming soon) or just remove (open house + agent help)
       archived++;
-      await doc.ref.update({
-        status: 'archived',
-        archivedAt: FieldValue.serverTimestamp(),
-        archivedReason: 'no_renewal_response',
-        renewalPromptSentAt: FieldValue.delete(),
-      });
+      if (col.archive) {
+        await doc.ref.update({
+          status: 'archived',
+          archivedAt: FieldValue.serverTimestamp(),
+          archivedReason: 'no_renewal_response',
+          renewalPromptSentAt: FieldValue.delete(),
+        });
+      } else {
+        await doc.ref.update({
+          status: 'removed',
+          removedAt: FieldValue.serverTimestamp(),
+          removedReason: 'no_renewal_response',
+          renewalPromptSentAt: FieldValue.delete(),
+        });
+      }
 
       const itemDescription = data.address || data.area ||
         `${data.beds ? data.beds + 'bd ' : ''}${data.baths ? data.baths + 'ba' : ''}`.trim() ||
         col.label;
-      const readdUrl = `${appBaseUrl}/dashboard/tv-mode?tab=archived`;
+      const readdUrl = col.archive ? `${appBaseUrl}/dashboard/tv-mode?tab=archived` : `${appBaseUrl}/dashboard/tv-mode`;
 
       // In-app notification
       if (data.agentProfileId) {
         await sendInAppNotification(
           data.agentProfileId,
-          `${col.emoji} ${col.label} Archived`,
-          `Your ${col.label.toLowerCase()} "${itemDescription}" was archived because we didn't receive a response. You can re-add it from your Archived Posts.`
+          `${col.emoji} ${col.label} ${col.archive ? 'Archived' : 'Removed'}`,
+          `Your ${col.label.toLowerCase()} "${itemDescription}" was ${col.archive ? 'archived' : 'removed'} because we didn't receive a response.${col.archive ? ' You can re-add it from your Archived Posts.' : ''}`
         );
       }
 
@@ -292,14 +309,30 @@ async function runWednesdayArchive(appBaseUrl: string) {
       if (data.agentPhone) {
         await adminDb.collection('pendingSms').add({
           to: data.agentPhone,
-          body: `Smart Broker: Your ${col.label} "${itemDescription}" was archived (no response received). Re-add it here: ${readdUrl}`,
+          body: `Smart Broker: Your ${col.label} "${itemDescription}" was ${col.archive ? 'archived' : 'removed'} (no response received).${col.archive ? ` Re-add it here: ${readdUrl}` : ''}`,
           createdAt: FieldValue.serverTimestamp(),
           type: 'tv_archived',
         });
       }
     }
 
-    results[col.name] = { archived };
+    // ── 180-day purge: permanently delete archived records older than 180 days ──
+    if (col.archive) {
+      const oldArchived = await adminDb
+        .collection(col.name)
+        .where('status', '==', 'archived')
+        .get();
+      for (const doc of oldArchived.docs) {
+        const data = doc.data();
+        const archivedAt: Date = data.archivedAt?.toDate?.() ?? new Date(0);
+        if (archivedAt < oneEightyDaysAgo) {
+          await doc.ref.delete();
+          purged++;
+        }
+      }
+    }
+
+    results[col.name] = { archived, purged };
   }
 
   return results;

@@ -141,6 +141,7 @@ const agentMenuItems = [
   { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
   { href: '/dashboard/open-house', label: 'Submit Open House', icon: Home },
   { href: '/dashboard/training', label: 'Training & Help', icon: GraduationCap },
+  { href: '/dashboard/settings/notifications', label: 'My Preferences', icon: Bell },
 ];
 
 // Shown to all users — community & entertainment
