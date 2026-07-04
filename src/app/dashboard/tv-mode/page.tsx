@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/firebase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Tv, Home, Users, Clock, ExternalLink, Plus, Trash2, CheckCircle,
   AlertCircle, Settings, ChevronDown, ChevronUp, Phone, MapPin,
@@ -236,6 +236,31 @@ export default function TvModePage() {
 
   // Form state
   const [form, setForm] = useState<Record<string, string | boolean | number>>({});
+
+  // ── Pre-fill Add dialog from appointment shortcut URL params ──────────────
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const postType = searchParams.get('postType');
+    if (!postType) return;
+    const area = searchParams.get('area') || '';
+    const minPrice = searchParams.get('minPrice') || '';
+    const maxPrice = searchParams.get('maxPrice') || '';
+    const notes = searchParams.get('notes') || '';
+    if (postType === 'buyer-needs') {
+      setTab('buyer-needs');
+      setForm({ area, minPrice, maxPrice, notes });
+      setShowAddDialog(true);
+    } else if (postType === 'coming-soon') {
+      setTab('coming-soon');
+      setForm({ area, price: minPrice || maxPrice, notes });
+      setShowAddDialog(true);
+    }
+    // Clear URL params after reading so refreshing doesn’t re-open the dialog
+    const url = new URL(window.location.href);
+    ['postType', 'area', 'minPrice', 'maxPrice', 'notes'].forEach(p => url.searchParams.delete(p));
+    window.history.replaceState({}, '', url.toString());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Edit state
   const [editingItem, setEditingItem] = useState<BoardItem | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);

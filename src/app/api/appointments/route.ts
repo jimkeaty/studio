@@ -186,6 +186,41 @@ export async function POST(req: NextRequest) {
         return jsonError(403, 'Edits are locked after 45 days.', 'edit_window_expired');
     }
 
+    // ── 'both' category: create 2 separate appointments (buyer + seller) ──────
+    if (body.category === 'both') {
+      const ids: string[] = [];
+      for (const cat of ['buyer', 'seller'] as const) {
+        const dualData = {
+          agentId: uid,
+          createdByUid: callerUid,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          date: body.date,
+          contactName: body.contactName,
+          category: cat,
+          status: body.status ?? 'set',
+          pipelineStatus: body.pipelineStatus ?? 'active',
+          contactPhone: body.contactPhone ?? null,
+          contactEmail: body.contactEmail ?? null,
+          listingAddress: body.listingAddress ?? null,
+          priceRangeLow: body.priceRangeLow ? Number(body.priceRangeLow) : null,
+          priceRangeHigh: body.priceRangeHigh ? Number(body.priceRangeHigh) : null,
+          estimatedCommission: body.estimatedCommission ? Number(body.estimatedCommission) : null,
+          timing: body.timing ?? null,
+          dateSet: body.dateSet ?? null,
+          timeSet: body.timeSet ?? null,
+          source: body.source ?? 'manual',
+          notes: body.notes ?? null,
+          scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
+          heldAt: body.heldAt ? new Date(body.heldAt) : null,
+          dualAppointment: true,
+        };
+        const ref = await adminDb.collection('appointments').add(dualData);
+        ids.push(ref.id);
+      }
+      return NextResponse.json({ ok: true, ids, dual: true });
+    }
+
     const dataToSave = {
       agentId: uid,
       createdByUid: callerUid,
@@ -217,6 +252,8 @@ export async function POST(req: NextRequest) {
       notes: body.notes ?? null,
       scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
       heldAt: body.heldAt ? new Date(body.heldAt) : null,
+      // Link to the original appointment set (for held appointments)
+      linkedSetAppointmentId: body.linkedSetAppointmentId ?? null,
     };
 
     const docRef = await adminDb.collection('appointments').add(dataToSave);

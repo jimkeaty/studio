@@ -37,6 +37,30 @@ type NotificationType =
   | 'tx_new_agent'
   | 'system';
 
+// ─── Transaction notification prefs ─────────────────────────────────────────
+type TxUpdateGranularity = 'all' | 'significant' | 'none';
+
+interface TxNotificationPrefs {
+  // Agent: notified when TC/staff updates their transaction
+  agentOnTcUpdate: {
+    granularity: TxUpdateGranularity;
+    in_app: boolean;
+    email: boolean;
+    sms: boolean;
+  };
+  // TC: notified when agent edits a transaction they are working
+  tcOnAgentEdit: {
+    in_app: boolean;
+    email: boolean;
+    sms: boolean;
+  };
+}
+
+const DEFAULT_TX_PREFS: TxNotificationPrefs = {
+  agentOnTcUpdate: { granularity: 'significant', in_app: true, email: true, sms: false },
+  tcOnAgentEdit:   { in_app: true, email: true, sms: false },
+};
+
 // ─── TV Board post types ──────────────────────────────────────────────────────
 type TvPostType = 'buyerNeeds' | 'comingSoon' | 'openHouseOpps' | 'agentHelp';
 
@@ -209,6 +233,9 @@ export default function NotificationSettingsPage() {
 
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [tvPrefs, setTvPrefs] = useState<TvNotificationPrefs>(DEFAULT_TV_PREFS);
+  const [txPrefs, setTxPrefs] = useState<TxNotificationPrefs>(DEFAULT_TX_PREFS);
+  const [savingTx, setSavingTx] = useState(false);
+  const [txSaveStatus, setTxSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [savingTv, setSavingTv] = useState(false);
   const [tvSaveStatus, setTvSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [loadingPrefs, setLoadingPrefs] = useState(true);
@@ -240,6 +267,12 @@ export default function NotificationSettingsPage() {
           setPhoneInput(savedPhone);
           if (data.tvNotificationPrefs) {
             setTvPrefs({ ...DEFAULT_TV_PREFS, ...data.tvNotificationPrefs });
+          }
+          if (data.txNotificationPrefs) {
+            setTxPrefs({
+              agentOnTcUpdate: { ...DEFAULT_TX_PREFS.agentOnTcUpdate, ...data.txNotificationPrefs.agentOnTcUpdate },
+              tcOnAgentEdit:   { ...DEFAULT_TX_PREFS.tcOnAgentEdit,   ...data.txNotificationPrefs.tcOnAgentEdit },
+            });
           }
         }
       } catch {
@@ -282,6 +315,32 @@ export default function NotificationSettingsPage() {
       setSaving(false);
     }
   }, [user, prefs]);
+
+  // ── Save transaction notification preferences ─────────────────────────────
+  const handleSaveTxPrefs = useCallback(async () => {
+    if (!user) return;
+    setSavingTx(true);
+    setTxSaveStatus('idle');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/notifications/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ prefs, txNotificationPrefs: txPrefs }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTxSaveStatus('success');
+        setTimeout(() => setTxSaveStatus('idle'), 3000);
+      } else {
+        setTxSaveStatus('error');
+      }
+    } catch {
+      setTxSaveStatus('error');
+    } finally {
+      setSavingTx(false);
+    }
+  }, [user, prefs, txPrefs]);
 
   // ── Save TV board preferences ───────────────────────────────────────────────
   const handleSaveTvPrefs = useCallback(async () => {
@@ -612,6 +671,116 @@ export default function NotificationSettingsPage() {
           </CardContent>
         </Card>
       ))}
+
+      {/* ── Transaction Notifications ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4" />
+            Transaction Update Notifications
+          </CardTitle>
+          <CardDescription>
+            Control how you are notified when transactions are updated by TC/staff or by agents.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Agent: notified when TC/staff updates */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">When TC or Staff updates my transaction</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Receive a notification whenever a TC or staff member makes changes to one of your transactions.</p>
+            </div>
+            <div className="flex flex-wrap gap-3 items-center">
+              <span className="text-xs text-muted-foreground w-20">Frequency:</span>
+              {(['all', 'significant', 'none'] as TxUpdateGranularity[]).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setTxPrefs(p => ({ ...p, agentOnTcUpdate: { ...p.agentOnTcUpdate, granularity: g } }))}
+                  className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                    txPrefs.agentOnTcUpdate.granularity === g
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                  }`}
+                >
+                  {g === 'all' ? 'Every change' : g === 'significant' ? 'Status changes only' : 'None'}
+                </button>
+              ))}
+            </div>
+            {txPrefs.agentOnTcUpdate.granularity !== 'none' && (
+              <div className="flex flex-wrap gap-4">
+                {(['in_app', 'email', 'sms'] as const).map((ch) => {
+                  const icons = { in_app: Monitor, email: Mail, sms: MessageSquare };
+                  const labels = { in_app: 'In-App', email: 'Email', sms: 'SMS' };
+                  const Icon = icons[ch];
+                  const disabled = ch === 'sms' && !phone;
+                  return (
+                    <div key={ch} className="flex items-center gap-2">
+                      <Switch
+                        id={`tx-agent-${ch}`}
+                        checked={txPrefs.agentOnTcUpdate[ch]}
+                        onCheckedChange={() => setTxPrefs(p => ({ ...p, agentOnTcUpdate: { ...p.agentOnTcUpdate, [ch]: !p.agentOnTcUpdate[ch] } }))}
+                        disabled={disabled}
+                      />
+                      <Label htmlFor={`tx-agent-${ch}`} className={`text-xs cursor-pointer ${disabled ? 'text-muted-foreground/50' : ''}`}>
+                        <Icon className="h-3 w-3 inline mr-1" />{labels[ch]}
+                        {ch === 'sms' && !phone && <span className="ml-1 text-amber-500">(no number)</span>}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* TC: notified when agent edits */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">When an agent edits a transaction I am working</p>
+              <p className="text-xs text-muted-foreground mt-0.5">As a TC, receive a notification whenever an agent makes changes to a transaction assigned to you.</p>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              {(['in_app', 'email', 'sms'] as const).map((ch) => {
+                const icons = { in_app: Monitor, email: Mail, sms: MessageSquare };
+                const labels = { in_app: 'In-App', email: 'Email', sms: 'SMS' };
+                const Icon = icons[ch];
+                const disabled = ch === 'sms' && !phone;
+                return (
+                  <div key={ch} className="flex items-center gap-2">
+                    <Switch
+                      id={`tx-tc-${ch}`}
+                      checked={txPrefs.tcOnAgentEdit[ch]}
+                      onCheckedChange={() => setTxPrefs(p => ({ ...p, tcOnAgentEdit: { ...p.tcOnAgentEdit, [ch]: !p.tcOnAgentEdit[ch] } }))}
+                      disabled={disabled}
+                    />
+                    <Label htmlFor={`tx-tc-${ch}`} className={`text-xs cursor-pointer ${disabled ? 'text-muted-foreground/50' : ''}`}>
+                      <Icon className="h-3 w-3 inline mr-1" />{labels[ch]}
+                      {ch === 'sms' && !phone && <span className="ml-1 text-amber-500">(no number)</span>}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </CardContent>
+        <div className="px-6 pb-4">
+          {txSaveStatus === 'success' && (
+            <p className="text-xs text-emerald-600 flex items-center gap-1 mb-2">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Transaction notification preferences saved.
+            </p>
+          )}
+          {txSaveStatus === 'error' && (
+            <p className="text-xs text-red-600 flex items-center gap-1 mb-2">
+              <AlertCircle className="h-3.5 w-3.5" /> Failed to save. Please try again.
+            </p>
+          )}
+          <Button size="sm" onClick={handleSaveTxPrefs} disabled={savingTx}>
+            {savingTx ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+            Save Transaction Preferences
+          </Button>
+        </div>
+      </Card>
 
       {/* ── TV Board Notifications ── */}
       <Card>

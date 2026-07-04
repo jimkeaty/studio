@@ -52,6 +52,8 @@ export interface NotificationPayload {
   data?: Record<string, string>;
   /** Sender display name (for email "from" name) */
   senderName?: string;
+  /** Optional per-call channel overrides — bypasses stored prefs for this notification */
+  channels?: { in_app?: boolean; email?: boolean; sms?: boolean; push?: boolean };
 }
 
 export interface NotificationPrefs {
@@ -84,7 +86,7 @@ export async function sendNotification(
   const uids = [...new Set(recipientUids)];
 
   await Promise.allSettled(
-    uids.map((uid) => dispatchToUser(db, uid, type, title, body, url, data)),
+    uids.map((uid) => dispatchToUser(db, uid, type, title, body, url, data, payload.channels)),
   );
 }
 
@@ -96,6 +98,7 @@ async function dispatchToUser(
   body: string,
   url: string,
   data?: Record<string, string>,
+  channelOverrides?: { in_app?: boolean; email?: boolean; sms?: boolean; push?: boolean },
 ) {
   // Load user profile for prefs + contact info
   const userDoc = await db.collection('users').doc(uid).get();
@@ -142,12 +145,21 @@ async function dispatchToUser(
   const rawPrefs: NotificationPrefs = normalisedPrefs;
   const eventOverride = rawPrefs.events?.[type] ?? {};
 
-  const channels = {
+  const resolvedFromPrefs = {
     in_app: eventOverride.in_app ?? rawPrefs.in_app ?? DEFAULT_PREFS.in_app,
     push:   eventOverride.push   ?? rawPrefs.push   ?? DEFAULT_PREFS.push,
     email:  eventOverride.email  ?? rawPrefs.email  ?? DEFAULT_PREFS.email,
     sms:    eventOverride.sms    ?? rawPrefs.sms    ?? DEFAULT_PREFS.sms,
   };
+  // If caller supplied explicit channel overrides, use them instead of stored prefs
+  const channels = channelOverrides
+    ? {
+        in_app: channelOverrides.in_app ?? resolvedFromPrefs.in_app,
+        push:   channelOverrides.push   ?? resolvedFromPrefs.push,
+        email:  channelOverrides.email  ?? resolvedFromPrefs.email,
+        sms:    channelOverrides.sms    ?? resolvedFromPrefs.sms,
+      }
+    : resolvedFromPrefs;
 
   const tasks: Promise<void>[] = [];
 

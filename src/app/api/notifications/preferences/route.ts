@@ -55,7 +55,10 @@ export async function GET(req: NextRequest) {
       } catch { /* ignore */ }
     }
 
-    return NextResponse.json({ ok: true, prefs, phone, tvNotificationPrefs });
+    // Also load txNotificationPrefs
+    const txNotificationPrefs = userData.txNotificationPrefs ?? null;
+
+    return NextResponse.json({ ok: true, prefs, phone, tvNotificationPrefs, txNotificationPrefs });
   } catch (err: any) {
     return jsonError(500, err.message || 'Internal error');
   }
@@ -69,7 +72,7 @@ export async function PATCH(req: NextRequest) {
     const uid = decoded.uid;
 
     const body = await req.json();
-    const { prefs, phone, tvNotificationPrefs } = body;
+    const { prefs, phone, tvNotificationPrefs, txNotificationPrefs } = body;
     if (!prefs || typeof prefs !== 'object') {
       return jsonError(400, 'Invalid preferences payload');
     }
@@ -92,6 +95,9 @@ export async function PATCH(req: NextRequest) {
     }
     if (tvNotificationPrefs && typeof tvNotificationPrefs === 'object') {
       update.tvNotificationPrefs = tvNotificationPrefs;
+    }
+    if (txNotificationPrefs && typeof txNotificationPrefs === 'object') {
+      update.txNotificationPrefs = txNotificationPrefs;
     }
 
     // Merge into the users/{uid} document

@@ -92,6 +92,7 @@ const CATEGORY_BADGE: Record<AppointmentCategory, string> = {
   seller:     'bg-emerald-100 text-emerald-700',
   commercial: 'bg-violet-100 text-violet-700',
   hot:        'bg-red-100 text-red-700',
+  both:       'bg-indigo-100 text-indigo-700',
 };
 
 const CATEGORY_LABEL: Record<AppointmentCategory, string> = {
@@ -99,6 +100,7 @@ const CATEGORY_LABEL: Record<AppointmentCategory, string> = {
   seller: 'Seller',
   commercial: 'Commercial',
   hot: 'Hot',
+  both: 'Buyer + Seller',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

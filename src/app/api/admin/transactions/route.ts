@@ -3,7 +3,7 @@
 // DELETE /api/admin/transactions — delete a single transaction by id
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { isStaff } from '@/lib/auth/staffAccess';
+import { isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
@@ -444,39 +444,87 @@ export async function PATCH(req: NextRequest) {
       const statusChanged = newStatus && existingData?.status !== newStatus;
       // Resolve the agent's Firebase UID from the agentId slug
       const agentUid = agentIdSlug ? (await getAgentUid(adminDb, agentIdSlug)) : null;
-      // Status change → notify agent
-      if (agentUid && statusChanged) {
-        const statusLabels: Record<string, string> = {
-          active: 'Active', pending: 'Pending', closed: 'Closed',
-          coming_soon: 'Coming Soon', temp_off_market: 'Temp Off Market',
-          canceled: 'Canceled', expired: 'Expired',
-        };
-        const fromLabel = statusLabels[existingData?.status] ?? existingData?.status ?? 'Unknown';
-        const toLabel = statusLabels[newStatus] ?? newStatus;
-        await sendNotification(adminDb, {
-          type: 'tx_status_change',
-          recipientUids: [agentUid],
-          title: `Transaction Status Updated: ${toLabel}`,
-          body: `${address} has been updated from ${fromLabel} to ${toLabel}.`,
-          url: '/dashboard/transactions',
-        });
-      }
+      // Determine who made this edit (TC/staff vs agent)
+      const callerUid = decoded.uid;
+      const callerRole = await getStaffRole(callerUid);
+      const callerIsTcOrStaff = callerRole !== null; // any staffUsers role
+      const callerIsAgent = !callerIsTcOrStaff;
 
-      // Any edit (not just status) → notify TC, but ONLY if this transaction is in the TC workflow
-      // (i.e. it was submitted with workingWithTc=true and has a tcIntakeId linking it to a TC intake)
-      const hasTcIntake = !!(txData?.tcIntakeId || txData?.workingWithTc);
-      if (agentIdSlug && hasTcIntake) {
-        const tcUids = await getTcUids(adminDb);
-        if (tcUids.length > 0) {
+      // ── Agent notification: TC/staff updated their transaction ──────────────
+      // Only fire if the caller is TC or staff (not the agent themselves)
+      if (agentUid && callerIsTcOrStaff) {
+        // Load agent's txNotificationPrefs
+        const agentUserDoc = await adminDb.collection('users').doc(agentUid).get();
+        const agentTxPrefs = agentUserDoc.exists
+          ? (agentUserDoc.data()?.txNotificationPrefs?.agentOnTcUpdate ?? { granularity: 'significant', in_app: true, email: true, sms: false })
+          : { granularity: 'significant', in_app: true, email: true, sms: false };
+        const granularity: string = agentTxPrefs.granularity ?? 'significant';
+        // Decide whether to send based on granularity
+        const shouldNotifyAgent = granularity === 'all' || (granularity === 'significant' && statusChanged);
+        if (shouldNotifyAgent) {
+          const statusLabels: Record<string, string> = {
+            active: 'Active', pending: 'Pending', closed: 'Closed',
+            coming_soon: 'Coming Soon', temp_off_market: 'Temp Off Market',
+            canceled: 'Canceled', expired: 'Expired',
+          };
           const changeDesc = statusChanged
-            ? `Status changed to ${updates.status}`
-            : 'Transaction details were updated';
+            ? `Status changed from ${statusLabels[existingData?.status] ?? existingData?.status} to ${statusLabels[newStatus] ?? newStatus}`
+            : 'Transaction details were updated by TC/staff';
           await sendNotification(adminDb, {
             type: 'tx_status_change',
-            recipientUids: tcUids,
-            title: 'Transaction Updated',
+            recipientUids: [agentUid],
+            title: statusChanged ? `Transaction Status Updated` : `Transaction Updated`,
+            body: `${address}: ${changeDesc}.`,
+            url: '/dashboard/transactions',
+            channels: {
+              in_app: agentTxPrefs.in_app !== false,
+              email: agentTxPrefs.email !== false,
+              sms: agentTxPrefs.sms === true,
+            },
+          });
+        }
+      }
+
+      // ── TC notification: agent edited a transaction they are working ─────────
+      // Only fire if the caller is the agent (not TC/staff) and transaction has a TC
+      const hasTcIntake = !!(txData?.tcIntakeId || txData?.workingWithTc);
+      if (callerIsAgent && hasTcIntake) {
+        // Find the assigned TC: prefer tcIntakeId → look up the intake doc for the assigned TC UID
+        // Fall back to all TCs if no specific assignment found
+        let assignedTcUids: string[] = [];
+        if (txData?.tcIntakeId) {
+          try {
+            const intakeSnap = await adminDb.collection('tcIntakes').doc(txData.tcIntakeId).get();
+            if (intakeSnap.exists) {
+              const assignedTcUid = intakeSnap.data()?.assignedTcUid || intakeSnap.data()?.tcUid;
+              if (assignedTcUid) assignedTcUids = [assignedTcUid];
+            }
+          } catch { /* ignore */ }
+        }
+        if (assignedTcUids.length === 0) {
+          // Fall back to all active TCs
+          assignedTcUids = await getTcUids(adminDb);
+        }
+        // For each TC, check their txNotificationPrefs
+        for (const tcUid of assignedTcUids) {
+          const tcUserDoc = await adminDb.collection('users').doc(tcUid).get();
+          const tcTxPrefs = tcUserDoc.exists
+            ? (tcUserDoc.data()?.txNotificationPrefs?.tcOnAgentEdit ?? { in_app: true, email: true, sms: false })
+            : { in_app: true, email: true, sms: false };
+          const changeDesc = statusChanged
+            ? `Status changed to ${updates.status}`
+            : 'Transaction details were updated by the agent';
+          await sendNotification(adminDb, {
+            type: 'tx_status_change',
+            recipientUids: [tcUid],
+            title: 'Transaction Updated by Agent',
             body: `${address}: ${changeDesc}.`,
             url: '/dashboard/admin/transactions',
+            channels: {
+              in_app: tcTxPrefs.in_app !== false,
+              email: tcTxPrefs.email !== false,
+              sms: tcTxPrefs.sms === true,
+            },
           });
         }
       }

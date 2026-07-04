@@ -10,7 +10,7 @@ import { AppointmentsKanban } from './AppointmentsKanban';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type PipelineStatus = 'active' | 'set' | 'held' | 'ghost' | 'on_hold' | 'trash' | 'contract_written' | 'closed';
-export type AppointmentCategory = 'buyer' | 'seller' | 'commercial' | 'hot';
+export type AppointmentCategory = 'buyer' | 'seller' | 'commercial' | 'hot' | 'both';
 
 export interface PipelineAppointment {
   id: string;
@@ -44,6 +44,7 @@ const STATUS_CONFIG: Record<PipelineStatus, { label: string; color: string; bg: 
 const CATEGORY_CONFIG: Record<AppointmentCategory, { label: string; color: string }> = {
   buyer:      { label: 'Buyer',      color: 'bg-blue-100 text-blue-700'   },
   seller:     { label: 'Seller',     color: 'bg-emerald-100 text-emerald-700' },
+  both:       { label: 'Both',       color: 'bg-indigo-100 text-indigo-700' },
   commercial: { label: 'Commercial', color: 'bg-violet-100 text-violet-700' },
   hot:        { label: 'Hot',        color: 'bg-red-100 text-red-700'     },
 };
@@ -78,11 +79,11 @@ interface ModalProps {
   viewAs?: string;
   year: number;
   initial?: PipelineAppointment | null;
+  openSetAppointments?: PipelineAppointment[];
   onClose: () => void;
   onSaved: () => void;
 }
-
-function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: ModalProps) {
+function AppointmentModal({ agentId, viewAs, year, initial, openSetAppointments, onClose, onSaved }: ModalProps) {
   const { user } = useUser();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
@@ -104,6 +105,8 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
   // Community board auto-post state
   const [postToCommunity, setPostToCommunity] = useState(false);
   const [communityArea, setCommunityArea] = useState('');  // seller-only: area description without address
+  // Link to set appointment (when logging held)
+  const [linkedSetId, setLinkedSetId] = useState<string>('');
 
   const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -134,6 +137,7 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
       };
       if (viewAs) payload.viewAs = viewAs;
 
+      if (linkedSetId) payload.linkedSetAppointmentId = linkedSetId;
       const url = initial ? `/api/appointments/${initial.id}` : '/api/appointments';
       const method = initial ? 'PATCH' : 'POST';
       const res = await fetch(url, {
@@ -174,6 +178,7 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
                 className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
                 <option value="buyer">Buyer</option>
                 <option value="seller">Seller</option>
+                <option value="both">Both (Buyer + Seller) — counts as 2</option>
                 <option value="commercial">Commercial</option>
                 <option value="hot">Hot</option>
               </select>
@@ -246,6 +251,33 @@ function AppointmentModal({ agentId, viewAs, year, initial, onClose, onSaved }: 
               className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
               placeholder="Any notes about this appointment…" />
           </div>
+
+          {/* ─ Link to Set Appointment (when logging held) ─ */}
+          {form.pipelineStatus === 'held' && openSetAppointments && openSetAppointments.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+              <p className="text-xs font-bold text-amber-800">📋 Link to an Appointment Set</p>
+              <p className="text-[11px] text-amber-700">Optionally select the appointment set this held appointment came from. The set appointment stays in your tracker as a Set count — this held entry is added separately.</p>
+              <select
+                value={linkedSetId}
+                onChange={e => setLinkedSetId(e.target.value)}
+                className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+              >
+                <option value="">— None (log as standalone held) —</option>
+                {openSetAppointments.filter(a => a.pipelineStatus !== 'held' && a.pipelineStatus !== 'trash').map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.contactName} ({a.category}) — {a.date}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* ─ Dual appointment note ─ */}
+          {form.category === 'both' && (
+            <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-3 text-xs text-indigo-700">
+              <strong>Counts as 2 appointments:</strong> This will create one Buyer appointment and one Seller appointment for the same contact, each counting separately toward your appointment set and held goals.
+            </div>
+          )}
 
           {/* ─ Community Board Auto-Post ─ */}
           {(form.category === 'buyer' || form.category === 'seller') && (
@@ -394,12 +426,32 @@ function AppointmentCard({ appt, onStatusChange, onEdit, onDelete }: CardProps) 
               <span className="flex-1 whitespace-pre-wrap">{appt.notes}</span>
             </div>
           )}
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
             <button onClick={() => onEdit(appt)}
               className="text-xs font-medium text-blue-600 hover:underline">Edit</button>
             <span className="text-gray-200">|</span>
             <button onClick={() => onDelete(appt.id)}
               className="text-xs font-medium text-red-500 hover:underline">Delete</button>
+            {(appt.category === 'buyer' || appt.category === 'both') && (
+              <>
+                <span className="text-gray-200">|</span>
+                <a
+                  href={`/dashboard/tv-mode?postType=buyer-needs&area=${encodeURIComponent(appt.listingAddress || appt.notes || '')}&minPrice=${appt.priceRangeLow || ''}&maxPrice=${appt.priceRangeHigh || ''}&notes=${encodeURIComponent(appt.notes || '')}`}
+                  className="text-xs font-medium text-emerald-600 hover:underline">
+                  🏠 Post to Buyer Needs Board
+                </a>
+              </>
+            )}
+            {(appt.category === 'seller' || appt.category === 'both') && (
+              <>
+                <span className="text-gray-200">|</span>
+                <a
+                  href={`/dashboard/tv-mode?postType=coming-soon&area=${encodeURIComponent(appt.listingAddress || appt.notes || '')}&minPrice=${appt.priceRangeLow || ''}&maxPrice=${appt.priceRangeHigh || ''}&notes=${encodeURIComponent(appt.notes || '')}`}
+                  className="text-xs font-medium text-purple-600 hover:underline">
+                  ⏳ Post to Coming Soon Board
+                </a>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -739,6 +791,7 @@ export function AppointmentsPipeline({ agentId, viewAs, initialYear }: Props) {
           viewAs={viewAs}
           year={year}
           initial={editTarget}
+          openSetAppointments={appointments.filter(a => a.pipelineStatus !== 'held' && a.pipelineStatus !== 'trash' && a.pipelineStatus !== 'contract_written' && a.pipelineStatus !== 'closed')}
           onClose={() => { setShowModal(false); setEditTarget(null); }}
           onSaved={fetchAppointments}
         />
