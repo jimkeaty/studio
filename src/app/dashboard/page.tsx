@@ -3782,19 +3782,32 @@ function GoalRing({
 // IMPROVEMENT #8 — QUICK ACTION BAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function QuickActionBar() {
-  const actions = [
+  type Action = { label: string; icon: React.ElementType; href?: string; anchor?: string; primary: boolean };
+  const actions: Action[] = [
     { label: 'Add Deal', icon: PlusCircle, href: '/dashboard/transactions/new', primary: true },
     { label: 'Log Activity', icon: ClipboardList, href: '/dashboard/tracker', primary: false },
-    { label: 'My Pipeline', icon: LayoutList, href: '#pipeline', primary: false },
-    { label: 'Set Goals', icon: Target, href: '#goals', primary: false },
-    { label: 'My Transactions', icon: ChevronsDown, href: '#my-transactions', primary: false },
+    { label: 'My Pipeline', icon: LayoutList, anchor: 'pipeline', primary: false },
+    { label: 'Set Goals', icon: Target, anchor: 'goals', primary: false },
+    { label: 'My Transactions', icon: ChevronsDown, anchor: 'my-transactions', primary: false },
   ];
+
+  function scrollToAnchor(anchorId: string) {
+    const el = document.getElementById(anchorId);
+    if (!el) return;
+    // Open the collapsible section if it is collapsed
+    const trigger = el.querySelector('[data-state="closed"] button, button[aria-expanded="false"]') as HTMLButtonElement | null;
+    if (trigger) trigger.click();
+    // Offset by 80px to clear the fixed header
+    const top = el.getBoundingClientRect().top + window.scrollY - 80;
+    window.scrollTo({ top, behavior: 'smooth' });
+  }
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-      {actions.map(({ label, icon: Icon, href, primary }) => (
-        <a key={label} href={href}>
+      {actions.map(({ label, icon: Icon, href, anchor, primary }) => {
+        const inner = (
           <div className={cn(
-            'flex items-center gap-2 sm:gap-3 rounded-xl border px-3 sm:px-4 py-3 sm:py-3 cursor-pointer transition-all active:scale-95 hover:shadow-md min-h-[52px]',
+            'flex items-center gap-2 sm:gap-3 rounded-xl border px-3 sm:px-4 py-3 sm:py-3 cursor-pointer transition-all active:scale-95 hover:shadow-md min-h-[52px] w-full',
             primary
               ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90'
               : 'bg-card hover:border-primary/50 hover:bg-primary/5'
@@ -3804,8 +3817,17 @@ function QuickActionBar() {
               {label}
             </span>
           </div>
-        </a>
-      ))}
+        );
+        if (anchor) {
+          return (
+            <button key={label} type="button" onClick={() => scrollToAnchor(anchor)}
+              className="text-left w-full focus:outline-none">
+              {inner}
+            </button>
+          );
+        }
+        return <a key={label} href={href ?? '#'}>{inner}</a>;
+      })}
     </div>
   );
 }
