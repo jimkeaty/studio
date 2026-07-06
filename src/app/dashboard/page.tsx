@@ -614,11 +614,13 @@ function AgentDashboardPage() {
           </Card>
 
           {/* ═══ APPOINTMENTS PIPELINE ═══════════════════════════════ */}
-          <AppointmentsPipeline
-            agentId={user?.uid ?? ''}
-            viewAs={viewAs ?? undefined}
-            initialYear={year}
-          />
+          <div id="pipeline">
+            <AppointmentsPipeline
+              agentId={user?.uid ?? ''}
+              viewAs={viewAs ?? undefined}
+              initialYear={year}
+            />
+          </div>
         </>
       )}
 
