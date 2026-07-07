@@ -32,6 +32,7 @@ import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
+import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -4440,6 +4441,9 @@ export default function AddTransactionPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* ── Agent Document Checklist ─────────────────────────────────────────── */}
+          <AgentDocumentChecklist closingType={watchedClosingType} />
 
           {/* Hidden fields */}
           <input type="hidden" {...form.register('notes')} />
