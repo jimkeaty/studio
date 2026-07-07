@@ -612,6 +612,9 @@ export default function AddTransactionPage() {
   const [pdfConfidence, setPdfConfidence] = useState<Record<string, number>>({});
   const [pdfHighlightFields, setPdfHighlightFields] = useState<Set<string>>(new Set());
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  // MLS Input Form upload (for listing transactions)
+  const mlsPdfInputRef = useRef<HTMLInputElement>(null);
+  const [mlsPdfName, setMlsPdfName] = useState<string>('');
 
   const handlePdfUpload = async (file: File) => {
     if (!user) return;
@@ -770,6 +773,84 @@ export default function AddTransactionPage() {
       }
       setPdfStep('form');
       toast({ title: '✅ Purchase agreement scanned', description: `${Object.values(conf).filter(v => (v as number) >= 0.7).length} fields auto-filled. Review highlighted fields before submitting.` });
+    } catch (err: any) {
+      toast({ title: 'Extraction error', description: err.message, variant: 'destructive' });
+      setPdfStep('form');
+    }
+  };
+
+  // ── MLS Input Form upload handler ──────────────────────────────────────────
+  const handleMlsPdfUpload = async (file: File) => {
+    if (!user) return;
+    setPdfStep('extracting');
+    setMlsPdfName(file.name);
+    try {
+      const token = await user.getIdToken();
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/agent/parse-mls-input-form', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast({ title: 'Extraction failed', description: data.error || 'Could not read the MLS form. Please fill manually.', variant: 'destructive' });
+        setPdfStep('form');
+        return;
+      }
+      const f = data.fields || {};
+      const conf = data.confidence || {};
+      setPdfConfidence(conf);
+      const lowConf = new Set<string>(Object.entries(conf).filter(([, v]) => (v as number) < 0.7 && (v as number) > 0).map(([k]) => k));
+      setPdfHighlightFields(lowConf);
+      const setIfPresent = (key: string, val: unknown) => {
+        if (val !== null && val !== undefined && val !== '') form.setValue(key as any, val as any);
+      };
+      // Core address & price
+      setIfPresent('address', f.address);
+      setIfPresent('listPrice', f.listPrice);
+      setIfPresent('listingDate', f.listingDate);
+      setIfPresent('listingExpirationDate', f.expirationDate);
+      // Seller info
+      if (f.sellerName) form.setValue('clientName', f.sellerName as string);
+      setIfPresent('clientPhone', f.sellerPhone);
+      // Closing type — always listing for MLS form
+      form.setValue('closingType', 'listing');
+      form.setValue('clientType', 'seller');
+      form.setValue('dealType', (f.dealType as any) || 'residential_sale');
+      // Extra details → notes
+      const extraNotes: string[] = [];
+      if (f.bedrooms) extraNotes.push(`Bedrooms: ${f.bedrooms}`);
+      if (f.bathsFull) extraNotes.push(`Baths Full: ${f.bathsFull}`);
+      if (f.bathsHalf) extraNotes.push(`Baths Half: ${f.bathsHalf}`);
+      if (f.sqftLiving) extraNotes.push(`SqFt Living: ${f.sqftLiving}`);
+      if (f.yearBuilt) extraNotes.push(`Year Built: ${f.yearBuilt}`);
+      if (f.acres) extraNotes.push(`Acres: ${f.acres}`);
+      if (f.subdivision) extraNotes.push(`Subdivision: ${f.subdivision}`);
+      if (f.floodZone) extraNotes.push(`Flood Zone: ${f.floodZone}`);
+      if (f.legalDescription) extraNotes.push(`Legal Description: ${f.legalDescription}`);
+      if (f.architecturalStyle) extraNotes.push(`Style: ${f.architecturalStyle}`);
+      if (f.propertyCondition) extraNotes.push(`Condition: ${f.propertyCondition}`);
+      if (f.hoaFee != null && Number(f.hoaFee) > 0) extraNotes.push(`HOA Fee: $${Number(f.hoaFee).toLocaleString()} ${f.hoaFeeTerms || ''}`.trim());
+      if (f.hasPool) extraNotes.push('Pool: Yes');
+      if (f.hasSepticSystem) extraNotes.push('Septic System: Yes');
+      if (f.hasPrivateWell) extraNotes.push('Private Well: Yes');
+      if (f.financing) extraNotes.push(`Financing: ${f.financing}`);
+      if (f.remarks) extraNotes.push(`MLS Remarks:\n${f.remarks}`);
+      if (extraNotes.length > 0) {
+        const existing = form.getValues('notes') || '';
+        form.setValue('notes', (existing ? existing + '\n\n' : '') + '[MLS Input Form]\n' + extraNotes.join('\n'));
+      }
+      // Auto-save the uploaded PDF as a transaction document
+      if (data.savedDoc) {
+        setUploadedDocs(prev => {
+          const alreadyExists = prev.some((d: UploadedDoc) => d.storagePath === data.savedDoc.storagePath);
+          return alreadyExists ? prev : [data.savedDoc as UploadedDoc, ...prev];
+        });
+      }
+      setPdfStep('form');
+      toast({ title: '✅ MLS Input Form scanned', description: `${Object.values(conf).filter(v => (v as number) >= 0.7).length} fields auto-filled. Review before submitting.` });
     } catch (err: any) {
       toast({ title: 'Extraction error', description: err.message, variant: 'destructive' });
       setPdfStep('form');
@@ -1578,7 +1659,55 @@ export default function AddTransactionPage() {
       )}
 
       {/* ── PDF Upload Landing ──────────────────────────────────────────────── */}
-      {pdfStep === 'upload' && (
+      {/* MLS Input Form upload — for listing transactions */}
+      {pdfStep === 'upload' && watchedClosingType === 'listing' && (
+        <Card className="border-2 border-dashed border-green-400/40 bg-green-50/50 dark:bg-green-950/20 hover:border-green-500/70 transition-colors">
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                <ClipboardList className="h-8 w-8 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Upload MLS Input Form</h2>
+                <p className="text-muted-foreground mt-1 max-w-md">Upload your completed ROAM MLS Residential Input Form and we’ll auto-fill the listing details — property address, list price, seller info, property description, flood zone, legal description, and more.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 mt-2">
+                <Button
+                  type="button"
+                  size="lg"
+                  className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => mlsPdfInputRef.current?.click()}
+                >
+                  <UploadCloud className="h-5 w-5" /> Upload MLS Input Form
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setPdfStep('form')}
+                  className="gap-2"
+                >
+                  Skip — Fill Manually <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">PDF only · Max 25 MB · ROAM MLS Residential Input Form (text-based PDF)</p>
+              <input
+                ref={mlsPdfInputRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleMlsPdfUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {/* Purchase Agreement upload — for buyer / dual transactions */}
+      {pdfStep === 'upload' && watchedClosingType !== 'listing' && (
         <Card className="border-2 border-dashed border-primary/30 bg-primary/5 hover:border-primary/60 transition-colors">
           <CardContent className="py-12">
             <div className="flex flex-col items-center text-center space-y-4">
@@ -1632,22 +1761,30 @@ export default function AddTransactionPage() {
             <div className="flex flex-col items-center text-center space-y-4">
               <Loader2 className="h-12 w-12 text-primary animate-spin" />
               <div>
-                <h2 className="text-xl font-bold">Reading Purchase Agreement</h2>
-                <p className="text-muted-foreground mt-1">{pdfName}</p>
-                <p className="text-sm text-muted-foreground mt-2">Extracting property details, dates, contacts, and financing terms...</p>
+                <h2 className="text-xl font-bold">
+                  {watchedClosingType === 'listing' ? 'Reading MLS Input Form' : 'Reading Purchase Agreement'}
+                </h2>
+                <p className="text-muted-foreground mt-1">{watchedClosingType === 'listing' ? mlsPdfName : pdfName}</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {watchedClosingType === 'listing'
+                    ? 'Extracting property address, list price, seller info, property details, flood zone, and legal description...'
+                    : 'Extracting property details, dates, contacts, and financing terms...'}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* ── PDF source banner (shown after extraction) ─────────────────────── */}
-      {pdfStep === 'form' && pdfName && (
+      {/* ── PDF source banner (shown after extraction) ─────────────────── */}
+      {pdfStep === 'form' && (pdfName || mlsPdfName) && (
         <div className="flex items-center gap-3 rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-700 px-4 py-3">
           <FileText className="h-5 w-5 text-green-600 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-green-800 dark:text-green-300">Auto-filled from purchase agreement</p>
-            <p className="text-xs text-green-700 dark:text-green-400 truncate">{pdfName}</p>
+            <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+              {mlsPdfName ? 'Auto-filled from MLS Input Form' : 'Auto-filled from purchase agreement'}
+            </p>
+            <p className="text-xs text-green-700 dark:text-green-400 truncate">{mlsPdfName || pdfName}</p>
           </div>
           {pdfHighlightFields.size > 0 && (
             <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 flex-shrink-0">
@@ -1659,16 +1796,20 @@ export default function AddTransactionPage() {
       )}
 
       {/* Back to upload button — shown when agent skipped to manual */}
-      {pdfStep === 'form' && !pdfName && (
+      {pdfStep === 'form' && !pdfName && !mlsPdfName && (
         <div className="flex items-center gap-3 rounded-xl border border-dashed border-muted-foreground/30 bg-muted/30 px-4 py-3">
           <Upload className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <p className="text-sm text-muted-foreground flex-1">Changed your mind? Upload a purchase agreement to auto-fill the form.</p>
+          <p className="text-sm text-muted-foreground flex-1">
+            {watchedClosingType === 'listing'
+              ? 'Changed your mind? Upload your MLS Input Form to auto-fill the listing details.'
+              : 'Changed your mind? Upload a purchase agreement to auto-fill the form.'}
+          </p>
           <button
             type="button"
-            onClick={() => { setPdfStep('upload'); setPdfName(''); setPdfHighlightFields(new Set()); }}
+            onClick={() => { setPdfStep('upload'); setPdfName(''); setMlsPdfName(''); setPdfHighlightFields(new Set()); }}
             className="text-sm font-medium text-primary underline underline-offset-2 hover:text-primary/80 flex-shrink-0"
           >
-            Upload PDF Instead
+            {watchedClosingType === 'listing' ? 'Upload MLS Form' : 'Upload PDF Instead'}
           </button>
         </div>
       )}
