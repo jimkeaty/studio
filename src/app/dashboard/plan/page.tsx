@@ -969,6 +969,27 @@ export default function BusinessPlanPage() {
             })
           );
         }
+        // Null-out months in the current plan year that come BEFORE the plan start month.
+        // This clears stale goal values from a previous plan cycle so the annual goal sum
+        // on the dashboard correctly reflects the new annualIncomeGoal (source of truth).
+        if (savePlanStart && saveStartMonthNum > 1) {
+          for (let m = 1; m < saveStartMonthNum; m++) {
+            goalPromises.push(
+              fetch('/api/broker/goals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  year: savePlanYear,
+                  month: m,
+                  segment: goalSegment,
+                  grossMarginGoal: null,
+                  volumeGoal: null,
+                  salesCountGoal: null,
+                }),
+              })
+            );
+          }
+        }
         // Explicitly null-out grace period months so old values are cleared
         if (savePlanStart && saveGrace > 0) {
           for (let m = saveStartMonthNum; m < Math.min(saveFirstClosingMonth, 13); m++) {

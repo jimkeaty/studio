@@ -430,6 +430,9 @@ export async function GET(req: NextRequest) {
     let planResetDate: string | null = null;
     let planIsNewAgent = false;
     let planGracePeriodMonths = 0;
+    // Source of truth: the annual income goal entered in the Business Plan tab.
+    // This is used as the authoritative annual goal on the dashboard Report Card.
+    let planAnnualIncomeGoal: number | null = null;
     try {
       const planRef = adminDb
         .collection('dashboards').doc(String(year))
@@ -442,6 +445,9 @@ export async function GET(req: NextRequest) {
         planResetDate = pd.resetStartDate ?? null;
         planIsNewAgent = !!pd.isNewAgent;
         planGracePeriodMonths = planIsNewAgent ? (pd.gracePeriodMonths ?? 3) : 0;
+        // Read the authoritative annual income goal from the Business Plan
+        const rawGoal = pd.annualIncomeGoal ?? pd.yearlyIncome ?? null;
+        if (rawGoal != null && Number(rawGoal) > 0) planAnnualIncomeGoal = Number(rawGoal);
       }
     } catch (_e) { /* non-fatal */ }
     // Derive the effective start month (1-12) for this year's goals.
@@ -1206,6 +1212,11 @@ export async function GET(req: NextRequest) {
         goalStartMonth,
         closingGoalStartMonth,
         profileDocId,
+        // Source of truth: annual income goal from the Business Plan tab.
+        // The dashboard Report Card uses this as the authoritative annual goal
+        // display instead of summing monthly brokerCommandGoals (which can be
+        // stale after a mid-year plan restart).
+        planAnnualIncomeGoal,
         // Team view extras
         activeAgentCount: view === 'team' ? activeAgentCount : undefined,
         totalTeamMembers: view === 'team' ? totalTeamMembers : undefined,

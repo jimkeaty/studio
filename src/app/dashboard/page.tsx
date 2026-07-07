@@ -668,6 +668,9 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
   const { overview, agentView, prevYearStats, aggregateStats } = perfData;
   const { totals } = overview;
   const { isTeamLeader, availableTeams } = agentView;
+  // Source of truth: annual income goal from the Business Plan tab.
+  // This is the authoritative annual goal — always prefer it over the monthly sum.
+  const planAnnualIncomeGoalFromAPI: number | null = (agentView as any).planAnnualIncomeGoal ?? null;
   const isAllYears = aggregateStats?.isAllYears ?? false;
 
   const avgSalePrice = totals.closedCount > 0 ? totals.closedVolume / totals.closedCount : 0;
@@ -1641,7 +1644,9 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
 
   const rcTotals = perfData?.overview?.totals;
   const rcMonths = perfData?.overview?.months;
-
+  // Source of truth: annual income goal from the Business Plan tab.
+  // Always prefer this over the monthly sum from brokerCommandGoals.
+  const planAnnualIncomeGoalFromAPI: number | null = (perfData?.agentView as any)?.planAnnualIncomeGoal ?? null;
   // Sum only goal months on/after the effective start month (mirrors MyPerformanceSection)
   const rcYearlyIncomeGoal = rcMonths ? rcMonths.reduce((s, m, i) => s + (i >= rcEffectiveStartMonth ? (m.grossMarginGoal ?? 0) : 0), 0) : 0;
   const rcYearlyVolumeGoal = rcMonths ? rcMonths.reduce((s, m, i) => s + (i >= rcEffectiveStartMonth ? (m.volumeGoal ?? 0) : 0), 0) : 0;
@@ -1690,7 +1695,9 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
   // Annual goals from volumeMetrics (full-year totals)
   const annualDealsGoal = vm.annualDealsGoal ?? null;
   const annualVolumeGoal = vm.annualVolumeGoal ?? null;
-  const annualIncomeGoalDisplay = vm.annualIncomeGoalFromMonthly ?? (rcYearlyIncomeGoal > 0 ? rcYearlyIncomeGoal : null);
+  // annualIncomeGoalDisplay: prefer the Business Plan's authoritative goal, then the
+  // volumeMetrics monthly sum, then the rcYearlyIncomeGoal (monthly sum from command-metrics).
+  const annualIncomeGoalDisplay = planAnnualIncomeGoalFromAPI ?? vm.annualIncomeGoalFromMonthly ?? (rcYearlyIncomeGoal > 0 ? rcYearlyIncomeGoal : null);
 
   // Month names for pipeline label
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1700,7 +1707,8 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
   // Determine overall status from the primary income grade
   const overallGrade = ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade;
   const overallColors = gradeColorScheme(overallGrade);
-  const annualIncomeGoal = rcYearlyIncomeGoal > 0 ? rcYearlyIncomeGoal : null;
+  // annualIncomeGoal: the authoritative full-year goal for the progress bar and hero card.
+  const annualIncomeGoal = planAnnualIncomeGoalFromAPI ?? (rcYearlyIncomeGoal > 0 ? rcYearlyIncomeGoal : null);
   const annualProgressPct = annualIncomeGoal ? Math.min(Math.round((netEarned / annualIncomeGoal) * 100), 100) : null;
 
   return (
