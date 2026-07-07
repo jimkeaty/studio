@@ -900,7 +900,10 @@ export default function BusinessPlanPage() {
         year: parseInt(year, 10),
         annualIncomeGoal: data.annualIncomeGoal,
         planStartDate: data.planStartDate || undefined,
-        resetStartDate: data.resetStartDate || undefined,
+        // Always send resetStartDate (even empty string) so the API route can
+        // explicitly delete it from Firestore when cleared. Using `|| undefined`
+        // would strip the key from JSON and Firestore merge would keep the old value.
+        resetStartDate: data.resetStartDate ?? "",
         isNewAgent,
         gracePeriodMonths: isNewAgent ? gracePeriodMonths : 0,
         measurementMode,
@@ -1053,52 +1056,8 @@ export default function BusinessPlanPage() {
             {isImpersonating && impersonatedAgent && (
               <span className="text-sm text-amber-600 font-medium">Viewing: {impersonatedAgent.name}</span>
             )}
-            <Button variant="outline" size="sm" className="text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => setShowResetDialog(true)}>
-              <RefreshCw className="h-4 w-4 mr-2" />Reset Plan from Today
-            </Button>
           </div>
         </div>
-
-        {/* Reset Plan Dialog */}
-        <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5 text-orange-600" />
-                Reset Business Plan
-              </DialogTitle>
-              <DialogDescription>
-                This will reset your plan start date to <strong>today</strong>. Your existing goals and targets stay exactly the same — only the start date changes, so all your YTD progress calculations restart from today.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm text-orange-800">
-                <p className="font-medium">What this does:</p>
-                <ul className="mt-1 space-y-1 text-xs list-disc list-inside">
-                  <li>Sets your plan start date to today</li>
-                  <li>All your income, engagement, and appointment goals remain unchanged</li>
-                  <li>YTD progress calculations restart from today forward</li>
-                </ul>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm">Note (optional)</Label>
-                <Textarea
-                  placeholder="e.g. Met with director today — resetting to build fresh momentum."
-                  value={resetNote}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setResetNote(e.target.value)}
-                  rows={2}
-                  className="text-sm"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowResetDialog(false)}>Cancel</Button>
-              <Button onClick={handleSelfReset} disabled={isResetting} className="bg-orange-600 hover:bg-orange-700 text-white">
-                {isResetting ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Resetting...</> : <><RefreshCw className="h-4 w-4 mr-2" />Reset from Today</>}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* ── SECTION 1: PRIOR YEAR ACTUALS REFERENCE ─────────────────── */}
         {histLoading ? (

@@ -108,10 +108,14 @@ export async function POST(req: NextRequest) {
 
     const ref = planDocRef(adminDb, profileDocId, year);
 
-    await ref.set(
-      { ...plan, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
-      { merge: true }
-    );
+    // Build the write payload. When resetStartDate is explicitly cleared (empty string or null),
+    // use FieldValue.delete() so Firestore removes the field rather than ignoring it (merge:true
+    // skips undefined, so we need an explicit delete sentinel to overwrite an existing value).
+    const planToWrite: Record<string, any> = { ...plan, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+    if ('resetStartDate' in plan && (plan.resetStartDate === '' || plan.resetStartDate === null)) {
+      planToWrite.resetStartDate = admin.firestore.FieldValue.delete();
+    }
+    await ref.set(planToWrite, { merge: true });
 
     // Read back to guarantee defined shape
     const snap = await ref.get();
