@@ -206,7 +206,7 @@ async function dispatchToUser(
     }
   }
   if (channels.sms && smsPhone) {
-    tasks.push(sendSms(smsPhone, title, body, url));
+    tasks.push(sendSms(db, smsPhone, title, body, url));
   }
 
   await Promise.allSettled(tasks);
@@ -343,7 +343,35 @@ function buildEmailHtml(
 
 // ─── SMS via Twilio ───────────────────────────────────────────────────────────
 
+// Cache the Firestore FROM number to avoid a Firestore read on every SMS
+let _cachedTwilioFromNumber: string | null = null;
+let _twilioFromNumberCachedAt = 0;
+const TWILIO_FROM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getTwilioFromNumber(db: Firestore): Promise<string | null> {
+  // Return cached value if still fresh
+  if (_cachedTwilioFromNumber && Date.now() - _twilioFromNumberCachedAt < TWILIO_FROM_CACHE_TTL_MS) {
+    return _cachedTwilioFromNumber;
+  }
+  try {
+    const doc = await db.collection('settings').doc('twilio').get();
+    if (doc.exists && doc.data()?.fromNumber) {
+      _cachedTwilioFromNumber = doc.data()!.fromNumber as string;
+      _twilioFromNumberCachedAt = Date.now();
+      return _cachedTwilioFromNumber;
+    }
+  } catch (err) {
+    console.warn('[sendNotification] Could not read Twilio settings from Firestore, falling back to env var:', err);
+  }
+  // Fall back to env var
+  const envFromNumber = process.env.TWILIO_FROM_NUMBER || null;
+  _cachedTwilioFromNumber = envFromNumber;
+  _twilioFromNumberCachedAt = Date.now();
+  return envFromNumber;
+}
+
 async function sendSms(
+  db: Firestore,
   toPhone: string,
   title: string,
   body: string,
@@ -351,7 +379,7 @@ async function sendSms(
 ): Promise<void> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken  = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+  const fromNumber = await getTwilioFromNumber(db);
 
   if (!accountSid || !authToken || !fromNumber) return; // Twilio not configured — skip silently
 

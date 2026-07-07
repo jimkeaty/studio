@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Upload, Image as ImageIcon, Paintbrush, Save, CheckCircle2, AlertTriangle, Loader2, X, Eye,
+  Upload, Image as ImageIcon, Paintbrush, Save, CheckCircle2, AlertTriangle, Loader2, X, Eye, Phone, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -192,6 +192,17 @@ export default function AdminBrandingPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // ---------- Twilio settings state ----------
+  const [twilioFromNumber, setTwilioFromNumber] = useState('');
+  const [twilioFromNumberInput, setTwilioFromNumberInput] = useState('');
+  const [twilioSource, setTwilioSource] = useState<'env' | 'firestore'>('env');
+  const [twilioAccountSidMasked, setTwilioAccountSidMasked] = useState('');
+  const [twilioUpdatedAt, setTwilioUpdatedAt] = useState<string | null>(null);
+  const [loadingTwilio, setLoadingTwilio] = useState(false);
+  const [savingTwilio, setSavingTwilio] = useState(false);
+  const [twilioError, setTwilioError] = useState<string | null>(null);
+  const [twilioSuccess, setTwilioSuccess] = useState<string | null>(null);
+
   // ---------- Fetch branding ----------
   const loadBranding = useCallback(async () => {
     if (!user) return;
@@ -215,6 +226,64 @@ export default function AdminBrandingPage() {
   useEffect(() => {
     if (!userLoading && user) loadBranding();
   }, [user, userLoading, loadBranding]);
+
+  // ---------- Fetch Twilio settings ----------
+  const loadTwilioSettings = useCallback(async () => {
+    if (!user) return;
+    setLoadingTwilio(true);
+    setTwilioError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/twilio-settings', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load Twilio settings');
+      setTwilioFromNumber(data.settings.fromNumber || '');
+      setTwilioFromNumberInput(data.settings.fromNumber || '');
+      setTwilioSource(data.settings.source || 'env');
+      setTwilioAccountSidMasked(data.settings.accountSidMasked || '');
+      setTwilioUpdatedAt(data.settings.updatedAt || null);
+    } catch (err: any) {
+      setTwilioError(err.message);
+    } finally {
+      setLoadingTwilio(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!userLoading && user) loadTwilioSettings();
+  }, [user, userLoading, loadTwilioSettings]);
+
+  // ---------- Save Twilio settings ----------
+  const handleSaveTwilio = async () => {
+    if (!user) return;
+    setSavingTwilio(true);
+    setTwilioError(null);
+    setTwilioSuccess(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/twilio-settings', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fromNumber: twilioFromNumberInput }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to save Twilio settings');
+      setTwilioFromNumber(twilioFromNumberInput);
+      setTwilioSource('firestore');
+      setTwilioUpdatedAt(data.settings.updatedAt || new Date().toISOString());
+      setTwilioSuccess('Twilio FROM number saved. New SMS notifications will use this number.');
+      setTimeout(() => setTwilioSuccess(null), 5000);
+    } catch (err: any) {
+      setTwilioError(err.message);
+    } finally {
+      setSavingTwilio(false);
+    }
+  };
 
   // ---------- Save branding ----------
   const handleSave = async () => {
@@ -526,6 +595,114 @@ export default function AdminBrandingPage() {
                     will see the new icon the next time they open the app. New installs will use it immediately.
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* SMS Notifications (Twilio) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Phone className="h-5 w-5" /> SMS Notifications (Twilio)
+                </CardTitle>
+                <CardDescription>
+                  Configure the phone number used to send SMS notifications to agents and staff.
+                  Credentials (Account SID and Auth Token) are managed in Firebase App Hosting environment variables.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {twilioError && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{twilioError}</AlertDescription>
+                  </Alert>
+                )}
+                {twilioSuccess && (
+                  <Alert className="border-green-500/50 bg-green-500/10">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <AlertTitle className="text-green-700">Saved</AlertTitle>
+                    <AlertDescription className="text-green-600">{twilioSuccess}</AlertDescription>
+                  </Alert>
+                )}
+                {loadingTwilio ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading Twilio settings...
+                  </div>
+                ) : (
+                  <>
+                    {/* Account SID (read-only masked) */}
+                    {twilioAccountSidMasked && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Account SID (from environment)</Label>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono">{twilioAccountSidMasked}</code>
+                          <Badge variant="outline" className="text-xs">env var</Badge>
+                        </div>
+                      </div>
+                    )}
+                    {/* FROM number */}
+                    <div className="space-y-2">
+                      <Label htmlFor="twilioFromNumber">SMS FROM Number (E.164 format)</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="twilioFromNumber"
+                          placeholder="+13372703108"
+                          value={twilioFromNumberInput}
+                          onChange={(e) => setTwilioFromNumberInput(e.target.value)}
+                          className="max-w-[220px] font-mono"
+                        />
+                        <Badge variant={twilioSource === 'firestore' ? 'default' : 'secondary'} className="text-xs">
+                          {twilioSource === 'firestore' ? 'Custom' : 'From env'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        This overrides the <code className="font-mono">TWILIO_FROM_NUMBER</code> environment variable.
+                        Must be a US number in E.164 format (e.g. +13372703108).
+                      </p>
+                    </div>
+                    {/* Save + Test buttons */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <Button
+                        onClick={handleSaveTwilio}
+                        disabled={savingTwilio || !twilioFromNumberInput.trim() || twilioFromNumberInput === twilioFromNumber}
+                        size="sm"
+                      >
+                        {savingTwilio ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Save className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        {savingTwilio ? 'Saving...' : 'Save FROM Number'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <a href="/dashboard/admin/test-sms" target="_blank" rel="noopener noreferrer">
+                          <Phone className="mr-2 h-3.5 w-3.5" />
+                          Send Test SMS
+                          <ExternalLink className="ml-1.5 h-3 w-3" />
+                        </a>
+                      </Button>
+                    </div>
+                    {twilioUpdatedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Last updated: {new Date(twilioUpdatedAt).toLocaleString()}
+                      </p>
+                    )}
+                    {/* Info box */}
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3">
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        <strong>Note:</strong> To change your Twilio Account SID or Auth Token, update the
+                        <code className="mx-1 font-mono">TWILIO_ACCOUNT_SID</code> and
+                        <code className="mx-1 font-mono">TWILIO_AUTH_TOKEN</code> environment variables in
+                        Firebase App Hosting (Firebase Console → App Hosting → your backend → Environment variables).
+                        A2P certification is required for US SMS delivery — your number +13372703108 is already certified.
+                      </p>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
