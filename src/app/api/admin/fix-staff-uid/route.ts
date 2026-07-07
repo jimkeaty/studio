@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 
-  const isAdmin = await isAdminLike(adminDb, uid);
+  const isAdmin = await isAdminLike(uid);
   if (!isAdmin) return NextResponse.json({ error: 'Admin only' }, { status: 403 });
 
   const { email } = await req.json();

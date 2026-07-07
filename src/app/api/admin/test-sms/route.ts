@@ -1,6 +1,6 @@
 // POST /api/admin/test-sms — send a test SMS via Twilio to verify A2P setup
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
 export async function POST(req: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 
-  const isAdmin = await isAdminLike(adminDb, uid);
+  const isAdmin = await isAdminLike(uid);
   if (!isAdmin) return NextResponse.json({ error: 'Admin only' }, { status: 403 });
 
   const { toNumber } = await req.json();
