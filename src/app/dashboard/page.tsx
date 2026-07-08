@@ -1798,11 +1798,36 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
       </Card>
 
       {/* ── REPORT CARD SECTION HEADER ──────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-bold">Report Card</h2>
-        <p className="text-xs text-muted-foreground">
-          {isCurrentYearRC ? `YTD vs. prorated goal · Jan–${new Date().toLocaleString('default', { month: 'short' })} ${perfYear}` : `Full Year ${perfYear}`}
-        </p>
+        <div className="flex flex-col items-start sm:items-end gap-0.5">
+          <p className="text-xs text-muted-foreground">
+            {isCurrentYearRC ? `YTD vs. prorated goal · Jan–${new Date().toLocaleString('default', { month: 'short' })} ${perfYear}` : `Full Year ${perfYear}`}
+          </p>
+          {/* Dual-clock badges: only show when start dates differ from Jan 1 */}
+          {(() => {
+            const finStart = dashboard.financialStartDate;
+            const kpiStart = dashboard.kpiStartDate;
+            const isFinJan1 = !finStart || finStart.endsWith('-01-01');
+            const isKpiJan1 = !kpiStart || kpiStart.endsWith('-01-01');
+            const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            if (isFinJan1 && isKpiJan1) return null;
+            return (
+              <div className="flex flex-wrap gap-2">
+                {!isFinJan1 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    💰 Financial tracking from {fmtDate(finStart!)}
+                  </span>
+                )}
+                {!isKpiJan1 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                    📊 KPI tracking from {fmtDate(kpiStart!)}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+        </div>
       </div>
 
       {/* Row 1: Income */}

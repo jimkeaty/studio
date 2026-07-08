@@ -83,6 +83,9 @@ type HistoricalStats = {
 
 const planFormSchema = z.object({
   annualIncomeGoal: z.coerce.number().min(0, "Goal must be positive."),
+  financialStartDate: z.string().optional(),
+  kpiStartDate: z.string().optional(),
+  // Legacy fields kept in schema for backward compat during migration
   planStartDate: z.string().optional(),
   resetStartDate: z.string().optional(),
   avgCommission: z.coerce.number().min(0, "Commission must be positive."),
@@ -304,14 +307,12 @@ export default function BusinessPlanPage() {
   const [yearlyIncome, setYearlyIncome] = useState('');
   const [isNewAgent, setIsNewAgent] = useState(false);
   const [gracePeriodMonths, setGracePeriodMonths] = useState(3);
-  // 'plan_start': grade only from plan start date forward (default for mid-year plans)
-  // 'calendar_year': grade from Jan 1 (full calendar year)
-  const [measurementMode, setMeasurementMode] = useState<'plan_start' | 'calendar_year'>('plan_start');
-
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
     defaultValues: {
       annualIncomeGoal: 100000,
+      financialStartDate: "",
+      kpiStartDate: "",
       planStartDate: "",
       resetStartDate: "",
       avgCommission: defaultAssumptions.avgCommission,
@@ -756,15 +757,11 @@ export default function BusinessPlanPage() {
           if (plan.yearlyIncome != null && plan.yearlyIncome > 0) setYearlyIncome(String(plan.yearlyIncome));
           if (plan.isNewAgent != null) setIsNewAgent(!!plan.isNewAgent);
           if (plan.gracePeriodMonths != null) setGracePeriodMonths(plan.gracePeriodMonths);
-          // Restore measurementMode — default to 'plan_start' when planStartDate is set
-          // and is not January 1 (i.e., a mid-year plan). Otherwise default to 'calendar_year'.
-          if ((plan as any).measurementMode) {
-            setMeasurementMode((plan as any).measurementMode as 'plan_start' | 'calendar_year');
-          } else if (plan.planStartDate && !plan.planStartDate.endsWith('-01-01')) {
-            setMeasurementMode('plan_start');
-          } else {
-            setMeasurementMode('calendar_year');
-          }
+          // Dual-clock migration: derive financialStartDate and kpiStartDate from legacy fields
+          // if the new fields are not yet saved on the plan.
+          const legacyStart = plan.resetStartDate || plan.planStartDate || '';
+          const derivedFinancialStart = (plan as any).financialStartDate || legacyStart;
+          const derivedKpiStart = (plan as any).kpiStartDate || legacyStart;
           // Restore seasonality weights so the volume column populates correctly
           const restoredWeights: Record<number, { salesPct: string; volumePct: string }> = {};
           if ((plan as any).seasonWeights && typeof (plan as any).seasonWeights === 'object') {
@@ -789,7 +786,9 @@ export default function BusinessPlanPage() {
             if (asp > 0) restoredSales = Math.round(restoredVol / asp);
           }
           if (restoredVol > 0 || restoredSales > 0 || restoredIncome > 0) {
-            const planStart = plan.planStartDate ? new Date(plan.planStartDate + 'T00:00:00') : null;
+            // Use financialStartDate (with fallback to planStartDate) for monthly goal distribution
+            const finStart = (plan as any).financialStartDate || plan.planStartDate || '';
+            const planStart = finStart ? new Date(finStart + 'T00:00:00') : null;
             const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
             const grace = plan.isNewAgent ? (plan.gracePeriodMonths ?? 3) : 0;
             const firstClosingMonth = startMonthNum + grace;
@@ -829,6 +828,8 @@ export default function BusinessPlanPage() {
           if (plan?.assumptions?.conversionRates) {
             form.reset({
               annualIncomeGoal: plan.annualIncomeGoal ?? 100000,
+              financialStartDate: derivedFinancialStart,
+              kpiStartDate: derivedKpiStart,
               planStartDate: plan.planStartDate ?? "",
               resetStartDate: plan.resetStartDate ?? "",
               avgCommission: plan.assumptions.avgCommission ?? defaultAssumptions.avgCommission,
@@ -899,14 +900,16 @@ export default function BusinessPlanPage() {
         userId: effectiveUid ?? user.uid,
         year: parseInt(year, 10),
         annualIncomeGoal: data.annualIncomeGoal,
-        planStartDate: data.planStartDate || undefined,
-        // Always send empty string for resetStartDate so the API route deletes it
-        // from Firestore. The Reset Start Date field has been removed from the UI;
-        // the Plan Start Date is now the single field that controls grading start.
+        // Dual-clock fields — save the new fields
+        financialStartDate: data.financialStartDate || undefined,
+        kpiStartDate: data.kpiStartDate || undefined,
+        // Keep planStartDate in sync with financialStartDate for backward compat
+        planStartDate: data.financialStartDate || data.planStartDate || undefined,
+        // Always clear legacy fields on save
         resetStartDate: "",
+        measurementMode: undefined,
         isNewAgent,
         gracePeriodMonths: isNewAgent ? gracePeriodMonths : 0,
-        measurementMode,
         // Financial & Timing block — persist so they reload correctly
         ...(goalAvgSalePrice > 0 ? { goalAvgSalePrice } : {}),
         ...(goalAvgCommPct > 0 ? { goalAvgCommPct } : {}),
@@ -935,7 +938,9 @@ export default function BusinessPlanPage() {
         const vol = parseFloat(yearlyVolume) || 0;
         const sales = parseInt(yearlySales, 10) || 0;
         const income = parseFloat(yearlyIncome) || 0;
-        const savePlanStart = data.planStartDate ? new Date(data.planStartDate + 'T00:00:00') : null;
+        // Use financialStartDate for monthly goal distribution (financial clock)
+        const saveFinStart = data.financialStartDate || data.planStartDate || '';
+        const savePlanStart = saveFinStart ? new Date(saveFinStart + 'T00:00:00') : null;
         const saveStartMonthNum = savePlanStart ? savePlanStart.getMonth() + 1 : 1;
         const saveGrace = isNewAgent ? gracePeriodMonths : 0;
         const saveFirstClosingMonth = saveStartMonthNum + saveGrace;
@@ -1311,36 +1316,59 @@ export default function BusinessPlanPage() {
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-1 gap-6">
-              <FormField
-                control={form.control}
-                name="planStartDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plan Start Date</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="date"
-                        {...field}
-                        value={field.value ?? ""}
-                        onChange={(e) => {
-                          field.onChange(e);
-                          // Auto-switch measurement mode based on the date chosen:
-                          // Non-Jan-1 date → grade from plan start (no Fs for pre-plan months)
-                          // Jan 1 (or cleared) → grade from Jan 1 (full calendar year)
-                          const val = e.target.value;
-                          const isJan1 = !val || val.endsWith('-01-01');
-                          setMeasurementMode(isJan1 ? 'calendar_year' : 'plan_start');
-                        }}
-                      />
-                    </FormControl>
-                    <FormDescription className="text-xs">
-                      Set to today to restart your plan from scratch — your grade will only count activity from this date forward.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            {/* Dual-Clock: Financial Start Date + KPI Start Date */}
+            <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Tracking Start Dates</p>
+                <button
+                  type="button"
+                  className="text-xs text-primary underline hover:no-underline"
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    form.setValue('financialStartDate', today);
+                    form.setValue('kpiStartDate', today);
+                  }}
+                >
+                  Set both to today
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="financialStartDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">Financial Start Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormDescription className="text-xs">
+                        When to start measuring net income, volume &amp; closed deals. Leave blank or set to Jan 1 for a full calendar-year goal.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="kpiStartDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">KPI Tracking Start Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormDescription className="text-xs">
+                        When to start measuring calls, engagements &amp; appointments. Set to today to reset KPI grades without affecting financial grades.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Both dates use a <strong>rolling 12-month window</strong> — goals and daily targets are calculated from the start date through the next 12 months. Leave both blank (or Jan 1) for a standard full calendar-year plan.
+              </p>
             </div>
             {/* New Agent toggle + Grace Period */}
             <div className="flex items-start gap-4 p-4 rounded-lg border bg-muted/30">
@@ -1371,42 +1399,8 @@ export default function BusinessPlanPage() {
                 </div>
               )}
             </div>
-            {/* Goal Measurement Mode toggle */}
-            <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
-              <p className="text-sm font-medium">How should your goals be measured?</p>
-              <div className="flex flex-col gap-2">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="measurementMode"
-                    value="plan_start"
-                    checked={measurementMode === 'plan_start'}
-                    onChange={() => setMeasurementMode('plan_start')}
-                    className="mt-0.5 h-4 w-4 accent-primary"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium">From Plan Start Date</span>
-                    <span className="text-muted-foreground"> — Only grades your performance from your plan start date forward. Activity before your plan start is shown in charts but not counted against your grade. Best for agents starting mid-year.</span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="measurementMode"
-                    value="calendar_year"
-                    checked={measurementMode === 'calendar_year'}
-                    onChange={() => setMeasurementMode('calendar_year')}
-                    className="mt-0.5 h-4 w-4 accent-primary"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium">Full Calendar Year</span>
-                    <span className="text-muted-foreground"> — Grades your performance from January 1. All year-to-date activity counts toward your grade.</span>
-                  </span>
-                </label>
-              </div>
-            </div>
             <p className="text-sm text-muted-foreground">
-              To restart your plan mid-year, simply update the Plan Start Date to today — the dashboard will grade only from that date forward, so past months won&apos;t count against your score. Check &quot;New Agent&quot; to suppress closing goals during the grace period — activity goals (calls, engagements, appointments) start immediately.
+              Check &quot;New Agent&quot; to suppress closing goals during the grace period — activity goals (calls, engagements, appointments) start immediately from the KPI Start Date.
             </p>
           </CardContent>
         </Card>

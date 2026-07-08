@@ -287,68 +287,89 @@ export async function GET(req: NextRequest) {
     const todayUtc = todayUtcInCompanyTz();
     const asOf = minDate(todayUtc, yearEnd);
 
-    const derivedPlanStart = toDate(
-      plan.resetStartDate || plan.planStartDate || `${year}-01-01`
-    ) || yearStart;
+    // ── Dual-clock: separate start dates for financial vs KPI metrics ──────
+    // financialStartDate controls: net income, volume, closed deals grading
+    // kpiStartDate controls:       calls, engagements, appointments, contracts
+    // Both use rolling-12-month windows from their start date.
+    // Legacy fallback: use resetStartDate ?? planStartDate ?? Jan 1 for both.
+    const legacyStart = plan.resetStartDate || plan.planStartDate || `${year}-01-01`;
+    const rawFinancialStart = (plan as any).financialStartDate || legacyStart;
+    const rawKpiStart = (plan as any).kpiStartDate || legacyStart;
 
-    // measurementMode controls how grading and goal-to-date are computed:
-    //   'plan_start' (default for mid-year plans): grade only from plan start date forward.
-    //     Pre-plan actuals are shown in charts but excluded from grading.
-    //   'calendar_year': grade from Jan 1. All YTD actuals count.
-    // Default logic:
-    //   - If measurementMode is explicitly saved on the plan, use it.
-    //   - If planStartDate is set to a non-Jan-1 date, default to 'plan_start'.
-    //   - If planStartDate is Jan 1 (or unset), default to 'calendar_year'.
-    //   EXCEPTION: if planStartDate IS Jan 1 but the agent explicitly saved
-    //   measurementMode='plan_start', respect that choice (they want to grade
-    //   from their plan start even though it's Jan 1 — e.g., a fresh restart).
-    const rawMeasurementMode = (plan as any).measurementMode as string | undefined;
-    const isJanFirst = (plan.planStartDate ?? `${year}-01-01`).endsWith('-01-01');
-    const measurementMode: 'plan_start' | 'calendar_year' =
-      rawMeasurementMode === 'calendar_year'
-        ? 'calendar_year'
-        : rawMeasurementMode === 'plan_start'
-          ? 'plan_start'
-          : isJanFirst ? 'calendar_year' : 'plan_start';
+    // Helper: parse a date string and clamp to a rolling-12-month window
+    // The window runs from startDate to startDate+12months; we grade within it.
+    // For calendar-year plans (Jan 1 start), the window is Jan 1 – Dec 31 of the plan year.
+    const resolveEffectiveStart = (rawDate: string): Date => {
+      const d = toDate(rawDate);
+      if (!d) return yearStart;
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    };
 
-    // In 'calendar_year' mode, effectiveStart is always Jan 1 so all YTD actuals count.
-    // In 'plan_start' mode, effectiveStart is the plan start date (current behavior).
-    const gradingStart = measurementMode === 'calendar_year' ? yearStart : derivedPlanStart;
+    // Financial effective start: when to begin counting net income, volume, deals
+    const financialEffectiveStart = resolveEffectiveStart(rawFinancialStart);
+    // KPI effective start: when to begin counting calls, engagements, appointments
+    const kpiEffectiveStart = resolveEffectiveStart(rawKpiStart);
 
-    const effectiveStart = maxDate(
-      new Date(Date.UTC(gradingStart.getUTCFullYear(), gradingStart.getUTCMonth(), gradingStart.getUTCDate())),
-      yearStart
-    );
+    // For backward compat: effectiveStart = financialEffectiveStart (used in transaction queries)
+    const effectiveStart = financialEffectiveStart;
 
-    const totalWorkdaysInYear =
-      Math.max(
-        1,
-        asNumber(plan.assumptions?.workingDaysPerMonth) * 12 -
-          asNumber(plan.assumptions?.weeksOff) * 5
-      );
+    // Rolling-12 window end dates
+    const financialWindowEnd = new Date(Date.UTC(
+      financialEffectiveStart.getUTCFullYear(),
+      financialEffectiveStart.getUTCMonth() + 12,
+      financialEffectiveStart.getUTCDate()
+    ));
+    const kpiWindowEnd = new Date(Date.UTC(
+      kpiEffectiveStart.getUTCFullYear(),
+      kpiEffectiveStart.getUTCMonth() + 12,
+      kpiEffectiveStart.getUTCDate()
+    ));
 
-    const elapsedWorkdays =
-      asOf.getTime() < effectiveStart.getTime()
+    // Workdays in each rolling-12 window
+    const workdaysPerMonth = Math.max(1, asNumber(plan.assumptions?.workingDaysPerMonth));
+    const weeksOff = asNumber(plan.assumptions?.weeksOff);
+    const totalWorkdaysInRolling12 = Math.max(1, workdaysPerMonth * 12 - weeksOff * 5);
+
+    // Elapsed workdays from each clock's start to today
+    const financialElapsedWorkdays =
+      asOf.getTime() < financialEffectiveStart.getTime()
         ? 0
-        : countWeekdaysInclusive(effectiveStart, asOf);
+        : countWeekdaysInclusive(financialEffectiveStart, minDate(asOf, financialWindowEnd));
+    const kpiElapsedWorkdays =
+      asOf.getTime() < kpiEffectiveStart.getTime()
+        ? 0
+        : countWeekdaysInclusive(kpiEffectiveStart, minDate(asOf, kpiWindowEnd));
+
+    // Legacy: keep elapsedWorkdays = financialElapsedWorkdays for backward compat
+    const elapsedWorkdays = financialElapsedWorkdays;
+
+    // Legacy: keep for backward compat (used in goalFloorMonth below)
+    const measurementMode = rawFinancialStart.endsWith('-01-01') ? 'calendar_year' : 'plan_start';
 
     const annualIncomeGoal = asNumber(plan.annualIncomeGoal);
     // Initial estimate using workday proration; will be overridden by actual
     // monthly goals from brokerCommandGoals if they exist (see below).
     let expectedYTDIncomeGoal = Number(
-      ((annualIncomeGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2)
+      ((annualIncomeGoal * financialElapsedWorkdays) / totalWorkdaysInRolling12).toFixed(2)
     );
 
-    // Use yearly goal prorated by workdays — more reliable than daily * elapsed
-    // because yearly is always a whole number saved correctly, while daily may be
-    // 0 on older plans (the bug). Formula: yearly * (elapsed / total).
-    const prorateYearly = (yearly: number) =>
-      totalWorkdaysInYear > 0
-        ? Math.ceil((yearly * elapsedWorkdays) / totalWorkdaysInYear)
+    // Prorate a yearly goal by elapsed workdays on the FINANCIAL clock
+    const prorateFinancial = (yearly: number) =>
+      totalWorkdaysInRolling12 > 0
+        ? Math.ceil((yearly * financialElapsedWorkdays) / totalWorkdaysInRolling12)
         : 0;
 
+    // Prorate a yearly goal by elapsed workdays on the KPI clock
+    const prorateKpi = (yearly: number) =>
+      totalWorkdaysInRolling12 > 0
+        ? Math.ceil((yearly * kpiElapsedWorkdays) / totalWorkdaysInRolling12)
+        : 0;
+
+    // Legacy alias: prorateYearly now uses financial clock (for income/volume/deals)
+    const prorateYearly = prorateFinancial;
+
     const dailyEngagementTarget = asNumber(plan.calculatedTargets?.engagements?.daily);
-    const engagementGoalToDate = prorateYearly(asNumber(plan.calculatedTargets?.engagements?.yearly));
+    const engagementGoalToDate = prorateKpi(asNumber(plan.calculatedTargets?.engagements?.yearly));
 
     // ── Phase 2: Fetch transactions, daily activity, and goals in parallel ─
     // Use the resolved Firebase UID (not the slug) for goal segment lookup
@@ -383,8 +404,8 @@ export async function GET(req: NextRequest) {
           adminDb
             .collection("daily_activity")
             .where("agentId", "==", agentIdVal)
-            .where("date", ">=", toYmd(effectiveStart))
-            .where("date", "<=", toYmd(asOf))
+            .where("date", ">=", toYmd(kpiEffectiveStart)) // KPI clock
+            .where("date", "<=", toYmd(minDate(asOf, kpiWindowEnd)))
             .get()
             .catch(e => { console.warn('[dashboard] daily_activity query failed for '+agentIdVal, e); return null; })
         )
@@ -543,8 +564,8 @@ export async function GET(req: NextRequest) {
           adminDb
             .collection('appointments')
             .where('agentId', '==', agentIdVal)
-            .where('date', '>=', toYmd(effectiveStart))
-            .where('date', '<=', toYmd(asOf))
+            .where('date', '>=', toYmd(kpiEffectiveStart)) // KPI clock
+            .where('date', '<=', toYmd(minDate(asOf, kpiWindowEnd)))
             .get()
             .catch(() => null)
         )
@@ -578,12 +599,14 @@ export async function GET(req: NextRequest) {
     // are not actionable and cause confusing decimals on the report card.
     // All targets now use yearly goal prorated by elapsed workdays (same as income goal).
     // This is immune to the old daily:0 bug and stays in sync with the saved business plan.
-    const callsTarget = prorateYearly(asNumber(plan.calculatedTargets?.calls?.yearly));
-    const engagementsTarget = prorateYearly(asNumber(plan.calculatedTargets?.engagements?.yearly));
-    const appointmentsSetTarget = prorateYearly(asNumber(plan.calculatedTargets?.appointmentsSet?.yearly));
-    const appointmentsHeldTarget = prorateYearly(asNumber(plan.calculatedTargets?.appointmentsHeld?.yearly));
-    const contractsWrittenTarget = prorateYearly(asNumber(plan.calculatedTargets?.contractsWritten?.yearly));
-    const closingsTarget = prorateYearly(asNumber(plan.calculatedTargets?.closings?.yearly));
+    // KPI targets use the KPI clock (calls, engagements, appointments, contracts)
+    const callsTarget = prorateKpi(asNumber(plan.calculatedTargets?.calls?.yearly));
+    const engagementsTarget = prorateKpi(asNumber(plan.calculatedTargets?.engagements?.yearly));
+    const appointmentsSetTarget = prorateKpi(asNumber(plan.calculatedTargets?.appointmentsSet?.yearly));
+    const appointmentsHeldTarget = prorateKpi(asNumber(plan.calculatedTargets?.appointmentsHeld?.yearly));
+    const contractsWrittenTarget = prorateKpi(asNumber(plan.calculatedTargets?.contractsWritten?.yearly));
+    // Closings use the FINANCIAL clock (it's a financial outcome)
+    const closingsTarget = prorateFinancial(asNumber(plan.calculatedTargets?.closings?.yearly));
 
     const engagementDelta = Number((engagementsActual - engagementGoalToDate).toFixed(2));
     const catchUpWindowDays = 20;
@@ -609,11 +632,11 @@ export async function GET(req: NextRequest) {
 
       leadIndicatorGrade: gradeFromPerformance(performance(engagementsActual, engagementsTarget)),
       leadIndicatorPerformance: performance(engagementsActual, engagementsTarget),
-      isLeadIndicatorGracePeriod: elapsedWorkdays < 5,
+      isLeadIndicatorGracePeriod: kpiElapsedWorkdays < 5,
 
       incomeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(incomePerformance),
       incomePerformance,
-      isIncomeGracePeriod: elapsedWorkdays < 5,
+      isIncomeGracePeriod: financialElapsedWorkdays < 5,
       isMetricsGracePeriod,
       expectedYTDIncomeGoal,
       ytdTotalPotential,
@@ -677,6 +700,9 @@ export async function GET(req: NextRequest) {
       totalIncomeWithPipelineForYear: Number(ytdTotalPotential.toFixed(2)),
 
       effectiveStartDate: toYmd(effectiveStart) || undefined,
+      // Dual-clock: expose both start dates so the UI can show them on report cards
+      financialStartDate: toYmd(financialEffectiveStart) || undefined,
+      kpiStartDate: toYmd(kpiEffectiveStart) || undefined,
       annualIncomeGoal,
       projectedNetIncome: Number(ytdTotalPotential.toFixed(2)),
       incomeDeltaToGoal: Number((netEarned - expectedYTDIncomeGoal).toFixed(2)),
@@ -778,10 +804,11 @@ export async function GET(req: NextRequest) {
         }
       }
     }
-    // In 'plan_start' mode, only count goal months from the plan start month onward.
-    // In 'calendar_year' mode, count all months from Jan 1 (goalFloorMonth = 1).
-    const planStartMonth = effectiveStart.getUTCMonth() + 1; // 1-based
-    const goalFloorMonth = measurementMode === 'calendar_year' ? 1 : planStartMonth;
+    // goalFloorMonth: only count goal months from the financial start month onward.
+    // For Jan 1 financial start (calendar year), count all months from Jan 1.
+    const financialStartMonth = financialEffectiveStart.getUTCMonth() + 1; // 1-based
+    const isFinancialJan1 = rawFinancialStart.endsWith('-01-01') || !rawFinancialStart;
+    const goalFloorMonth = isFinancialJan1 ? 1 : financialStartMonth;
 
     for (const gDoc of allGoalDocs) {
       const g = gDoc.data();

@@ -334,28 +334,44 @@ export async function GET(req: NextRequest) {
         isGracePeriod = true;
       }
 
-      // Effective start for prorating
-      const planStart = toDate(plan.resetStartDate || plan.planStartDate || `${yearNum}-01-01`) || yearStart;
-      const effectiveStart = planStart.getTime() >= yearStart.getTime() ? planStart : yearStart;
-      const elapsedWorkdays = asOf.getTime() < effectiveStart.getTime()
-        ? 0
-        : countWeekdaysInclusive(effectiveStart, asOf);
+      // Dual-clock: separate start dates for financial vs KPI metrics
+      const legacyStart = plan.resetStartDate || plan.planStartDate || `${yearNum}-01-01`;
+      const rawFinancialStart = (plan as any).financialStartDate || legacyStart;
+      const rawKpiStart = (plan as any).kpiStartDate || legacyStart;
 
-      const totalWorkdaysInYear = Math.max(1,
+      const resolveStart = (raw: string): Date => {
+        const d = toDate(raw);
+        if (!d) return yearStart;
+        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      };
+      const financialEffectiveStart = resolveStart(rawFinancialStart);
+      const kpiEffectiveStart = resolveStart(rawKpiStart);
+
+      const totalWorkdaysInRolling12 = Math.max(1,
         asNumber(plan.assumptions?.workingDaysPerMonth) * 12 - asNumber(plan.assumptions?.weeksOff) * 5
       );
 
-      // Engagement & appointment targets (prorated)
+      const financialElapsed = asOf.getTime() < financialEffectiveStart.getTime()
+        ? 0
+        : countWeekdaysInclusive(financialEffectiveStart, asOf);
+      const kpiElapsed = asOf.getTime() < kpiEffectiveStart.getTime()
+        ? 0
+        : countWeekdaysInclusive(kpiEffectiveStart, asOf);
+
+      // Engagement & appointment targets use KPI clock
       const dailyEngTarget = asNumber(plan.calculatedTargets?.engagements?.daily);
       const dailyApptHeldTarget = asNumber(plan.calculatedTargets?.appointmentsHeld?.daily);
-      const engTarget = Number((dailyEngTarget * elapsedWorkdays).toFixed(2));
-      const apptHeldTarget = Number((dailyApptHeldTarget * elapsedWorkdays).toFixed(2));
+      const engTarget = Number((dailyEngTarget * kpiElapsed).toFixed(2));
+      const apptHeldTarget = Number((dailyApptHeldTarget * kpiElapsed).toFixed(2));
 
-      // Income goals
+      // Income goals use financial clock
       const annualIncomeGoal = asNumber(plan.annualIncomeGoal);
-      const expectedYTDIncome = totalWorkdaysInYear > 0
-        ? Number(((annualIncomeGoal * elapsedWorkdays) / totalWorkdaysInYear).toFixed(2))
+      const expectedYTDIncome = totalWorkdaysInRolling12 > 0
+        ? Number(((annualIncomeGoal * financialElapsed) / totalWorkdaysInRolling12).toFixed(2))
         : 0;
+
+      // Legacy: effectiveStart = financialEffectiveStart (for transaction filtering)
+      const effectiveStart = financialEffectiveStart;
 
       // Process transactions
       let netEarned = 0;

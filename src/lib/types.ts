@@ -34,27 +34,22 @@ export interface BusinessPlan {
   year: number;
   annualIncomeGoal: number;
 
-  // New fields for prorated calendar-year planning.
-  // effective start date will be derived later from:
-  // resetStartDate ?? planStartDate ?? Jan 1 of the plan year
-  planStartDate?: string; // YYYY-MM-DD
-  resetStartDate?: string; // YYYY-MM-DD
+  // Dual-clock measurement system:
+  //   financialStartDate: rolling-12 window start for net income, volume, closed deals
+  //   kpiStartDate:       rolling-12 window start for calls, engagements, appts, contracts
+  // When both are Jan 1, behavior is identical to a standard calendar-year plan.
+  // Legacy fields (planStartDate, resetStartDate, measurementMode) are kept for
+  // backward compatibility and used as fallbacks when the new fields are absent.
+  financialStartDate?: string; // YYYY-MM-DD
+  kpiStartDate?: string;       // YYYY-MM-DD
+
+  // Legacy fields — kept for backward compat; new code uses financialStartDate/kpiStartDate
+  planStartDate?: string;  // YYYY-MM-DD
+  resetStartDate?: string; // YYYY-MM-DD — deprecated, cleared on next save
+  measurementMode?: 'plan_start' | 'calendar_year'; // deprecated
+
   isNewAgent?: boolean; // true = grace period applies before closing goals start
   gracePeriodMonths?: number; // default 3 for new agents, 0 for existing
-
-  /**
-   * Controls how the dashboard grades the agent's performance.
-   *
-   * 'plan_start' (default when planStartDate is set and not Jan 1):
-   *   - Grades only from the plan start date forward.
-   *   - Pre-plan actuals are shown in charts but excluded from grading.
-   *   - Prevents F grades for agents who set their plan mid-year.
-   *
-   * 'calendar_year':
-   *   - Grades from January 1 of the plan year.
-   *   - All YTD actuals count toward the grade.
-   */
-  measurementMode?: 'plan_start' | 'calendar_year';
 
   // Financial & Timing block — average sale price and commission percentages
   goalAvgSalePrice?: number;
@@ -291,7 +286,10 @@ export interface AgentDashboardData {
   totalIncomeWithPipelineForYear: number;
 
   // Proration / pacing fields for the upgraded dashboard.
-  effectiveStartDate?: string; // YYYY-MM-DD
+  effectiveStartDate?: string; // YYYY-MM-DD (legacy — equals financialStartDate)
+  // Dual-clock: separate start dates exposed to the UI for display on report cards
+  financialStartDate?: string; // YYYY-MM-DD — when financial metrics start being graded
+  kpiStartDate?: string;       // YYYY-MM-DD — when KPI activity metrics start being graded
   annualIncomeGoal?: number;
   projectedNetIncome?: number;
   incomeDeltaToGoal?: number;

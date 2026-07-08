@@ -108,13 +108,26 @@ export async function POST(req: NextRequest) {
 
     const ref = planDocRef(adminDb, profileDocId, year);
 
-    // Build the write payload. When resetStartDate is explicitly cleared (empty string or null),
-    // use FieldValue.delete() so Firestore removes the field rather than ignoring it (merge:true
-    // skips undefined, so we need an explicit delete sentinel to overwrite an existing value).
+    // Build the write payload.
+    // - financialStartDate / kpiStartDate: save as-is (or delete if empty)
+    // - resetStartDate: always delete (deprecated field, cleared on every save)
+    // - measurementMode: always delete (deprecated, replaced by dual-clock fields)
+    // FieldValue.delete() is required because merge:true skips undefined keys,
+    // so we need an explicit sentinel to remove fields from Firestore.
     const planToWrite: Record<string, any> = { ...plan, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-    if ('resetStartDate' in plan && (plan.resetStartDate === '' || plan.resetStartDate === null)) {
-      planToWrite.resetStartDate = admin.firestore.FieldValue.delete();
+
+    // Handle financialStartDate
+    if ('financialStartDate' in plan && (plan.financialStartDate === '' || plan.financialStartDate === null)) {
+      planToWrite.financialStartDate = admin.firestore.FieldValue.delete();
     }
+    // Handle kpiStartDate
+    if ('kpiStartDate' in plan && (plan.kpiStartDate === '' || plan.kpiStartDate === null)) {
+      planToWrite.kpiStartDate = admin.firestore.FieldValue.delete();
+    }
+    // Always clear legacy fields
+    planToWrite.resetStartDate = admin.firestore.FieldValue.delete();
+    planToWrite.measurementMode = admin.firestore.FieldValue.delete();
+
     await ref.set(planToWrite, { merge: true });
 
     // Read back to guarantee defined shape
