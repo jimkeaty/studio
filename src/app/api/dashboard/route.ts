@@ -295,7 +295,13 @@ export async function GET(req: NextRequest) {
     //   'plan_start' (default for mid-year plans): grade only from plan start date forward.
     //     Pre-plan actuals are shown in charts but excluded from grading.
     //   'calendar_year': grade from Jan 1. All YTD actuals count.
-    // Default: 'plan_start' when planStartDate is set and not Jan 1; otherwise 'calendar_year'.
+    // Default logic:
+    //   - If measurementMode is explicitly saved on the plan, use it.
+    //   - If planStartDate is set to a non-Jan-1 date, default to 'plan_start'.
+    //   - If planStartDate is Jan 1 (or unset), default to 'calendar_year'.
+    //   EXCEPTION: if planStartDate IS Jan 1 but the agent explicitly saved
+    //   measurementMode='plan_start', respect that choice (they want to grade
+    //   from their plan start even though it's Jan 1 — e.g., a fresh restart).
     const rawMeasurementMode = (plan as any).measurementMode as string | undefined;
     const isJanFirst = (plan.planStartDate ?? `${year}-01-01`).endsWith('-01-01');
     const measurementMode: 'plan_start' | 'calendar_year' =

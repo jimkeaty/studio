@@ -900,10 +900,10 @@ export default function BusinessPlanPage() {
         year: parseInt(year, 10),
         annualIncomeGoal: data.annualIncomeGoal,
         planStartDate: data.planStartDate || undefined,
-        // Always send resetStartDate (even empty string) so the API route can
-        // explicitly delete it from Firestore when cleared. Using `|| undefined`
-        // would strip the key from JSON and Firestore merge would keep the old value.
-        resetStartDate: data.resetStartDate ?? "",
+        // Always send empty string for resetStartDate so the API route deletes it
+        // from Firestore. The Reset Start Date field has been removed from the UI;
+        // the Plan Start Date is now the single field that controls grading start.
+        resetStartDate: "",
         isNewAgent,
         gracePeriodMonths: isNewAgent ? gracePeriodMonths : 0,
         measurementMode,
@@ -1311,7 +1311,7 @@ export default function BusinessPlanPage() {
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               <FormField
                 control={form.control}
                 name="planStartDate"
@@ -1319,21 +1319,24 @@ export default function BusinessPlanPage() {
                   <FormItem>
                     <FormLabel>Plan Start Date</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} value={field.value ?? ""} />
+                      <Input
+                        type="date"
+                        {...field}
+                        value={field.value ?? ""}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          // Auto-switch measurement mode based on the date chosen:
+                          // Non-Jan-1 date → grade from plan start (no Fs for pre-plan months)
+                          // Jan 1 (or cleared) → grade from Jan 1 (full calendar year)
+                          const val = e.target.value;
+                          const isJan1 = !val || val.endsWith('-01-01');
+                          setMeasurementMode(isJan1 ? 'calendar_year' : 'plan_start');
+                        }}
+                      />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="resetStartDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Reset Start Date (Optional)</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} value={field.value ?? ""} />
-                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Set to today to restart your plan from scratch — your grade will only count activity from this date forward.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1403,7 +1406,7 @@ export default function BusinessPlanPage() {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Use Plan Start Date for a new agent or the beginning of this year&apos;s plan. Use Reset Start Date only if you want the dashboard pacing and grading to restart later in the same calendar year. Check &quot;New Agent&quot; to suppress closing goals during the grace period — activity goals (calls, engagements, appointments) start immediately.
+              To restart your plan mid-year, simply update the Plan Start Date to today — the dashboard will grade only from that date forward, so past months won&apos;t count against your score. Check &quot;New Agent&quot; to suppress closing goals during the grace period — activity goals (calls, engagements, appointments) start immediately.
             </p>
           </CardContent>
         </Card>
