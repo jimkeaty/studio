@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
       agentPhone,
       agentEmail,
       agentProfileId,
+      postToFacebook,  // boolean — share to KRE Agents Facebook Group
     } = body;
 
     if (!helpType || !description || !agentName || !agentPhone) {
@@ -151,6 +152,74 @@ export async function POST(req: NextRequest) {
         console.warn('[agent-help] Broadcast notification failed (non-fatal):', notifErr?.message);
       }
     })();
+
+    // ── Facebook Group post (non-fatal) ────────────────────────────────────────────────────
+    if (postToFacebook) {
+      void (async () => {
+        try {
+          const userDoc = await adminDb.collection('users').doc(auth.uid).get();
+          const userData = userDoc.data() || {};
+          const fbToken = userData.facebookToken as string | undefined;
+          const fbExpiresAt = userData.facebookTokenExpiresAt as string | undefined;
+          if (fbToken && (!fbExpiresAt || new Date(fbExpiresAt) > new Date())) {
+            const helpTypeLabel: Record<string, string> = {
+              showing: 'Showing',
+              inspection: 'Inspection',
+              closing: 'Closing',
+              other: 'Help',
+            };
+            const label = helpTypeLabel[helpType] || 'Help';
+            const compText = compensation && Number(compensation) > 0
+              ? `\nCompensation: $${Number(compensation)}${compensationNote ? ` (${compensationNote})` : ''}`
+              : '';
+            const dateText = needDate ? `\nDate Needed: ${needDate}${needTime ? ` at ${needTime}` : ''}` : '';
+            const fbMessage = [
+              `🤝 AGENT HELP NEEDED — ${agentName}`,
+              ``,
+              `Type: ${label}`,
+              propertyAddress ? `Property: ${propertyAddress}` : '',
+              dateText ? dateText.trim() : '',
+              compText ? compText.trim() : '',
+              ``,
+              description.trim(),
+              ``,
+              `Contact: ${agentPhone}`,
+              `#KREAgents #AgentHelp`,
+            ].filter(Boolean).join('\n');
+            const FACEBOOK_GROUP_ID = process.env.FACEBOOK_GROUP_ID || '1590583281249545';
+            const fbRes = await fetch(
+              `https://graph.facebook.com/v19.0/${FACEBOOK_GROUP_ID}/feed`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: fbMessage, access_token: fbToken }),
+              }
+            );
+            const fbData = await fbRes.json();
+            if (fbData.error) {
+              console.error('[agent-help] Facebook post error:', fbData.error);
+              if (fbData.error.code === 190 || fbData.error.code === 200) {
+                await adminDb.collection('users').doc(auth.uid).update({ facebookToken: null, facebookTokenExpiresAt: null });
+              }
+            } else {
+              await adminDb.collection('facebookPosts').add({
+                uid: auth.uid,
+                postType: 'agent_needed',
+                groupId: FACEBOOK_GROUP_ID,
+                fbPostId: fbData.id || '',
+                messagePreview: fbMessage.slice(0, 200),
+                sourceAgentHelpId: ref.id,
+                postedAt: new Date().toISOString(),
+              });
+            }
+          } else {
+            console.warn(`[agent-help] Facebook post requested but token missing/expired for uid=${auth.uid}`);
+          }
+        } catch (fbErr) {
+          console.error('[agent-help] Facebook post failed (non-fatal):', fbErr);
+        }
+      })();
+    }
 
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (err: any) {

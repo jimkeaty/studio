@@ -404,6 +404,99 @@ export async function POST(req: NextRequest) {
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
+    // ── Facebook Group auto-post ───────────────────────────────────────────────
+    // If the agent checked "Share to KRE Agents Facebook Group", post via Graph API.
+    const postToFacebook = body.postToFacebook as boolean | undefined;
+    if (postToFacebook) {
+      try {
+        // Get agent's stored Facebook token
+        const userDoc = await adminDb.collection('users').doc(callerUid).get();
+        const userData = userDoc.data() || {};
+        const fbToken = userData.facebookToken as string | undefined;
+        const fbExpiresAt = userData.facebookTokenExpiresAt as string | undefined;
+
+        if (fbToken && (!fbExpiresAt || new Date(fbExpiresAt) > new Date())) {
+          const category = body.category as string;
+          const agentName = (body.agentNameOverride as string) || callerUid;
+          let fbMessage = '';
+
+          if (category === 'buyer') {
+            const area = body.listingAddress || body.notes || 'Area TBD';
+            const minP = body.priceRangeLow ? `$${Number(body.priceRangeLow).toLocaleString()}` : null;
+            const maxP = body.priceRangeHigh ? `$${Number(body.priceRangeHigh).toLocaleString()}` : null;
+            const priceRange = minP && maxP ? `${minP} – ${maxP}` : maxP || minP || '';
+            fbMessage = [
+              `🔍 BUYER NEEDS — ${agentName}`,
+              ``,
+              `Looking for a home in: ${area}`,
+              priceRange ? `Price range: ${priceRange}` : '',
+              body.notes ? `Notes: ${body.notes}` : '',
+              ``,
+              `Contact me if you have a match! #KREAgents #BuyerNeeds`,
+            ].filter(Boolean).join('\n');
+          } else if (category === 'seller') {
+            const area = body.communityArea || body.notes || 'Area TBD';
+            const price = body.priceRangeLow ? `$${Number(body.priceRangeLow).toLocaleString()}` : (body.priceRangeHigh ? `$${Number(body.priceRangeHigh).toLocaleString()}` : '');
+            fbMessage = [
+              `🏡 COMING SOON — ${agentName}`,
+              ``,
+              `Neighborhood / Area: ${area}`,
+              price ? `Price: ${price}` : '',
+              body.notes ? `Notes: ${body.notes}` : '',
+              ``,
+              `Reach out if you have a buyer! #KREAgents #ComingSoon`,
+            ].filter(Boolean).join('\n');
+          } else {
+            // 'both'
+            const area = body.communityArea || body.listingAddress || body.notes || 'Area TBD';
+            fbMessage = [
+              `📋 BUYER NEEDS + 🏡 COMING SOON — ${agentName}`,
+              ``,
+              `Area: ${area}`,
+              body.notes ? `Notes: ${body.notes}` : '',
+              ``,
+              `#KREAgents`,
+            ].filter(Boolean).join('\n');
+          }
+
+          const FACEBOOK_GROUP_ID = process.env.FACEBOOK_GROUP_ID || '1590583281249545';
+          const fbRes = await fetch(
+            `https://graph.facebook.com/v19.0/${FACEBOOK_GROUP_ID}/feed`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: fbMessage, access_token: fbToken }),
+            }
+          );
+          const fbData = await fbRes.json();
+          if (fbData.error) {
+            console.error('[API/appointments] Facebook post error:', fbData.error);
+            // If token revoked, clear it
+            if (fbData.error.code === 190 || fbData.error.code === 200) {
+              await adminDb.collection('users').doc(callerUid).update({ facebookToken: null, facebookTokenExpiresAt: null });
+            }
+          } else {
+            console.log(`[API/appointments] Facebook post success: ${fbData.id}`);
+            // Audit log
+            await adminDb.collection('facebookPosts').add({
+              uid: callerUid,
+              postType: category === 'buyer' ? 'buyer_needs' : category === 'seller' ? 'coming_soon' : 'both',
+              groupId: FACEBOOK_GROUP_ID,
+              fbPostId: fbData.id || '',
+              messagePreview: fbMessage.slice(0, 200),
+              sourceAppointmentId: docRef.id,
+              postedAt: new Date().toISOString(),
+            });
+          }
+        } else {
+          console.warn(`[API/appointments] Facebook post requested but token missing/expired for uid=${callerUid}`);
+        }
+      } catch (fbErr) {
+        // Non-fatal — appointment was saved; log and continue
+        console.error('[API/appointments] Facebook post failed:', fbErr);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ ok: true, id: docRef.id });
   } catch (err: any) {

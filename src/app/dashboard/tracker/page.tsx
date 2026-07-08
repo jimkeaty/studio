@@ -56,6 +56,7 @@ type DraftAppointment = Omit<Appointment, 'id'> & {
   category: 'buyer' | 'seller' | 'both';
   apptKind?: 'set' | 'held';  // whether this was logged as appt set or appt held
   postToCommunity?: boolean;
+  postToFacebook?: boolean;   // share to KRE Agents Facebook group
   listingAddress?: string;    // seller: property address (private, not posted)
   communityArea?: string;     // seller: area/neighborhood for Coming Soon post
   priceRangeLow?: string;     // buyer: min price
@@ -287,8 +288,8 @@ export default function DailyTrackerPage() {
     setApptDraftRows(currentDrafts => {
       const newDrafts = [...currentDrafts];
       const draftToUpdate = { ...newDrafts[index] };
-      // postToCommunity is a boolean — parse string 'true'/'false'
-      if (field === 'postToCommunity') {
+      // boolean fields — parse string 'true'/'false'
+      if (field === 'postToCommunity' || field === 'postToFacebook') {
         (draftToUpdate as any)[field] = value === 'true';
       } else {
         (draftToUpdate as any)[field] = value;
@@ -317,6 +318,7 @@ export default function DailyTrackerPage() {
         scheduledAt: draft.time ? new Date(`${draft.date}T${draft.time}`).toISOString() : new Date(`${draft.date}T00:00:00`).toISOString(),
         // Community board posting
         postToCommunity: draft.postToCommunity || false,
+        postToFacebook: draft.postToFacebook || false,
         listingAddress: draft.listingAddress || null,
         communityArea: draft.communityArea || null,
         priceRangeLow: draft.priceRangeLow || null,
@@ -480,7 +482,7 @@ export default function DailyTrackerPage() {
                     <Input type="time" value={draft.time || ''} onChange={(e) => handleDraftChange(index, 'time', e.target.value)} />
                   </div>
                   {/* Seller-specific fields */}
-                  {(draft.category === 'seller' || draft.category === 'both') && (
+                  {(draft.category === 'seller' || (draft.category as string) === 'both') && (
                     <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
                       <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Seller Details</p>
                       <Input placeholder="Property Address (private — not shared publicly)" value={draft.listingAddress || ''} onChange={(e) => handleDraftChange(index, 'listingAddress', e.target.value)} />
@@ -489,7 +491,7 @@ export default function DailyTrackerPage() {
                     </div>
                   )}
                   {/* Buyer-specific fields */}
-                  {(draft.category === 'buyer' || draft.category === 'both') && (
+                  {(draft.category === 'buyer' || (draft.category as string) === 'both') && (
                     <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <p className="text-xs font-medium text-blue-700 dark:text-blue-400">Buyer Details</p>
                       <div className="grid grid-cols-2 gap-2">
@@ -527,6 +529,34 @@ export default function DailyTrackerPage() {
                             : draft.category === 'seller'
                             ? 'Adds this property area to Coming Soon (address stays private)'
                             : 'Posts buyer needs and coming soon listing to the TV board'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {/* Share to KRE Agents Facebook Group toggle */}
+                  {(draft.category === 'buyer' || draft.category === 'seller' || draft.category === 'both') && (
+                    <div
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        draft.postToFacebook
+                          ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-400 dark:border-blue-700'
+                          : 'bg-muted/40 border-muted-foreground/20 hover:bg-muted/60'
+                      }`}
+                      onClick={() => handleDraftChange(index, 'postToFacebook', String(!draft.postToFacebook))}
+                    >
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        draft.postToFacebook ? 'bg-blue-600 border-blue-600' : 'border-muted-foreground/40'
+                      }`}>
+                        {draft.postToFacebook && <span className="text-white text-xs font-bold">✓</span>}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          <svg className="h-3.5 w-3.5 inline mr-1 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                          </svg>
+                          Share to KRE Agents Facebook Group
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Posts to the KRE Agents group as you (requires Facebook connected in Settings)
                         </p>
                       </div>
                     </div>

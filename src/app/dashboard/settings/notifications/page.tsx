@@ -22,6 +22,8 @@ import {
   Loader2,
   Save,
   Phone,
+  Link2,
+  Link2Off,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -850,6 +852,9 @@ export default function NotificationSettingsPage() {
         </div>
       </Card>
 
+      {/* ── Facebook Group Integration ── */}
+      <FacebookConnectCard />
+
       {/* Bottom save button */}
       <div className="flex justify-end pb-4">
         <Button onClick={handleSave} disabled={saving}>
@@ -862,5 +867,217 @@ export default function NotificationSettingsPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+// ─── Facebook Connect Card ────────────────────────────────────────────────────
+function FacebookConnectCard() {
+  const { user } = useUser();
+  const [status, setStatus] = useState<'loading' | 'connected' | 'expired' | 'disconnected'>('loading');
+  const [fbName, setFbName] = useState<string | null>(null);
+  const [fbExpiresAt, setFbExpiresAt] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Check for ?fb= query param on page load (redirect from OAuth callback)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fb = params.get('fb');
+    const name = params.get('name');
+    const reason = params.get('reason');
+    if (fb === 'connected' && name) {
+      setFbName(decodeURIComponent(name));
+      setStatus('connected');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('fb');
+      url.searchParams.delete('name');
+      window.history.replaceState({}, '', url.toString());
+    } else if (fb === 'denied' || fb === 'error') {
+      setError(reason ? decodeURIComponent(reason) : 'Facebook connection failed. Please try again.');
+      setStatus('disconnected');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('fb');
+      url.searchParams.delete('reason');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  // Fetch current Facebook connection status
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/facebook/status', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.connected) {
+          setStatus('connected');
+          setFbName(data.facebookName || null);
+          setFbExpiresAt(data.expiresAt || null);
+        } else if (data.expired) {
+          setStatus('expired');
+          setFbName(data.facebookName || null);
+        } else {
+          setStatus('disconnected');
+        }
+      } catch {
+        if (!cancelled) setStatus('disconnected');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  async function handleConnect() {
+    if (!user) return;
+    setConnecting(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/facebook/connect', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error || 'Failed to start Facebook connection');
+        setConnecting(false);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to connect');
+      setConnecting(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!user) return;
+    setDisconnecting(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      await fetch('/api/facebook/disconnect', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setStatus('disconnected');
+      setFbName(null);
+      setFbExpiresAt(null);
+    } catch (e: any) {
+      setError(e.message || 'Failed to disconnect');
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <svg className="h-4 w-4 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+          </svg>
+          Facebook Group Integration
+        </CardTitle>
+        <CardDescription>
+          Connect your personal Facebook account to post Coming Soon listings, Buyer Needs, Open Houses,
+          and Agent Help requests directly to the <strong>KRE Agents</strong> Facebook group.
+          Each agent connects their own account — posts appear as coming from you.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {status === 'loading' && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Checking connection status...
+          </div>
+        )}
+
+        {status === 'connected' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              <div>
+                <p className="text-sm font-medium text-emerald-700">
+                  Connected{fbName ? ` as ${fbName}` : ''}
+                </p>
+                {fbExpiresAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Token valid until {new Date(fbExpiresAt).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your Facebook account is linked. When you post to the community board, you'll see an option
+              to also share to the KRE Agents Facebook group.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="text-red-600 border-red-200 hover:bg-red-50"
+            >
+              {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Link2Off className="h-3.5 w-3.5 mr-1.5" />}
+              Disconnect Facebook
+            </Button>
+          </div>
+        )}
+
+        {status === 'expired' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <p className="text-sm font-medium text-amber-700">
+                Facebook token expired{fbName ? ` (was: ${fbName})` : ''} — please reconnect
+              </p>
+            </div>
+            <Button size="sm" onClick={handleConnect} disabled={connecting}>
+              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Link2 className="h-3.5 w-3.5 mr-1.5" />}
+              Reconnect Facebook
+            </Button>
+          </div>
+        )}
+
+        {status === 'disconnected' && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Not connected. Click below to authorize Smart Broker USA to post to the KRE Agents group on your behalf.
+              You'll be redirected to Facebook to grant permission.
+            </p>
+            <Button size="sm" onClick={handleConnect} disabled={connecting} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : (
+                <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+              )}
+              Connect Facebook Account
+            </Button>
+          </div>
+        )}
+
+        {error && (
+          <p className="text-xs text-red-600 flex items-center gap-1">
+            <AlertCircle className="h-3.5 w-3.5" />
+            {error}
+          </p>
+        )}
+
+        <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+          <p className="font-medium">How it works:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li>You authorize once — your token is stored securely</li>
+            <li>Posts appear as coming from <strong>your</strong> Facebook account</li>
+            <li>Tokens expire after ~60 days — you'll be prompted to reconnect</li>
+            <li>The app only posts when <strong>you</strong> check "Share to KRE Agents Group"</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

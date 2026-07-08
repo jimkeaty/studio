@@ -192,6 +192,7 @@ export default function TvModePage() {
   const [helpLoading, setHelpLoading] = useState(false);
   const [showHelpAddDialog, setShowHelpAddDialog] = useState(false);
   const [helpForm, setHelpForm] = useState<Partial<AgentHelpItem & { compensation: string }>>({});
+  const [helpPostToFacebook, setHelpPostToFacebook] = useState(false);
   const [helpSaving, setHelpSaving] = useState(false);
   const [editingHelpItem, setEditingHelpItem] = useState<AgentHelpItem | null>(null);
   const [showHelpEditDialog, setShowHelpEditDialog] = useState(false);
@@ -463,14 +464,14 @@ export default function TvModePage() {
     setHelpSaving(true);
     try {
       const token = await user!.getIdToken();
-      const body = { ...helpForm, compensation: helpForm.compensation ? Number(helpForm.compensation) : 0 };
+      const body = { ...helpForm, compensation: helpForm.compensation ? Number(helpForm.compensation) : 0, postToFacebook: helpPostToFacebook };
       const res = await fetch('/api/community/agent-help', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (json.ok) { setShowHelpAddDialog(false); setHelpForm({}); loadHelpItems(); }
+      if (json.ok) { setShowHelpAddDialog(false); setHelpForm({}); setHelpPostToFacebook(false); loadHelpItems(); }
     } catch (e) { console.error(e); } finally { setHelpSaving(false); }
   };
 
@@ -1545,6 +1546,32 @@ export default function TvModePage() {
               <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.description || '')} onChange={(e) => setHelpForm((f) => ({ ...f, description: e.target.value }))} placeholder="I'm out of town and need someone to show 123 Main St on Friday at 2pm. Buyer is pre-approved. Easy showing." rows={4} />
             </div>
           </div>
+                    {/* Share to KRE Agents Facebook Group */}
+          <div
+            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors mx-0 ${
+              helpPostToFacebook
+                ? 'bg-blue-900/40 border-blue-500'
+                : 'bg-gray-800/60 border-white/10 hover:bg-gray-800'
+            }`}
+            onClick={() => setHelpPostToFacebook(v => !v)}
+          >
+            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+              helpPostToFacebook ? 'bg-blue-600 border-blue-600' : 'border-gray-500'
+            }`}>
+              {helpPostToFacebook && <span className="text-white text-xs font-bold">✓</span>}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">
+                <svg className="h-3.5 w-3.5 inline mr-1 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                Share to KRE Agents Facebook Group
+              </p>
+              <p className="text-xs text-gray-400">
+                Posts this help request to the KRE Agents group as you (requires Facebook connected in Settings)
+              </p>
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="ghost" className="text-gray-400" onClick={() => setShowHelpAddDialog(false)}>Cancel</Button>
             <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleHelpAdd} disabled={helpSaving}>
@@ -1553,7 +1580,6 @@ export default function TvModePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* ─── Agent Help — Edit Dialog ─────────────────────────────────────────── */}
       <Dialog open={showHelpEditDialog} onOpenChange={(open) => { if (!open) { setShowHelpEditDialog(false); setEditingHelpItem(null); setHelpForm({}); } }}>
         <DialogContent className="bg-gray-900 border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">

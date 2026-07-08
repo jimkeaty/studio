@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
   try { decoded = await adminAuth.verifyIdToken(tok); } catch { return jsonErr(401, 'Invalid token'); }
 
   const body = await req.json();
-  const { openHouseDate, startTime, endTime, agentName, agentPhone, propertyAddress, mlsNumber, specialNotes } = body;
+  const { openHouseDate, startTime, endTime, agentName, agentPhone, propertyAddress, mlsNumber, specialNotes, postToFacebook } = body;
 
   if (!openHouseDate || !startTime || !endTime || !agentName) {
     return jsonErr(400, 'openHouseDate, startTime, endTime, and agentName are required');
@@ -167,10 +167,62 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // ── Facebook Group post (non-fatal) ────────────────────────────────────────────────────
+  if (postToFacebook) {
+    try {
+      const userDoc = await adminDb.collection('users').doc(decoded.uid).get();
+      const userData = userDoc.data() || {};
+      const fbToken = userData.facebookToken as string | undefined;
+      const fbExpiresAt = userData.facebookTokenExpiresAt as string | undefined;
+      if (fbToken && (!fbExpiresAt || new Date(fbExpiresAt) > new Date())) {
+        const fbMessage = [
+          `🏠 OPEN HOUSE — ${agentDisplayName}`,
+          ``,
+          `Date: ${openHouseDate}  |  Time: ${startTime} – ${endTime}`,
+          propertyAddress ? `Address: ${propertyAddress}` : '',
+          mlsNumber ? `MLS: ${mlsNumber}` : '',
+          specialNotes ? `Notes: ${specialNotes}` : '',
+          ``,
+          `#KREAgents #OpenHouse`,
+        ].filter(Boolean).join('\n');
+        const FACEBOOK_GROUP_ID = process.env.FACEBOOK_GROUP_ID || '1590583281249545';
+        const fbRes = await fetch(
+          `https://graph.facebook.com/v19.0/${FACEBOOK_GROUP_ID}/feed`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: fbMessage, access_token: fbToken }),
+          }
+        );
+        const fbData = await fbRes.json();
+        if (fbData.error) {
+          console.error('[API/open-house] Facebook post error:', fbData.error);
+          if (fbData.error.code === 190 || fbData.error.code === 200) {
+            await adminDb.collection('users').doc(decoded.uid).update({ facebookToken: null, facebookTokenExpiresAt: null });
+          }
+        } else {
+          await adminDb.collection('facebookPosts').add({
+            uid: decoded.uid,
+            postType: 'open_house',
+            groupId: FACEBOOK_GROUP_ID,
+            fbPostId: fbData.id || '',
+            messagePreview: fbMessage.slice(0, 200),
+            sourceOpenHouseId: docRef.id,
+            postedAt: new Date().toISOString(),
+          });
+        }
+      } else {
+        console.warn(`[API/open-house] Facebook post requested but token missing/expired for uid=${decoded.uid}`);
+      }
+    } catch (fbErr) {
+      console.error('[API/open-house] Facebook post failed (non-fatal):', fbErr);
+    }
+  }
+
   return NextResponse.json({ ok: true, id: docRef.id });
 }
 
-// ─── PATCH (edit time / notes) ────────────────────────────────────────────────
+// ─── PATCH (edit time / notes) ─────────────────────────────────────────────────────────────────────────
 export async function PATCH(req: NextRequest) {
   const tok = bearer(req);
   if (!tok) return jsonErr(401, 'Unauthorized');

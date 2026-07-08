@@ -114,6 +114,22 @@ env:
     availability:
       - RUNTIME
 
+  # ── Facebook Group Integration ──────────────────────────────────────────
+  - variable: FACEBOOK_APP_ID
+    value: "2034192387224399"
+    availability:
+      - RUNTIME
+
+  - variable: FACEBOOK_APP_SECRET
+    value: "e3e6e934edf55f7e81c6505a6b4abb50"
+    availability:
+      - RUNTIME
+
+  - variable: FACEBOOK_GROUP_ID
+    value: "1590583281249545"
+    availability:
+      - RUNTIME
+
   # ── OpenAI ───────────────────────────────────────────────────────────────
   # OPENAI_API_KEY is configured via Firebase App Hosting environment variable
   # override in the Firebase console (bypasses this file to avoid secret scanning)

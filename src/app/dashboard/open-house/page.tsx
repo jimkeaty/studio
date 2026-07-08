@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Home, Clock, Calendar, Phone, FileText, CheckCircle2,
-  AlertCircle, Plus, Loader2, ArrowLeft, Info, Pencil, X, AlertTriangle,
+  AlertCircle, Plus, Loader2, ArrowLeft, Info, Pencil, X, AlertTriangle, Link2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -62,9 +62,8 @@ export default function OpenHouseSubmissionPage() {
 
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
-
   // New submission form state
   const [openHouseDate, setOpenHouseDate] = useState('');
   const [startTime, setStartTime] = useState('1:00 PM');
@@ -74,6 +73,7 @@ export default function OpenHouseSubmissionPage() {
   const [propertyAddress, setPropertyAddress] = useState('');
   const [mlsNumber, setMlsNumber] = useState('');
   const [specialNotes, setSpecialNotes] = useState('');
+  const [postToFacebook, setPostToFacebook] = useState(false);
 
   // Edit sheet state
   const [editSub, setEditSub] = useState<Submission | null>(null);
@@ -133,7 +133,7 @@ export default function OpenHouseSubmissionPage() {
       const res = await fetch('/api/agent/open-house-submissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
-        body: JSON.stringify({ openHouseDate, startTime, endTime, agentName, agentPhone, propertyAddress, mlsNumber, specialNotes }),
+        body: JSON.stringify({ openHouseDate, startTime, endTime, agentName, agentPhone, propertyAddress, mlsNumber, specialNotes, postToFacebook }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Submission failed');
@@ -141,6 +141,7 @@ export default function OpenHouseSubmissionPage() {
       setShowForm(false);
       setOpenHouseDate(''); setStartTime('1:00 PM'); setEndTime('4:00 PM');
       setPropertyAddress(''); setMlsNumber(''); setSpecialNotes('');
+      setPostToFacebook(false);
       loadSubmissions();
     } catch (err: any) {
       toast({ title: 'Submission failed', description: err.message, variant: 'destructive' });
@@ -354,6 +355,32 @@ export default function OpenHouseSubmissionPage() {
                 <p className="text-[11px] text-muted-foreground">Staff will pull MLS details. Use this field for anything you want highlighted in the email.</p>
               </div>
 
+              {/* Share to KRE Agents Facebook Group */}
+              <div
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  postToFacebook
+                    ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-400 dark:border-blue-700'
+                    : 'bg-muted/40 border-muted-foreground/20 hover:bg-muted/60'
+                }`}
+                onClick={() => setPostToFacebook(v => !v)}
+              >
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                  postToFacebook ? 'bg-blue-600 border-blue-600' : 'border-muted-foreground/40'
+                }`}>
+                  {postToFacebook && <span className="text-white text-xs font-bold">✓</span>}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">
+                    <svg className="h-3.5 w-3.5 inline mr-1 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                    </svg>
+                    Share to KRE Agents Facebook Group
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Posts this open house to the KRE Agents group as you (requires Facebook connected in Settings)
+                  </p>
+                </div>
+              </div>
               <div className="flex gap-2 pt-1">
                 <Button type="submit" disabled={submitting} className="flex-1">
                   {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Submitting...</> : '🏠 Submit Open House'}
