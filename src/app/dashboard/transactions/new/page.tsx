@@ -807,11 +807,29 @@ export default function AddTransactionPage() {
       const setIfPresent = (key: string, val: unknown) => {
         if (val !== null && val !== undefined && val !== '') form.setValue(key as any, val as any);
       };
+      // Convert MM/DD/YYYY or M/D/YYYY → YYYY-MM-DD for HTML date inputs
+      const toInputDate = (raw: unknown): string => {
+        if (!raw || typeof raw !== 'string') return '';
+        const trimmed = raw.trim();
+        // Already in YYYY-MM-DD format
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+        // MM/DD/YYYY or M/D/YYYY
+        const parts = trimmed.split('/');
+        if (parts.length === 3) {
+          const [m, d, y] = parts;
+          if (y.length === 4) {
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          }
+        }
+        return '';
+      };
       // Core address & price
       setIfPresent('address', f.address);
       setIfPresent('listPrice', f.listPrice);
-      setIfPresent('listingDate', f.listingDate);
-      setIfPresent('listingExpirationDate', f.expirationDate);
+      const listingDateConverted = toInputDate(f.listingDate);
+      const expirationDateConverted = toInputDate(f.expirationDate);
+      setIfPresent('listingDate', listingDateConverted);
+      setIfPresent('listingExpirationDate', expirationDateConverted);
       // Seller info
       if (f.sellerName) form.setValue('clientName', f.sellerName as string);
       setIfPresent('clientPhone', f.sellerPhone);

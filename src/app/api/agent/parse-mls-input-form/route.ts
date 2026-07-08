@@ -129,9 +129,13 @@ Store the full combined address in "address". Also store each component separate
 LISTING PRICE: Extract the dollar amount from the "Listing Price" field. Return as a number (no $ or commas).
 
 DATES: Extract dates in MM/DD/YYYY format as written on the form.
-- "Listing Date" → listingDate
-- "Expiration Date" → expirationDate
-- "Start Showing Date" → startShowingDate
+Look in the "Listing Info" section (usually near the top of page 1) for:
+- "Listing Date" or "List Date" → listingDate  (the date the property is listed, e.g. 07/08/2026)
+- "Expiration Date" or "Exp Date" or "Expire Date" → expirationDate  (the date the listing expires, e.g. 01/08/2027)
+- "Start Showing Date" or "Show Date" → startShowingDate
+These fields are CRITICAL — look carefully in the Listing Info / Listing Information section at the top of the form.
+If you see a date next to "Listing Date" or similar label, always extract it.
+Return dates exactly as written (MM/DD/YYYY). Do NOT return empty string if a date is visible on the form.
 
 SELLER INFO: Look for "Seller Name" and "Seller Phone" in the "Office/Member/Contract Info" section (usually page 2).
 
