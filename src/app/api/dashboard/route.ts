@@ -580,8 +580,10 @@ export async function GET(req: NextRequest) {
           seenApptIds.add(doc.id);
           const d = doc.data();
           if (d.pipelineStatus === 'trash') continue;
-          pipelineSetTotal++;
-          if (d.pipelineStatus === 'held') pipelineHeldTotal++;
+          // 'both' category counts as 2 appointments (1 buyer + 1 seller)
+          const apptWeight = (d.category === 'both') ? 2 : 1;
+          pipelineSetTotal += apptWeight;
+          if (d.pipelineStatus === 'held') pipelineHeldTotal += apptWeight;
         }
       }
       // Use the higher of daily_activity vs pipeline

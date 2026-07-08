@@ -51,7 +51,16 @@ type Appointment = {
   updatedAt?: string;
 };
 
-type DraftAppointment = Omit<Appointment, 'id'> & { id: string; };
+type DraftAppointment = Omit<Appointment, 'id'> & {
+  id: string;
+  category: 'buyer' | 'seller' | 'both';
+  apptKind?: 'set' | 'held';  // whether this was logged as appt set or appt held
+  postToCommunity?: boolean;
+  listingAddress?: string;    // seller: property address (private, not posted)
+  communityArea?: string;     // seller: area/neighborhood for Coming Soon post
+  priceRangeLow?: string;     // buyer: min price
+  priceRangeHigh?: string;    // buyer/seller: max price or listing price
+};
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -247,14 +256,22 @@ export default function DailyTrackerPage() {
         date, dailyActivity: parseActivity(activityData),
       })).filter((x) => x.date && isSameMonth(x.date, monthYear.year, monthYear.monthIndex));
       setRangeDays(normalized);
-      // Prompt for appointment entry if new appointments were set
-      const prevApptCount = activityMap[selectedDate]?.appointmentsSetCount ?? 0;
-      const newApptCount = activity.appointmentsSetCount;
-      if (newApptCount > prevApptCount) {
-        const diff = newApptCount - prevApptCount;
-        const newDrafts: DraftAppointment[] = Array.from({ length: diff }, (_, i) => ({
-          id: `draft_${Date.now()}_${i}`, date: selectedDate, contactName: '', category: 'buyer', status: 'scheduled', time: '', notes: '',
-        }));
+      // Prompt for appointment entry if new appointments were set OR held
+      const prevApptSetCount = activityMap[selectedDate]?.appointmentsSetCount ?? 0;
+      const newApptSetCount = activity.appointmentsSetCount;
+      const prevApptHeldCount = activityMap[selectedDate]?.appointmentsHeldCount ?? 0;
+      const newApptHeldCount = activity.appointmentsHeldCount;
+      const setDiff = newApptSetCount - prevApptSetCount;
+      const heldDiff = newApptHeldCount - prevApptHeldCount;
+      const newDrafts: DraftAppointment[] = [
+        ...Array.from({ length: Math.max(0, setDiff) }, (_, i) => ({
+          id: `draft_set_${Date.now()}_${i}`, date: selectedDate, contactName: '', category: 'buyer' as const, status: 'scheduled' as const, time: '', notes: '', apptKind: 'set' as const,
+        })),
+        ...Array.from({ length: Math.max(0, heldDiff) }, (_, i) => ({
+          id: `draft_held_${Date.now()}_${i}`, date: selectedDate, contactName: '', category: 'buyer' as const, status: 'held' as const, time: '', notes: '', apptKind: 'held' as const,
+        })),
+      ];
+      if (newDrafts.length > 0) {
         setApptDraftRows(newDrafts);
         setShowApptModal(true);
       }
@@ -270,7 +287,12 @@ export default function DailyTrackerPage() {
     setApptDraftRows(currentDrafts => {
       const newDrafts = [...currentDrafts];
       const draftToUpdate = { ...newDrafts[index] };
-      (draftToUpdate as any)[field] = value;
+      // postToCommunity is a boolean — parse string 'true'/'false'
+      if (field === 'postToCommunity') {
+        (draftToUpdate as any)[field] = value === 'true';
+      } else {
+        (draftToUpdate as any)[field] = value;
+      }
       newDrafts[index] = draftToUpdate;
       return newDrafts;
     });
@@ -287,9 +309,18 @@ export default function DailyTrackerPage() {
     setError(null);
     const savePromises = validDrafts.map(draft => {
       const payload = {
-        date: draft.date, contactName: draft.contactName, category: draft.category, status: draft.status,
+        date: draft.date,
+        contactName: draft.contactName,
+        category: draft.category,  // 'buyer' | 'seller' | 'both'
+        status: draft.status,
         notes: draft.notes || null,
         scheduledAt: draft.time ? new Date(`${draft.date}T${draft.time}`).toISOString() : new Date(`${draft.date}T00:00:00`).toISOString(),
+        // Community board posting
+        postToCommunity: draft.postToCommunity || false,
+        listingAddress: draft.listingAddress || null,
+        communityArea: draft.communityArea || null,
+        priceRangeLow: draft.priceRangeLow || null,
+        priceRangeHigh: draft.priceRangeHigh || null,
         ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}),
       };
       return authedFetch('/api/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -417,23 +448,89 @@ export default function DailyTrackerPage() {
       <Dialog open={showApptModal} onOpenChange={setShowApptModal}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Log New Appointments</DialogTitle>
-            <DialogDescription>Your daily log shows you set {apptDraftRows.length} new appointment(s). Add the details below.</DialogDescription>
+            <DialogTitle>Log Appointment Details</DialogTitle>
+            <DialogDescription>
+              {apptDraftRows.length} new appointment(s) logged. Fill in the details below.
+              Selecting <strong>Both</strong> counts as 2 appointments (1 buyer + 1 seller).
+            </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto p-1 space-y-4">
+          <div className="max-h-[65vh] overflow-y-auto p-1 space-y-4">
             {apptDraftRows.map((draft, index) => (
-              <Card key={draft.id}>
+              <Card key={draft.id} className="border-l-4" style={{ borderLeftColor: draft.category === 'buyer' ? '#3b82f6' : draft.category === 'seller' ? '#f59e0b' : '#8b5cf6' }}>
                 <CardContent className="p-4 space-y-3">
-                  <Input placeholder="Contact Name / Title" value={draft.contactName} onChange={(e) => handleDraftChange(index, 'contactName', e.target.value)} />
+                  {/* Kind badge */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {draft.apptKind === 'held' ? '✅ Appointment Held' : '📅 Appointment Set'}
+                    </span>
+                  </div>
+                  {/* Contact name */}
+                  <Input placeholder="Contact Name" value={draft.contactName} onChange={(e) => handleDraftChange(index, 'contactName', e.target.value)} />
+                  {/* Category + date + time */}
                   <div className="grid grid-cols-3 gap-3">
-                    <Select value={draft.category} onValueChange={(val: 'buyer' | 'seller') => handleDraftChange(index, 'category', val)}>
+                    <Select value={draft.category} onValueChange={(val: 'buyer' | 'seller' | 'both') => handleDraftChange(index, 'category', val)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="buyer">Buyer</SelectItem><SelectItem value="seller">Seller</SelectItem></SelectContent>
+                      <SelectContent>
+                        <SelectItem value="buyer">🏠 Buyer</SelectItem>
+                        <SelectItem value="seller">🏷️ Seller</SelectItem>
+                        <SelectItem value="both">🔄 Both (counts ×2)</SelectItem>
+                      </SelectContent>
                     </Select>
                     <Input type="date" value={draft.date} onChange={(e) => handleDraftChange(index, 'date', e.target.value)} />
-                    <Input type="time" value={draft.time} onChange={(e) => handleDraftChange(index, 'time', e.target.value)} />
+                    <Input type="time" value={draft.time || ''} onChange={(e) => handleDraftChange(index, 'time', e.target.value)} />
                   </div>
-                  <Textarea placeholder="Optional notes..." value={draft.notes} onChange={(e) => handleDraftChange(index, 'notes', e.target.value)} />
+                  {/* Seller-specific fields */}
+                  {(draft.category === 'seller' || draft.category === 'both') && (
+                    <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Seller Details</p>
+                      <Input placeholder="Property Address (private — not shared publicly)" value={draft.listingAddress || ''} onChange={(e) => handleDraftChange(index, 'listingAddress', e.target.value)} />
+                      <Input placeholder="Neighborhood / Area (shown on Coming Soon board)" value={draft.communityArea || ''} onChange={(e) => handleDraftChange(index, 'communityArea', e.target.value)} />
+                      <Input placeholder="Estimated Price" value={draft.priceRangeHigh || ''} onChange={(e) => handleDraftChange(index, 'priceRangeHigh', e.target.value)} />
+                    </div>
+                  )}
+                  {/* Buyer-specific fields */}
+                  {(draft.category === 'buyer' || draft.category === 'both') && (
+                    <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <p className="text-xs font-medium text-blue-700 dark:text-blue-400">Buyer Details</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input placeholder="Min Price" value={draft.priceRangeLow || ''} onChange={(e) => handleDraftChange(index, 'priceRangeLow', e.target.value)} />
+                        <Input placeholder="Max Price" value={draft.priceRangeHigh || ''} onChange={(e) => handleDraftChange(index, 'priceRangeHigh', e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+                  {/* Notes */}
+                  <Textarea placeholder="Notes (area preferences, timeline, etc.)..." value={draft.notes || ''} onChange={(e) => handleDraftChange(index, 'notes', e.target.value)} />
+                  {/* Post to TV board toggle */}
+                  {(draft.category === 'buyer' || draft.category === 'seller' || draft.category === 'both') && (
+                    <div
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        draft.postToCommunity
+                          ? 'bg-green-50 dark:bg-green-950/20 border-green-400 dark:border-green-700'
+                          : 'bg-muted/40 border-muted-foreground/20 hover:bg-muted/60'
+                      }`}
+                      onClick={() => handleDraftChange(index, 'postToCommunity', String(!draft.postToCommunity))}
+                    >
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        draft.postToCommunity ? 'bg-green-500 border-green-500' : 'border-muted-foreground/40'
+                      }`}>
+                        {draft.postToCommunity && <span className="text-white text-xs font-bold">✓</span>}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {draft.category === 'buyer' ? '📋 Post to Buyer Needs board' :
+                           draft.category === 'seller' ? '🏡 Post to Coming Soon board' :
+                           '📋 Post to Buyer Needs + 🏡 Coming Soon boards'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {draft.category === 'buyer'
+                            ? 'Adds this buyer to the TV board so other agents can match them with listings'
+                            : draft.category === 'seller'
+                            ? 'Adds this property area to Coming Soon (address stays private)'
+                            : 'Posts buyer needs and coming soon listing to the TV board'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

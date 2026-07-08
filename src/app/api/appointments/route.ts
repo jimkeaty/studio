@@ -189,6 +189,29 @@ export async function POST(req: NextRequest) {
     // ── 'both' category: create 2 separate appointments (buyer + seller) ──────
     if (body.category === 'both') {
       const ids: string[] = [];
+      // Fetch agent profile once for community posting
+      let dualAgentName: string | undefined;
+      let dualAgentPhone: string | undefined;
+      let dualAgentProfileId = uid;
+      if (body.postToCommunity) {
+        try {
+          const profileSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+          if (profileSnap.exists) {
+            const pd = profileSnap.data()!;
+            dualAgentName = [pd.firstName, pd.lastName].filter(Boolean).join(' ') || pd.displayName || uid;
+            dualAgentPhone = pd.phone || pd.phoneNumber || '';
+            dualAgentProfileId = profileSnap.id;
+          } else {
+            const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get();
+            if (!byFbUid.empty) {
+              const pd = byFbUid.docs[0].data();
+              dualAgentName = [pd.firstName, pd.lastName].filter(Boolean).join(' ') || pd.displayName || uid;
+              dualAgentPhone = pd.phone || pd.phoneNumber || '';
+              dualAgentProfileId = byFbUid.docs[0].id;
+            }
+          }
+        } catch { /* non-fatal */ }
+      }
       for (const cat of ['buyer', 'seller'] as const) {
         const dualData = {
           agentId: uid,
@@ -217,6 +240,46 @@ export async function POST(req: NextRequest) {
         };
         const ref = await adminDb.collection('appointments').add(dualData);
         ids.push(ref.id);
+        // Post to community board if requested
+        if (body.postToCommunity) {
+          try {
+            const now = FieldValue.serverTimestamp();
+            if (cat === 'buyer') {
+              await adminDb.collection('buyerNeeds').add({
+                agentName: (dualAgentName || uid).trim(),
+                agentPhone: (dualAgentPhone || '').trim(),
+                agentProfileId: dualAgentProfileId,
+                createdByUid: callerUid,
+                area: body.communityArea || body.notes || 'Area TBD',
+                minPrice: body.priceRangeLow ? Number(body.priceRangeLow) : null,
+                maxPrice: body.priceRangeHigh ? Number(body.priceRangeHigh) : null,
+                beds: null, baths: null,
+                notes: body.notes || null,
+                sourceAppointmentId: ref.id,
+                active: true,
+                lastConfirmedAt: now, createdAt: now, updatedAt: now,
+              });
+            } else {
+              await adminDb.collection('comingSoon').add({
+                agentName: (dualAgentName || uid).trim(),
+                agentPhone: (dualAgentPhone || '').trim(),
+                agentProfileId: dualAgentProfileId,
+                createdByUid: callerUid,
+                address: null, // address intentionally omitted for privacy
+                area: body.communityArea || body.notes || 'Area TBD',
+                price: body.priceRangeHigh ? Number(body.priceRangeHigh) : (body.priceRangeLow ? Number(body.priceRangeLow) : null),
+                beds: null, baths: null,
+                notes: body.notes || null,
+                expectedDate: null,
+                sourceAppointmentId: ref.id,
+                active: true,
+                lastConfirmedAt: now, createdAt: now, updatedAt: now,
+              });
+            }
+          } catch (communityErr) {
+            console.error('[API/appointments] dual community post failed for', cat, communityErr);
+          }
+        }
       }
       return NextResponse.json({ ok: true, ids, dual: true });
     }
