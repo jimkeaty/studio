@@ -173,7 +173,12 @@ const adminMenuGroups = [
       { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
       { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
       { href: '/dashboard/admin/staff-users', label: 'Staff & Users', icon: UsersRound },
-      { href: '/dashboard/admin/stagers', label: 'Stager Management', icon: Sofa },
+    ],
+  },
+  {
+    label: 'Vendors',
+    items: [
+      { href: '/dashboard/admin/vendors', label: 'Vendor Management', icon: Sofa },
     ],
   },
   {
