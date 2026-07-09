@@ -56,6 +56,7 @@ import {
   Zap,
   History,
   GitMerge,
+  Sofa,
   type LucideIcon,
 } from 'lucide-react';
 import { useAgentPlugins } from '@/hooks/useAgentPlugins';
@@ -172,6 +173,7 @@ const adminMenuGroups = [
       { href: '/dashboard/admin/teams', label: 'Teams', icon: FolderKanban },
       { href: '/dashboard/admin/team-plans', label: 'Team Plans', icon: GitBranchPlus },
       { href: '/dashboard/admin/staff-users', label: 'Staff & Users', icon: UsersRound },
+      { href: '/dashboard/admin/stagers', label: 'Stager Management', icon: Sofa },
     ],
   },
   {
