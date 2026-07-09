@@ -139,6 +139,7 @@ const agentMenuItems = [
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
+  { href: '/dashboard/my-transactions', label: 'My Transactions', icon: ClipboardList },
   { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
   { href: '/dashboard/open-house', label: 'Submit Open House', icon: Home },
   { href: '/dashboard/training', label: 'Training & Help', icon: GraduationCap },

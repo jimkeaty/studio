@@ -42,6 +42,12 @@ export type NotificationType =
   | 'open_house_opportunity_claimed'  // another agent claimed an open house opportunity → poster notified
   | 'inspection_confirmed'            // inspector confirmed a time → agent/TC notified
   | 'inspection_request_sent'         // inspection request sent to inspector(s)
+  | 'checklist_item_completed'        // staff/TC completed a checklist item → agent notified
+  | 'checklist_note_added'            // staff/TC added a note to checklist item → agent notified
+  | 'agent_tx_updated'                // agent updated transaction → staff/TC notified
+  | 'commission_summary_prepare'      // 5 days before closing → TC/Staff to prepare summary
+  | 'commission_summary_send'         // 3 days before closing → TC/Staff to send summary to agent
+  | 'agent_task_reminder'             // weekly hug, post-closing check-in reminders → agent
   | 'system';                         // generic system notification
 
 export interface NotificationPayload {
@@ -311,6 +317,12 @@ function buildEmailHtml(
     open_house_opportunity_claimed: 'Open House Claimed',
     inspection_confirmed:           'Inspection Confirmed',
     inspection_request_sent:        'Inspection Request',
+    checklist_item_completed:       'Checklist Update',
+    checklist_note_added:           'Staff Note',
+    agent_tx_updated:               'Transaction Updated',
+    commission_summary_prepare:     'Commission Summary',
+    commission_summary_send:        'Commission Summary',
+    agent_task_reminder:            'Task Reminder',
     system:                         'System',
   };
   const badge = typeLabel[type] ?? 'Notification';

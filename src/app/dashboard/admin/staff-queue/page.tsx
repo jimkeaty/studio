@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, Eye, RefreshCw, ClipboardList,
-  MapPin, Home, ArrowRightLeft, Plus, Mail, MailCheck, Loader2,
+  MapPin, Home, ArrowRightLeft, Plus, Mail, MailCheck, Loader2, CalendarCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -147,6 +147,47 @@ export default function StaffQueuePage() {
   // Per-submission checklist state (submissionId -> checklist)
   const [checklists, setChecklists] = useState<Record<string, { mls: boolean; boomtown: boolean; email: boolean }>>({});
   const [savingChecklist, setSavingChecklist] = useState<string | null>(null);
+  // Closings (Mon–Fri this week and next week)
+  type ClosingItem = {
+    id: string;
+    transactionId: string;
+    address: string;
+    agentId: string;
+    agentName: string;
+    closingDate: string;
+    closingType: string | null;
+    dealType: string | null;
+    salePrice: number | null;
+    gci: number | null;
+    tcWorking: boolean;
+    tcName: string | null;
+    status: string;
+  };
+  const [closings, setClosings] = useState<ClosingItem[]>([]);
+  const [closingsLoading, setClosingsLoading] = useState(true);
+  const [closingsError, setClosingsError] = useState<string | null>(null);
+
+  const fetchClosings = useCallback(async () => {
+    if (!user) return;
+    setClosingsLoading(true);
+    setClosingsError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/staff-queue/closings', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
+      setClosings(data.closings || []);
+    } catch (err: any) {
+      setClosingsError(err.message || 'Failed to load closings');
+    } finally {
+      setClosingsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => { fetchClosings(); }, [fetchClosings]);
+
   // Marketing email generator
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [emailPreviewHtml, setEmailPreviewHtml] = useState('');
@@ -450,7 +491,7 @@ export default function StaffQueuePage() {
 
       {/* Tabs */}
       <Tabs defaultValue="open-houses">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
           <TabsTrigger value="open-houses" className="flex items-center gap-1.5">
             <Home className="h-3.5 w-3.5" />
             Open Houses
@@ -477,9 +518,17 @@ export default function StaffQueuePage() {
                 {newListings.filter(i => i.status === 'pending_review').length}
               </span>
             )}
+                    </TabsTrigger>
+          <TabsTrigger value="closings" className="flex items-center gap-1.5">
+            <CalendarCheck className="h-3.5 w-3.5" />
+            Closings
+            {closings.length > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                {closings.length}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
-
         {/* ── Open Houses Tab ─────────────────────────────────────────────── */}
         <TabsContent value="open-houses" className="mt-4 space-y-4">
           {pendingOhCount > 0 && (
@@ -746,6 +795,123 @@ export default function StaffQueuePage() {
             emptyMessage="No new listing items found."
             emptySubMessage={statusFilter === 'active' ? 'All caught up — no pending new listings.' : 'Try adjusting your filters.'}
           />
+        </TabsContent>
+
+        {/* ── Closings Tab ────────────────────────────────────────── */}
+        <TabsContent value="closings" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CalendarCheck className="h-4 w-4 text-blue-600" />
+                  Upcoming Closings — This Week &amp; Next (Mon–Fri)
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={fetchClosings} className="gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {closingsLoading ? (
+                <div className="p-6 space-y-3">
+                  {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : closingsError ? (
+                <div className="p-6">
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{closingsError}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : closings.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">
+                  <CalendarCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium">No closings scheduled this week or next</p>
+                  <p className="text-sm mt-1">Closings will appear here when transactions have a closing date within the next two weeks (weekdays only).</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="whitespace-nowrap">Closing Date</TableHead>
+                        <TableHead className="whitespace-nowrap min-w-[200px]">Address</TableHead>
+                        <TableHead className="whitespace-nowrap">Agent</TableHead>
+                        <TableHead className="whitespace-nowrap">Side</TableHead>
+                        <TableHead className="whitespace-nowrap">Deal Type</TableHead>
+                        <TableHead className="whitespace-nowrap text-right">Sale Price</TableHead>
+                        <TableHead className="whitespace-nowrap text-right">GCI</TableHead>
+                        <TableHead className="whitespace-nowrap">TC</TableHead>
+                        <TableHead className="whitespace-nowrap w-[100px] text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {closings.map((item) => {
+                        let closingDateLabel = item.closingDate;
+                        try {
+                          closingDateLabel = format(new Date(item.closingDate + 'T12:00:00'), 'EEE, MMM d, yyyy');
+                        } catch { /* ignore */ }
+                        const daysUntil = Math.ceil((new Date(item.closingDate + 'T12:00:00').getTime() - Date.now()) / 86400000);
+                        const isToday = daysUntil === 0;
+                        const isTomorrow = daysUntil === 1;
+                        const isUrgent = daysUntil <= 2;
+                        return (
+                          <TableRow key={item.id} className={cn('hover:bg-muted/40', isToday ? 'bg-red-50' : isTomorrow ? 'bg-amber-50' : '')}>
+                            <TableCell className="whitespace-nowrap">
+                              <div className={cn('font-semibold text-sm', isToday ? 'text-red-700' : isTomorrow ? 'text-amber-700' : 'text-foreground')}>
+                                {closingDateLabel}
+                              </div>
+                              {isToday && <span className="text-[10px] font-bold text-red-600 uppercase">TODAY</span>}
+                              {isTomorrow && <span className="text-[10px] font-bold text-amber-600 uppercase">Tomorrow</span>}
+                              {!isToday && !isTomorrow && isUrgent && <span className="text-[10px] text-orange-600">{daysUntil}d away</span>}
+                              {!isUrgent && daysUntil > 0 && <span className="text-[10px] text-muted-foreground">{daysUntil}d away</span>}
+                            </TableCell>
+                            <TableCell className="min-w-[200px]">
+                              <div className="font-medium text-sm truncate max-w-[240px]">{item.address}</div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm">{item.agentName}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {item.closingType ? (
+                                <Badge variant="outline" className="text-xs">
+                                  {CLOSING_TYPE_LABEL[item.closingType] ?? item.closingType}
+                                </Badge>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {DEAL_TYPE_LABEL[item.dealType ?? ''] ?? item.dealType ?? '—'}
+                            </TableCell>
+                            <TableCell className="text-right font-medium whitespace-nowrap">
+                              {formatCurrency(item.salePrice)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium whitespace-nowrap text-emerald-700">
+                              {formatCurrency(item.gci)}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm">
+                              {item.tcWorking ? (
+                                <span className="text-indigo-600 font-medium text-xs">
+                                  {item.tcName || 'TC Assigned'}
+                                </span>
+                              ) : <span className="text-xs text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Link href={`/dashboard/admin/transactions/${item.transactionId}`}>
+                                <Button variant="outline" size="sm" className="h-7 text-xs">
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  View
+                                </Button>
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

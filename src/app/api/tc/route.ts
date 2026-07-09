@@ -456,6 +456,57 @@ export async function POST(req: NextRequest) {
     }
     // Buyer/referral transactions with workingWithTc=false are saved to the transaction ledger only (no staff queue or TC queue entry on new submission)
 
+    // ── Agent Task Workflow: auto-create on new transaction ───────────────────
+    try {
+      const workflowType = isListingType ? 'seller_workflow' : 'buyer_workflow';
+      const { getAgentTaskDef } = await import('@/lib/checklists/definitions');
+      const taskDef = getAgentTaskDef(workflowType as 'seller_workflow' | 'buyer_workflow');
+      const taskItems = taskDef.map((t: any) => ({
+        ...t,
+        completed: false,
+        completedAt: null,
+      }));
+      await adminDb.collection('agentTasks').add({
+        transactionId: txRef.id,
+        agentId,
+        workflowType,
+        tasks: taskItems,
+        closingDate: toStr(body.closingDate) || null,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      });
+    } catch (taskErr: any) {
+      console.error('[tc route] agent task creation failed (non-fatal):', taskErr?.message);
+    }
+
+    // ── Staff Checklist: auto-create new_listing checklist for listing transactions ──
+    try {
+      if (isListingType) {
+        const { getChecklistDef } = await import('@/lib/checklists/definitions');
+        const checklistDef = getChecklistDef('new_listing');
+        const checklistItems = checklistDef.map((item: any) => ({
+          ...item,
+          completed: false,
+          completedAt: null,
+          completedBy: null,
+          note: null,
+        }));
+        await adminDb.collection('transactionChecklists').add({
+          transactionId: txRef.id,
+          agentId,
+          checklistType: 'new_listing',
+          items: checklistItems,
+          status: 'active',
+          agentUpdateBanner: false,
+          completedAt: null,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        });
+      }
+    } catch (clErr: any) {
+      console.error('[tc route] checklist creation failed (non-fatal):', clErr?.message);
+    }
+
     // ── Notifications ────────────────────────────────────────────────────────
     // Fire-and-forget: don't let notification errors block the response
     void (async () => {

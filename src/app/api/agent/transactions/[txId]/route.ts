@@ -617,9 +617,104 @@ export async function PATCH(
       })();
     }
 
+    // ── Agent-change alert: set banner on active checklists and notify staff ────
+    // Fires on any field edit or document upload (regardless of TC assignment)
+    void (async () => {
+      try {
+        const isDocUpload = updates.documents !== undefined;
+        const isFieldEdit = Object.keys(updates).some(k =>
+          !['status', 'documents', 'updatedAt'].includes(k)
+        );
+        if (isDocUpload || isFieldEdit) {
+          const txAddress = String(txData.propertyAddress || txData.address || 'a transaction');
+          const agentName = String(txData.agentDisplayName || 'Agent');
+          const changeDesc = isDocUpload
+            ? 'uploaded a document'
+            : `updated fields: ${Object.keys(updates).filter(k => !['updatedAt'].includes(k)).slice(0, 3).join(', ')}`;
+
+          // Set agentUpdateBanner on all active checklists for this transaction
+          const checklistSnap = await adminDb.collection('transactionChecklists')
+            .where('transactionId', '==', txId)
+            .where('status', '==', 'active')
+            .get();
+          const bannerUpdate = {
+            agentUpdateBanner: true,
+            agentUpdateAt: new Date().toISOString(),
+            agentUpdateDescription: `${agentName} ${changeDesc}`,
+            updatedAt: new Date().toISOString(),
+          };
+          for (const cl of checklistSnap.docs) {
+            await cl.ref.update(bannerUpdate);
+          }
+
+          // Notify all staff
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'agent_tx_updated',
+              recipientUids: staffUids,
+              title: 'Transaction Updated — Please Review',
+              body: `${agentName} ${changeDesc} on ${txAddress}.`,
+              url: '/dashboard/admin/staff-queue',
+              data: { transactionId: txId },
+            });
+          }
+
+          // Also notify TC if working with TC
+          if (effectiveWorkingWithTc) {
+            const tcUids = await getTcUids(adminDb);
+            if (tcUids.length > 0) {
+              await sendNotification(adminDb, {
+                type: 'agent_tx_updated',
+                recipientUids: tcUids,
+                title: 'Transaction Updated — Please Review',
+                body: `${agentName} ${changeDesc} on ${txAddress}.`,
+                url: '/dashboard/admin/tc',
+                data: { transactionId: txId },
+              });
+            }
+          }
+        }
+      } catch (alertErr) {
+        console.error('[agent PATCH] agent-change alert error:', alertErr);
+      }
+    })();
+
     return NextResponse.json({ ok: true, updated: Object.keys(updates), resubmitted: shouldResubmitToTc });
   } catch (err: any) {
     console.error('[api/agent/transactions/[txId]]', err);
     return jsonError(500, err.message || 'Internal Server Error');
   }
+}
+
+// GET /api/agent/transactions/[txId]
+// Returns a single transaction for the authenticated agent (or admin).
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ txId: string }> }
+) {
+  const h = req.headers.get('Authorization') || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7).trim() : null;
+  if (!token) return jsonError(401, 'Unauthorized');
+
+  let uid: string;
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    uid = decoded.uid;
+  } catch {
+    return jsonError(401, 'Invalid token');
+  }
+
+  const { txId } = await params;
+  const docRef = adminDb.collection('transactions').doc(txId);
+  const snap = await docRef.get();
+  if (!snap.exists) return jsonError(404, 'Transaction not found');
+
+  const data = snap.data()!;
+  // Only allow the owning agent or admin to view
+  const isOwner = data.agentId === uid;
+  const isAdmin = await isAdminLike(uid);
+  if (!isOwner && !isAdmin) return jsonError(403, 'Forbidden');
+
+  return NextResponse.json({ ok: true, transaction: { id: snap.id, ...data } });
 }

@@ -49,6 +49,33 @@ type ChecklistItem = {
   completedAt: string | null;
 };
 
+// New per-transaction checklist layer types
+type TxChecklistItem = {
+  id: string;
+  label: string;
+  group: string;
+  ifApplicable?: boolean;
+  completed: boolean;
+  completedBy: string | null;
+  completedByName: string | null;
+  completedAt: string | null;
+  note: string | null;
+};
+
+type TxChecklist = {
+  id: string;
+  transactionId: string;
+  checklistType: string;
+  items: TxChecklistItem[];
+  agentUpdateBanner: boolean;
+  agentUpdateAt: string | null;
+  agentUpdateDescription: string | null;
+  status: 'active' | 'complete';
+  completedAt: string | null;
+  completedByName: string | null;
+  createdAt: string;
+};
+
 type StaffProfile = {
   id: string;
   displayName: string;
@@ -241,6 +268,13 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // New transaction-level checklists (stacked layers)
+  const [txChecklists, setTxChecklists] = useState<TxChecklist[]>([]);
+  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
+  const [savingNote, setSavingNote] = useState<string | null>(null);
+  const [addingChecklist, setAddingChecklist] = useState(false);
+  const [newChecklistType, setNewChecklistType] = useState<string>('');
+
   // Commission processing state
   const [commissionOpen, setCommissionOpen] = useState(false);
   const [commissionMethod, setCommissionMethod] = useState<'check_front_desk' | 'direct_deposit'>('check_front_desk');
@@ -363,6 +397,131 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
     };
     if (!userLoading && user) load();
   }, [user, userLoading, itemId]);
+
+  // ── Load transaction checklists ──────────────────────────────────────────
+  const loadTxChecklists = useCallback(async (transactionId: string) => {
+    if (!user || !transactionId) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/transaction-checklist?transactionId=${transactionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok) setTxChecklists(data.checklists || []);
+    } catch { /* non-fatal */ }
+  }, [user]);
+
+  useEffect(() => {
+    if (transaction?.id) loadTxChecklists(transaction.id);
+    else if (item?.transactionId) loadTxChecklists(item.transactionId);
+  }, [transaction?.id, item?.transactionId, loadTxChecklists]);
+
+  // ── Checklist helpers ────────────────────────────────────────────────────
+  const handleChecklistItemToggle = async (checklistId: string, item: TxChecklistItem) => {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const newCompleted = !item.completed;
+    // Optimistic update
+    setTxChecklists(prev => prev.map(cl => {
+      if (cl.id !== checklistId) return cl;
+      return { ...cl, items: cl.items.map(i => i.id === item.id ? { ...i, completed: newCompleted, completedAt: newCompleted ? new Date().toISOString() : null } : i) };
+    }));
+    try {
+      await fetch(`/api/admin/transaction-checklist/${checklistId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete_item', itemId: item.id }),
+      });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update checklist item', variant: 'destructive' });
+    }
+  };
+
+  const handleSaveNote = async (checklistId: string, itemId: string) => {
+    if (!user) return;
+    const noteKey = `${checklistId}:${itemId}`;
+    const note = noteInputs[noteKey] || '';
+    setSavingNote(noteKey);
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/admin/transaction-checklist/${checklistId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_note', itemId, note }),
+      });
+      setTxChecklists(prev => prev.map(cl => {
+        if (cl.id !== checklistId) return cl;
+        return { ...cl, items: cl.items.map(i => i.id === itemId ? { ...i, note } : i) };
+      }));
+      toast({ title: 'Note saved' });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to save note', variant: 'destructive' });
+    } finally {
+      setSavingNote(null);
+    }
+  };
+
+  const handleMarkChecklistComplete = async (checklistId: string) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/admin/transaction-checklist/${checklistId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_complete' }),
+      });
+      setTxChecklists(prev => prev.map(cl =>
+        cl.id === checklistId ? { ...cl, status: 'complete', completedAt: new Date().toISOString() } : cl
+      ));
+      toast({ title: 'Checklist marked complete' });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to mark complete', variant: 'destructive' });
+    }
+  };
+
+  const handleClearBanner = async (checklistId: string) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/admin/transaction-checklist/${checklistId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear_banner' }),
+      });
+      setTxChecklists(prev => prev.map(cl =>
+        cl.id === checklistId ? { ...cl, agentUpdateBanner: false } : cl
+      ));
+    } catch { /* non-fatal */ }
+  };
+
+  const handleAddChecklist = async () => {
+    if (!user || !newChecklistType) return;
+    const txId = transaction?.id || item?.transactionId;
+    if (!txId) return;
+    setAddingChecklist(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/transaction-checklist', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactionId: txId,
+          checklistType: newChecklistType,
+          agentId: transaction?.agentId || item?.agentId,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await loadTxChecklists(txId);
+        setNewChecklistType('');
+        toast({ title: 'Checklist added' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to add checklist', variant: 'destructive' });
+    } finally {
+      setAddingChecklist(false);
+    }
+  };
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const callAction = async (action: string, extra?: Record<string, any>) => {
@@ -887,63 +1046,195 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
         </Card>
       )}
 
-      {/* ── Workflow Checklist ─────────────────────────────────────────────── */}
-      {checklistTotal > 0 && (
-        <Card>
-          <CardHeader>
+      {/* ── Transaction Checklists (stacked layers) ────────────────────────── */}
+      <div className="space-y-4">
+        {/* Add Checklist */}
+        <Card className="border-dashed">
+          <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" /> Workflow Checklist
+              <ClipboardList className="h-4 w-4" /> Transaction Checklists
             </CardTitle>
-            <CardDescription>
-              {checklistCompleted} of {checklistTotal} items completed
-              {checklistTotal > 0 && (
-                <span className="ml-2 text-xs">({Math.round((checklistCompleted / checklistTotal) * 100)}%)</span>
-              )}
-            </CardDescription>
+            <CardDescription>Add a checklist layer for this transaction. Completed layers are preserved as history below.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="w-full bg-muted rounded-full h-2 mb-4">
-              <div
-                className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(checklistCompleted / checklistTotal) * 100}%` }}
-              />
-            </div>
-            <div className="space-y-3">
-              {checklist.map((ci) => (
-                <div
-                  key={ci.id}
-                  className={cn(
-                    'flex items-start gap-3 p-3 rounded-md border transition-colors',
-                    ci.completed
-                      ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
-                      : 'bg-background'
-                  )}
-                >
-                  <Checkbox
-                    checked={ci.completed}
-                    onCheckedChange={() => toggleChecklistItem(ci)}
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className={cn('text-sm', ci.completed && 'line-through text-muted-foreground')}>
-                      {ci.label}
-                    </p>
-                    {ci.completed && ci.completedBy && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Completed by {ci.completedBy}
-                        {ci.completedAt && ` on ${formatDateShort(ci.completedAt)}`}
-                      </p>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground font-mono">#{ci.order}</span>
-                </div>
-              ))}
+            <div className="flex gap-2">
+              <Select value={newChecklistType} onValueChange={setNewChecklistType}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select checklist type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new_listing">New Listing</SelectItem>
+                  <SelectItem value="under_contract_seller">Under Contract — Seller</SelectItem>
+                  <SelectItem value="under_contract_buyer">Under Contract — Buyer</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!newChecklistType || addingChecklist}
+                onClick={handleAddChecklist}
+              >
+                {addingChecklist ? 'Adding...' : '+ Add Checklist'}
+              </Button>
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* ── Editable form ─────────────────────────────────────────────────── */}
+        {/* Stacked checklist layers — newest first */}
+        {txChecklists.map((cl, clIdx) => {
+          const completedCount = cl.items.filter(i => i.completed).length;
+          const totalCount = cl.items.length;
+          const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+          const isCompleted = cl.status === 'complete';
+          const isFirst = clIdx === 0;
+
+          // Group items by their group field
+          const groups: Record<string, TxChecklistItem[]> = {};
+          for (const ci of cl.items) {
+            if (!groups[ci.group]) groups[ci.group] = [];
+            groups[ci.group].push(ci);
+          }
+
+          return (
+            <Card key={cl.id} className={cn(isCompleted && 'opacity-75')}>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {isCompleted
+                        ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        : <ClipboardList className="h-4 w-4" />
+                      }
+                      {cl.checklistType === 'new_listing' && 'New Listing Checklist'}
+                      {cl.checklistType === 'under_contract_seller' && 'Under Contract — Seller Checklist'}
+                      {cl.checklistType === 'under_contract_buyer' && 'Under Contract — Buyer Checklist'}
+                      {isCompleted && <Badge className="bg-green-100 text-green-800 text-xs ml-1">Completed</Badge>}
+                    </CardTitle>
+                    <CardDescription>
+                      {completedCount} of {totalCount} items • {pct}%
+                      {isCompleted && cl.completedAt && ` • Completed ${formatDateShort(cl.completedAt)}`}
+                      {!isFirst && <span className="ml-2 text-xs text-muted-foreground">(history)</span>}
+                    </CardDescription>
+                  </div>
+                  {!isCompleted && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white shrink-0"
+                      onClick={() => handleMarkChecklistComplete(cl.id)}
+                    >
+                      <CheckCircle2 className="mr-1 h-3 w-3" /> Mark Complete
+                    </Button>
+                  )}
+                </div>
+
+                {/* Agent update banner */}
+                {cl.agentUpdateBanner && (
+                  <Alert className="border-amber-400 bg-amber-50 dark:bg-amber-950/20 mt-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <AlertTitle className="text-amber-800 dark:text-amber-400 text-sm">
+                      ⚠️ Agent updated this transaction — please review
+                    </AlertTitle>
+                    <AlertDescription className="text-xs">
+                      {cl.agentUpdateDescription}
+                      {cl.agentUpdateAt && ` • ${formatDateShort(cl.agentUpdateAt)}`}
+                    </AlertDescription>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 h-6 text-xs"
+                      onClick={() => handleClearBanner(cl.id)}
+                    >
+                      Dismiss
+                    </Button>
+                  </Alert>
+                )}
+
+                {/* Progress bar */}
+                <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+                  <div
+                    className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-6">
+                {Object.entries(groups).map(([groupName, groupItems]) => (
+                  <div key={groupName}>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{groupName}</p>
+                    <div className="space-y-2">
+                      {groupItems.map((ci) => {
+                        const noteKey = `${cl.id}:${ci.id}`;
+                        const noteVal = noteInputs[noteKey] !== undefined ? noteInputs[noteKey] : (ci.note || '');
+                        return (
+                          <div
+                            key={ci.id}
+                            className={cn(
+                              'rounded-md border p-3 transition-colors',
+                              ci.completed
+                                ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+                                : 'bg-background'
+                            )}
+                          >
+                            <div className="flex items-start gap-3">
+                              <Checkbox
+                                checked={ci.completed}
+                                onCheckedChange={() => !isCompleted && handleChecklistItemToggle(cl.id, ci)}
+                                disabled={isCompleted}
+                                className="mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className={cn('text-sm', ci.completed && 'line-through text-muted-foreground')}>
+                                  {ci.label}
+                                  {ci.ifApplicable && <span className="ml-1 text-xs text-muted-foreground">(if applicable)</span>}
+                                </p>
+                                {ci.completed && ci.completedByName && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    ✓ {ci.completedByName}{ci.completedAt && ` • ${formatDateShort(ci.completedAt)}`}
+                                  </p>
+                                )}
+                                {/* Note field */}
+                                {!isCompleted && (
+                                  <div className="mt-2 flex gap-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Add a note..."
+                                      value={noteVal}
+                                      onChange={(e) => setNoteInputs(prev => ({ ...prev, [noteKey]: e.target.value }))}
+                                      className="flex-1 text-xs border rounded px-2 py-1 bg-background"
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs px-2"
+                                      disabled={savingNote === noteKey}
+                                      onClick={() => handleSaveNote(cl.id, ci.id)}
+                                    >
+                                      {savingNote === noteKey ? '...' : 'Save'}
+                                    </Button>
+                                  </div>
+                                )}
+                                {isCompleted && ci.note && (
+                                  <p className="text-xs text-muted-foreground mt-1 italic">"{ci.note}"</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+            {/* ── Editable form ─────────────────────────────────────────────────── */}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6">
 
