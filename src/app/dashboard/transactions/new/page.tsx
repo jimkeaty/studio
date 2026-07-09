@@ -1212,11 +1212,11 @@ export default function AddTransactionPage() {
       setStagersLoading(true);
       try {
         const token = await user.getIdToken();
-        const res = await fetch('/api/admin/stagers', {
+        const res = await fetch('/api/admin/vendors?category=stager', {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
-        if (data.ok) setStagers(data.stagers ?? []);
+        if (data.ok) setStagers((data.vendors ?? []).filter((v: any) => v.active !== false));
       } catch {}
       finally { setStagersLoading(false); }
     };
@@ -3300,11 +3300,12 @@ export default function AddTransactionPage() {
                   <FormItem><FormLabel>Please specify</FormLabel><FormControl><Input placeholder="Describe what you need..." {...field} /></FormControl></FormItem>
                 )} />
               )}
-              {/* Per-type inspector rows */}
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-foreground">Inspection Requests</p>
-                <p className="text-xs text-muted-foreground -mt-1">Select an inspector for each type needed. Use &quot;Use General Inspector&quot; to assign the same inspector across multiple types.</p>
+              {/* Per-type inspector rows — checkbox to expand */}
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground mb-2">Inspection Types</p>
+                <p className="text-xs text-muted-foreground mb-3">Check each inspection needed. Each row expands to assign an inspector and send a request.</p>
                 {INSP_TYPES.map(({ key, label }) => {
+                  const isChecked = preListingInspectionTypes.includes(label);
                   const row = inspRows[key] || makeDefaultInspRow();
                   const vendors = inspVendors[key] || [];
                   const generalVendorId = inspRows['inspector_general']?.vendorId;
@@ -3315,138 +3316,151 @@ export default function AddTransactionPage() {
                   const today = new Date().toISOString().split('T')[0];
                   const fallbackEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                   return (
-                    <div key={key} className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">{label}</p>
-                        {row.sent && <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Request Sent</Badge>}
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
-                          <select
-                            value={row.vendorId}
-                            onChange={e => updateInspRow(key, { vendorId: e.target.value })}
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                          >
-                            <option value="">— Select inspector —</option>
-                            {key !== 'inspector_general' && (
-                              <option value="USE_GENERAL">
-                                {generalVendor ? `Use General Inspector (${generalVendor.name})` : 'Use General Inspector'}
-                              </option>
-                            )}
-                            {vendors.map(v => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
-                            {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>
-                          <select
-                            value={row.sendMode}
-                            onChange={e => updateInspRow(key, { sendMode: e.target.value as 'selected' | 'all' })}
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                          >
-                            <option value="selected">Selected inspector only</option>
-                            <option value="all">All {label} inspectors</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
-                          <Input type="date" value={row.preferredDate} min={today}
-                            onChange={e => {
-                              updateInspRow(key, { preferredDate: e.target.value });
-                              if (key === 'inspector_general' && e.target.value) {
-                                setInspRows(prev => {
-                                  const updated = { ...prev };
-                                  for (const k of Object.keys(updated)) {
-                                    if (k !== 'inspector_general' && !updated[k].sent) {
-                                      updated[k] = { ...updated[k], preferredDate: e.target.value };
-                                    }
+                    <div key={key} className={`rounded-lg border transition-colors ${isChecked ? 'border-primary/30 bg-primary/5' : 'border-border bg-transparent'}`}>
+                      {/* Checkbox row — always visible */}
+                      <label className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => togglePreListingInspectionType(label)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm font-medium flex-1">{label}</span>
+                        {row.sent && <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Sent</Badge>}
+                        {isChecked && !row.sent && <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </label>
+                      {/* Expanded details — only when checked */}
+                      {isChecked && (
+                        <div className="px-4 pb-4 space-y-3 border-t border-border/50 pt-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
+                              <select
+                                value={row.vendorId}
+                                onChange={e => updateInspRow(key, { vendorId: e.target.value })}
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                <option value="">— Select inspector —</option>
+                                {key !== 'inspector_general' && (
+                                  <option value="USE_GENERAL">
+                                    {generalVendor ? `Use General Inspector (${generalVendor.name})` : 'Use General Inspector'}
+                                  </option>
+                                )}
+                                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
+                                {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>
+                              <select
+                                value={row.sendMode}
+                                onChange={e => updateInspRow(key, { sendMode: e.target.value as 'selected' | 'all' })}
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                <option value="selected">Selected inspector only</option>
+                                <option value="all">All {label} inspectors</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
+                              <Input type="date" value={row.preferredDate} min={today}
+                                onChange={e => {
+                                  updateInspRow(key, { preferredDate: e.target.value });
+                                  if (key === 'inspector_general' && e.target.value) {
+                                    setInspRows(prev => {
+                                      const updated = { ...prev };
+                                      for (const k of Object.keys(updated)) {
+                                        if (k !== 'inspector_general' && !updated[k].sent) {
+                                          updated[k] = { ...updated[k], preferredDate: e.target.value };
+                                        }
+                                      }
+                                      return updated;
+                                    });
                                   }
-                                  return updated;
-                                });
-                              }
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">Time Start</label>
-                          <Input type="time" value={row.preferredTimeStart} onChange={e => updateInspRow(key, { preferredTimeStart: e.target.value })} />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">Time End</label>
-                          <Input type="time" value={row.preferredTimeEnd} onChange={e => updateInspRow(key, { preferredTimeEnd: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
-                          <Input type="date" value={row.fallbackDateStart || today} min={today}
-                            onChange={e => updateInspRow(key, { fallbackDateStart: e.target.value })} />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">Available Until</label>
-                          <Input type="date" value={row.fallbackDateEnd || fallbackEnd}
-                            onChange={e => updateInspRow(key, { fallbackDateEnd: e.target.value })} />
-                        </div>
-                      </div>
-                      {!row.sent && (
-                        <div className="flex justify-end">
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={row.sending || (!row.vendorId && row.sendMode === 'selected')}
-                            onClick={async () => {
-                              if (!user) return;
-                              updateInspRow(key, { sending: true });
-                              try {
-                                const token = await user.getIdToken();
-                                const formVals = form.getValues();
-                                const effectiveVendorId = row.vendorId === 'USE_GENERAL' ? generalVendorId : row.vendorId;
-                                const today2 = new Date().toISOString().split('T')[0];
-                                const fallbackEnd2 = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                                const res = await fetch('/api/agent/inspection-request', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                                  body: JSON.stringify({
-                                    transactionId: null,
-                                    transactionType: 'listing',
-                                    inspectionCategory: key,
-                                    vendorId: effectiveVendorId || undefined,
-                                    sendMode: row.sendMode,
-                                    preferredDate: row.preferredDate || today2,
-                                    preferredTimeStart: row.preferredTimeStart,
-                                    preferredTimeEnd: row.preferredTimeEnd,
-                                    fallbackDateStart: row.fallbackDateStart || today2,
-                                    fallbackDateEnd: row.fallbackDateEnd || fallbackEnd2,
-                                    propertyAddress: formVals.address || '',
-                                    clientName: formVals.sellerName || '',
-                                    clientPhone: formVals.sellerPhone || '',
-                                    clientEmail: formVals.sellerEmail || '',
-                                    agentName: formVals.agentDisplayName || effectiveName || '',
-                                    agentPhone: '',
-                                    agentEmail: user.email || '',
-                                    sqft: '',
-                                    accessNotes: formVals.showingAccessNotes || '',
-                                  }),
-                                });
-                                const data = await res.json();
-                                if (data.ok) {
-                                  updateInspRow(key, { sent: true, sending: false });
-                                  toast({ title: 'Request sent!', description: `Inspection request sent to ${data.vendorCount} inspector(s).` });
-                                } else {
-                                  updateInspRow(key, { sending: false });
-                                  toast({ title: 'Error', description: data.error || 'Failed to send request', variant: 'destructive' });
-                                }
-                              } catch (err: any) {
-                                updateInspRow(key, { sending: false });
-                                toast({ title: 'Error', description: err.message, variant: 'destructive' });
-                              }
-                            }}
-                          >
-                            {row.sending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sending...</> : <><Send className="h-3 w-3 mr-1" />Send Request</>}
-                          </Button>
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground mb-1 block">Time Start</label>
+                              <Input type="time" value={row.preferredTimeStart} onChange={e => updateInspRow(key, { preferredTimeStart: e.target.value })} />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground mb-1 block">Time End</label>
+                              <Input type="time" value={row.preferredTimeEnd} onChange={e => updateInspRow(key, { preferredTimeEnd: e.target.value })} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
+                              <Input type="date" value={row.fallbackDateStart || today} min={today}
+                                onChange={e => updateInspRow(key, { fallbackDateStart: e.target.value })} />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground mb-1 block">Available Until</label>
+                              <Input type="date" value={row.fallbackDateEnd || fallbackEnd}
+                                onChange={e => updateInspRow(key, { fallbackDateEnd: e.target.value })} />
+                            </div>
+                          </div>
+                          {!row.sent && (
+                            <div className="flex justify-end">
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={row.sending || (!row.vendorId && row.sendMode === 'selected')}
+                                onClick={async () => {
+                                  if (!user) return;
+                                  updateInspRow(key, { sending: true });
+                                  try {
+                                    const token = await user.getIdToken();
+                                    const formVals = form.getValues();
+                                    const effectiveVendorId = row.vendorId === 'USE_GENERAL' ? generalVendorId : row.vendorId;
+                                    const today2 = new Date().toISOString().split('T')[0];
+                                    const fallbackEnd2 = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                                    const res = await fetch('/api/agent/inspection-request', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                      body: JSON.stringify({
+                                        transactionId: null,
+                                        transactionType: 'listing',
+                                        inspectionCategory: key,
+                                        vendorId: effectiveVendorId || undefined,
+                                        sendMode: row.sendMode,
+                                        preferredDate: row.preferredDate || today2,
+                                        preferredTimeStart: row.preferredTimeStart,
+                                        preferredTimeEnd: row.preferredTimeEnd,
+                                        fallbackDateStart: row.fallbackDateStart || today2,
+                                        fallbackDateEnd: row.fallbackDateEnd || fallbackEnd2,
+                                        propertyAddress: formVals.address || '',
+                                        clientName: formVals.sellerName || '',
+                                        clientPhone: formVals.sellerPhone || '',
+                                        clientEmail: formVals.sellerEmail || '',
+                                        agentName: formVals.agentDisplayName || effectiveName || '',
+                                        agentPhone: '',
+                                        agentEmail: user.email || '',
+                                        sqft: '',
+                                        accessNotes: formVals.showingAccessNotes || '',
+                                      }),
+                                    });
+                                    const data = await res.json();
+                                    if (data.ok) {
+                                      updateInspRow(key, { sent: true, sending: false });
+                                      toast({ title: 'Request sent!', description: `Inspection request sent to ${data.vendorCount} inspector(s).` });
+                                    } else {
+                                      updateInspRow(key, { sending: false });
+                                      toast({ title: 'Error', description: data.error || 'Failed to send request', variant: 'destructive' });
+                                    }
+                                  } catch (err: any) {
+                                    updateInspRow(key, { sending: false });
+                                    toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                                  }
+                                }}
+                              >
+                                {row.sending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sending...</> : <><Send className="h-3 w-3 mr-1" />Send Request</>}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

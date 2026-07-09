@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
   if (!uid) return jsonError(401, 'Unauthorized');
   const category = req.nextUrl.searchParams.get('category') || null;
   try {
-    // Special case: inspector_all fetches all inspector_* categories in one call
+    // Special case: inspector_all fetches all inspector_* categories in one call.
+    // Avoid composite index requirement by filtering active in memory and sorting by name.
     if (category === 'inspector_all') {
       const inspectorCategories = [
         'inspector_general', 'inspector_roof', 'inspector_termite',
@@ -33,15 +34,30 @@ export async function GET(req: NextRequest) {
       ];
       const snap = await adminDb.collection('vendors')
         .where('category', 'in', inspectorCategories)
-        .where('active', '==', true)
-        .orderBy('name')
         .get();
-      const vendors = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      type VendorDoc = Record<string, any> & { id: string };
+      const vendors: VendorDoc[] = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as VendorDoc))
+        .filter((v: VendorDoc) => v['active'] !== false)
+        .sort((a: VendorDoc, b: VendorDoc) => String(a['name'] || '').localeCompare(String(b['name'] || '')));
       return NextResponse.json({ ok: true, vendors });
     }
-    let query: FirebaseFirestore.Query = adminDb.collection('vendors').orderBy('name');
-    if (category) query = query.where('category', '==', category);
-    const snap = await query.get();
+
+    // For a specific category: fetch by category only (no composite index needed),
+    // then filter active in memory and sort by name.
+    if (category) {
+      const snap = await adminDb.collection('vendors')
+        .where('category', '==', category)
+        .get();
+      type VendorDoc2 = Record<string, any> & { id: string };
+      const vendors: VendorDoc2[] = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as VendorDoc2))
+        .sort((a: VendorDoc2, b: VendorDoc2) => String(a['name'] || '').localeCompare(String(b['name'] || '')));
+      return NextResponse.json({ ok: true, vendors });
+    }
+
+    // No category filter — return all vendors sorted by name (admin management page)
+    const snap = await adminDb.collection('vendors').orderBy('name').get();
     const vendors = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ ok: true, vendors });
   } catch (err: any) {

@@ -160,10 +160,16 @@ export async function POST(req: NextRequest) {
 
     if (!stagerId) return jsonError(400, 'stagerId is required');
 
-    // Look up the stager
-    const stagerDoc = await adminDb.collection('stagers').doc(stagerId).get();
-    if (!stagerDoc.exists) return jsonError(404, 'Stager not found');
-    const stager = stagerDoc.data()!;
+    // Look up the stager — check vendors collection first (new), fall back to stagers (legacy)
+    let stager: Record<string, any> | null = null;
+    const vendorDoc = await adminDb.collection('vendors').doc(stagerId).get();
+    if (vendorDoc.exists) {
+      stager = vendorDoc.data()!;
+    } else {
+      const stagerDoc = await adminDb.collection('stagers').doc(stagerId).get();
+      if (stagerDoc.exists) stager = stagerDoc.data()!;
+    }
+    if (!stager) return jsonError(404, 'Stager not found');
 
     if (!stager.email) return jsonError(400, 'Stager has no email address on file');
 
