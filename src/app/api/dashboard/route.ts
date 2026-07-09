@@ -843,8 +843,23 @@ export async function GET(req: NextRequest) {
     projectedVolumeGoal = Number(projectedVolumeGoal.toFixed(2));
     projectedSalesGoal = Number(projectedSalesGoal.toFixed(2));
 
-    // Override income YTD goal with actual monthly goals if available
-    if (incomeGoalToDate > 0) {
+    // Override income YTD goal with actual monthly goals if available.
+    // Sanity check: if financialStartDate = Jan 1 (calendar year), the monthly goals in
+    // brokerCommandGoals should cover all 12 months. If the sum of goals for months
+    // 1 through currentMonth is unreasonably low (< 20% of the workday-prorated estimate),
+    // it means the goals were saved incorrectly (e.g. only July onward was written).
+    // In that case, fall back to the workday-prorated estimate from annualIncomeGoal.
+    const proratedFallback = expectedYTDIncomeGoal; // workday-prorated estimate computed above
+    const goalDataIsReliable = (() => {
+      if (incomeGoalToDate <= 0) return false;
+      if (!isFinancialJan1) return true; // non-Jan-1 start: trust the monthly goals as-is
+      // For Jan-1 start: check that the monthly goal coverage is reasonable.
+      // If the sum of goals for months 1..currentMonth is less than 20% of the
+      // prorated estimate, the data is likely incomplete (plan saved from wrong start month).
+      if (proratedFallback <= 0) return true;
+      return incomeGoalToDate >= proratedFallback * 0.20;
+    })();
+    if (goalDataIsReliable) {
       expectedYTDIncomeGoal = incomeGoalToDate;
       const recalcIncomePerf = performance(netEarned, expectedYTDIncomeGoal);
       // Projected: grade closed+pending against goal at their close date
@@ -858,6 +873,14 @@ export async function GET(req: NextRequest) {
         performance: recalcPipelinePerf,
       };
       dashboard.incomeDeltaToGoal = Number((netEarned - expectedYTDIncomeGoal).toFixed(2));
+    } else if (incomeGoalToDate > 0 && !goalDataIsReliable) {
+      // Monthly goals exist but appear incomplete for a Jan-1 plan — log a warning and
+      // use the workday-prorated fallback so the agent sees a correct grade.
+      console.warn('[dashboard] incomeGoalToDate suspiciously low for Jan-1 plan; using workday-prorated fallback', {
+        incomeGoalToDate, proratedFallback, annualIncomeGoal, currentMonth, goalFloorMonth,
+        goalsFound: allGoalDocs.length,
+      });
+      // expectedYTDIncomeGoal stays as the workday-prorated value set above — no override needed.
     }
 
     // Override KPI closings target with monthly sales goals if available

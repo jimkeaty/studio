@@ -505,9 +505,10 @@ export default function BusinessPlanPage() {
     const vol = parseFloat(yearlyVolume) || 0;
     const sales = parseInt(yearlySales, 10) || 0;
     const income = parseFloat(yearlyIncome) || 0;
-    // Compute rolling window
-    const planStartVal = form.getValues('planStartDate');
-    const planStart = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+    // Compute rolling window — always use financialStartDate for goal distribution.
+    // KPI start date only affects KPI tracking, not when income goals are distributed.
+    const finStartVal = form.getValues('financialStartDate') || form.getValues('planStartDate');
+    const planStart = finStartVal ? new Date(finStartVal + 'T00:00:00') : null;
     const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
     const grace = isNewAgent ? gracePeriodMonths : 0;
     const firstClosingMonth = startMonthNum + grace;
@@ -536,8 +537,9 @@ export default function BusinessPlanPage() {
     // Build seasonality weights keyed by rolling position 1-12.
     // The source data is indexed by calendar month (Jan=0..Dec=11).
     // We map each rolling position to its calendar month to look up the right weight.
-    const planStartVal = form.getValues('planStartDate');
-    const planStart = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+    // Always use financialStartDate for goal distribution (KPI start date is separate).
+    const finStartVal = form.getValues('financialStartDate') || form.getValues('planStartDate');
+    const planStart = finStartVal ? new Date(finStartVal + 'T00:00:00') : null;
     const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
     const grace = isNewAgent ? gracePeriodMonths : 0;
     const firstClosingMonth = startMonthNum + grace;
@@ -590,9 +592,10 @@ export default function BusinessPlanPage() {
     setIsSavingGoals(true);
     try {
       const token = await user.getIdToken();
-      // Build the rolling window to map positions to calendar year+month
-      const planStartVal = form.getValues('planStartDate');
-      const planStart = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+      // Build the rolling window to map positions to calendar year+month.
+      // Always use financialStartDate for goal distribution (KPI start date is separate).
+      const finStartVal = form.getValues('financialStartDate') || form.getValues('planStartDate');
+      const planStart = finStartVal ? new Date(finStartVal + 'T00:00:00') : null;
       const startMonthNum = planStart ? planStart.getMonth() + 1 : 1;
       const grace = isNewAgent ? gracePeriodMonths : 0;
       const firstClosingMonth = startMonthNum + grace;
@@ -2072,9 +2075,10 @@ export default function BusinessPlanPage() {
 
                 {/* Monthly goals table */}
                 {(() => {
-                  // Build rolling-12 window for display
-                  const planStartVal = form.getValues('planStartDate');
-                  const planStartDt = planStartVal ? new Date(planStartVal + 'T00:00:00') : null;
+                  // Build rolling-12 window for display.
+                  // Always use financialStartDate for goal distribution (KPI start date is separate).
+                  const finStartVal = form.getValues('financialStartDate') || form.getValues('planStartDate');
+                  const planStartDt = finStartVal ? new Date(finStartVal + 'T00:00:00') : null;
                   const startMonthNum = planStartDt ? planStartDt.getMonth() + 1 : 1;
                   const grace = isNewAgent ? gracePeriodMonths : 0;
                   const firstClosingMonth = startMonthNum + grace;
