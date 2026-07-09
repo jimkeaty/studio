@@ -959,6 +959,9 @@ export default function AddTransactionPage() {
   const [stagersLoading, setStagersLoading] = useState(false);
   const [stagingRequestData, setStagingRequestData] = useState({
     stagerId: '',
+    serviceType: '',
+    coordinateWith: '',
+    photographerDate: '',
     consultationDate: '',
     consultationTime: '',
     paymentMethod: '',
@@ -3644,7 +3647,7 @@ export default function AddTransactionPage() {
                             {stagingError}
                           </div>
                         )}
-                        {/* Stager selection */}
+                        {/* Stager selection + Service Type */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                           <div>
                             <label className="text-sm font-medium">Select Stager</label>
@@ -3678,6 +3681,52 @@ export default function AddTransactionPage() {
                               <option value="Seller">Seller pays directly</option>
                             </select>
                           </div>
+                        </div>
+
+                        {/* Service type + Coordinate with */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className="text-sm font-medium">Staging Service Type</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.serviceType}
+                              onChange={e => setStagingRequestData(d => ({ ...d, serviceType: e.target.value }))}
+                            >
+                              <option value="">-- Select service type --</option>
+                              <option value="Walk &amp; Talk Consultation">Walk &amp; Talk Consultation</option>
+                              <option value="Staging Furniture Package">Staging Furniture Package</option>
+                              <option value="Accessory Package">Accessory Package</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium">Stager Should Coordinate With</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.coordinateWith}
+                              onChange={e => setStagingRequestData(d => ({ ...d, coordinateWith: e.target.value }))}
+                            >
+                              <option value="">-- Select who to contact --</option>
+                              <option value="Seller">Seller</option>
+                              <option value="Agent">Agent</option>
+                              <option value="TC">Transaction Coordinator (TC)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Photographer date */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className="text-sm font-medium">Photographer Date</label>
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.photographerDate}
+                              onChange={e => setStagingRequestData(d => ({ ...d, photographerDate: e.target.value }))}
+                            />
+                            <p className="mt-1 text-xs text-muted-foreground">Staging should be completed a few days before this date.</p>
+                          </div>
+                          <div />
                         </div>
 
                         {/* Consultation date/time */}
@@ -3794,6 +3843,9 @@ export default function AddTransactionPage() {
                                   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                                   body: JSON.stringify({
                                     stagerId: stagingRequestData.stagerId,
+                                    serviceType: stagingRequestData.serviceType,
+                                    coordinateWith: stagingRequestData.coordinateWith,
+                                    photographerDate: stagingRequestData.photographerDate,
                                     consultationDate: stagingRequestData.consultationDate,
                                     consultationTime: stagingRequestData.consultationTime,
                                     paymentMethod: stagingRequestData.paymentMethod,

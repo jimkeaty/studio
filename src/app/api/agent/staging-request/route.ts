@@ -27,6 +27,9 @@ function buildStagingEmailHtml(data: {
   sellerPhone: string;
   sellerEmail: string;
   propertyAddress: string;
+  serviceType: string;
+  coordinateWith: string;
+  photographerDate: string;
   consultationDate: string;
   consultationTime: string;
   paymentMethod: string;
@@ -67,6 +70,9 @@ function buildStagingEmailHtml(data: {
           <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
             <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:#1e40af;">📅 Consultation Details</p>
             <table cellpadding="0" cellspacing="0" width="100%">
+              ${row('Service Type', data.serviceType)}
+              ${row('Coordinate With', data.coordinateWith)}
+              ${row('Photographer Date', data.photographerDate ? data.photographerDate + ' (staging needed a few days before)' : '')}
               ${row('Target Date', data.consultationDate)}
               ${row('Preferred Time', data.consultationTime)}
               ${row('Payment Method', data.paymentMethod)}
@@ -132,6 +138,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       stagerId,
+      // Service
+      serviceType,
+      coordinateWith,
+      photographerDate,
       // Consultation
       consultationDate,
       consultationTime,
@@ -179,6 +189,9 @@ export async function POST(req: NextRequest) {
       stagerId,
       stagerName: stager.name,
       stagerEmail: stager.email,
+      serviceType: serviceType || null,
+      coordinateWith: coordinateWith || null,
+      photographerDate: photographerDate || null,
       consultationDate: consultationDate || null,
       consultationTime: consultationTime || null,
       paymentMethod: paymentMethod || null,
@@ -219,6 +232,9 @@ export async function POST(req: NextRequest) {
       sellerPhone: sellerPhone || '',
       sellerEmail: sellerEmail || '',
       propertyAddress: propertyAddress || '',
+      serviceType: serviceType || '',
+      coordinateWith: coordinateWith || '',
+      photographerDate: photographerDate || '',
       consultationDate: consultationDate || '',
       consultationTime: consultationTime || '',
       paymentMethod: paymentMethod || '',
