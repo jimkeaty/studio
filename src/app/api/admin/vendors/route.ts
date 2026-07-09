@@ -23,6 +23,22 @@ export async function GET(req: NextRequest) {
   if (!uid) return jsonError(401, 'Unauthorized');
   const category = req.nextUrl.searchParams.get('category') || null;
   try {
+    // Special case: inspector_all fetches all inspector_* categories in one call
+    if (category === 'inspector_all') {
+      const inspectorCategories = [
+        'inspector_general', 'inspector_roof', 'inspector_termite',
+        'inspector_foundation', 'inspector_sewer', 'inspector_hvac',
+        'inspector_pool', 'inspector_water_well', 'inspector_survey',
+        'inspector_elevation', 'inspector_stucco',
+      ];
+      const snap = await adminDb.collection('vendors')
+        .where('category', 'in', inspectorCategories)
+        .where('active', '==', true)
+        .orderBy('name')
+        .get();
+      const vendors = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return NextResponse.json({ ok: true, vendors });
+    }
     let query: FirebaseFirestore.Query = adminDb.collection('vendors').orderBy('name');
     if (category) query = query.where('category', '==', category);
     const snap = await query.get();

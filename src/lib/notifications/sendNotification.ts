@@ -40,6 +40,8 @@ export type NotificationType =
   | 'agent_help_claimed'              // another agent claimed a help request → requester notified
   | 'open_house_opportunity'          // agent posted an open house opportunity → all agents notified
   | 'open_house_opportunity_claimed'  // another agent claimed an open house opportunity → poster notified
+  | 'inspection_confirmed'            // inspector confirmed a time → agent/TC notified
+  | 'inspection_request_sent'         // inspection request sent to inspector(s)
   | 'system';                         // generic system notification
 
 export interface NotificationPayload {
@@ -307,6 +309,8 @@ function buildEmailHtml(
     agent_help_claimed:             'Help Claimed',
     open_house_opportunity:         'Open House Opportunity',
     open_house_opportunity_claimed: 'Open House Claimed',
+    inspection_confirmed:           'Inspection Confirmed',
+    inspection_request_sent:        'Inspection Request',
     system:                         'System',
   };
   const badge = typeLabel[type] ?? 'Notification';
