@@ -81,13 +81,13 @@ async function sendRenewalEmail(
     const resend = new Resend(apiKey);
     const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
     await resend.emails.send({
-      from: `Smart Broker USA <notifications@${fromDomain}>`,
+      from: `Keaty Real Estate <notifications@${fromDomain}>`,
       to: [email],
       subject: `Do you still have this ${itemLabel}? Confirm by Wednesday`,
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;">
           <div style="background:#f97316;padding:24px 32px;border-radius:12px 12px 0 0;">
-            <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">Smart Broker USA</p>
+            <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">Keaty Real Estate</p>
             <span style="display:inline-block;margin-top:8px;background:rgba(255,255,255,.2);color:#fff;font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;">Board Renewal</span>
           </div>
           <div style="background:#fff;padding:32px;border:1px solid #e5e7eb;border-top:none;">
@@ -104,7 +104,7 @@ async function sendRenewalEmail(
               <a href="${declineUrl}" style="display:inline-block;background:#dc2626;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">❌ No, Remove It</a>
             </div>
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-            <p style="color:#9ca3af;font-size:12px;">Smart Broker USA — Keaty Real Estate</p>
+            <p style="color:#9ca3af;font-size:12px;">Keaty Real Estate — Keaty Real Estate</p>
           </div>
         </div>
       `,
@@ -128,13 +128,13 @@ async function sendArchiveEmail(
     const resend = new Resend(apiKey);
     const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
     await resend.emails.send({
-      from: `Smart Broker USA <notifications@${fromDomain}>`,
+      from: `Keaty Real Estate <notifications@${fromDomain}>`,
       to: [email],
       subject: `Your ${itemLabel} has been archived`,
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;">
           <div style="background:#6b7280;padding:24px 32px;border-radius:12px 12px 0 0;">
-            <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">Smart Broker USA</p>
+            <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">Keaty Real Estate</p>
             <span style="display:inline-block;margin-top:8px;background:rgba(255,255,255,.2);color:#fff;font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;">Archived</span>
           </div>
           <div style="background:#fff;padding:32px;border:1px solid #e5e7eb;border-top:none;">
@@ -147,7 +147,7 @@ async function sendArchiveEmail(
             <p style="margin:0 0 24px;color:#374151;font-size:15px;">It has been saved to your Archived Posts. If you still need it on the board, you can re-add it with one click.</p>
             <a href="${readdUrl}" style="display:inline-block;background:#f97316;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Re-add to Board</a>
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-            <p style="color:#9ca3af;font-size:12px;">Smart Broker USA — Keaty Real Estate</p>
+            <p style="color:#9ca3af;font-size:12px;">Keaty Real Estate — Keaty Real Estate</p>
           </div>
         </div>
       `,

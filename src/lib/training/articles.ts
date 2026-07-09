@@ -1,5 +1,5 @@
 /**
- * Smart Broker USA — Training & Help Center Article Library
+ * Keaty Real Estate — Training & Help Center Article Library
  *
  * To add a new article:
  *  1. Add a new entry to the ARTICLES array below.

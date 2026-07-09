@@ -249,7 +249,7 @@ export function SidebarNav() {
     return () => { cancelled = true; };
   }, []);
 
-  const companyName = branding?.companyName || 'Smart Broker USA';
+  const companyName = branding?.companyName || 'Keaty Real Estate';
   const tagline = branding?.tagline;
   // Priority: animated logo (if enabled) → static logo → PWA/home screen icon
   const activeLogo =

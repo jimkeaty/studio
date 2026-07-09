@@ -10,7 +10,7 @@ export const revalidate = 0;
 
 export async function GET() {
   let pwaIconUrl: string | null = null;
-  let companyName = 'Smart Broker USA';
+  let companyName = 'Keaty Real Estate';
   let primaryColor = '#2563eb';
 
   try {

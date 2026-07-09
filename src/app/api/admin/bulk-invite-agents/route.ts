@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL ||
       'https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app';
-    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Smart Broker USA';
+    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
 
     if (!resendApiKey) {
       return jsonError(500, 'RESEND_API_KEY is not configured — cannot send invite emails');

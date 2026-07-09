@@ -2,13 +2,13 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy — Smart Broker USA | Keaty Real Estate',
-  description: 'Privacy Policy for the Smart Broker USA platform operated by Keaty Real Estate.',
+  title: 'Privacy Policy — Keaty Real Estate | Keaty Real Estate',
+  description: 'Privacy Policy for the Keaty Real Estate platform operated by Keaty Real Estate.',
 };
 
 const EFFECTIVE_DATE = 'July 1, 2025';
 const COMPANY_NAME = 'Keaty Real Estate';
-const PLATFORM_NAME = 'Smart Broker USA';
+const PLATFORM_NAME = 'Keaty Real Estate';
 const CONTACT_EMAIL = 'admin@keatyrealestate.com';
 const COMPANY_ADDRESS = 'Lafayette, Louisiana, United States';
 

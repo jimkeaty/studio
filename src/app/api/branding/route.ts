@@ -11,7 +11,7 @@ export async function GET() {
       return NextResponse.json({
         ok: true,
         branding: {
-          companyName: 'Smart Broker USA',
+          companyName: 'Keaty Real Estate',
           tagline: null,
           logoUrl: null,
           animatedLogoUrl: null,
@@ -26,7 +26,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       branding: {
-        companyName: data.companyName ?? 'Smart Broker USA',
+        companyName: data.companyName ?? 'Keaty Real Estate',
         tagline: data.tagline ?? null,
         logoUrl: data.logoUrl ?? null,
         animatedLogoUrl: data.animatedLogoUrl ?? null,
@@ -41,7 +41,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       branding: {
-        companyName: 'Smart Broker USA',
+        companyName: 'Keaty Real Estate',
         tagline: null,
         logoUrl: null,
         animatedLogoUrl: null,

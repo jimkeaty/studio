@@ -1047,7 +1047,7 @@ function FacebookConnectCard() {
         {status === 'disconnected' && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Not connected. Click below to authorize Smart Broker USA to post to the KRE Agents group on your behalf.
+              Not connected. Click below to authorize Keaty Real Estate to post to the KRE Agents group on your behalf.
               You'll be redirected to Facebook to grant permission.
             </p>
             <Button size="sm" onClick={handleConnect} disabled={connecting} className="bg-blue-600 hover:bg-blue-700 text-white">

@@ -61,7 +61,7 @@ function usePageTitle() {
   for (const key of sorted) {
     if (pathname.startsWith(key + '/')) return PAGE_TITLES[key];
   }
-  return 'Smart Broker USA';
+  return 'Keaty Real Estate';
 }
 
 // ─── Notification icon ────────────────────────────────────────────────────────

@@ -103,7 +103,7 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
           const resend = new Resend(apiKey);
           const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
           await resend.emails.send({
-            from: `Smart Broker USA <notifications@${fromDomain}>`,
+            from: `Keaty Real Estate <notifications@${fromDomain}>`,
             to: [agent.email],
             subject: title,
             html: buildBroadcastEmail(agent.displayName || agent.firstName || 'Agent', info, fullUrl),
@@ -153,7 +153,7 @@ function buildBroadcastEmail(
     <tr><td align="center">
       <table width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
         <tr><td style="background:${accent};padding:24px 32px;">
-          <p style="margin:0;color:#ffffff;font-size:18px;font-weight:700;">Smart Broker USA</p>
+          <p style="margin:0;color:#ffffff;font-size:18px;font-weight:700;">Keaty Real Estate</p>
           <span style="display:inline-block;margin-top:8px;background:rgba(255,255,255,.2);color:#fff;font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;">${info.emoji} ${info.label}</span>
         </td></tr>
         <tr><td style="padding:32px;">

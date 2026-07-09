@@ -65,9 +65,9 @@ export async function POST(req: NextRequest) {
     const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
 
     await resend.emails.send({
-      from: `Smart Broker USA <noreply@${fromDomain}>`,
+      from: `Keaty Real Estate <noreply@${fromDomain}>`,
       to: normalizedEmail,
-      subject: 'Your sign-in link for Smart Broker USA',
+      subject: 'Your sign-in link for Keaty Real Estate',
       html: `
         <!DOCTYPE html>
         <html>
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
                       <span style="color:white;font-size:24px;font-weight:bold">K</span>
                     </div>
                     <h1 style="margin:0;color:white;font-size:20px;font-weight:700">Keaty Real Estate</h1>
-                    <p style="margin:4px 0 0;color:rgba(255,255,255,0.8);font-size:13px">Smart Broker USA Dashboard</p>
+                    <p style="margin:4px 0 0;color:rgba(255,255,255,0.8);font-size:13px">Keaty Real Estate Dashboard</p>
                   </td>
                 </tr>
                 <tr>

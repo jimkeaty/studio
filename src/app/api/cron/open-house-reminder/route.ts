@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
   const settingsSnap = await adminDb.collection('openHouseSettings').doc('default').get();
   const settings = settingsSnap.exists ? settingsSnap.data()! : {};
   const deadlineText = (settings.deadlineText as string) || 'Thursday by 4:00 PM';
-  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Smart Broker USA';
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa.web.app';
 
   /* ── mode: deadline ─────────────────────────────────────────────────── */

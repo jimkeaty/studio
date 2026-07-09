@@ -29,7 +29,7 @@ type BrandingSettings = {
 };
 
 const DEFAULT_BRANDING: BrandingSettings = {
-  companyName: 'Smart Broker USA',
+  companyName: 'Keaty Real Estate',
   tagline: null,
   logoUrl: null,
   animatedLogoUrl: null,

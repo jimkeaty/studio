@@ -245,7 +245,7 @@ function TVError({ message }: { message: string }) {
         <div className="text-6xl mb-6 opacity-50">{'\uD83C\uDFC6'}</div>
         <h1 className="text-3xl font-bold text-gray-300 mb-4">Competition Unavailable</h1>
         <p className="text-gray-500 text-lg">{message}</p>
-        <p className="text-gray-700 text-sm mt-8">Powered by Smart Broker USA</p>
+        <p className="text-gray-700 text-sm mt-8">Powered by Keaty Real Estate</p>
       </div>
     </div>
   );
@@ -512,7 +512,7 @@ export default function CompetitionTVPage() {
           <div className="text-6xl mb-6">{getThemeIcon(theme)}</div>
           <h1 className="text-3xl font-bold text-gray-300 mb-2">{config.name}</h1>
           <p className="text-gray-500 text-xl">No standings available yet</p>
-          <p className="text-gray-700 text-sm mt-8">Powered by Smart Broker USA</p>
+          <p className="text-gray-700 text-sm mt-8">Powered by Keaty Real Estate</p>
         </div>
       </div>
     );
@@ -914,7 +914,7 @@ export default function CompetitionTVPage() {
         {/* Branding */}
         <div className="absolute right-4 top-0 h-full flex items-center z-10 bg-gradient-to-l from-gray-900/90 to-transparent pl-8">
           <span className="text-gray-700 text-xs font-medium tracking-wide">
-            Powered by <span className="text-gray-600">Smart Broker USA</span>
+            Powered by <span className="text-gray-600">Keaty Real Estate</span>
           </span>
         </div>
       </div>

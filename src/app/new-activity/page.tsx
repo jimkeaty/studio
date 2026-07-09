@@ -264,7 +264,7 @@ export default function NewActivityPage() {
       {/* Footer */}
       <footer className="flex-shrink-0 border-t border-white/10 px-8 py-2 flex items-center justify-between text-xs text-gray-600">
         <span>Data refreshes automatically every 5 minutes</span>
-        <span>Smart Broker USA</span>
+        <span>Keaty Real Estate</span>
       </footer>
     </div>
   );

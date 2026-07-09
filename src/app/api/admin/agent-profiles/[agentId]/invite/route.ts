@@ -129,7 +129,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     // ── Send invite email via Resend ──────────────────────────────────────
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
-    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Smart Broker USA';
+    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
 
     if (!resendApiKey) {
       return NextResponse.json({

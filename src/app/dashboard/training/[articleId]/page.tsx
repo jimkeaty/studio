@@ -127,7 +127,7 @@ export default function TrainingArticlePage({ params }: { params: Promise<{ arti
         </Link>
         <span className="text-xs text-muted-foreground flex items-center gap-1.5">
           <GraduationCap className="h-3.5 w-3.5" />
-          Smart Broker USA Training
+          Keaty Real Estate Training
         </span>
       </div>
     </div>

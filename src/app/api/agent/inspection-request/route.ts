@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app';
-    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Smart Broker USA';
+    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
     const fromEmail = `${appName} <inspections@${fromDomain}>`;

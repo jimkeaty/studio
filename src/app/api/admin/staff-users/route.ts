@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     await adminDb.collection('notifications').add({
       recipientUid: firebaseUid,
       type: 'welcome',
-      title: 'Welcome to Smart Broker USA',
+      title: 'Welcome to Keaty Real Estate',
       message: `Your account has been created with the role: ${profileData.role.replace('_', ' ')}. Check your email for a link to set your password.`,
       read: false,
       createdAt: now,

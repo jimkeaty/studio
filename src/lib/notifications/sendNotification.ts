@@ -269,7 +269,7 @@ async function sendEmail(
     const { Resend } = await import('resend');
     const resend = new Resend(apiKey);
 
-    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Smart Broker USA';
+    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa.web.app';
     const fullUrl = url.startsWith('http') ? url : `${appUrl}${url}`;
 

@@ -5,7 +5,7 @@ import { FirebaseClientProvider } from '@/firebase/client-provider';
 import BuildBadge from '@/components/BuildBadge';
 
 export const metadata: Metadata = {
-  title: 'Smart Broker USA',
+  title: 'Keaty Real Estate',
   description: 'Performance and accountability dashboard for real estate agents and brokers.',
   // IMPORTANT: Do NOT add manifest, icons, or appleWebApp here.
   // Next.js metadata auto-generates <link> tags for these that:

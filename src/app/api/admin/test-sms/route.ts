@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     const client = twilio(accountSid, authToken);
 
     const message = await client.messages.create({
-      body: `✅ Smart Broker USA — SMS test successful! Your A2P certified number (${fromNumber}) is working correctly. Notifications will now be delivered via SMS.`,
+      body: `✅ Keaty Real Estate — SMS test successful! Your A2P certified number (${fromNumber}) is working correctly. Notifications will now be delivered via SMS.`,
       from: fromNumber,
       to: toNumber,
     });

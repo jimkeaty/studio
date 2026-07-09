@@ -59,7 +59,7 @@ env:
 
   # ── App identity ──────────────────────────────────────────────────────────
   - variable: NEXT_PUBLIC_APP_NAME
-    value: "Smart Broker USA"
+    value: "Keaty Real Estate"
     availability:
       - BUILD
       - RUNTIME

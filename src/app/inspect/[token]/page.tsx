@@ -342,13 +342,12 @@ function PageShell({ children }: { children: React.ReactNode }) {
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-2 mb-1">
           <img src="/icon-512.png" alt="Logo" className="h-8 w-8 rounded-lg" />
-          <span className="text-lg font-bold text-gray-900">Smart Broker USA</span>
+          <span className="text-lg font-bold text-gray-900">Keaty Real Estate</span>
         </div>
-        <p className="text-xs text-gray-400">Powered by Keaty Real Estate</p>
       </div>
       {children}
       <p className="text-center text-xs text-gray-400 mt-8">
-        © {new Date().getFullYear()} Smart Broker USA · Keaty Real Estate
+        © {new Date().getFullYear()} Keaty Real Estate
       </p>
     </div>
   );

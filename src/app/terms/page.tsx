@@ -2,13 +2,13 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service — Smart Broker USA | Keaty Real Estate',
-  description: 'Terms of Service for the Smart Broker USA platform operated by Keaty Real Estate.',
+  title: 'Terms of Service — Keaty Real Estate | Keaty Real Estate',
+  description: 'Terms of Service for the Keaty Real Estate platform operated by Keaty Real Estate.',
 };
 
 const EFFECTIVE_DATE = 'July 1, 2025';
 const COMPANY_NAME = 'Keaty Real Estate';
-const PLATFORM_NAME = 'Smart Broker USA';
+const PLATFORM_NAME = 'Keaty Real Estate';
 const CONTACT_EMAIL = 'admin@keatyrealestate.com';
 const COMPANY_ADDRESS = 'Lafayette, Louisiana, United States';
 
@@ -187,7 +187,7 @@ export default function TermsOfServicePage() {
               expressly set forth herein.
             </p>
             <p className="mt-2">
-              &ldquo;Keaty Real Estate,&rdquo; &ldquo;Smart Broker USA,&rdquo; &ldquo;Always 110%,&rdquo; and associated logos
+              &ldquo;Keaty Real Estate,&rdquo; &ldquo;Keaty Real Estate,&rdquo; &ldquo;Always 110%,&rdquo; and associated logos
               are trademarks or service marks of {COMPANY_NAME}. You may not use these marks without prior written consent.
             </p>
           </section>

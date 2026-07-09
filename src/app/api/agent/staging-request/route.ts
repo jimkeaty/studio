@@ -43,7 +43,7 @@ function buildStagingEmailHtml(data: {
   specialNotes: string;
   stagerName: string;
 }): string {
-  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Smart Broker USA';
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
   const accentColor = '#1d4ed8';
 
   const row = (label: string, value: string) =>
@@ -216,6 +216,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Send email via Resend
+    const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
 
@@ -255,8 +256,8 @@ export async function POST(req: NextRequest) {
 
       // Send from agent's email (reply-to also set to agent)
       const fromEmail = agentEmail
-        ? `${agentName || 'Agent'} via Smart Broker USA <staging@${fromDomain}>`
-        : `Smart Broker USA <staging@${fromDomain}>`;
+        ? `${agentName || 'Agent'} via ${appName} <staging@${fromDomain}>`
+        : `${appName} <staging@${fromDomain}>`;
 
       const { error: sendError } = await resend.emails.send({
         from: fromEmail,
