@@ -24,7 +24,8 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info, Paintbrush } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
@@ -950,6 +951,27 @@ export default function AddTransactionPage() {
   const [mediaOrderOpen, setMediaOrderOpen] = useState(false);
   const [signOrderOpen, setSignOrderOpen] = useState(false);
   const [showingTimeOpen, setShowingTimeOpen] = useState(false);
+  const [stagingOpen, setStagingOpen] = useState(false);
+
+  // Staging request state
+  type Stager = { id: string; name: string; email: string | null; phone: string | null; company: string | null };
+  const [stagers, setStagers] = useState<Stager[]>([]);
+  const [stagersLoading, setStagersLoading] = useState(false);
+  const [stagingRequestData, setStagingRequestData] = useState({
+    stagerId: '',
+    consultationDate: '',
+    consultationTime: '',
+    paymentMethod: '',
+    currentlyOnMarket: '',
+    targetedMarketDate: '',
+    homeStyle: '',
+    occupancy: '',
+    reasonForSelling: '',
+    specialNotes: '',
+  });
+  const [stagingSubmitting, setStagingSubmitting] = useState(false);
+  const [stagingSent, setStagingSent] = useState(false);
+  const [stagingError, setStagingError] = useState('');
 
   const { isAdmin: isAdminUser, loading: adminLoading } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
@@ -1136,6 +1158,24 @@ export default function AddTransactionPage() {
     };
     load();
   }, [user, isAdmin]);
+
+  // Load stagers list
+  useEffect(() => {
+    if (!user) return;
+    const loadStagers = async () => {
+      setStagersLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/admin/stagers', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.ok) setStagers(data.stagers ?? []);
+      } catch {}
+      finally { setStagersLoading(false); }
+    };
+    loadStagers();
+  }, [user]);
 
   // Pre-fill agent — wait for admin check to resolve before pre-filling.
   // Without this guard, staff/admin users (e.g. office_admin) would get their
@@ -3335,6 +3375,234 @@ export default function AddTransactionPage() {
                     <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
                       <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea placeholder="Any special instructions for the sign company..." {...field} /></FormControl></FormItem>
                     )} />
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          )}
+
+          {/* ── Staging Request (listing/dual only) ──────────────────────── */}
+          {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+            <Collapsible open={stagingOpen} onOpenChange={setStagingOpen}>
+              <Card>
+                <CardHeader
+                  className="cursor-pointer select-none py-4"
+                  onClick={() => setStagingOpen(!stagingOpen)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2"><Paintbrush className="h-4 w-4" /> Staging Request</CardTitle>
+                      <CardDescription>Request a home staging consultation. Fill out the details and send directly to your chosen stager.</CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${stagingOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-5 pt-0">
+                    {stagingSent ? (
+                      <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-700 p-4 text-sm text-green-800 dark:text-green-300 flex items-center gap-3">
+                        <CheckCircle2 className="h-5 w-5 shrink-0" />
+                        <div>
+                          <p className="font-semibold">Staging request sent!</p>
+                          <p>The stager has been emailed with the property and seller details.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {stagingError && (
+                          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2">
+                            <AlertCircle className="h-4 w-4 shrink-0" />
+                            {stagingError}
+                          </div>
+                        )}
+                        {/* Stager selection */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className="text-sm font-medium">Select Stager</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.stagerId}
+                              onChange={e => setStagingRequestData(d => ({ ...d, stagerId: e.target.value }))}
+                            >
+                              <option value="">-- Choose a stager --</option>
+                              {stagersLoading ? (
+                                <option disabled>Loading stagers...</option>
+                              ) : (
+                                stagers.map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}{s.company ? ` — ${s.company}` : ''}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium">Payment Method</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.paymentMethod}
+                              onChange={e => setStagingRequestData(d => ({ ...d, paymentMethod: e.target.value }))}
+                            >
+                              <option value="">-- Select payment method --</option>
+                              <option value="Prepaid Keaty Listing Package">Prepaid Keaty Listing Package (Keaty invoiced)</option>
+                              <option value="Agent">Agent pays directly</option>
+                              <option value="Seller">Seller pays directly</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Consultation date/time */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className="text-sm font-medium">Consultation Appointment Target Date</label>
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.consultationDate}
+                              onChange={e => setStagingRequestData(d => ({ ...d, consultationDate: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium">Preferred Time</label>
+                            <input
+                              type="time"
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.consultationTime}
+                              onChange={e => setStagingRequestData(d => ({ ...d, consultationTime: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Property details */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className="text-sm font-medium">Currently on Market?</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.currentlyOnMarket}
+                              onChange={e => setStagingRequestData(d => ({ ...d, currentlyOnMarket: e.target.value }))}
+                            >
+                              <option value="">-- Select --</option>
+                              <option value="Yes">Yes</option>
+                              <option value="No">No</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium">Targeted Market Date</label>
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.targetedMarketDate}
+                              onChange={e => setStagingRequestData(d => ({ ...d, targetedMarketDate: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className="text-sm font-medium">Home Style</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Ranch, Two-Story, Craftsman..."
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.homeStyle}
+                              onChange={e => setStagingRequestData(d => ({ ...d, homeStyle: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium">Occupied or Vacant?</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                              value={stagingRequestData.occupancy}
+                              onChange={e => setStagingRequestData(d => ({ ...d, occupancy: e.target.value }))}
+                            >
+                              <option value="">-- Select --</option>
+                              <option value="Occupied">Occupied</option>
+                              <option value="Vacant">Vacant</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Reason for Selling</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Downsizing, Relocating, Estate sale..."
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                            value={stagingRequestData.reasonForSelling}
+                            onChange={e => setStagingRequestData(d => ({ ...d, reasonForSelling: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Special Notes from Agent to Stager</label>
+                          <textarea
+                            rows={3}
+                            placeholder="Any special instructions, concerns, or notes for the stager..."
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                            value={stagingRequestData.specialNotes}
+                            onChange={e => setStagingRequestData(d => ({ ...d, specialNotes: e.target.value }))}
+                          />
+                        </div>
+
+                        {/* Auto-filled info note */}
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-700 p-3 text-sm text-blue-800 dark:text-blue-300">
+                          <p className="font-semibold mb-1">Auto-filled from your listing:</p>
+                          <p>Property address, list price, sqft, seller name/phone/email, and your agent contact info will be included automatically in the email to the stager.</p>
+                        </div>
+
+                        {/* Send button */}
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            disabled={stagingSubmitting || !stagingRequestData.stagerId}
+                            onClick={async () => {
+                              if (!user) return;
+                              setStagingSubmitting(true);
+                              setStagingError('');
+                              try {
+                                const token = await user.getIdToken();
+                                const formVals = form.getValues();
+                                const res = await fetch('/api/agent/staging-request', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                  body: JSON.stringify({
+                                    stagerId: stagingRequestData.stagerId,
+                                    consultationDate: stagingRequestData.consultationDate,
+                                    consultationTime: stagingRequestData.consultationTime,
+                                    paymentMethod: stagingRequestData.paymentMethod,
+                                    currentlyOnMarket: stagingRequestData.currentlyOnMarket,
+                                    targetedMarketDate: stagingRequestData.targetedMarketDate,
+                                    homeStyle: stagingRequestData.homeStyle,
+                                    occupancy: stagingRequestData.occupancy,
+                                    reasonForSelling: stagingRequestData.reasonForSelling,
+                                    specialNotes: stagingRequestData.specialNotes,
+                                    // Auto-filled from form
+                                    propertyAddress: formVals.address || '',
+                                    listPrice: formVals.listPrice || '',
+                                    sellerName: formVals.sellerName || '',
+                                    sellerPhone: formVals.sellerPhone || '',
+                                    sellerEmail: formVals.sellerEmail || '',
+                                    agentName: formVals.agentDisplayName || effectiveName || '',
+                                    agentEmail: user.email || '',
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (data.ok) {
+                                  setStagingSent(true);
+                                  toast({ title: 'Staging request sent!', description: data.emailSent ? 'The stager has been emailed.' : 'Saved — email could not be sent (check Resend config).' });
+                                } else {
+                                  setStagingError(data.error || 'Failed to send staging request');
+                                }
+                              } catch (err: any) {
+                                setStagingError(err.message || 'Unexpected error');
+                              } finally {
+                                setStagingSubmitting(false);
+                              }
+                            }}
+                          >
+                            {stagingSubmitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending...</> : <><Send className="h-4 w-4 mr-2" /> Send Staging Request</>}
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </CollapsibleContent>
               </Card>
