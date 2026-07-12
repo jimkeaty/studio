@@ -311,20 +311,25 @@ async function handlePeriod(
       });
     }
     const agg = agentMap.get(agentId)!;
+    // Referral closings count toward net commission but NOT toward volume, unit count, or GCI.
+    const txClosingType = String(t.closingType || "").toLowerCase();
+    const isReferralClosing = txClosingType === "referral";
     // Dual Agent counts as 2 sides (1 buyer + 1 listing)
-    const isDual = String(t.closingType || "").toLowerCase() === "dual";
+    const isDual = txClosingType === "dual";
     const sideCount = isDual ? 2 : 1;
 
     if (status === "closed") {
-      agg.closed += sideCount;
-      agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
-      agg.totalGCI += num(t.commission);
       agg.agentNetCommission += num(
         t.splitSnapshot?.agentNetCommission ?? t.commission
       );
-      agg.companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+      if (!isReferralClosing) {
+        agg.closed += sideCount;
+        agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
+        agg.totalGCI += num(t.commission);
+        agg.companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+      }
     } else if (status === "pending" || status === "under_contract") {
-      agg.pending += sideCount;
+      if (!isReferralClosing) agg.pending += sideCount;
     }
   }
 

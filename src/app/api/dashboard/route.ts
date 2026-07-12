@@ -485,8 +485,12 @@ export async function GET(req: NextRequest) {
       const net = getTransactionNet(t);
       const dealValue = asNumber(t.salePrice ?? t.listPrice);
       const gci = asNumber(t.splitSnapshot?.grossCommission || t.commission);
+      // Referral closings (closingType='referral') count toward net income but NOT
+      // toward volume, unit count, or GCI — same treatment as broker recruiting incentives.
+      const closingType = String((t as any).closingType || "").toLowerCase();
+      const isReferralClosing = closingType === "referral";
          // Dual Agent counts as 2 sides (1 buyer + 1 listing)
-      const isDual = String((t as any).closingType || "").toLowerCase() === "dual";
+      const isDual = closingType === "dual";
       const sideCount = isDual ? 2 : 1;
       if (status === "closed") {
         const d = getTransactionDateForEarned(t);
@@ -499,9 +503,11 @@ export async function GET(req: NextRequest) {
           dUtc.getTime() <= asOf.getTime()
         ) {
           netEarned += net;
-          closedUnits += sideCount;
-          closedVolume += dealValue;
-          totalGCI += gci;
+          if (!isReferralClosing) {
+            closedUnits += sideCount;
+            closedVolume += dealValue;
+            totalGCI += gci;
+          }
           // grossGCIYTD is accumulated below using anniversary cycle filter
         }
       } else if (status === "pending" || status === "under_contract") {
@@ -529,12 +535,14 @@ export async function GET(req: NextRequest) {
           dUtc.getTime() <= asOf.getTime()
         ) {
           netPending += net;
-          pendingUnits += sideCount;
-          pendingVolume += dealValue;
-          pendingGrossGCI += asNumber(
-            t.splitSnapshot?.grossCommission
-            || t.commission
-          );
+          if (!isReferralClosing) {
+            pendingUnits += sideCount;
+            pendingVolume += dealValue;
+            pendingGrossGCI += asNumber(
+              t.splitSnapshot?.grossCommission
+              || t.commission
+            );
+          }
         }
       }
     }
@@ -1169,10 +1177,13 @@ export async function GET(req: NextRequest) {
         if (String(t.status || "").trim() !== "closed") continue;
         const d = getTransactionDateForEarned(t);
         if (!d) continue;
+        const prevIsReferral = String(t.closingType || "").toLowerCase() === "referral";
         prevNetEarned += getTransactionNet(t);
-        prevClosedVolume += asNumber(t.salePrice ?? t.listPrice);
-        prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
-        prevClosedUnits += 1;
+        if (!prevIsReferral) {
+          prevClosedVolume += asNumber(t.salePrice ?? t.listPrice);
+          prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
+          prevClosedUnits += 1;
+        }
       }
 
       let prevEngagements = 0;

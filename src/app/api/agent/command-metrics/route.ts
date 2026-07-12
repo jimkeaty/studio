@@ -569,13 +569,16 @@ export async function GET(req: NextRequest) {
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
       const srcKey = (t.dealSource || 'other').toLowerCase();
+      // Referral closings count toward net income but NOT toward volume, unit count, GCI, or contracts.
+      const txClosingType = String(t.closingType || '').toLowerCase();
+      const isReferralClosing = txClosingType === 'referral';
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
-      const isDual = String(t.closingType || '').toLowerCase() === 'dual';
+      const isDual = txClosingType === 'dual';
       const sideCount = isDual ? 2 : 1;
 
       // ── Contracts written by month (contractDate bucket) ──────────────
       const contractDateParsed = parseDate(t.contractDate);
-      if (!isAllYears && contractDateParsed && contractDateParsed.getFullYear() === year) {
+      if (!isReferralClosing && !isAllYears && contractDateParsed && contractDateParsed.getFullYear() === year) {
         const cmi = contractDateParsed.getMonth();
         contractsByMonthMap[cmi].count += sideCount;
         contractsByMonthMap[cmi].volume += dealValue;
@@ -611,31 +614,37 @@ export async function GET(req: NextRequest) {
         // Partial-month cap: skip current-month transactions closed after today's day
         if (isCurrentYear && mi === currentCalMonth && closedDate!.getDate() > todayDayOfMonth) continue;
         if (!isAllYears) {
-          months[mi].totalGCI += gci;
-          months[mi].grossMargin += companyRetained;
-          months[mi].transactionFees += txFee;
-          months[mi].closedVolume += dealValue;
-          months[mi].closedCount += sideCount;
+          if (!isReferralClosing) {
+            months[mi].totalGCI += gci;
+            months[mi].grossMargin += companyRetained;
+            months[mi].transactionFees += txFee;
+            months[mi].closedVolume += dealValue;
+            months[mi].closedCount += sideCount;
+          }
           monthlyNetIncome[mi] += agentNet;
         }
 
-        totals.totalGCI += gci;
-        totals.grossMargin += companyRetained;
-        totals.transactionFees += txFee;
-        totals.closedVolume += dealValue;
-        totals.closedCount += sideCount;
+        // Referral closings: count net income only, not volume/units/GCI
         totals.netIncome += agentNet;
         totals.agentNetCommission += agentNet;
+        if (!isReferralClosing) {
+          totals.totalGCI += gci;
+          totals.grossMargin += companyRetained;
+          totals.transactionFees += txFee;
+          totals.closedVolume += dealValue;
+          totals.closedCount += sideCount;
+        }
 
-        categoryBreakdown.closed[catKey].count += sideCount;
+        categoryBreakdown.closed[catKey].count += isReferralClosing ? 0 : sideCount;
         categoryBreakdown.closed[catKey].netRevenue += agentNet;
-        addToSource(sourceBreakdown.closed, srcKey, dealValue, agentNet);
+        addToSource(sourceBreakdown.closed, srcKey, isReferralClosing ? 0 : dealValue, agentNet);
         // For dual agent, split into buyer + seller sides (1 each) instead of a single 'dual' bucket
         if (isDual) {
           addToSide(sideBreakdown.closed, 'buyer', dealValue / 2, agentNet / 2);
           addToSide(sideBreakdown.closed, 'seller', dealValue / 2, agentNet / 2);
         } else {
-          addToSide(sideBreakdown.closed, getSideKey(t), dealValue, agentNet);
+          // Referral side: pass dealValue=0 so it doesn't inflate volume in side breakdown
+          addToSide(sideBreakdown.closed, getSideKey(t), isReferralClosing ? 0 : dealValue, agentNet);
         }
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         // Use projectedCloseDate to bucket pending transactions into the month they are
@@ -663,23 +672,25 @@ export async function GET(req: NextRequest) {
           ? projectedDate.getMonth()
           : currentCalMonth;
 
-        totals.pendingVolume += dealValue;
-        totals.pendingCount += sideCount;
+        // Referral closings: count pending net income only, not volume/units
         totals.pendingNetIncome += agentNet;
-
-        months[mi].pendingVolume += dealValue;
-        months[mi].pendingCount += sideCount;
         monthlyPendingNetIncome[mi] += agentNet;
+        if (!isReferralClosing) {
+          totals.pendingVolume += dealValue;
+          totals.pendingCount += sideCount;
+          months[mi].pendingVolume += dealValue;
+          months[mi].pendingCount += sideCount;
+        }
 
-        categoryBreakdown.pending[catKey].count += sideCount;
+        categoryBreakdown.pending[catKey].count += isReferralClosing ? 0 : sideCount;
         categoryBreakdown.pending[catKey].netRevenue += agentNet;
-        addToSource(sourceBreakdown.pending, srcKey, dealValue, agentNet);
+        addToSource(sourceBreakdown.pending, srcKey, isReferralClosing ? 0 : dealValue, agentNet);
         // For dual agent, split into buyer + seller sides (1 each) instead of a single 'dual' bucket
         if (isDual) {
           addToSide(sideBreakdown.pending, 'buyer', dealValue / 2, agentNet / 2);
           addToSide(sideBreakdown.pending, 'seller', dealValue / 2, agentNet / 2);
         } else {
-          addToSide(sideBreakdown.pending, getSideKey(t), dealValue, agentNet);
+          addToSide(sideBreakdown.pending, getSideKey(t), isReferralClosing ? 0 : dealValue, agentNet);
         }
       }
     }
