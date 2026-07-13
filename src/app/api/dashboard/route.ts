@@ -860,7 +860,7 @@ export async function GET(req: NextRequest) {
     const proratedFallback = expectedYTDIncomeGoal; // workday-prorated estimate computed above
     const goalDataIsReliable = (() => {
       if (incomeGoalToDate <= 0) return false;
-      if (!isFinancialJan1) return true; // non-Jan-1 start: trust the monthly goals as-is
+      if (!isFinancialJan1) return false; // non-Jan-1 start: always use workday proration
       // For Jan-1 start: check that the monthly goal coverage is reasonable.
       // If the sum of goals for months 1..currentMonth is less than 20% of the
       // prorated estimate, the data is likely incomplete (plan saved from wrong start month).
