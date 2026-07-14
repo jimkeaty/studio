@@ -530,9 +530,22 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        // For pending deals, include in the agent's pipeline if the expected close date
+        // falls within the financial window (financialEffectiveStart → financialWindowEnd).
+        // We use the expected close date (not the contract date) for inclusion so that
+        // deals entered before a mid-year plan restart are still counted in the pipeline
+        // as long as they are expected to close within the rolling-12 window.
+        // The contract date (dUtc) is still used for the monthly bar chart bucket above.
+        const pendingIncludeDate = expectedCloseDate
+          ? new Date(Date.UTC(
+              expectedCloseDate.getUTCFullYear(),
+              expectedCloseDate.getUTCMonth(),
+              expectedCloseDate.getUTCDate()
+            ))
+          : dUtc; // fall back to contract date if no expected close date
         if (
-          dUtc.getTime() >= effectiveStart.getTime() &&
-          dUtc.getTime() <= asOf.getTime()
+          pendingIncludeDate.getTime() >= financialEffectiveStart.getTime() &&
+          pendingIncludeDate.getTime() <= financialWindowEnd.getTime()
         ) {
           netPending += net;
           if (!isReferralClosing) {
@@ -852,22 +865,35 @@ export async function GET(req: NextRequest) {
     projectedSalesGoal = Number(projectedSalesGoal.toFixed(2));
 
     // Override income YTD goal with actual monthly goals if available.
-    // Sanity check: if financialStartDate = Jan 1 (calendar year), the monthly goals in
-    // brokerCommandGoals should cover all 12 months. If the sum of goals for months
-    // 1 through currentMonth is unreasonably low (< 20% of the workday-prorated estimate),
-    // it means the goals were saved incorrectly (e.g. only July onward was written).
-    // In that case, fall back to the workday-prorated estimate from annualIncomeGoal.
+    // YTD income goal strategy:
+    //
+    // Jan-1 (calendar-year) plans: use the monthly goal sum from brokerCommandGoals.
+    //   This accounts for seasonality — e.g. a high-weight July goal correctly raises
+    //   the mid-year target. A sanity check guards against corrupt/incomplete data
+    //   (e.g. plan saved from wrong start month) by falling back to workday proration
+    //   if the monthly sum is unreasonably low.
+    //
+    // Non-Jan-1 (mid-year restart) plans: ALWAYS use workday proration.
+    //   When an agent restarts their financial goals mid-month (e.g. July 13), the
+    //   monthly goal bucket for July represents the full month's target. Using it as
+    //   the YTD goal on day 1 makes the agent look 100% behind immediately. Workday
+    //   proration correctly gives a ~$435 target on day 1, growing smoothly each workday
+    //   toward $100K over the rolling 12 months. The monthly goals are still used for
+    //   the bar chart and plan page — just not for the YTD grade target.
     const proratedFallback = expectedYTDIncomeGoal; // workday-prorated estimate computed above
     const goalDataIsReliable = (() => {
+      // Non-Jan-1 plans: always use workday proration — never override with monthly sum.
+      if (!isFinancialJan1) return false;
+      // Jan-1 plans: use monthly goal sum if it exists and passes the sanity check.
       if (incomeGoalToDate <= 0) return false;
-      if (!isFinancialJan1) return false; // non-Jan-1 start: always use workday proration
-      // For Jan-1 start: check that the monthly goal coverage is reasonable.
-      // If the sum of goals for months 1..currentMonth is less than 20% of the
-      // prorated estimate, the data is likely incomplete (plan saved from wrong start month).
+      // Sanity check: if the sum of goals for months 1..currentMonth is less than 20% of
+      // the prorated estimate, the data is likely incomplete (plan saved from wrong start
+      // month). Fall back to workday proration in that case.
       if (proratedFallback <= 0) return true;
       return incomeGoalToDate >= proratedFallback * 0.20;
     })();
     if (goalDataIsReliable) {
+      // Jan-1 plan with reliable monthly goals: use the seasonality-weighted monthly sum.
       expectedYTDIncomeGoal = incomeGoalToDate;
       const recalcIncomePerf = performance(netEarned, expectedYTDIncomeGoal);
       // Projected: grade closed+pending against goal at their close date
@@ -881,14 +907,32 @@ export async function GET(req: NextRequest) {
         performance: recalcPipelinePerf,
       };
       dashboard.incomeDeltaToGoal = Number((netEarned - expectedYTDIncomeGoal).toFixed(2));
-    } else if (incomeGoalToDate > 0 && !goalDataIsReliable) {
-      // Monthly goals exist but appear incomplete for a Jan-1 plan — log a warning and
-      // use the workday-prorated fallback so the agent sees a correct grade.
+    } else if (isFinancialJan1 && incomeGoalToDate > 0) {
+      // Jan-1 plan but monthly goals appear incomplete — log a warning and keep the
+      // workday-prorated fallback so the agent sees a correct grade.
       console.warn('[dashboard] incomeGoalToDate suspiciously low for Jan-1 plan; using workday-prorated fallback', {
         incomeGoalToDate, proratedFallback, annualIncomeGoal, currentMonth, goalFloorMonth,
         goalsFound: allGoalDocs.length,
       });
-      // expectedYTDIncomeGoal stays as the workday-prorated value set above — no override needed.
+      // expectedYTDIncomeGoal stays as the workday-prorated value — no override needed.
+    }
+    // Non-Jan-1 plans: expectedYTDIncomeGoal stays as the workday-prorated value computed
+    // above. No override, no warning — this is the correct and intended behavior.
+
+    // Volume and deals YTD goal strategy (mirrors income goal strategy above):
+    // Non-Jan-1 plans: always use workday proration so agents don't see a full
+    // month's goal on day 1 of a mid-year restart.
+    // Jan-1 plans: use the monthly goal sum (seasonality-weighted) if available.
+    if (!isFinancialJan1) {
+      // Non-Jan-1: override with workday-prorated values
+      const yearlyVolumeGoalFromPlan = asNumber(plan.calculatedTargets?.volume?.yearly);
+      const yearlySalesGoalFromPlan = asNumber(plan.calculatedTargets?.closings?.yearly);
+      if (yearlyVolumeGoalFromPlan > 0) {
+        volumeGoalToDate = Number(prorateFinancial(yearlyVolumeGoalFromPlan).toFixed(2));
+      }
+      if (yearlySalesGoalFromPlan > 0) {
+        salesGoalToDate = Number(prorateFinancial(yearlySalesGoalFromPlan).toFixed(2));
+      }
     }
 
     // Override KPI closings target with monthly sales goals if available
