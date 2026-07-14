@@ -1301,16 +1301,22 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       const isCoAgentView = !!(t as any)._isCoAgentView;
                       const canEdit = !isCoAgentView; // co-agent views are always read-only; agents can edit any of their own transactions including closed ones
                       const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
+                      const isPending = t.status === 'pending';
                       // listingPct: prefer sellerPayingListingAgent, fall back to commissionPercent (already set to listing side %)
                       const listingPct = Number(t.sellerPayingListingAgent ?? t.commissionPercent) || 0;
-                      // Use salePrice when available; only fall back to listPrice when no sale price yet
+                      // Active: use salePrice if available, otherwise list price; Pending: always use sale price
                       const sp = Number(t.salePrice) || 0;
-                      const lp = sp > 0 ? sp : (Number(t.listPrice) || 0);
+                      const lp = Number(t.listPrice) || 0;
+                      const activePrice = sp > 0 ? sp : lp;  // active listing price basis
                       const isEstimate = isActiveListing && sp === 0; // only show ~ prefix when no sale price
-                      // agentSplitPct: pipeline API exposes this for active listings
+                      // agentSplitPct: pipeline API exposes this for active and pending transactions
                       const agentSplitPct = Number(t.agentSplitPercent ?? (t.splitSnapshot as any)?.agentSplitPercent ?? (t as any).agentPct) || 0;
-                      const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? lp * listingPct / 100 : null;
+                      // Active listing: estimate net from list/sale price × commission % × agent split %
+                      const estimatedGrossGci = isActiveListing && activePrice > 0 && listingPct > 0 ? activePrice * listingPct / 100 : null;
                       const estimatedNet = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
+                      // Pending: use stored netIncome from splitSnapshot; fall back to calculated estimate if missing
+                      const pendingGrossGci = isPending && sp > 0 && listingPct > 0 && net === 0 ? sp * listingPct / 100 : null;
+                      const pendingEstimatedNet = pendingGrossGci !== null && agentSplitPct > 0 ? Math.round(pendingGrossGci * agentSplitPct / 100) : null;
                       return (
                         <TableRow
                           key={t.id}
@@ -1402,9 +1408,15 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap font-semibold text-primary text-sm">
                             {isActiveListing
                               ? (estimatedNet !== null
-                                  ? <span title={isEstimate ? 'Estimated based on list price' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedNet)}</span>
+                                  ? <span title={isEstimate ? '~Estimated based on list price × commission % × agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedNet)}</span>
                                   : (net ? formatCurrency(net) : '—'))
-                              : (net ? formatCurrency(net) : '—')
+                              : isPending
+                                ? (net > 0
+                                    ? <span title="Agent net from commission calculation">{formatCurrency(net)}</span>
+                                    : pendingEstimatedNet !== null
+                                      ? <span title="~Estimated based on sale price × commission % × agent split %">~{formatCurrency(pendingEstimatedNet)}</span>
+                                      : '—')
+                                : (net ? formatCurrency(net) : '—')
                             }
                           </TableCell>
                           <TableCell className="min-w-[90px] text-center" onClick={e => e.stopPropagation()}>

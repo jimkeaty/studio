@@ -251,6 +251,7 @@ export async function GET(req: NextRequest) {
       const snap = tx.splitSnapshot as any;
       const netIncome = snap?.agentNetCommission ?? tx.netCommission ?? null;
       if (netIncome !== null) safe.netIncome = netIncome;
+
       // For active listings: expose commission fields needed to estimate net to agent
       // (sellerPayingListingAgent = listing side %, agentSplitPercent = agent's take-home %)
       if (tx.status === 'active') {
@@ -261,6 +262,20 @@ export async function GET(req: NextRequest) {
         const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
         if (agentSplitPct != null) safe.agentSplitPercent = agentSplitPct;
       }
+
+      // For pending transactions: expose commission fields so the ledger can show
+      // estimated net when splitSnapshot is missing or zero.
+      // netIncome is already set above from splitSnapshot.agentNetCommission;
+      // additionally expose the raw inputs so the UI can recalculate if needed.
+      if (tx.status === 'pending') {
+        if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
+        if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
+        if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
+        // Prefer split % from snapshot, then transaction, then current agent plan
+        const pendingSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
+        if (pendingSplitPct != null) safe.agentSplitPercent = pendingSplitPct;
+      }
+
       return safe;
     }
 
