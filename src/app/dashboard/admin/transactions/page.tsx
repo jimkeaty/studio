@@ -82,7 +82,14 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
     case 'salePrice': return (tx as any).salePrice || 0;
     case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
     case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? tx.netCommission ?? 0;
-    case 'companyRetained': return tx.splitSnapshot?.companyRetained ?? tx.brokerGci ?? 0;
+    case 'companyRetained': {
+      const _gross = tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
+      const _net = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? tx.netCommission ?? 0;
+      const _leaderRetains = tx.splitSnapshot?.leaderRetainedAfterMember ?? null;
+      return _leaderRetains !== null
+        ? Math.max(0, _gross - _net - _leaderRetains)
+        : (tx.splitSnapshot?.companyRetained ?? tx.brokerGci ?? 0);
+    }
     case 'source': return tx.source || 'manual';
     default: return '';
   }
@@ -559,7 +566,15 @@ export default function AdminTransactionLedgerPage() {
 
   const totalGross = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0), [filtered]);
   const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0), 0), [filtered]);
-  const totalBroker = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0), 0), [filtered]);
+  const totalBroker = useMemo(() => filtered.reduce((s, t) => {
+    const _gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
+    const _net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0;
+    const _leaderRetains = t.splitSnapshot?.leaderRetainedAfterMember ?? null;
+    const _broker = _leaderRetains !== null
+      ? Math.max(0, _gross - _net - _leaderRetains)
+      : (t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0);
+    return s + _broker;
+  }, 0), [filtered]);
 
   /* ─── Auth guards ──────────────────────────────────────────────────── */
 
@@ -978,7 +993,15 @@ export default function AdminTransactionLedgerPage() {
                   {filtered.map((t) => {
                     const net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0;
                     const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
-                    const broker = t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0;
+                    // For team member transactions, the true company retained is:
+                    //   Gross GCI − Agent Net − Leader Retains
+                    // This avoids showing the raw broker GCI (which includes the leader's cut)
+                    // as the company retained amount in the ledger.
+                    const leaderRetains = t.splitSnapshot?.leaderRetainedAfterMember ?? null;
+                    const isTeamMemberTx = leaderRetains !== null && leaderRetains !== undefined;
+                    const broker = isTeamMemberTx
+                      ? Math.max(0, gross - net - (leaderRetains ?? 0))
+                      : (t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0);
                     const sc = statusConfig[t.status] || statusConfig.pending;
                     const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                     const listingPct = Number(t.sellerPayingListingAgent) || 0;
