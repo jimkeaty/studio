@@ -45,6 +45,16 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
     badge: 'New',
     defaultEnabled: true, // All Keaty agents get this
   },
+  {
+    id: 'smart-preq',
+    name: 'Smart Prequalification',
+    description: 'Streamlined buyer prequalification tool — collect client financial info, generate prequalification summaries, and share results with agents instantly.',
+    iconName: 'ClipboardCheck',
+    category: 'productivity',
+    externalUrl: 'https://smartpreq-kxereu6h.manus.space',
+    badge: 'New',
+    defaultEnabled: true, // All Keaty agents get this
+  },
   // Future plugins can be added here:
   // {
   //   id: 'market-pulse',
