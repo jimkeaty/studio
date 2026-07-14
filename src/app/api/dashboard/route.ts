@@ -650,6 +650,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // ── Automatic 30-day financial grace period ──────────────────────────
+    // Any time an agent resets their financial goals (financialStartDate set
+    // to a date within the last 30 calendar days), the financial report cards
+    // (income, volume, deals) show an A grade for the first 30 days.
+    // KPIs are NOT affected — they grade from day 1 regardless.
+    const FINANCIAL_GRACE_DAYS = 30;
+    const financialDaysSinceStart = Math.floor(
+      (todayUtc.getTime() - financialEffectiveStart.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const isFinancialGracePeriod = financialDaysSinceStart < FINANCIAL_GRACE_DAYS;
+    // Grace end date = financialEffectiveStart + 30 days
+    const financialGraceEndDate = new Date(
+      financialEffectiveStart.getTime() + FINANCIAL_GRACE_DAYS * 24 * 60 * 60 * 1000
+    );
+    const financialGraceEndDateStr = toYmd(financialGraceEndDate) || undefined;
+
     const dashboard: AgentDashboardData = {
       userId: uid,
 
@@ -657,15 +673,18 @@ export async function GET(req: NextRequest) {
       leadIndicatorPerformance: performance(engagementsActual, engagementsTarget),
       isLeadIndicatorGracePeriod: kpiElapsedWorkdays < 5,
 
-      incomeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(incomePerformance),
+      incomeGrade: (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(incomePerformance),
       incomePerformance,
       isIncomeGracePeriod: financialElapsedWorkdays < 5,
       isMetricsGracePeriod,
+      // Automatic 30-day financial grace period
+      isFinancialGracePeriod,
+      financialGraceEndDate: financialGraceEndDateStr,
       expectedYTDIncomeGoal,
       ytdTotalPotential,
 
       pipelineAdjustedIncome: {
-        grade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(pipelinePerformance),
+        grade: (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(pipelinePerformance),
         performance: pipelinePerformance,
       },
 
@@ -900,10 +919,10 @@ export async function GET(req: NextRequest) {
       const projIncomeTarget = projectedIncomeGoal > 0 ? projectedIncomeGoal : expectedYTDIncomeGoal;
       const recalcPipelinePerf = performance(ytdTotalPotential, projIncomeTarget);
       dashboard.expectedYTDIncomeGoal = expectedYTDIncomeGoal;
-      dashboard.incomeGrade = isMetricsGracePeriod ? 'A' : gradeFromPerformance(recalcIncomePerf);
+      dashboard.incomeGrade = (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(recalcIncomePerf);
       dashboard.incomePerformance = recalcIncomePerf;
       dashboard.pipelineAdjustedIncome = {
-        grade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(recalcPipelinePerf),
+        grade: (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(recalcPipelinePerf),
         performance: recalcPipelinePerf,
       };
       dashboard.incomeDeltaToGoal = Number((netEarned - expectedYTDIncomeGoal).toFixed(2));
@@ -960,16 +979,16 @@ export async function GET(req: NextRequest) {
       pendingVolume: Number(pendingVolume.toFixed(2)),
       totalVolume: Number((closedVolume + pendingVolume).toFixed(2)),
       volumeGoal: volumeGoalToDate > 0 ? volumeGoalToDate : null,
-      volumeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(volumePerf),
+      volumeGrade: (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(volumePerf),
       volumePerformance: volumePerf,
-      projectedVolumeGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(projectedVolumePerf),
+      projectedVolumeGrade: (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(projectedVolumePerf),
       projectedVolumePerformance: projectedVolumePerf,
       closedDeals: closedUnits,
       pendingDeals: pendingUnits,
       dealsGoal: salesGoalToDate > 0 ? salesGoalToDate : null,
-      dealsGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(dealsPerf),
+      dealsGrade: (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(dealsPerf),
       dealsPerformance: dealsPerf,
-      projectedDealsGrade: isMetricsGracePeriod ? 'A' : gradeFromPerformance(projectedDealsPerf),
+      projectedDealsGrade: (isMetricsGracePeriod || isFinancialGracePeriod) ? 'A' : gradeFromPerformance(projectedDealsPerf),
       projectedDealsPerformance: projectedDealsPerf,
       projectedVolumeGoal: projectedVolumeGoal > 0 ? projectedVolumeGoal : null,
       projectedDealsGoal: projectedSalesGoal > 0 ? projectedSalesGoal : null,
