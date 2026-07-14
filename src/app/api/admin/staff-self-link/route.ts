@@ -19,20 +19,30 @@ export async function POST(req: NextRequest) {
     const { uid, email } = decoded;
     if (!email) return NextResponse.json({ ok: false, error: 'No email on token' }, { status: 400 });
 
-    // Check if this UID is already linked
-    const alreadyLinked = await adminDb
+    // Check if this UID is already linked (with status=active filter for new records)
+    const alreadyLinkedActive = await adminDb
       .collection('staffUsers')
       .where('firebaseUid', '==', uid)
       .where('status', '==', 'active')
       .limit(1)
       .get();
-
-    if (!alreadyLinked.empty) {
-      // Already linked — return the role
-      return NextResponse.json({ ok: true, linked: false, role: alreadyLinked.docs[0].data().role });
+    if (!alreadyLinkedActive.empty) {
+      return NextResponse.json({ ok: true, linked: false, role: alreadyLinkedActive.docs[0].data().role });
     }
 
-    // Look for a staffUsers record matching this email (exact lowercase match first)
+    // Also check records without a status field (legacy records created before status was added).
+    // Anna Cain and other early staff users may have no status field at all, so the
+    // status=active filter above misses them entirely.
+    const alreadyLinkedAll = await adminDb
+      .collection('staffUsers')
+      .where('firebaseUid', '==', uid)
+      .limit(1)
+      .get();
+    if (!alreadyLinkedAll.empty) {
+      return NextResponse.json({ ok: true, linked: false, role: alreadyLinkedAll.docs[0].data().role });
+    }
+
+    // Look for a staffUsers record matching this email (exact lowercase match first, with status filter)
     let matchSnap = await adminDb
       .collection('staffUsers')
       .where('email', '==', email.toLowerCase())
@@ -40,9 +50,8 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .get();
 
-    // Fallback: case-insensitive scan — handles emails stored with mixed case
-    // e.g. staffUsers record has "Anna@keatyrealestate.com" but Firebase token
-    // has "anna@keatyrealestate.com"
+    // Fallback 1: case-insensitive scan of active records — handles emails stored with mixed case
+    // e.g. staffUsers record has "Anna@keatyrealestate.com" but Firebase token has "anna@keatyrealestate.com"
     if (matchSnap.empty) {
       const allActive = await adminDb
         .collection('staffUsers')
@@ -52,9 +61,24 @@ export async function POST(req: NextRequest) {
         (d) => (d.data().email || '').toLowerCase() === email.toLowerCase()
       );
       if (matchDoc) {
-        // Wrap in a compatible shape
         matchSnap = { empty: false, docs: [matchDoc] } as any;
-        console.log(`[staff-self-link] Case-insensitive email match for uid=${uid} email=${email} → doc=${matchDoc.id}`);
+        console.log(`[staff-self-link] Case-insensitive active match for uid=${uid} email=${email} → doc=${matchDoc.id}`);
+      }
+    }
+
+    // Fallback 2: scan ALL staffUsers records without any status filter.
+    // This catches legacy records (e.g. Anna Cain) that were created before the
+    // status field was introduced and therefore have no status field at all.
+    if (matchSnap.empty) {
+      const allStaff = await adminDb.collection('staffUsers').get();
+      const matchDoc = allStaff.docs.find(
+        (d) => (d.data().email || '').toLowerCase() === email.toLowerCase()
+      );
+      if (matchDoc) {
+        matchSnap = { empty: false, docs: [matchDoc] } as any;
+        console.log(`[staff-self-link] Legacy no-status match for uid=${uid} email=${email} → doc=${matchDoc.id}`);
+        // Backfill the status field so future status-filtered queries work correctly
+        await matchDoc.ref.update({ status: 'active' }).catch(() => { /* non-fatal */ });
       }
     }
 

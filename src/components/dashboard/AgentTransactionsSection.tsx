@@ -1301,21 +1301,28 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       const isCoAgentView = !!(t as any)._isCoAgentView;
                       const canEdit = !isCoAgentView; // co-agent views are always read-only; agents can edit any of their own transactions including closed ones
                       const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
+                      const isActiveBuyer = t.status === 'active' && t.closingType === 'buyer';
                       const isPending = t.status === 'pending';
-                      // listingPct: prefer sellerPayingListingAgent, fall back to commissionPercent (already set to listing side %)
+                      // listingPct: prefer sellerPayingListingAgent, fall back to commissionPercent (listing side %)
                       const listingPct = Number(t.sellerPayingListingAgent ?? t.commissionPercent) || 0;
+                      // buyerPct: sellerPayingBuyerAgent is the buyer-side commission % paid by seller
+                      const buyerPct = Number(t.sellerPayingBuyerAgent ?? t.commissionPercent) || 0;
                       // Active: use salePrice if available, otherwise list price; Pending: always use sale price
                       const sp = Number(t.salePrice) || 0;
                       const lp = Number(t.listPrice) || 0;
-                      const activePrice = sp > 0 ? sp : lp;  // active listing price basis
-                      const isEstimate = isActiveListing && sp === 0; // only show ~ prefix when no sale price
+                      const activePrice = sp > 0 ? sp : lp;  // active listing/buyer price basis
+                      const isEstimate = (isActiveListing || isActiveBuyer) && sp === 0; // only show ~ prefix when no sale price
                       // agentSplitPct: pipeline API exposes this for active and pending transactions
                       const agentSplitPct = Number(t.agentSplitPercent ?? (t.splitSnapshot as any)?.agentSplitPercent ?? (t as any).agentPct) || 0;
-                      // Active listing: estimate net from list/sale price × commission % × agent split %
+                      // Active listing: estimate net from list/sale price × listing commission % × agent split %
                       const estimatedGrossGci = isActiveListing && activePrice > 0 && listingPct > 0 ? activePrice * listingPct / 100 : null;
                       const estimatedNet = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
+                      // Active buyer: estimate net from list/sale price × buyer commission % × agent split %
+                      const estimatedBuyerGrossGci = isActiveBuyer && activePrice > 0 && buyerPct > 0 ? activePrice * buyerPct / 100 : null;
+                      const estimatedBuyerNet = estimatedBuyerGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedBuyerGrossGci * agentSplitPct / 100) : null;
                       // Pending: use stored netIncome from splitSnapshot; fall back to calculated estimate if missing
-                      const pendingGrossGci = isPending && sp > 0 && listingPct > 0 && net === 0 ? sp * listingPct / 100 : null;
+                      const pendingCommPct = listingPct || buyerPct;
+                      const pendingGrossGci = isPending && sp > 0 && pendingCommPct > 0 && net === 0 ? sp * pendingCommPct / 100 : null;
                       const pendingEstimatedNet = pendingGrossGci !== null && agentSplitPct > 0 ? Math.round(pendingGrossGci * agentSplitPct / 100) : null;
                       return (
                         <TableRow
@@ -1410,6 +1417,10 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                               ? (estimatedNet !== null
                                   ? <span title={isEstimate ? '~Estimated based on list price × commission % × agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedNet)}</span>
                                   : (net ? formatCurrency(net) : '—'))
+                              : isActiveBuyer
+                                ? (estimatedBuyerNet !== null
+                                    ? <span title={isEstimate ? '~Estimated based on list price × buyer commission % × agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedBuyerNet)}</span>
+                                    : (net ? formatCurrency(net) : '—'))
                               : isPending
                                 ? (net > 0
                                     ? <span title="Agent net from commission calculation">{formatCurrency(net)}</span>
