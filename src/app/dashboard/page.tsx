@@ -1510,11 +1510,13 @@ function gradeColorScheme(g: string) {
   }
 }
 
-function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel, annualGoalLabel, icon: Icon, isGracePeriod, infoText }: {
+function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel, annualGoalLabel, icon: Icon, isGracePeriod, gracePeriodLabel, infoText }: {
   title: string; grade: string; primary: string; secondary: string;
-  performancePct?: number; goalLabel?: string; annualGoalLabel?: string; icon: React.ElementType; isGracePeriod?: boolean; infoText?: string;
+  performancePct?: number; goalLabel?: string; annualGoalLabel?: string; icon: React.ElementType; isGracePeriod?: boolean; gracePeriodLabel?: string; infoText?: string;
 }) {
-  const colors = gradeColorScheme(grade);
+  // When grace period is active, display A-grade colors so the card looks correct
+  const effectiveGrade = isGracePeriod ? 'A' : grade;
+  const colors = gradeColorScheme(effectiveGrade);
   const clampedPct = Math.min(performancePct ?? 0, 100);
   const isPaceAhead = secondary.includes('ahead');
   const isPaceBehind = secondary.includes('behind');
@@ -1529,7 +1531,7 @@ function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel,
     )}>
       {/* Faint watermark grade letter */}
       <div className="absolute -right-3 -top-3 text-[110px] font-black leading-none opacity-[0.05] pointer-events-none select-none">
-        {grade}
+        {effectiveGrade}
       </div>
 
       <CardHeader className="flex flex-row items-start justify-between pb-2 pt-4 px-5 relative z-10">
@@ -1598,7 +1600,7 @@ function HeroCard({ title, grade, primary, secondary, performancePct, goalLabel,
 
         {isGracePeriod && (
           <Badge variant="outline" className="text-[10px] border-amber-400/60 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-            <Clock className="h-2.5 w-2.5 mr-1" /> 90-Day Grace Period
+            <Clock className="h-2.5 w-2.5 mr-1" /> {gracePeriodLabel ?? '30-Day Grace Period'}
           </Badge>
         )}
       </CardContent>
@@ -1710,7 +1712,9 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
   const projMonthLabel = projThroughMonth ? MONTH_NAMES[projThroughMonth - 1] : null;
 
   // Determine overall status from the primary income grade
-  const overallGrade = ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade;
+  // During grace period (either metrics or financial), force A so the banner looks correct
+  const isAnyFinancialGrace = dashboard.isMetricsGracePeriod || !!(dashboard as any).isFinancialGracePeriod;
+  const overallGrade = isAnyFinancialGrace ? 'A' : (ytdIncomeGoal > 0 ? letterGrade(incomePct).letter : dashboard.incomeGrade);
   const overallColors = gradeColorScheme(overallGrade);
   // annualIncomeGoal: the authoritative full-year goal for the progress bar and hero card.
   const annualIncomeGoal = planAnnualIncomeGoalFromAPI ?? (rcYearlyIncomeGoal > 0 ? rcYearlyIncomeGoal : null);
@@ -1746,7 +1750,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
                   'flex items-center justify-center h-16 w-16 rounded-2xl text-4xl font-black border-2 shrink-0',
                   overallColors.gradeBadgeBg, overallColors.gradeBadgeText, overallColors.gradeBadgeBorder
                 )}>
-                  {dashboard.isMetricsGracePeriod ? 'A' : overallGrade}
+                  {overallGrade}
                 </div>
               </div>
               {ytdIncomeGoal > 0 && (
@@ -1869,6 +1873,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
           annualGoalLabel={annualIncomeGoalDisplay ? `Annual goal: ${fmtCurrency(annualIncomeGoalDisplay)}` : undefined}
           secondary={ytdIncomeGoal > 0 ? paceText(incomeDeltaPct, fmtCurrency(ytdIncomeGoal)) : 'No income goal set'}
           icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod || (dashboard as any).isFinancialGracePeriod}
+          gracePeriodLabel={dashboard.isMetricsGracePeriod ? '90-Day Grace Period' : '30-Day Grace Period'}
           infoText="Your net income after broker split on all closed transactions so far this year. The YTD goal is your annual income goal prorated by the number of days elapsed in the year."
         />
         <HeroCard
@@ -1891,10 +1896,10 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
                 return (projPct >= 0 ? `${Math.abs(projPct)}% ahead` : `${Math.abs(projPct)}% behind`) + ` of ${projMonthLabel ?? 'projected'} goal · ${fmtCurrency(netPending)} pending`;
               })()
             : `${fmtCurrency(netPending)} pending · closed + pipeline`}
-          icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod || (dashboard as any).isFinancialGracePeriod}
+                    icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod || (dashboard as any).isFinancialGracePeriod}
+          gracePeriodLabel={dashboard.isMetricsGracePeriod ? '90-Day Grace Period' : '30-Day Grace Period'}
         />
       </div>
-
       {/* Row 2: Deals & Volume */}
       <div className="grid gap-4 md:grid-cols-2">
           <HeroCard
@@ -1908,6 +1913,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
               ? (vm.dealsPerformance >= 100 ? `${Math.round(vm.dealsPerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.dealsPerformance)}% behind pace`) + ` · ${fmtNum(vm.dealsGoal)} deals YTD goal · ${vm.pendingDeals} pending`
               : `${vm.pendingDeals} pending · No goal set`}
             icon={BarChart3} isGracePeriod={dashboard.isMetricsGracePeriod || (dashboard as any).isFinancialGracePeriod}
+            gracePeriodLabel={dashboard.isMetricsGracePeriod ? '90-Day Grace Period' : '30-Day Grace Period'}
             infoText="The number of transaction sides you have closed so far this year. The YTD goal is your annual closings goal prorated by days elapsed. Each closed transaction counts as one side."
           />
           <HeroCard
@@ -1930,6 +1936,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
                 })()
               : `${vm.closedDeals} closed + ${vm.pendingDeals} pending`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod || (dashboard as any).isFinancialGracePeriod}
+            gracePeriodLabel={dashboard.isMetricsGracePeriod ? '90-Day Grace Period' : '30-Day Grace Period'}
           />
           <HeroCard
             title="$ Volume Sold"
@@ -1943,6 +1950,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
               ? (vm.volumePerformance >= 100 ? `${Math.round(vm.volumePerformance - 100)}% ahead of pace` : `${Math.round(100 - vm.volumePerformance)}% behind pace`) + ` · ${fmtCurrency(vm.volumeGoal)} YTD goal`
               : `${fmtCurrency(vm.pendingVolume)} pending · No goal set`}
             icon={DollarSign} isGracePeriod={dashboard.isMetricsGracePeriod || (dashboard as any).isFinancialGracePeriod}
+            gracePeriodLabel={dashboard.isMetricsGracePeriod ? '90-Day Grace Period' : '30-Day Grace Period'}
           />
           <HeroCard
             title="Pipeline $ Volume Sold"
@@ -1964,6 +1972,7 @@ function ReportCardSection({ dashboard, perfData, perfYear, perfLoading }: {
                 })()
               : `${fmtCurrency(vm.pendingVolume)} pending · Closed + pending volume`}
             icon={TrendingUp} isGracePeriod={dashboard.isMetricsGracePeriod || (dashboard as any).isFinancialGracePeriod}
+            gracePeriodLabel={dashboard.isMetricsGracePeriod ? '90-Day Grace Period' : '30-Day Grace Period'}
           />
       </div>
     </div>
