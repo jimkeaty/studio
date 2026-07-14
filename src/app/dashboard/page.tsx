@@ -717,6 +717,10 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
   const gradeVsVolume = ytdVolumeGoal ? Math.round((totals.closedVolume / ytdVolumeGoal) * 100) : null;
   const gradeVsSales = ytdSalesGoal ? Math.round((totals.closedCount / ytdSalesGoal) * 100) : null;
 
+  // Financial grace period — auto-triggered for 30 days after a financial goal reset.
+  // During grace, all financial grades (income, volume, sales) are forced to A.
+  const isFinancialGracePeriod = !!(dashboard as any)?.isFinancialGracePeriod;
+
   // Projection (seasonality-based for current year, straight-line fallback)
   const projFull = (() => {
     if (!isCurrentYearPerf) return null;
@@ -892,37 +896,38 @@ function MyPerformanceSection({ perfData, perfLoading, perfError, dashboard, yea
         {/* ── Grade Cards ─────────────────────────────────────────────────────────────────── */}
         {(gradeVsGoal || gradeVsVolume || gradeVsSales || projFull) && (
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {gradeVsGoal != null && (() => { const g = letterGrade(gradeVsGoal); return (
+            {gradeVsGoal != null && (() => { const g = isFinancialGracePeriod ? { letter: 'A', color: 'text-emerald-600' } : letterGrade(gradeVsGoal); return (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Net Income vs YTD Goal' : 'Net Income vs Goal'}</p>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold">{fmtCurrencyCompact(totals.netIncome, true)} <span className="text-muted-foreground font-normal text-xs">/ {fmtCurrencyCompact(ytdIncomeGoal!, true)}</span></p>
-                    {projFull && isCurrentYearPerf && <p className="text-xs text-amber-600 mt-0.5">Proj. full year: {fmtCurrencyCompact(projFull, true)} <span className="text-muted-foreground">({projLabel})</span></p>}
+                    {projFull && isCurrentYearPerf && !isFinancialGracePeriod && <p className="text-xs text-amber-600 mt-0.5">Proj. full year: {fmtCurrencyCompact(projFull, true)} <span className="text-muted-foreground">({projLabel})</span></p>}
+                    {isFinancialGracePeriod && <p className="text-xs text-amber-600 mt-0.5">Grace period active</p>}
                   </div>
                   <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
                 </div>
               </div>
             ); })()}
-            {gradeVsVolume != null && (() => { const g = letterGrade(gradeVsVolume); return (
+            {gradeVsVolume != null && (() => { const g = isFinancialGracePeriod ? { letter: 'A', color: 'text-emerald-600' } : letterGrade(gradeVsVolume); return (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Volume vs YTD Goal' : 'Volume vs Goal'}</p>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold">{fmtCurrencyCompact(totals.closedVolume, true)} <span className="text-muted-foreground font-normal text-xs">/ {fmtCurrencyCompact(ytdVolumeGoal!, true)}</span></p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{gradeVsVolume}% of YTD goal</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{isFinancialGracePeriod ? 'Grace period active' : `${gradeVsVolume}% of YTD goal`}</p>
                   </div>
                   <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
                 </div>
               </div>
             ); })()}
-            {gradeVsSales != null && (() => { const g = letterGrade(gradeVsSales); return (
+            {gradeVsSales != null && (() => { const g = isFinancialGracePeriod ? { letter: 'A', color: 'text-emerald-600' } : letterGrade(gradeVsSales); return (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground font-medium mb-1">{isCurrentYearPerf ? 'Sales vs YTD Goal' : 'Sales vs Goal'}</p>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold">{totals.closedCount} closings <span className="text-muted-foreground font-normal text-xs">/ {ytdSalesGoal} goal</span></p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{gradeVsSales}% of YTD goal</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{isFinancialGracePeriod ? 'Grace period active' : `${gradeVsSales}% of YTD goal`}</p>
                   </div>
                   <span className={`text-4xl font-black leading-none ${g.color}`}>{g.letter}</span>
                 </div>

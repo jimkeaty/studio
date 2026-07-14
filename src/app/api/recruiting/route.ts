@@ -213,6 +213,9 @@ export async function GET(req: NextRequest) {
     // ── 0. Resolve all possible IDs for this referrer ──────────────────────────
     const referrerIdSet = new Set<string>([uid]);
     if (profileByIdSnap.exists) {
+      // Also add the Firestore document ID itself — referringAgentId is stored
+      // as the doc ID when an agent is selected from the profile dropdown.
+      referrerIdSet.add(profileByIdSnap.id);
       const d = profileByIdSnap.data();
       if (d?.agentId) referrerIdSet.add(String(d.agentId));
       if (d?.firebaseUid) referrerIdSet.add(String(d.firebaseUid));
