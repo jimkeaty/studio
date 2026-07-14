@@ -220,12 +220,23 @@ export async function GET(req: NextRequest) {
       if (d?.agentId) referrerIdSet.add(String(d.agentId));
       if (d?.firebaseUid) referrerIdSet.add(String(d.firebaseUid));
     } else {
+      // Profile doc not found by uid directly — try two fallback queries in parallel:
+      //   1. agentId field == uid  (uid happens to be the slug, rare)
+      //   2. firebaseUid field == uid  (most common case: agent's docId is a slug like
+      //      'jason-ray' but their Firebase Auth UID is stored in the firebaseUid field)
       try {
-        const profileBySlugSnap = await adminDb.collection('agentProfiles')
-          .where('agentId', '==', uid).limit(1).get();
-        if (!profileBySlugSnap.empty) {
-          referrerIdSet.add(profileBySlugSnap.docs[0].id);
-          const d = profileBySlugSnap.docs[0].data();
+        const [bySlugSnap, byFirebaseUidSnap] = await Promise.all([
+          adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get(),
+          adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get(),
+        ]);
+        const fallbackDoc = !bySlugSnap.empty
+          ? bySlugSnap.docs[0]
+          : !byFirebaseUidSnap.empty
+            ? byFirebaseUidSnap.docs[0]
+            : null;
+        if (fallbackDoc) {
+          referrerIdSet.add(fallbackDoc.id); // the slug docId (e.g. 'jason-ray')
+          const d = fallbackDoc.data();
           if (d?.agentId) referrerIdSet.add(String(d.agentId));
           if (d?.firebaseUid) referrerIdSet.add(String(d.firebaseUid));
         }
