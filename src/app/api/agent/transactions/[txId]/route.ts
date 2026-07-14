@@ -139,9 +139,18 @@ export async function PATCH(
       const txAgentId = String(txData.agentId || '');
       const txTeamId = String(txData.splitSnapshot?.primaryTeamId || txData.primaryTeamId || '');
 
+      // Check flat co-agent fields (coAgent1Id, coAgent2Id, coAgent3Id) and legacy coAgent.agentId
+      const isCoAgentTx =
+        (txData.coAgent1Id && ownIds.has(String(txData.coAgent1Id))) ||
+        (txData.coAgent2Id && ownIds.has(String(txData.coAgent2Id))) ||
+        (txData.coAgent3Id && ownIds.has(String(txData.coAgent3Id))) ||
+        // Legacy nested co-agent schema: coAgent.agentId
+        (txData.coAgent?.agentId && ownIds.has(String(txData.coAgent.agentId)));
+
       // Allow if: (a) it's the agent's own transaction, OR
-      //           (b) the caller is a team leader and the transaction belongs to their team
-      const isOwnTx = ownIds.has(txAgentId);
+      //           (b) the caller is a co-agent on this transaction, OR
+      //           (c) the caller is a team leader and the transaction belongs to their team
+      const isOwnTx = ownIds.has(txAgentId) || !!isCoAgentTx;
       const isTeamLeaderEdit = !!(callerTeamId && (txTeamId === callerTeamId || (() => {
         // Also allow if the transaction's agent is a member of the caller's team
         return false; // resolved below via async check if needed
@@ -711,10 +720,46 @@ export async function GET(
   if (!snap.exists) return jsonError(404, 'Transaction not found');
 
   const data = snap.data()!;
-  // Only allow the owning agent or admin to view
-  const isOwner = data.agentId === uid;
   const isAdmin = await isAdminLike(uid);
-  if (!isOwner && !isAdmin) return jsonError(403, 'Forbidden');
+  if (!isAdmin) {
+    // Build the caller's full identity set (Firebase UID + agentProfiles doc ID + agentId field)
+    const getIds = new Set<string>([uid]);
+    try {
+      const byDocId = await adminDb.collection('agentProfiles').doc(uid).get();
+      if (byDocId.exists) {
+        const d = byDocId.data() || {};
+        if (d.agentId) getIds.add(String(d.agentId));
+        if (d.firebaseUid) getIds.add(String(d.firebaseUid));
+        getIds.add(byDocId.id);
+      }
+      const byField = await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get();
+      if (!byField.empty) {
+        const fd = byField.docs[0].data() || {};
+        getIds.add(byField.docs[0].id);
+        if (fd.agentId) getIds.add(String(fd.agentId));
+        if (fd.firebaseUid) getIds.add(String(fd.firebaseUid));
+      }
+      const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get();
+      if (!byFbUid.empty) {
+        const fd = byFbUid.docs[0].data() || {};
+        getIds.add(byFbUid.docs[0].id);
+        if (fd.agentId) getIds.add(String(fd.agentId));
+        if (fd.firebaseUid) getIds.add(String(fd.firebaseUid));
+      }
+    } catch (_) {}
+
+    // Check primary agent ownership
+    const isOwner = getIds.has(String(data.agentId || ''));
+    // Check flat co-agent fields (coAgent1Id, coAgent2Id, coAgent3Id)
+    const isCoAgent =
+      (data.coAgent1Id && getIds.has(String(data.coAgent1Id))) ||
+      (data.coAgent2Id && getIds.has(String(data.coAgent2Id))) ||
+      (data.coAgent3Id && getIds.has(String(data.coAgent3Id))) ||
+      // Legacy nested co-agent schema: coAgent.agentId
+      (data.coAgent?.agentId && getIds.has(String(data.coAgent.agentId)));
+
+    if (!isOwner && !isCoAgent) return jsonError(403, 'Forbidden');
+  }
 
   return NextResponse.json({ ok: true, transaction: { id: snap.id, ...data } });
 }

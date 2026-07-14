@@ -299,38 +299,41 @@ export async function GET(req: NextRequest) {
       })
     );
 
-    // Also fetch transactions where this agent is the co-agent (pre-close shared view)
-    // These are read-only for the co-agent — they see the same document as the primary agent.
-    // At close the split creates separate transactions per agent, so source === 'co_agent_split'
-    // transactions are already picked up by the primary agentId query above.
+    // Also fetch transactions where this agent is listed as a co-agent.
+    // Co-agents have full edit access (same as the primary agent) — no read-only restriction.
+    // We query all four possible co-agent fields:
+    //   - Legacy nested schema: coAgent.agentId
+    //   - Flat schema: coAgent1Id, coAgent2Id, coAgent3Id
+    // Each query is independent because Firestore does not support OR across different fields.
+    const coAgentFields = ['coAgent.agentId', 'coAgent1Id', 'coAgent2Id', 'coAgent3Id'];
     try {
       await Promise.all(
-        agentIds.map(async (agentId) => {
-          try {
-            const coSnap = await adminDb
-              .collection('transactions')
-              .where('coAgent.agentId', '==', agentId)
-              .get();
-            coSnap.docs.forEach(d => {
-              if (!allTxMap.has(d.id)) {
-                // Mark as co-agent view so the UI can render read-only badge
-                const tx = sanitizeForAgent({ id: d.id, ...serializeFirestore(d.data() || {}) });
-                tx._isCoAgentView = true;
-                // For the co-agent, expose their own net income from coAgent.splitSnapshot
-                if (!isAdminCaller) {
-                  const coSnap2 = (d.data() as any)?.coAgent?.splitSnapshot;
-                  tx.netIncome = coSnap2?.agentNetCommission ?? null;
+        agentIds.flatMap((agentId) =>
+          coAgentFields.map(async (field) => {
+            try {
+              const coSnap = await adminDb
+                .collection('transactions')
+                .where(field, '==', agentId)
+                .get();
+              coSnap.docs.forEach(d => {
+                if (!allTxMap.has(d.id)) {
+                  // Co-agents see the shared transaction with full edit rights.
+                  // Mark _isCoAgentView so the UI can optionally show a co-agent badge,
+                  // but the transaction is NOT read-only — either agent may edit it.
+                  const tx = sanitizeForAgent({ id: d.id, ...serializeFirestore(d.data() || {}) });
+                  tx._isCoAgentView = true;
+                  allTxMap.set(d.id, tx);
                 }
-                allTxMap.set(d.id, tx);
-              }
-            });
-          } catch (err: any) {
-            console.warn(`[api/agent/pipeline] Failed to fetch co-agent transactions for agentId=${agentId}:`, err.message);
-          }
-        })
+              });
+            } catch (err: any) {
+              // Non-fatal: field may not be indexed yet for some variants
+              console.warn(`[api/agent/pipeline] co-agent query ${field}=${agentId} failed (non-fatal):`, err.message);
+            }
+          })
+        )
       );
     } catch {
-      // Non-fatal: composite index may not exist yet
+      // Non-fatal outer guard
     }
 
     const allTx = Array.from(allTxMap.values()).sort((a, b) => {
