@@ -162,7 +162,7 @@ export default function OpenHousesTvPage() {
 
                 {/* Notes */}
                 {item.notes && (
-                  <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">{item.notes}</p>
+                  <p className="text-gray-200 text-sm leading-relaxed line-clamp-2 border-l-2 border-orange-500/50 pl-3 bg-orange-500/5 rounded-r py-1">{item.notes}</p>
                 )}
 
                 {/* Agent */}

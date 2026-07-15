@@ -34,6 +34,20 @@ type OpenHouseListing = {
   claimedByName?: string | null; claimedByPhone?: string | null; claimedAt?: string | null;
 };
 
+type AgentHelpItem = {
+  id: string;
+  helpType: string;
+  description: string;
+  propertyAddress?: string;
+  needDate?: string | null;
+  needTime?: string | null;
+  compensation?: number | null;
+  compensationNote?: string;
+  agentName: string;
+  agentPhone: string;
+  claimedByName?: string | null;
+};
+
 type ActivityItem = {
   agentDisplayName: string;
   date: string;
@@ -58,17 +72,18 @@ type LeaderRow = {
   agentNetCommission: number;
 };
 
-// All 6 possible sections
+// All 7 possible sections
 const ALL_SECTION_DEFS: Record<string, { label: string; color: string; dot: string; bgColor: string }> = {
   'activity':     { label: 'Activity Board',  color: 'bg-emerald-500',  dot: 'bg-emerald-400',  bgColor: 'from-emerald-900/30' },
   'leaderboard':  { label: 'Leaderboard',     color: 'bg-yellow-500',   dot: 'bg-yellow-400',   bgColor: 'from-yellow-900/30' },
   'coming-soon':  { label: 'Coming Soon',     color: 'bg-purple-500',   dot: 'bg-purple-400',   bgColor: 'from-purple-900/30' },
   'buyer-needs':  { label: 'Buyer Needs',     color: 'bg-blue-500',     dot: 'bg-blue-400',     bgColor: 'from-blue-900/30' },
   'open-houses':  { label: 'Open House Opportunities', color: 'bg-orange-500', dot: 'bg-orange-400', bgColor: 'from-orange-900/30' },
+  'agent-help':   { label: 'Agent Help Needed', color: 'bg-teal-500',   dot: 'bg-teal-400',     bgColor: 'from-teal-900/30' },
   'competition':  { label: 'Competition',     color: 'bg-red-500',      dot: 'bg-red-400',      bgColor: 'from-red-900/30' },
 };
 
-const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses'];
+const DEFAULT_COMMUNITY_SECTIONS = ['activity', 'leaderboard', 'coming-soon', 'buyer-needs', 'open-houses', 'agent-help'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -618,7 +633,7 @@ function ComingSoonSection({ items, loading, active }: { items: ComingSoonListin
                     {item.generator && <span className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full text-xs font-semibold"><Zap className="h-3 w-3" />Generator</span>}
                   </div>
                   {item.otherAmenities && <p className="text-gray-400 text-sm">Amenities: {item.otherAmenities}</p>}
-                  {item.notes && <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">{item.notes}</p>}
+                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed line-clamp-2 border-l-2 border-purple-500/50 pl-3 bg-purple-500/5 rounded-r py-1">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-base">{item.agentName.charAt(0)}</div>
                     <div>
@@ -777,7 +792,7 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
                     {item.baths && <span className="flex items-center gap-1"><Bath className="h-4 w-4 text-gray-500" />{item.baths} ba</span>}
                     {item.sqft && <span className="flex items-center gap-1"><Square className="h-4 w-4 text-gray-500" />{item.sqft.toLocaleString()} sqft</span>}
                   </div>
-                  {item.notes && <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">{item.notes}</p>}
+                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed line-clamp-2 border-l-2 border-orange-500/50 pl-3 bg-orange-500/5 rounded-r py-1">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-base">{item.agentName.charAt(0)}</div>
                     <div className="flex-1">
@@ -964,15 +979,147 @@ function CompetitionSection({ competitionId, active }: { competitionId: string |
   );
 }
 
+// ─── Agent Help Section ─────────────────────────────────────────────────────
+
+const HELP_TYPE_LABELS: Record<string, string> = {
+  showing: 'Showing',
+  inspection: 'Inspection',
+  closing: 'Closing',
+  open_house: 'Open House',
+  other: 'Other',
+};
+
+function AgentHelpSection({ items, loading, active }: { items: AgentHelpItem[]; loading: boolean; active: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef<number | null>(null);
+  const posRef = useRef(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const inner = innerRef.current;
+    if (!container || !inner || items.length === 0 || !active) return;
+    posRef.current = 0;
+    container.scrollTop = 0;
+    const SPEED = 20;
+    let lastTime: number | null = null;
+    let pauseUntil = 0;
+    const step = (ts: number) => {
+      if (!container || !inner) return;
+      if (lastTime === null) lastTime = ts;
+      const dt = ts - lastTime; lastTime = ts;
+      if (ts < pauseUntil) { animRef.current = requestAnimationFrame(step); return; }
+      const maxScroll = inner.scrollHeight - container.clientHeight;
+      if (maxScroll <= 0) return;
+      posRef.current += (SPEED * dt) / 1000;
+      if (posRef.current >= maxScroll) { posRef.current = maxScroll; pauseUntil = ts + 2000; }
+      container.scrollTop = posRef.current;
+      animRef.current = requestAnimationFrame(step);
+    };
+    animRef.current = requestAnimationFrame(step);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [items, active]);
+
+  function fmtDate(d?: string | null) {
+    if (!d) return null;
+    try { return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); } catch { return d; }
+  }
+
+  return (
+    <div className="w-full h-full flex flex-col bg-gradient-to-b from-teal-900/30 to-gray-950">
+      {/* Header */}
+      <div className="flex-shrink-0 px-8 py-4 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center">
+            <Users className="h-5 w-5 text-teal-400" />
+          </div>
+          <div>
+            <h2 className="text-white text-xl font-bold tracking-tight">Agent Help Needed</h2>
+            <p className="text-gray-400 text-sm">Agents seeking help with showings, inspections &amp; more</p>
+          </div>
+          <div className="ml-auto text-teal-400 text-sm font-semibold">{items.length} request{items.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-4">
+        {loading ? (
+          <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-lg">Loading...</div></div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <Users className="h-12 w-12 text-gray-600" />
+            <p className="text-gray-400 text-lg">No help requests right now</p>
+          </div>
+        ) : (
+          <div ref={innerRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
+            {items.map((item) => (
+              <div key={item.id} className="bg-gray-800/60 border border-white/10 rounded-2xl p-4 flex flex-col gap-3">
+                {/* Type badge + date */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <span className="inline-block bg-teal-500/20 text-teal-300 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+                      {HELP_TYPE_LABELS[item.helpType] ?? item.helpType}
+                    </span>
+                    {item.propertyAddress && (
+                      <p className="text-white text-sm font-semibold mt-1 leading-tight">{item.propertyAddress}</p>
+                    )}
+                  </div>
+                  {item.needDate && (
+                    <div className="flex-shrink-0 bg-teal-500/10 border border-teal-500/20 rounded-xl px-3 py-1.5 text-center">
+                      <div className="text-teal-400 text-xs font-semibold uppercase">Needed</div>
+                      <div className="text-white font-bold text-sm">{fmtDate(item.needDate)}</div>
+                      {item.needTime && <div className="text-gray-300 text-xs">{item.needTime}</div>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                {item.description && (
+                  <p className="text-gray-200 text-sm leading-relaxed line-clamp-3 border-l-2 border-teal-500/50 pl-3 bg-teal-500/5 rounded-r py-1">{item.description}</p>
+                )}
+
+                {/* Compensation */}
+                {item.compensation && item.compensation > 0 && (
+                  <div className="flex items-center gap-1.5 text-yellow-300 text-sm font-semibold">
+                    <DollarSign className="h-4 w-4" />
+                    ${item.compensation.toLocaleString()} compensation
+                    {item.compensationNote && <span className="text-gray-400 font-normal text-xs">· {item.compensationNote}</span>}
+                  </div>
+                )}
+
+                {/* Claimed / Agent */}
+                <div className="flex items-center gap-2 pt-2 border-t border-white/5 mt-auto">
+                  <div className="w-9 h-9 rounded-full bg-teal-500/20 flex items-center justify-center text-teal-400 font-bold text-base">{item.agentName.charAt(0)}</div>
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-semibold">{item.agentName}</div>
+                    <div className="text-gray-400 text-xs flex items-center gap-1"><Phone className="h-3 w-3" />{item.agentPhone}</div>
+                  </div>
+                  {item.claimedByName && (
+                    <div className="text-right">
+                      <div className="text-green-400 text-xs font-semibold">✓ {item.claimedByName}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Community Board ─────────────────────────────────────────────────────
 
 export default function CommunityBoardPage() {
   const [comingSoon, setComingSoon] = useState<ComingSoonListing[]>([]);
   const [buyerNeeds, setBuyerNeeds] = useState<BuyerNeed[]>([]);
   const [openHouses, setOpenHouses] = useState<OpenHouseListing[]>([]);
+  const [agentHelp, setAgentHelp] = useState<AgentHelpItem[]>([]);
   const [loadingCS, setLoadingCS] = useState(true);
   const [loadingBN, setLoadingBN] = useState(true);
   const [loadingOH, setLoadingOH] = useState(true);
+  const [loadingAH, setLoadingAH] = useState(true);
 
   // Active sections list (from admin config)
   const [sections, setSections] = useState<string[]>(DEFAULT_COMMUNITY_SECTIONS);
@@ -1013,6 +1160,7 @@ export default function CommunityBoardPage() {
       fetch('/api/community/coming-soon').then(r => r.json()).then(d => { if (d.ok) setComingSoon(d.items || []); }).catch(() => {}).finally(() => setLoadingCS(false));
       fetch('/api/community/buyer-needs').then(r => r.json()).then(d => { if (d.ok) setBuyerNeeds(d.items || []); }).catch(() => {}).finally(() => setLoadingBN(false));
       fetch('/api/community/open-houses').then(r => r.json()).then(d => { if (d.ok) setOpenHouses(d.items || []); }).catch(() => {}).finally(() => setLoadingOH(false));
+      fetch('/api/community/agent-help').then(r => r.json()).then(d => { if (d.ok) setAgentHelp(d.items || []); }).catch(() => {}).finally(() => setLoadingAH(false));
     };
     loadAll();
     const interval = setInterval(loadAll, 5 * 60 * 1000);
@@ -1086,6 +1234,7 @@ export default function CommunityBoardPage() {
         {activeSectionId === 'coming-soon' && <ComingSoonSection items={comingSoon} loading={loadingCS} active={activeSectionId === 'coming-soon'} />}
         {activeSectionId === 'buyer-needs' && <BuyerNeedsSection items={buyerNeeds} loading={loadingBN} active={activeSectionId === 'buyer-needs'} />}
         {activeSectionId === 'open-houses' && <OpenHousesSection items={openHouses} loading={loadingOH} active={activeSectionId === 'open-houses'} />}
+        {activeSectionId === 'agent-help'  && <AgentHelpSection items={agentHelp} loading={loadingAH} active={activeSectionId === 'agent-help'} />}
         {activeSectionId === 'competition' && <CompetitionSection competitionId={pinnedCompetitionId} active={activeSectionId === 'competition'} />}
       </div>
 
