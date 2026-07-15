@@ -26,6 +26,14 @@ export type TransactionSplitSnapshot = {
   companySplitPercent: number | null;
   agentNetCommission: number | null;
 
+  /**
+   * Transaction/listing compliance fee deducted from the agent's net commission
+   * when the agent is paying the fee out of their own commission.
+   * agentNetCommission already has this amount subtracted when this field is set.
+   * null / 0 when the fee is paid by buyer, seller, or not applicable.
+   */
+  agentFeeDeduction?: number | null;
+
   leaderStructurePercent: number | null;
   leaderStructureGross: number | null;
 

@@ -938,13 +938,23 @@ export default function EditTransactionPage() {
             if (teamLeaderRetained === null) teamLeaderRetained = autoLeaderRetained;
           }
         }
+        // ── Agent-paid compliance fee deduction ───────────────────────────────
+        // The agentDollar field represents the gross split (before fee).
+        // When the agent is paying the compliance fee, subtract it so the stored
+        // agentNetCommission reflects what the agent actually takes home.
+        const _editFeeAmt = Number(values.txComplianceFeeAmount) || 0;
+        const _editFeePaidBy = String(values.txComplianceFeePaidBy || '').toLowerCase().trim();
+        const _editAgentPaysFee = values.txComplianceFee === 'yes' && _editFeeAmt > 0 && _editFeePaidBy === 'agent';
         payload.splitSnapshot = {
           // Start from the previously-saved splitSnapshot so we never drop fields
           // that the form doesn't directly manage (primaryTeamId, teamPlanId, etc.)
           ...loadedSplitSnapshot.current,
           // Overlay the live form values — these always win over the stored values
           grossCommission: gci,
-          agentNetCommission: agentDollar || null,
+          agentNetCommission: _editAgentPaysFee
+            ? Number(Math.max(0, agentDollar - _editFeeAmt).toFixed(2))
+            : (agentDollar || null),
+          ..._editAgentPaysFee ? { agentFeeDeduction: _editFeeAmt } : {},
           companyRetained: brokerGci,
           agentSplitPercent: agentPct || null,
           companySplitPercent: brokerPct || null,

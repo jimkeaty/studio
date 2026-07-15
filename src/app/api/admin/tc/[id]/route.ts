@@ -616,6 +616,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         agentType = calc.agentType;
         calculationModel = calc.calculationModel;
 
+        // ── Agent-paid compliance fee deduction ───────────────────────────────
+        // When the agent is paying the transaction/listing compliance fee out of
+        // their own commission, subtract it from agentNetCommission so the stored
+        // net accurately reflects what the agent actually takes home.
+        // The fee does NOT affect GCI, tier lookup, or company retained.
+        {
+          const _txFeeAmt = Number(intake.txComplianceFeeAmount) || 0;
+          const _txFeePaidBy = String(intake.txComplianceFeePaidBy || '').toLowerCase().trim();
+          if (intake.txComplianceFee === 'yes' && _txFeeAmt > 0 && _txFeePaidBy === 'agent') {
+            const _rawNet = Number(splitSnapshot.agentNetCommission) || 0;
+            splitSnapshot.agentNetCommission = Number(Math.max(0, _rawNet - _txFeeAmt).toFixed(2));
+            splitSnapshot.agentFeeDeduction = _txFeeAmt;
+          }
+        }
+
         // Co-agent calculation
         if (hasCoAgent && coAgentId && coAgentDisplayName) {
           let coSplitSnapshot: any = null;

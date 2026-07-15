@@ -93,6 +93,18 @@ export async function POST(req: NextRequest) {
         creditSnapshot = calculation.creditSnapshot
         agentType = calculation.agentType
         calculationModel = calculation.calculationModel
+        // ── Agent-paid compliance fee deduction ───────────────────────────────
+        // When the agent is paying the compliance fee out of their own commission,
+        // subtract it from agentNetCommission so the stored net is accurate.
+        {
+          const _txFeeAmt = Number(body.txComplianceFeeAmount) || 0
+          const _txFeePaidBy = String(body.txComplianceFeePaidBy || '').toLowerCase().trim()
+          if (body.txComplianceFee === 'yes' && _txFeeAmt > 0 && _txFeePaidBy === 'agent') {
+            const _rawNet = Number((splitSnapshot as any).agentNetCommission) || 0
+            ;(splitSnapshot as any).agentNetCommission = Number(Math.max(0, _rawNet - _txFeeAmt).toFixed(2))
+            ;(splitSnapshot as any).agentFeeDeduction = _txFeeAmt
+          }
+        }
       } catch (calcErr: any) {
         console.warn('[API/transactions] Calculation failed, using manual fallback:', calcErr?.message)
         // Fallback: save with basic split (full commission as gross, no agent/company split calculated)

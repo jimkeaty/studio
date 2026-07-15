@@ -272,6 +272,19 @@ export async function PATCH(
                 allowed.creditSnapshot = calculation.creditSnapshot;
                 allowed.agentType = calculation.agentType;
                 allowed.calculationModel = calculation.calculationModel;
+                // ── Agent-paid compliance fee deduction ───────────────────────────────
+                // Merge new fee values over current transaction to check payer
+                const _mergedFee = { ...currentTx, ...allowed };
+                const _txFeeAmt = Number(_mergedFee.txComplianceFeeAmount) || 0;
+                const _txFeePaidBy = String(_mergedFee.txComplianceFeePaidBy || '').toLowerCase().trim();
+                if (_mergedFee.txComplianceFee === 'yes' && _txFeeAmt > 0 && _txFeePaidBy === 'agent') {
+                  const _rawNet = Number(allowed.splitSnapshot.agentNetCommission) || 0;
+                  allowed.splitSnapshot = {
+                    ...allowed.splitSnapshot,
+                    agentNetCommission: Number(Math.max(0, _rawNet - _txFeeAmt).toFixed(2)),
+                    agentFeeDeduction: _txFeeAmt,
+                  };
+                }
               }
             }
           } catch (calcErr: any) {
