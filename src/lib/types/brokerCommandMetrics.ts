@@ -243,6 +243,8 @@ export type BrokerCommandMetrics = {
   contractsByMonthComparison?: { year: number; months: ContractsByMonthData[] }[]; // up to 4 prior years
   // Pending-to-close ratio (YTD, resolved deals only)
   pendingCloseRatio?: PendingCloseRatio;
+  // Fees collected breakdown (transaction fees + listing fees, by payer)
+  feesCollected?: FeesCollected;
   // All-time brokerage totals (from brokerAllTimeSummary/totals)
   allTimeSummary?: {
     totalDeals: number;
@@ -264,6 +266,39 @@ export type BrokerCommandMetrics = {
   currentPeriodMetrics?: PeriodMetrics;
   comparisonPeriodMetrics?: PeriodMetrics;
   monthlyTrend?: { month: string; activeAgents: number; closedDeals: number; dealsPerAgent: number }[];
+};
+
+// ── Fees Collected breakdown ──────────────────────────────────────────────────
+export type FeesByPayer = {
+  count: number;       // number of transactions with this payer
+  totalAmount: number; // sum of fee amounts
+};
+
+export type FeesCollected = {
+  // Grand totals
+  totalFees: number;            // all fees regardless of payer
+  totalTransactionFees: number; // txComplianceFee amounts (compliance/transaction fee)
+  totalListingFees: number;     // legacy transactionFee field (listing-side fee)
+  totalCount: number;           // transactions that have any fee
+  // Company-collected vs agent-paid split
+  companyCollectedTotal: number; // buyer + seller + sellerClosingCost payers
+  agentPaidTotal: number;        // agent pays from their commission
+  // Breakdown by who pays
+  byPayer: {
+    agent: FeesByPayer;              // agent pays out of their commission
+    buyer: FeesByPayer;              // collected from buyer at closing
+    seller: FeesByPayer;             // collected from seller
+    sellerClosingCost: FeesByPayer;  // taken from seller-paid closing cost to buyer
+    other: FeesByPayer;              // any other / unspecified payer
+  };
+  // Monthly breakdown (index 0 = Jan, 11 = Dec)
+  byMonth: Array<{
+    month: number;   // 1-12
+    label: string;
+    totalFees: number;
+    agentFees: number;
+    companyCollectedFees: number; // buyer + seller + sellerClosingCost
+  }>;
 };
 
 // ── Goals (admin-set) ───────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import type {
   PendingTransactionSummary,
   ContractsByMonthData,
   PendingCloseRatio,
+  FeesCollected,
 } from '@/lib/types/brokerCommandMetrics';
 
 
@@ -43,6 +44,10 @@ interface Transaction {
     companyRetained?: number;
     primaryTeamId?: string | null;
   };
+  // Compliance / transaction fee fields
+  txComplianceFee?: string;          // 'yes' | 'no'
+  txComplianceFeeAmount?: number | null;
+  txComplianceFeePaidBy?: string;    // 'agent' | 'buyer' | 'seller' | 'seller_closing_cost'
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -303,7 +308,31 @@ export async function GET(req: NextRequest) {
       bucket[src].netRevenue += netRevenue;
     };
 
-    // 6. Process each transaction
+    // 6. Initialize fees collected accumulators
+    const feesByMonth = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      label: format(new Date(2000, i), 'MMM'),
+      totalFees: 0,
+      agentFees: 0,
+      companyCollectedFees: 0,
+    }));
+    const feesAcc = {
+      totalFees: 0,
+      totalTransactionFees: 0,
+      totalListingFees: 0,
+      totalCount: 0,
+      companyCollectedTotal: 0,
+      agentPaidTotal: 0,
+      byPayer: {
+        agent:             { count: 0, totalAmount: 0 },
+        buyer:             { count: 0, totalAmount: 0 },
+        seller:            { count: 0, totalAmount: 0 },
+        sellerClosingCost: { count: 0, totalAmount: 0 },
+        other:             { count: 0, totalAmount: 0 },
+      },
+    };
+
+    // 7. Process each transaction
     const pendingTransactionsList: PendingTransactionSummary[] = [];
     // Contracts written by month: bucket by contractDate for the selected year
     const contractsByMonthMap: ContractsByMonthData[] = Array.from({ length: 12 }, (_, i) => ({
@@ -399,6 +428,51 @@ export async function GET(req: NextRequest) {
 
         // Source
         addToSource(sourceBreakdown.closed, srcKey, dealValue, companyRetained);
+
+        // ── Fees collected aggregation ──────────────────────────────────
+        // txComplianceFee: the compliance/transaction fee (new schema)
+        const hasTxCompFee = t.txComplianceFee === 'yes' && (t.txComplianceFeeAmount ?? 0) > 0;
+        const txCompFeeAmt = hasTxCompFee ? Number(t.txComplianceFeeAmount ?? 0) : 0;
+        const txCompFeePayer = hasTxCompFee
+          ? String(t.txComplianceFeePaidBy || 'other').toLowerCase().trim()
+          : '';
+        // transactionFee: legacy listing-side fee field
+        const legacyFeeAmt = Number(t.transactionFee ?? 0);
+        const totalFeeThisTx = txCompFeeAmt + legacyFeeAmt;
+        if (totalFeeThisTx > 0) {
+          feesAcc.totalFees += totalFeeThisTx;
+          feesAcc.totalTransactionFees += txCompFeeAmt;
+          feesAcc.totalListingFees += legacyFeeAmt;
+          feesAcc.totalCount += 1;
+          // Bucket by payer
+          if (hasTxCompFee) {
+            const payerKey =
+              txCompFeePayer === 'agent'                ? 'agent'
+              : txCompFeePayer === 'buyer'              ? 'buyer'
+              : txCompFeePayer === 'seller'             ? 'seller'
+              : txCompFeePayer === 'seller_closing_cost' ? 'sellerClosingCost'
+              : 'other';
+            feesAcc.byPayer[payerKey].count += 1;
+            feesAcc.byPayer[payerKey].totalAmount += txCompFeeAmt;
+            if (payerKey === 'agent') {
+              feesAcc.agentPaidTotal += txCompFeeAmt;
+            } else {
+              feesAcc.companyCollectedTotal += txCompFeeAmt;
+            }
+          }
+          if (legacyFeeAmt > 0) {
+            // Legacy fees assumed company-collected (no payer field)
+            feesAcc.companyCollectedTotal += legacyFeeAmt;
+            feesAcc.byPayer.other.count += 1;
+            feesAcc.byPayer.other.totalAmount += legacyFeeAmt;
+          }
+          // Monthly bucket
+          const fmBucket = feesByMonth[txMonth];
+          fmBucket.totalFees += totalFeeThisTx;
+          fmBucket.agentFees += hasTxCompFee && txCompFeePayer === 'agent' ? txCompFeeAmt : 0;
+          fmBucket.companyCollectedFees += hasTxCompFee && txCompFeePayer !== 'agent' ? txCompFeeAmt : 0;
+          fmBucket.companyCollectedFees += legacyFeeAmt;
+        }
       } else if (t.status === 'pending' || t.status === 'under_contract') {
         // Use projectedCloseDate to bucket pending transactions into the month
         // they are expected to close — not the month they went under contract.
@@ -733,6 +807,18 @@ export async function GET(req: NextRequest) {
       });
     } catch { /* non-fatal */ }
 
+    // Build feesCollected response object
+    const feesCollected: FeesCollected = {
+      totalFees: Math.round(feesAcc.totalFees * 100) / 100,
+      totalTransactionFees: Math.round(feesAcc.totalTransactionFees * 100) / 100,
+      totalListingFees: Math.round(feesAcc.totalListingFees * 100) / 100,
+      totalCount: feesAcc.totalCount,
+      companyCollectedTotal: Math.round(feesAcc.companyCollectedTotal * 100) / 100,
+      agentPaidTotal: Math.round(feesAcc.agentPaidTotal * 100) / 100,
+      byPayer: feesAcc.byPayer,
+      byMonth: feesByMonth,
+    };
+
     const result: BrokerCommandMetrics = {
       overview,
       prevYearStats,
@@ -743,6 +829,7 @@ export async function GET(req: NextRequest) {
       contractsByMonth: contractsByMonthMap,
       contractsByMonthComparison,
       pendingCloseRatio,
+      feesCollected,
       allTimeSummary,
       agentHistory,
       ...(teamLeaderEarnings ? { teamLeaderEarnings } : {}),

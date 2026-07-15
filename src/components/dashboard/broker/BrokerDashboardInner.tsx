@@ -1926,6 +1926,110 @@ export function BrokerDashboardInner() {
         </Card>
       </div>
 
+      {/* ── Fees Collected Card ─────────────────────────────────────────── */}
+      {data.feesCollected && data.feesCollected.totalCount > 0 && (() => {
+        const fees = data.feesCollected!;
+        const companyPct = fees.totalFees > 0 ? Math.round((fees.companyCollectedTotal / fees.totalFees) * 100) : 0;
+        const agentPct   = fees.totalFees > 0 ? Math.round((fees.agentPaidTotal / fees.totalFees) * 100) : 0;
+        return (
+          <Card className="border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-emerald-600" />
+                Fees Collected
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Transaction &amp; listing fees from closed deals &middot; {fees.totalCount} transaction{fees.totalCount !== 1 ? 's' : ''} with fees
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div className="bg-white dark:bg-background rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Total Fees</div>
+                  <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(fees.totalFees)}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{fees.totalCount} deals</div>
+                </div>
+                <div className="bg-white dark:bg-background rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Company Collected</div>
+                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatCurrency(fees.companyCollectedTotal)}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{companyPct}% of total &middot; buyer/seller/closing cost</div>
+                </div>
+                <div className="bg-white dark:bg-background rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Agent Paid</div>
+                  <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{formatCurrency(fees.agentPaidTotal)}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{agentPct}% of total &middot; deducted from commission</div>
+                </div>
+                <div className="bg-white dark:bg-background rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">By Type</div>
+                  <div className="space-y-1">
+                    {fees.totalTransactionFees > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Compliance Fee</span>
+                        <span className="font-semibold">{formatCurrency(fees.totalTransactionFees)}</span>
+                      </div>
+                    )}
+                    {fees.totalListingFees > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Listing Fee</span>
+                        <span className="font-semibold">{formatCurrency(fees.totalListingFees)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Paid By</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Deals</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {fees.byPayer.buyer.count > 0 && (
+                      <tr className="bg-white dark:bg-background">
+                        <td className="px-3 py-2">Buyer</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{fees.byPayer.buyer.count}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{formatCurrency(fees.byPayer.buyer.totalAmount)}</td>
+                      </tr>
+                    )}
+                    {fees.byPayer.seller.count > 0 && (
+                      <tr className="bg-white dark:bg-background">
+                        <td className="px-3 py-2">Seller</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{fees.byPayer.seller.count}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{formatCurrency(fees.byPayer.seller.totalAmount)}</td>
+                      </tr>
+                    )}
+                    {fees.byPayer.sellerClosingCost.count > 0 && (
+                      <tr className="bg-white dark:bg-background">
+                        <td className="px-3 py-2">Seller Closing Cost</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{fees.byPayer.sellerClosingCost.count}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{formatCurrency(fees.byPayer.sellerClosingCost.totalAmount)}</td>
+                      </tr>
+                    )}
+                    {fees.byPayer.agent.count > 0 && (
+                      <tr className="bg-amber-50 dark:bg-amber-950/20">
+                        <td className="px-3 py-2 text-amber-700 dark:text-amber-400">Agent (from commission)</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{fees.byPayer.agent.count}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-amber-700 dark:text-amber-400">{formatCurrency(fees.byPayer.agent.totalAmount)}</td>
+                      </tr>
+                    )}
+                    {fees.byPayer.other.count > 0 && (
+                      <tr className="bg-white dark:bg-background">
+                        <td className="px-3 py-2 text-muted-foreground">Other / Legacy</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{fees.byPayer.other.count}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{formatCurrency(fees.byPayer.other.totalAmount)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* ── Pending-to-Close Ratio Card ────────────────────────────────── */}
       {data.pendingCloseRatio && data.pendingCloseRatio.pendingTotal > 0 && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20">
