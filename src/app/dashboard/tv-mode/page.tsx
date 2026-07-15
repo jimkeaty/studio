@@ -729,7 +729,7 @@ export default function TvModePage() {
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500" />
             <Input
-              className="bg-gray-800 border-white/10 text-white pl-9 h-8 text-sm"
+              className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 pl-9 h-8 text-sm"
               placeholder={`Search ${tc.label.toLowerCase()} by address, area, or agent...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1085,11 +1085,11 @@ export default function TvModePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Agent Name *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.agentName || '')} onChange={(e) => setForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.agentName || '')} onChange={(e) => setForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Agent Phone *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.agentPhone || '')} onChange={(e) => setForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.agentPhone || '')} onChange={(e) => setForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
               </div>
             </div>
 
@@ -1098,50 +1098,50 @@ export default function TvModePage() {
               <>
                 <div>
                   <Label className="text-gray-300 text-xs">Property Address *</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St, Lafayette, LA" />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St, Lafayette, LA" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">List Price</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Beds</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Baths</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Preferred Date <span className="text-gray-500 font-normal">(optional)</span></Label>
-                    <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseDate || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseDate: e.target.value }))} />
+                    <Input type="date" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.openHouseDate || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseDate: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Preferred Start <span className="text-gray-500 font-normal">(optional)</span></Label>
-                    <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseTime: e.target.value }))} />
+                    <Input type="time" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.openHouseTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseTime: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Preferred End <span className="text-gray-500 font-normal">(optional)</span></Label>
-                    <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
+                    <Input type="time" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 -mt-1">Leave date/time blank — any agent can claim any day and time that works for them.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensation || '')} onChange={(e) => setForm((f) => ({ ...f, compensation: e.target.value }))} placeholder="e.g. 50" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.compensation || '')} onChange={(e) => setForm((f) => ({ ...f, compensation: e.target.value }))} placeholder="e.g. 50" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Compensation Note</Label>
-                    <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensationNote || '')} onChange={(e) => setForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+                    <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.compensationNote || '')} onChange={(e) => setForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
                   </div>
                 </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Notes / Description</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville. Need someone to host 1–4pm Sunday." rows={3} />
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville. Need someone to host 1–4pm Sunday." rows={3} />
                 </div>
               </>
             )}
@@ -1151,32 +1151,32 @@ export default function TvModePage() {
               <>
                 <div>
                   <Label className="text-gray-300 text-xs">Area / Neighborhood *</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Near UL campus, Youngsville, South Lafayette..." />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Near UL campus, Youngsville, South Lafayette..." />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Min Price</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.minPrice || '')} onChange={(e) => setForm((f) => ({ ...f, minPrice: e.target.value }))} placeholder="200000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.minPrice || '')} onChange={(e) => setForm((f) => ({ ...f, minPrice: e.target.value }))} placeholder="200000" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Max Price</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.maxPrice || '')} onChange={(e) => setForm((f) => ({ ...f, maxPrice: e.target.value }))} placeholder="400000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.maxPrice || '')} onChange={(e) => setForm((f) => ({ ...f, maxPrice: e.target.value }))} placeholder="400000" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Min Beds</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Min Baths</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Stories</Label>
                     <Select value={String(form.stories || '')} onValueChange={(v) => setForm((f) => ({ ...f, stories: v }))} >
-                      <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1"><SelectValue placeholder="Any" /></SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-white/10 text-white">
+                      <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1"><SelectValue placeholder="Any" /></SelectTrigger>
+                      <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                         <SelectItem value="any">Any</SelectItem>
                         <SelectItem value="1">1 Story</SelectItem>
                         <SelectItem value="2">2 Story</SelectItem>
@@ -1187,11 +1187,11 @@ export default function TvModePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Min Acreage</Label>
-                    <Input type="number" step="0.1" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.minAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, minAcreage: e.target.value }))} placeholder="0.5" />
+                    <Input type="number" step="0.1" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.minAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, minAcreage: e.target.value }))} placeholder="0.5" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Max Acreage</Label>
-                    <Input type="number" step="0.1" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.maxAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, maxAcreage: e.target.value }))} placeholder="5" />
+                    <Input type="number" step="0.1" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.maxAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, maxAcreage: e.target.value }))} placeholder="5" />
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -1205,8 +1205,12 @@ export default function TvModePage() {
                   </label>
                 </div>
                 <div>
-                  <Label className="text-gray-300 text-xs">Other Amenities / Notes</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.otherAmenities || '')} onChange={(e) => setForm((f) => ({ ...f, otherAmenities: e.target.value }))} placeholder="Garage, fenced yard, open floor plan..." rows={2} />
+                  <Label className="text-gray-300 text-xs">Other Amenities</Label>
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.otherAmenities || '')} onChange={(e) => setForm((f) => ({ ...f, otherAmenities: e.target.value }))} placeholder="Garage, fenced yard, open floor plan..." rows={2} />
+                </div>
+                <div>
+                  <Label className="text-gray-300 text-xs">Agent Notes <span className="text-gray-500 font-normal">(shown on TV board)</span></Label>
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Pre-approved at $400k, flexible on closing, needs to sell current home first..." rows={2} />
                 </div>
               </>
             )}
@@ -1216,34 +1220,34 @@ export default function TvModePage() {
               <>
                 <div>
                   <Label className="text-gray-300 text-xs">Area / Neighborhood *</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Youngsville, South Lafayette, River Ranch..." />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Youngsville, South Lafayette, River Ranch..." />
                 </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Address (optional)</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St (leave blank to show area only)" />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St (leave blank to show area only)" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Price / Price Range</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Expected List Date</Label>
-                    <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.expectedDate || '')} onChange={(e) => setForm((f) => ({ ...f, expectedDate: e.target.value }))} />
+                    <Input type="date" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.expectedDate || '')} onChange={(e) => setForm((f) => ({ ...f, expectedDate: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Beds</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Baths</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Sq Ft</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.sqft || '')} onChange={(e) => setForm((f) => ({ ...f, sqft: e.target.value }))} placeholder="2200" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.sqft || '')} onChange={(e) => setForm((f) => ({ ...f, sqft: e.target.value }))} placeholder="2200" />
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -1262,7 +1266,7 @@ export default function TvModePage() {
                 </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Details / Notes</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Renovated kitchen, large lot, motivated seller..." rows={3} />
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Renovated kitchen, large lot, motivated seller..." rows={3} />
                 </div>
               </>
             )}
@@ -1291,11 +1295,11 @@ export default function TvModePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Agent Name *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.agentName || '')} onChange={(e) => setForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.agentName || '')} onChange={(e) => setForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Agent Phone *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.agentPhone || '')} onChange={(e) => setForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.agentPhone || '')} onChange={(e) => setForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
               </div>
             </div>
 
@@ -1304,50 +1308,50 @@ export default function TvModePage() {
               <>
                 <div>
                   <Label className="text-gray-300 text-xs">Property Address *</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St, Lafayette, LA" />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St, Lafayette, LA" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">List Price</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Beds</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Baths</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Preferred Date <span className="text-gray-500 font-normal">(optional)</span></Label>
-                    <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseDate || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseDate: e.target.value }))} />
+                    <Input type="date" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.openHouseDate || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseDate: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Preferred Start <span className="text-gray-500 font-normal">(optional)</span></Label>
-                    <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseTime: e.target.value }))} />
+                    <Input type="time" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.openHouseTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseTime: e.target.value }))} />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Preferred End <span className="text-gray-500 font-normal">(optional)</span></Label>
-                    <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
+                    <Input type="time" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.openHouseEndTime || '')} onChange={(e) => setForm((f) => ({ ...f, openHouseEndTime: e.target.value }))} />
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 -mt-1">Leave date/time blank — any agent can claim any day and time that works for them.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensation || '')} onChange={(e) => setForm((f) => ({ ...f, compensation: e.target.value }))} placeholder="e.g. 50" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.compensation || '')} onChange={(e) => setForm((f) => ({ ...f, compensation: e.target.value }))} placeholder="e.g. 50" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Compensation Note</Label>
-                    <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.compensationNote || '')} onChange={(e) => setForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+                    <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.compensationNote || '')} onChange={(e) => setForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
                   </div>
                 </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Notes / Description</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville. Need someone to host 1–4pm Sunday." rows={3} />
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beautiful 3/2 in Youngsville. Need someone to host 1–4pm Sunday." rows={3} />
                 </div>
               </>
             )}
@@ -1357,32 +1361,32 @@ export default function TvModePage() {
               <>
                 <div>
                   <Label className="text-gray-300 text-xs">Area / Neighborhood *</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Near UL campus, Youngsville, South Lafayette..." />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Near UL campus, Youngsville, South Lafayette..." />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Min Price</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.minPrice || '')} onChange={(e) => setForm((f) => ({ ...f, minPrice: e.target.value }))} placeholder="200000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.minPrice || '')} onChange={(e) => setForm((f) => ({ ...f, minPrice: e.target.value }))} placeholder="200000" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Max Price</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.maxPrice || '')} onChange={(e) => setForm((f) => ({ ...f, maxPrice: e.target.value }))} placeholder="400000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.maxPrice || '')} onChange={(e) => setForm((f) => ({ ...f, maxPrice: e.target.value }))} placeholder="400000" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Min Beds</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Min Baths</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Stories</Label>
                     <Select value={String(form.stories || '')} onValueChange={(v) => setForm((f) => ({ ...f, stories: v }))} >
-                      <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1"><SelectValue placeholder="Any" /></SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-white/10 text-white">
+                      <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1"><SelectValue placeholder="Any" /></SelectTrigger>
+                      <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                         <SelectItem value="any">Any</SelectItem>
                         <SelectItem value="1">1 Story</SelectItem>
                         <SelectItem value="2">2 Story</SelectItem>
@@ -1393,11 +1397,11 @@ export default function TvModePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Min Acreage</Label>
-                    <Input type="number" step="0.1" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.minAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, minAcreage: e.target.value }))} placeholder="0.5" />
+                    <Input type="number" step="0.1" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.minAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, minAcreage: e.target.value }))} placeholder="0.5" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Max Acreage</Label>
-                    <Input type="number" step="0.1" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.maxAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, maxAcreage: e.target.value }))} placeholder="5" />
+                    <Input type="number" step="0.1" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.maxAcreage || '')} onChange={(e) => setForm((f) => ({ ...f, maxAcreage: e.target.value }))} placeholder="5" />
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -1411,8 +1415,12 @@ export default function TvModePage() {
                   </label>
                 </div>
                 <div>
-                  <Label className="text-gray-300 text-xs">Other Amenities / Notes</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.otherAmenities || '')} onChange={(e) => setForm((f) => ({ ...f, otherAmenities: e.target.value }))} placeholder="Garage, fenced yard, open floor plan..." rows={2} />
+                  <Label className="text-gray-300 text-xs">Other Amenities</Label>
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.otherAmenities || '')} onChange={(e) => setForm((f) => ({ ...f, otherAmenities: e.target.value }))} placeholder="Garage, fenced yard, open floor plan..." rows={2} />
+                </div>
+                <div>
+                  <Label className="text-gray-300 text-xs">Agent Notes <span className="text-gray-500 font-normal">(shown on TV board)</span></Label>
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Pre-approved at $400k, flexible on closing, needs to sell current home first..." rows={2} />
                 </div>
               </>
             )}
@@ -1422,34 +1430,34 @@ export default function TvModePage() {
               <>
                 <div>
                   <Label className="text-gray-300 text-xs">Area / Neighborhood *</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Youngsville, South Lafayette, River Ranch..." />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.area || '')} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="Youngsville, South Lafayette, River Ranch..." />
                 </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Address (optional)</Label>
-                  <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St (leave blank to show area only)" />
+                  <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.address || '')} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St (leave blank to show area only)" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Price / Price Range</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.price || '')} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="350000" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Expected List Date</Label>
-                    <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.expectedDate || '')} onChange={(e) => setForm((f) => ({ ...f, expectedDate: e.target.value }))} />
+                    <Input type="date" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.expectedDate || '')} onChange={(e) => setForm((f) => ({ ...f, expectedDate: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-gray-300 text-xs">Beds</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.beds || '')} onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))} placeholder="3" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Baths</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.baths || '')} onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))} placeholder="2" />
                   </div>
                   <div>
                     <Label className="text-gray-300 text-xs">Sq Ft</Label>
-                    <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.sqft || '')} onChange={(e) => setForm((f) => ({ ...f, sqft: e.target.value }))} placeholder="2200" />
+                    <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.sqft || '')} onChange={(e) => setForm((f) => ({ ...f, sqft: e.target.value }))} placeholder="2200" />
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -1468,7 +1476,7 @@ export default function TvModePage() {
                 </div>
                 <div>
                   <Label className="text-gray-300 text-xs">Details / Notes</Label>
-                  <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Renovated kitchen, large lot, motivated seller..." rows={3} />
+                  <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(form.notes || '')} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Renovated kitchen, large lot, motivated seller..." rows={3} />
                 </div>
               </>
             )}
@@ -1494,22 +1502,22 @@ export default function TvModePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Your Name *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentName || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.agentName || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Your Phone *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentPhone || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.agentPhone || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
               </div>
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Your Email</Label>
-              <Input type="email" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentEmail || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentEmail: e.target.value }))} placeholder="you@example.com" />
+              <Input type="email" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.agentEmail || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentEmail: e.target.value }))} placeholder="you@example.com" />
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Type of Help Needed *</Label>
               <Select value={String(helpForm.helpType || '')} onValueChange={(v) => setHelpForm((f) => ({ ...f, helpType: v as HelpType }))}>
-                <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1"><SelectValue placeholder="Select type..." /></SelectTrigger>
-                <SelectContent className="bg-gray-800 border-white/10 text-white">
+                <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1"><SelectValue placeholder="Select type..." /></SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                   <SelectItem value="showing">🏠 Showing — cover a showing for me</SelectItem>
                   <SelectItem value="inspection">🔍 Inspection — open door for inspection</SelectItem>
                   <SelectItem value="closing">📝 Closing — attend closing on my behalf</SelectItem>
@@ -1519,31 +1527,31 @@ export default function TvModePage() {
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Property Address (optional)</Label>
-              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.propertyAddress || '')} onChange={(e) => setHelpForm((f) => ({ ...f, propertyAddress: e.target.value }))} placeholder="123 Main St, Lafayette, LA" />
+              <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.propertyAddress || '')} onChange={(e) => setHelpForm((f) => ({ ...f, propertyAddress: e.target.value }))} placeholder="123 Main St, Lafayette, LA" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Date Needed</Label>
-                <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needDate || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needDate: e.target.value }))} />
+                <Input type="date" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.needDate || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needDate: e.target.value }))} />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Time Needed</Label>
-                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needTime || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needTime: e.target.value }))} />
+                <Input type="time" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.needTime || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needTime: e.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
-                <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensation || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensation: e.target.value as any }))} placeholder="e.g. 50" />
+                <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.compensation || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensation: e.target.value as any }))} placeholder="e.g. 50" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Compensation Note</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensationNote || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.compensationNote || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
               </div>
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Description / Details *</Label>
-              <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.description || '')} onChange={(e) => setHelpForm((f) => ({ ...f, description: e.target.value }))} placeholder="I'm out of town and need someone to show 123 Main St on Friday at 2pm. Buyer is pre-approved. Easy showing." rows={4} />
+              <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.description || '')} onChange={(e) => setHelpForm((f) => ({ ...f, description: e.target.value }))} placeholder="I'm out of town and need someone to show 123 Main St on Friday at 2pm. Buyer is pre-approved. Easy showing." rows={4} />
             </div>
           </div>
                     {/* Share to KRE Agents Facebook Group */}
@@ -1590,18 +1598,18 @@ export default function TvModePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Your Name *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentName || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.agentName || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentName: e.target.value }))} placeholder="Your name" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Your Phone *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.agentPhone || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.agentPhone || '')} onChange={(e) => setHelpForm((f) => ({ ...f, agentPhone: e.target.value }))} placeholder="(555) 555-5555" />
               </div>
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Type of Help Needed *</Label>
               <Select value={String(helpForm.helpType || '')} onValueChange={(v) => setHelpForm((f) => ({ ...f, helpType: v as HelpType }))}>
-                <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1"><SelectValue placeholder="Select type..." /></SelectTrigger>
-                <SelectContent className="bg-gray-800 border-white/10 text-white">
+                <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1"><SelectValue placeholder="Select type..." /></SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                   <SelectItem value="showing">🏠 Showing</SelectItem>
                   <SelectItem value="inspection">🔍 Inspection</SelectItem>
                   <SelectItem value="closing">📝 Closing</SelectItem>
@@ -1611,31 +1619,31 @@ export default function TvModePage() {
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Property Address</Label>
-              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.propertyAddress || '')} onChange={(e) => setHelpForm((f) => ({ ...f, propertyAddress: e.target.value }))} placeholder="123 Main St" />
+              <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.propertyAddress || '')} onChange={(e) => setHelpForm((f) => ({ ...f, propertyAddress: e.target.value }))} placeholder="123 Main St" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Date Needed</Label>
-                <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needDate || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needDate: e.target.value }))} />
+                <Input type="date" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.needDate || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needDate: e.target.value }))} />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Time Needed</Label>
-                <Input type="time" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.needTime || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needTime: e.target.value }))} />
+                <Input type="time" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.needTime || '')} onChange={(e) => setHelpForm((f) => ({ ...f, needTime: e.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Compensation Offered ($)</Label>
-                <Input type="number" className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensation || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensation: e.target.value as any }))} placeholder="e.g. 50" />
+                <Input type="number" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.compensation || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensation: e.target.value as any }))} placeholder="e.g. 50" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Compensation Note</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.compensationNote || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.compensationNote || '')} onChange={(e) => setHelpForm((f) => ({ ...f, compensationNote: e.target.value }))} placeholder="e.g. Cash at closing" />
               </div>
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Description / Details *</Label>
-              <Textarea className="bg-gray-800 border-white/10 text-white mt-1" value={String(helpForm.description || '')} onChange={(e) => setHelpForm((f) => ({ ...f, description: e.target.value }))} rows={4} />
+              <Textarea className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={String(helpForm.description || '')} onChange={(e) => setHelpForm((f) => ({ ...f, description: e.target.value }))} rows={4} />
             </div>
           </div>
           <DialogFooter>
@@ -1670,15 +1678,15 @@ export default function TvModePage() {
               <p className="text-gray-400 text-sm">Enter your contact info so {claimingItem.agentName} knows who is helping them.</p>
               <div>
                 <Label className="text-gray-300 text-xs">Your Name *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={claimForm.claimantName} onChange={(e) => setClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your name" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={claimForm.claimantName} onChange={(e) => setClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your name" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Your Phone *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={claimForm.claimantPhone} onChange={(e) => setClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={claimForm.claimantPhone} onChange={(e) => setClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Your Email</Label>
-                <Input type="email" className="bg-gray-800 border-white/10 text-white mt-1" value={claimForm.claimantEmail} onChange={(e) => setClaimForm((f) => ({ ...f, claimantEmail: e.target.value }))} placeholder="you@example.com" />
+                <Input type="email" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={claimForm.claimantEmail} onChange={(e) => setClaimForm((f) => ({ ...f, claimantEmail: e.target.value }))} placeholder="you@example.com" />
               </div>
             </div>
           )}
@@ -1736,31 +1744,31 @@ export default function TvModePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Your Name *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantName} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your full name" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={ohClaimForm.claimantName} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantName: e.target.value }))} placeholder="Your full name" />
               </div>
               <div>
                 <Label className="text-gray-300 text-xs">Your Phone *</Label>
-                <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantPhone} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
+                <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={ohClaimForm.claimantPhone} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantPhone: e.target.value }))} placeholder="(555) 555-5555" />
               </div>
             </div>
             <div>
               <Label className="text-gray-300 text-xs">Your Email</Label>
-              <Input className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimantEmail} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantEmail: e.target.value }))} placeholder="you@example.com" />
+              <Input className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={ohClaimForm.claimantEmail} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimantEmail: e.target.value }))} placeholder="you@example.com" />
             </div>
 
             {/* ─ Date + time slot dropdowns ─ */}
             <div>
               <Label className="text-gray-300 text-xs">Date *</Label>
-              <Input type="date" className="bg-gray-800 border-white/10 text-white mt-1" value={ohClaimForm.claimedDate} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedDate: e.target.value }))} />
+              <Input type="date" className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1" value={ohClaimForm.claimedDate} onChange={(e) => setOhClaimForm((f) => ({ ...f, claimedDate: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-gray-300 text-xs">Start Time *</Label>
                 <Select value={ohClaimForm.claimedStartTime} onValueChange={(v) => setOhClaimForm((f) => ({ ...f, claimedStartTime: v }))}>
-                  <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1">
+                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1">
                     <SelectValue placeholder="Select start" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-white/10 text-white max-h-48 overflow-y-auto">
+                  <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 max-h-48 overflow-y-auto">
                     {TIME_OPTIONS.map((t) => (
                       <SelectItem key={t} value={t} className="text-white hover:bg-gray-700">{t}</SelectItem>
                     ))}
@@ -1770,10 +1778,10 @@ export default function TvModePage() {
               <div>
                 <Label className="text-gray-300 text-xs">End Time *</Label>
                 <Select value={ohClaimForm.claimedEndTime} onValueChange={(v) => setOhClaimForm((f) => ({ ...f, claimedEndTime: v }))}>
-                  <SelectTrigger className="bg-gray-800 border-white/10 text-white mt-1">
+                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 mt-1">
                     <SelectValue placeholder="Select end" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-white/10 text-white max-h-48 overflow-y-auto">
+                  <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500 max-h-48 overflow-y-auto">
                     {TIME_OPTIONS.filter((t) => !ohClaimForm.claimedStartTime || toMinutes(t) > toMinutes(ohClaimForm.claimedStartTime)).map((t) => (
                       <SelectItem key={t} value={t} className="text-white hover:bg-gray-700">{t}</SelectItem>
                     ))}
@@ -1840,10 +1848,10 @@ export default function TvModePage() {
                 value={String(tvConfig.rotationIntervalSeconds)}
                 onValueChange={(v) => setTvConfig((c) => ({ ...c, rotationIntervalSeconds: Number(v) }))}
               >
-                <SelectTrigger className="bg-gray-800 border-white/10 text-white">
+                <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-white/10 text-white">
+                <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                   <SelectItem value="30">30 seconds</SelectItem>
                   <SelectItem value="45">45 seconds</SelectItem>
                   <SelectItem value="60">60 seconds</SelectItem>
@@ -1860,10 +1868,10 @@ export default function TvModePage() {
                 value={String(tvConfig.communityBoardIntervalSeconds ?? 30)}
                 onValueChange={(v) => setTvConfig((c) => ({ ...c, communityBoardIntervalSeconds: Number(v) }))}
               >
-                <SelectTrigger className="bg-gray-800 border-white/10 text-white">
+                <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-white/10 text-white">
+                <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                   <SelectItem value="15">15 seconds</SelectItem>
                   <SelectItem value="20">20 seconds</SelectItem>
                   <SelectItem value="30">30 seconds</SelectItem>
@@ -1955,10 +1963,10 @@ export default function TvModePage() {
                   value={tvConfig.pinnedCompetitionId ?? 'none'}
                   onValueChange={(v) => setTvConfig((c) => ({ ...c, pinnedCompetitionId: v === 'none' ? null : v }))}
                 >
-                  <SelectTrigger className="bg-gray-800 border-white/10 text-white">
+                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                     <SelectValue placeholder="Select a competition..." />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-white/10 text-white">
+                  <SelectContent className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-500">
                     <SelectItem value="none">— None (hide competition slot) —</SelectItem>
                     {activeCompetitions.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>

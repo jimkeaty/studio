@@ -700,7 +700,7 @@ function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loa
                     {item.generator && <span className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full text-xs font-semibold"><Zap className="h-3 w-3" />Generator</span>}
                   </div>
                   {item.otherAmenities && <p className="text-gray-400 text-sm">Needs: {item.otherAmenities}</p>}
-                  {item.notes && <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">{item.notes}</p>}
+                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed line-clamp-2 border-l-2 border-blue-500/50 pl-3 bg-blue-500/5 rounded-r py-1">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-base">{item.agentName.charAt(0)}</div>
                     <div>

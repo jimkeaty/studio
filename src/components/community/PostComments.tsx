@@ -185,7 +185,7 @@ export function PostComments({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Add a note (e.g. 'You should talk to Lena, I think she has a house coming up like this')"
-            className="text-xs min-h-[60px] resize-none"
+            className="text-xs min-h-[60px] resize-none text-foreground bg-background border-input"
             maxLength={1000}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

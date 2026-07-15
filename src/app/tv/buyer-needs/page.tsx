@@ -173,10 +173,10 @@ export default function BuyerNeedsTvPage() {
 
                 {/* Other amenities / notes */}
                 {item.otherAmenities && (
-                  <p className="text-gray-400 text-sm">Other: {item.otherAmenities}</p>
+                  <p className="text-gray-400 text-sm">Other amenities: {item.otherAmenities}</p>
                 )}
                 {item.notes && (
-                  <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">{item.notes}</p>
+                  <p className="text-gray-200 text-sm leading-relaxed border-l-2 border-blue-500/50 pl-3 bg-blue-500/5 rounded-r py-1">{item.notes}</p>
                 )}
 
                 {/* Agent */}
