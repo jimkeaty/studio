@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, use, useCallback } from 'react';
+import { useEffect, useState, use, useCallback, useRef } from 'react';
 import { useUser } from '@/firebase';
 import { useIsStaff } from '@/hooks/useIsStaff';
 import { useRouter } from 'next/navigation';
@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
-  ArrowLeft, CheckCircle2, XCircle, Eye, Save, ExternalLink,
+  ArrowLeft, Check, CheckCircle2, XCircle, Eye, Save, ExternalLink,
   ClipboardList, UserCheck, Activity, Archive, Trash2,
   Phone, Mail, Building2, User, Users, RefreshCw, AlertTriangle, FileText, Paperclip,
   UploadCloud, X, DollarSign, Banknote,
@@ -270,10 +270,12 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
 
   // New transaction-level checklists (stacked layers)
   const [txChecklists, setTxChecklists] = useState<TxChecklist[]>([]);
+  const [txChecklistsLoaded, setTxChecklistsLoaded] = useState(false);
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
   const [savingNote, setSavingNote] = useState<string | null>(null);
   const [addingChecklist, setAddingChecklist] = useState(false);
   const [newChecklistType, setNewChecklistType] = useState<string>('');
+  const autoSeedAttempted = useRef(false);
 
   // Commission processing state
   const [commissionOpen, setCommissionOpen] = useState(false);
@@ -407,14 +409,52 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (data.ok) setTxChecklists(data.checklists || []);
+      if (data.ok) {
+        setTxChecklists(data.checklists || []);
+        setTxChecklistsLoaded(true);
+      }
     } catch { /* non-fatal */ }
   }, [user]);
 
+  // Auto-seed the new_listing checklist when staff open a listing item with no checklist yet
+  const autoSeedListingChecklist = useCallback(async (txId: string, agentId?: string) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/transaction-checklist', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: txId, checklistType: 'new_listing', agentId: agentId || null }),
+      });
+      const data = await res.json();
+      if (data.ok) await loadTxChecklists(txId);
+    } catch { /* non-fatal */ }
+  }, [user, loadTxChecklists]);
+
   useEffect(() => {
-    if (transaction?.id) loadTxChecklists(transaction.id);
-    else if (item?.transactionId) loadTxChecklists(item.transactionId);
+    const txId = transaction?.id || item?.transactionId;
+    if (!txId) return;
+    loadTxChecklists(txId).then(() => {
+      // After loading, if this is a listing item with no checklist, auto-seed it
+    });
   }, [transaction?.id, item?.transactionId, loadTxChecklists]);
+
+  // Auto-seed: once checklists are loaded and we know it's a listing with no checklist, create one
+  useEffect(() => {
+    if (!item || !txChecklistsLoaded || autoSeedAttempted.current) return;
+    const txId = transaction?.id || item?.transactionId;
+    if (!txId) return;
+    const isListingItem = ['new_listing', 'listing', 'listing_status_change'].includes(item.actionType || '') ||
+      ['listing', 'dual'].includes(item.closingType || '') ||
+      ['listing', 'dual'].includes(transaction?.closingType || '');
+    if (!isListingItem) return;
+    const hasNewListingChecklist = txChecklists.some(cl => cl.checklistType === 'new_listing');
+    if (!hasNewListingChecklist) {
+      autoSeedAttempted.current = true; // prevent repeated calls
+      autoSeedListingChecklist(txId, transaction?.agentId || item?.agentId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txChecklistsLoaded, item?.id, transaction?.id]);
 
   // ── Checklist helpers ────────────────────────────────────────────────────
   const handleChecklistItemToggle = async (checklistId: string, item: TxChecklistItem) => {
@@ -909,6 +949,162 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
         </CardContent>
       </Card>
 
+      {/* ── Transaction Checklists (stacked layers) — MOVED UP for visibility ─── */}
+      <div className="space-y-4">
+        {/* Active checklist layers */}
+        {txChecklists.map((cl, clIdx) => {
+          const completedCount = cl.items.filter(i => i.completed).length;
+          const totalCount = cl.items.length;
+          const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+          const isCompleted = cl.status === 'complete';
+          const isFirst = clIdx === 0;
+          const checklistLabel: Record<string, string> = {
+            new_listing: 'New Listing Checklist',
+            under_contract_seller: 'Under Contract — Seller',
+            under_contract_buyer: 'Under Contract — Buyer',
+          };
+          return (
+            <Card key={cl.id} className={cn(
+              isFirst && !isCompleted ? 'border-amber-400 shadow-sm' : '',
+              isCompleted ? 'opacity-70' : ''
+            )}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-amber-500" />
+                    {checklistLabel[cl.checklistType] || cl.checklistType.replace(/_/g, ' ')}
+                    {isCompleted && <Badge className="bg-green-100 text-green-700 text-xs ml-1">Completed</Badge>}
+                    {!isCompleted && <Badge className="bg-amber-100 text-amber-700 text-xs ml-1">{completedCount}/{totalCount} done</Badge>}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs text-muted-foreground">{pct}%</span>
+                    {!isCompleted && (
+                      <Button type="button" size="sm" variant="outline" className="text-xs h-7"
+                        onClick={() => handleMarkChecklistComplete(cl.id)}>
+                        Mark Complete
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {cl.agentUpdateBanner && (
+                  <div className="mb-3 flex items-start gap-2 rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
+                    <span className="font-medium">Agent Update:</span>
+                    <span>{cl.agentUpdateDescription || 'Agent made changes to this transaction.'}</span>
+                    <Button type="button" size="sm" variant="ghost" className="ml-auto h-6 text-xs"
+                      onClick={() => handleClearBanner(cl.id)}>Dismiss</Button>
+                  </div>
+                )}
+                {Object.entries(
+                  cl.items.reduce((acc: Record<string, TxChecklistItem[]>, ci) => {
+                    const g = ci.group || 'General';
+                    if (!acc[g]) acc[g] = [];
+                    acc[g].push(ci);
+                    return acc;
+                  }, {})
+                ).map(([group, groupItems]) => (
+                  <div key={group} className="mb-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{group}</p>
+                    <div className="space-y-1">
+                      {(groupItems as TxChecklistItem[]).map((ci) => {
+                        const isItemCompleted = ci.completed;
+                        const noteKey = `${cl.id}:${ci.id}`;
+                        return (
+                          <div key={ci.id} className={cn(
+                            'flex items-start gap-3 rounded-md px-2 py-1.5 transition-colors',
+                            isItemCompleted ? 'bg-green-50 dark:bg-green-950/20' : 'hover:bg-muted/50'
+                          )}>
+                            <button
+                              type="button"
+                              onClick={() => handleChecklistItemToggle(cl.id, ci)}
+                              className={cn(
+                                'mt-0.5 h-4 w-4 flex-shrink-0 rounded border transition-colors',
+                                isItemCompleted
+                                  ? 'bg-green-500 border-green-500 text-white flex items-center justify-center'
+                                  : 'border-gray-300 hover:border-gray-500'
+                              )}
+                            >
+                              {isItemCompleted && <Check className="h-3 w-3" />}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn('text-sm', isItemCompleted && 'line-through text-muted-foreground')}>
+                                {ci.label}
+                              </p>
+                              {ci.completedBy && (
+                                <p className="text-xs text-muted-foreground">
+                                  {ci.completedBy}{ci.completedAt && ` · ${formatDateShort(ci.completedAt)}`}
+                                </p>
+                              )}
+                              {!isCompleted && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Input
+                                    className="h-6 text-xs py-0 px-2"
+                                    placeholder="Add note..."
+                                    value={noteInputs[noteKey] ?? ci.note ?? ''}
+                                    onChange={e => setNoteInputs(prev => ({ ...prev, [noteKey]: e.target.value }))}
+                                  />
+                                  <Button
+                                    type="button" size="sm" variant="ghost"
+                                    className="h-6 text-xs px-2"
+                                    disabled={savingNote === noteKey}
+                                    onClick={() => handleSaveNote(cl.id, ci.id)}
+                                  >
+                                    {savingNote === noteKey ? '...' : 'Save'}
+                                  </Button>
+                                </div>
+                              )}
+                              {isCompleted && ci.note && (
+                                <p className="text-xs text-muted-foreground mt-1 italic">&quot;{ci.note}&quot;</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        {/* Add additional checklist layers */}
+        <Card className="border-dashed">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" /> Add Checklist Layer
+            </CardTitle>
+            <CardDescription>Add an additional checklist for this transaction. Completed layers are preserved as history.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Select value={newChecklistType} onValueChange={setNewChecklistType}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select checklist type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new_listing">New Listing</SelectItem>
+                  <SelectItem value="under_contract_seller">Under Contract — Seller</SelectItem>
+                  <SelectItem value="under_contract_buyer">Under Contract — Buyer</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!newChecklistType || addingChecklist}
+                onClick={handleAddChecklist}
+              >
+                {addingChecklist ? 'Adding...' : '+ Add Checklist'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* ── Actions (active items) ─────────────────────────────────────────── */}
       {isActive && (
         <Card>
@@ -1046,193 +1242,9 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
         </Card>
       )}
 
-      {/* ── Transaction Checklists (stacked layers) ────────────────────────── */}
-      <div className="space-y-4">
-        {/* Add Checklist */}
-        <Card className="border-dashed">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" /> Transaction Checklists
-            </CardTitle>
-            <CardDescription>Add a checklist layer for this transaction. Completed layers are preserved as history below.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2">
-              <Select value={newChecklistType} onValueChange={setNewChecklistType}>
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Select checklist type..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="new_listing">New Listing</SelectItem>
-                  <SelectItem value="under_contract_seller">Under Contract — Seller</SelectItem>
-                  <SelectItem value="under_contract_buyer">Under Contract — Buyer</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!newChecklistType || addingChecklist}
-                onClick={handleAddChecklist}
-              >
-                {addingChecklist ? 'Adding...' : '+ Add Checklist'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Transaction Checklists — rendered above Actions section */}
 
-        {/* Stacked checklist layers — newest first */}
-        {txChecklists.map((cl, clIdx) => {
-          const completedCount = cl.items.filter(i => i.completed).length;
-          const totalCount = cl.items.length;
-          const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-          const isCompleted = cl.status === 'complete';
-          const isFirst = clIdx === 0;
 
-          // Group items by their group field
-          const groups: Record<string, TxChecklistItem[]> = {};
-          for (const ci of cl.items) {
-            if (!groups[ci.group]) groups[ci.group] = [];
-            groups[ci.group].push(ci);
-          }
-
-          return (
-            <Card key={cl.id} className={cn(isCompleted && 'opacity-75')}>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      {isCompleted
-                        ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        : <ClipboardList className="h-4 w-4" />
-                      }
-                      {cl.checklistType === 'new_listing' && 'New Listing Checklist'}
-                      {cl.checklistType === 'under_contract_seller' && 'Under Contract — Seller Checklist'}
-                      {cl.checklistType === 'under_contract_buyer' && 'Under Contract — Buyer Checklist'}
-                      {isCompleted && <Badge className="bg-green-100 text-green-800 text-xs ml-1">Completed</Badge>}
-                    </CardTitle>
-                    <CardDescription>
-                      {completedCount} of {totalCount} items • {pct}%
-                      {isCompleted && cl.completedAt && ` • Completed ${formatDateShort(cl.completedAt)}`}
-                      {!isFirst && <span className="ml-2 text-xs text-muted-foreground">(history)</span>}
-                    </CardDescription>
-                  </div>
-                  {!isCompleted && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white shrink-0"
-                      onClick={() => handleMarkChecklistComplete(cl.id)}
-                    >
-                      <CheckCircle2 className="mr-1 h-3 w-3" /> Mark Complete
-                    </Button>
-                  )}
-                </div>
-
-                {/* Agent update banner */}
-                {cl.agentUpdateBanner && (
-                  <Alert className="border-amber-400 bg-amber-50 dark:bg-amber-950/20 mt-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    <AlertTitle className="text-amber-800 dark:text-amber-400 text-sm">
-                      ⚠️ Agent updated this transaction — please review
-                    </AlertTitle>
-                    <AlertDescription className="text-xs">
-                      {cl.agentUpdateDescription}
-                      {cl.agentUpdateAt && ` • ${formatDateShort(cl.agentUpdateAt)}`}
-                    </AlertDescription>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-1 h-6 text-xs"
-                      onClick={() => handleClearBanner(cl.id)}
-                    >
-                      Dismiss
-                    </Button>
-                  </Alert>
-                )}
-
-                {/* Progress bar */}
-                <div className="w-full bg-muted rounded-full h-1.5 mt-2">
-                  <div
-                    className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-6">
-                {Object.entries(groups).map(([groupName, groupItems]) => (
-                  <div key={groupName}>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{groupName}</p>
-                    <div className="space-y-2">
-                      {groupItems.map((ci) => {
-                        const noteKey = `${cl.id}:${ci.id}`;
-                        const noteVal = noteInputs[noteKey] !== undefined ? noteInputs[noteKey] : (ci.note || '');
-                        return (
-                          <div
-                            key={ci.id}
-                            className={cn(
-                              'rounded-md border p-3 transition-colors',
-                              ci.completed
-                                ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
-                                : 'bg-background'
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <Checkbox
-                                checked={ci.completed}
-                                onCheckedChange={() => !isCompleted && handleChecklistItemToggle(cl.id, ci)}
-                                disabled={isCompleted}
-                                className="mt-0.5"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className={cn('text-sm', ci.completed && 'line-through text-muted-foreground')}>
-                                  {ci.label}
-                                  {ci.ifApplicable && <span className="ml-1 text-xs text-muted-foreground">(if applicable)</span>}
-                                </p>
-                                {ci.completed && ci.completedByName && (
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    ✓ {ci.completedByName}{ci.completedAt && ` • ${formatDateShort(ci.completedAt)}`}
-                                  </p>
-                                )}
-                                {/* Note field */}
-                                {!isCompleted && (
-                                  <div className="mt-2 flex gap-2">
-                                    <input
-                                      type="text"
-                                      placeholder="Add a note..."
-                                      value={noteVal}
-                                      onChange={(e) => setNoteInputs(prev => ({ ...prev, [noteKey]: e.target.value }))}
-                                      className="flex-1 text-xs border rounded px-2 py-1 bg-background"
-                                    />
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-6 text-xs px-2"
-                                      disabled={savingNote === noteKey}
-                                      onClick={() => handleSaveNote(cl.id, ci.id)}
-                                    >
-                                      {savingNote === noteKey ? '...' : 'Save'}
-                                    </Button>
-                                  </div>
-                                )}
-                                {isCompleted && ci.note && (
-                                  <p className="text-xs text-muted-foreground mt-1 italic">"{ci.note}"</p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
 
             {/* ── Editable form ─────────────────────────────────────────────────── */}
       <Form {...form}>

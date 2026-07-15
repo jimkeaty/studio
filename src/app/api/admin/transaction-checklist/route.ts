@@ -63,6 +63,17 @@ export async function POST(req: NextRequest) {
   const def = getChecklistDef(checklistType as ChecklistType);
   if (!def) return jsonError(400, 'Invalid checklistType');
 
+  // Prevent duplicate active checklists of the same type for the same transaction
+  const existing = await adminDb.collection('transactionChecklists')
+    .where('transactionId', '==', transactionId)
+    .where('checklistType', '==', checklistType)
+    .where('status', '==', 'active')
+    .limit(1)
+    .get();
+  if (!existing.empty) {
+    return NextResponse.json({ ok: true, id: existing.docs[0].id, alreadyExists: true });
+  }
+
   const items = def.map(item => ({
     ...item,
     completed: false,
