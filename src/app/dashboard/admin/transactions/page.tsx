@@ -83,15 +83,9 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
     case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
     case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? tx.netCommission ?? 0;
     case 'companyRetained': {
-      const _gross = tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
-      const _net = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? tx.netCommission ?? 0;
-      const _leaderRetains = tx.splitSnapshot?.leaderRetainedAfterMember ?? null;
-      // agentFeeDeduction is the fee the agent paid from their commission (e.g. $7.50 tx fee).
-      // It was subtracted from agentNetCommission but the money goes to the company, so add it back.
-      const _feeDeduction = tx.splitSnapshot?.agentFeeDeduction ?? 0;
-      return _leaderRetains !== null
-        ? Math.max(0, _gross - _net - _leaderRetains + _feeDeduction)
-        : (tx.splitSnapshot?.companyRetained ?? tx.brokerGci ?? 0);
+      // Use splitSnapshot.companyRetained directly — the resolver already computes this
+      // correctly for all transaction types (team member = GCI × companyPercent).
+      return tx.splitSnapshot?.companyRetained ?? tx.brokerGci ?? 0;
     }
     case 'source': return tx.source || 'manual';
     default: return '';
@@ -570,13 +564,9 @@ export default function AdminTransactionLedgerPage() {
   const totalGross = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0), [filtered]);
   const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0), 0), [filtered]);
   const totalBroker = useMemo(() => filtered.reduce((s, t) => {
-    const _gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
-    const _net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0;
-    const _leaderRetains = t.splitSnapshot?.leaderRetainedAfterMember ?? null;
-    const _feeDeduction = t.splitSnapshot?.agentFeeDeduction ?? 0;
-    const _broker = _leaderRetains !== null
-      ? Math.max(0, _gross - _net - _leaderRetains + _feeDeduction)
-      : (t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0);
+    // Use splitSnapshot.companyRetained directly — the resolver already computes this
+    // correctly for all transaction types (team member = GCI × companyPercent).
+    const _broker = t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0;
     return s + _broker;
   }, 0), [filtered]);
 
@@ -998,17 +988,9 @@ export default function AdminTransactionLedgerPage() {
                     const net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0;
                     const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
                     // For team member transactions, the true company retained is:
-                    //   Gross GCI − Agent Net − Leader Retains
-                    // This avoids showing the raw broker GCI (which includes the leader's cut)
-                    // as the company retained amount in the ledger.
-                    const leaderRetains = t.splitSnapshot?.leaderRetainedAfterMember ?? null;
-                    const isTeamMemberTx = leaderRetains !== null && leaderRetains !== undefined;
-                    // agentFeeDeduction: fee paid by agent from their net (e.g. $7.50 tx fee).
-                    // This was subtracted from agentNetCommission but flows to the company, so add it back.
-                    const feeDeduction = t.splitSnapshot?.agentFeeDeduction ?? 0;
-                    const broker = isTeamMemberTx
-                      ? Math.max(0, gross - net - (leaderRetains ?? 0) + feeDeduction)
-                      : (t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0);
+                    // Use splitSnapshot.companyRetained directly — the resolver already computes
+                    // this correctly for all transaction types (team member = GCI × companyPercent).
+                    const broker = t.splitSnapshot?.companyRetained ?? t.brokerGci ?? 0;
                     const sc = statusConfig[t.status] || statusConfig.pending;
                     const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                     const listingPct = Number(t.sellerPayingListingAgent) || 0;
