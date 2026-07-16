@@ -416,15 +416,16 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
     } catch { /* non-fatal */ }
   }, [user]);
 
-  // Auto-seed the new_listing checklist when staff open a listing item with no checklist yet
-  const autoSeedListingChecklist = useCallback(async (txId: string, agentId?: string) => {
+  // Auto-seed a checklist when staff open a queue item that has no checklist yet.
+  // Determines the correct checklist type based on the item's actionType and closingType.
+  const autoSeedChecklist = useCallback(async (txId: string, checklistType: string, agentId?: string) => {
     if (!user) return;
     try {
       const token = await user.getIdToken();
       const res = await fetch('/api/admin/transaction-checklist', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: txId, checklistType: 'new_listing', agentId: agentId || null }),
+        body: JSON.stringify({ transactionId: txId, checklistType, agentId: agentId || null }),
       });
       const data = await res.json();
       if (data.ok) await loadTxChecklists(txId);
@@ -432,26 +433,54 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
   }, [user, loadTxChecklists]);
 
   useEffect(() => {
-    const txId = transaction?.id || item?.transactionId;
+    // Use transactionId if available, fall back to the queue itemId so checklists
+    // can be stored/retrieved even for items not yet linked to a transaction.
+    const txId = transaction?.id || item?.transactionId || itemId;
     if (!txId) return;
-    loadTxChecklists(txId).then(() => {
-      // After loading, if this is a listing item with no checklist, auto-seed it
-    });
-  }, [transaction?.id, item?.transactionId, loadTxChecklists]);
+    loadTxChecklists(txId);
+  }, [transaction?.id, item?.transactionId, itemId, loadTxChecklists]);
 
-  // Auto-seed: once checklists are loaded and we know it's a listing with no checklist, create one
+  // Auto-seed: once checklists are loaded, seed the appropriate checklist if none exists yet.
+  // Covers all queue item types: new_listing, status_change, closed_buyer, open_house, etc.
   useEffect(() => {
     if (!item || !txChecklistsLoaded || autoSeedAttempted.current) return;
-    const txId = transaction?.id || item?.transactionId;
+    const txId = transaction?.id || item?.transactionId || itemId;
     if (!txId) return;
-    const isListingItem = ['new_listing', 'listing', 'listing_status_change'].includes(item.actionType || '') ||
-      ['listing', 'dual'].includes(item.closingType || '') ||
-      ['listing', 'dual'].includes(transaction?.closingType || '');
-    if (!isListingItem) return;
-    const hasNewListingChecklist = txChecklists.some(cl => cl.checklistType === 'new_listing');
-    if (!hasNewListingChecklist) {
-      autoSeedAttempted.current = true; // prevent repeated calls
-      autoSeedListingChecklist(txId, transaction?.agentId || item?.agentId);
+
+    const actionType = item.actionType || '';
+    const closingType = item.closingType || transaction?.closingType || '';
+
+    // Determine which checklist type to seed based on item context
+    const isListingType = ['new_listing', 'listing', 'listing_status_change'].includes(actionType) ||
+      ['listing', 'dual'].includes(closingType);
+    const isBuyerClose = actionType === 'closed_buyer' ||
+      (actionType === 'status_change' && (item.newStatus === 'closed') && ['buyer', 'referral'].includes(closingType));
+    const isSellerClose = actionType === 'status_change' && (item.newStatus === 'closed') && isListingType;
+    const isUnderContractSeller = actionType === 'status_change' && item.newStatus === 'pending' && isListingType;
+    const isUnderContractBuyer = actionType === 'status_change' && item.newStatus === 'pending' && ['buyer', 'referral'].includes(closingType);
+
+    let targetChecklistType: string | null = null;
+    if (isListingType && !isBuyerClose) {
+      // New listing or listing status change — use new_listing checklist unless it's a closing
+      if (!isSellerClose && !isUnderContractSeller) {
+        targetChecklistType = 'new_listing';
+      } else if (isSellerClose || isUnderContractSeller) {
+        targetChecklistType = 'under_contract_seller';
+      }
+    } else if (isBuyerClose || isUnderContractBuyer) {
+      targetChecklistType = 'under_contract_buyer';
+    } else if (isListingType) {
+      targetChecklistType = 'new_listing';
+    } else {
+      // Default: buyer/referral items that aren't explicitly a close get under_contract_buyer
+      targetChecklistType = 'under_contract_buyer';
+    }
+
+    if (!targetChecklistType) return;
+    const alreadyExists = txChecklists.some(cl => cl.checklistType === targetChecklistType);
+    if (!alreadyExists) {
+      autoSeedAttempted.current = true;
+      autoSeedChecklist(txId, targetChecklistType, transaction?.agentId || item?.agentId);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txChecklistsLoaded, item?.id, transaction?.id]);
@@ -536,7 +565,7 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
 
   const handleAddChecklist = async () => {
     if (!user || !newChecklistType) return;
-    const txId = transaction?.id || item?.transactionId;
+    const txId = transaction?.id || item?.transactionId || itemId;
     if (!txId) return;
     setAddingChecklist(true);
     try {
