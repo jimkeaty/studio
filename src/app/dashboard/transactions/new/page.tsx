@@ -24,7 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info, Paintbrush } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info, Paintbrush, WandSparkles, RefreshCw, Copy, CheckCheck } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -453,6 +453,8 @@ const schema = z.object({
   mediaTypes: z.array(z.string()).optional(),
   mediaRequestedDate: z.string().optional().or(z.literal('')),
   mediaNotes: z.string().optional(),
+  // MLS Description Builder (listing-only)
+  mlsDescription: z.string().optional(),
   // Sign Order (listing-only)
   signOrderRequested: z.boolean().optional(),
   signServiceType: z.string().optional(),
@@ -949,6 +951,9 @@ export default function AddTransactionPage() {
 
   // Collapsible listing-only sections (collapsed by default)
   const [mediaOrderOpen, setMediaOrderOpen] = useState(false);
+  const [mlsDescriptionOpen, setMlsDescriptionOpen] = useState(false);
+  const [mlsBrainDump, setMlsBrainDump] = useState('');
+  const [mlsGenerating, setMlsGenerating] = useState(false);
   const [signOrderOpen, setSignOrderOpen] = useState(false);
   const [showingTimeOpen, setShowingTimeOpen] = useState(false);
   const [stagingOpen, setStagingOpen] = useState(false);
@@ -3521,6 +3526,163 @@ export default function AddTransactionPage() {
                     </Grid2>
                     <FormField control={form.control} name="mediaNotes" render={({ field }) => (
                       <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea placeholder="Any special instructions for the media team..." {...field} /></FormControl></FormItem>
+                    )} />
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          )}
+
+          {/* ── MLS Description Builder (listing/dual only, collapsed by default) ─── */}
+          {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+            <Collapsible open={mlsDescriptionOpen} onOpenChange={setMlsDescriptionOpen}>
+              <Card>
+                <CardHeader
+                  className="cursor-pointer select-none py-4"
+                  onClick={() => setMlsDescriptionOpen(!mlsDescriptionOpen)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <WandSparkles className="h-4 w-4 text-violet-500" />
+                        MLS Description Builder
+                        <Badge className="bg-violet-100 text-violet-700 text-xs font-medium border-0">AI</Badge>
+                      </CardTitle>
+                      <CardDescription>Brain-dump your property features and let AI craft a polished, fair-housing-compliant MLS description.</CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${mlsDescriptionOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-5 pt-0">
+                    {/* Info banner */}
+                    <div className="rounded-lg border border-violet-200 bg-violet-50 dark:bg-violet-950/20 dark:border-violet-800 p-4 flex items-start gap-3">
+                      <WandSparkles className="h-5 w-5 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+                      <div className="text-sm text-violet-800 dark:text-violet-300">
+                        <p className="font-semibold mb-1">How it works</p>
+                        <p>Type anything — features, upgrades, neighborhood highlights, lot details, unique selling points. Don&apos;t worry about grammar or order. The AI will organize it into a compelling, fair-housing-compliant MLS description ready to copy into ROAM.</p>
+                      </div>
+                    </div>
+
+                    {/* Brain-dump input */}
+                    <div>
+                      <label className="text-sm font-medium block mb-1.5">Your Notes &amp; Features</label>
+                      <Textarea
+                        placeholder={`Example:\n• 4 bed / 3 bath, 2,400 sqft\n• Open floor plan, vaulted ceilings\n• Granite countertops, stainless appliances\n• Primary suite with walk-in closet and soaking tub\n• Large backyard, covered patio, new roof 2022\n• Quiet cul-de-sac, top-rated schools nearby\n• Minutes from I-10, restaurants, and shopping`}
+                        className="min-h-[160px] font-mono text-sm"
+                        value={mlsBrainDump}
+                        onChange={(e) => setMlsBrainDump(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Just brain-dump — bullet points, fragments, anything goes. The AI handles the rest.</p>
+                    </div>
+
+                    {/* Generate button */}
+                    <div className="flex items-center gap-3">
+                      <Button
+                        type="button"
+                        className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
+                        disabled={mlsGenerating || !mlsBrainDump.trim()}
+                        onClick={async () => {
+                          if (!mlsBrainDump.trim()) return;
+                          setMlsGenerating(true);
+                          try {
+                            const token = await user?.getIdToken();
+                            const res = await fetch('/api/agent/generate-mls-description', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                              body: JSON.stringify({
+                                brainDump: mlsBrainDump,
+                                address: form.getValues('address'),
+                                propertyType: form.getValues('closingType'),
+                              }),
+                            });
+                            const data = await res.json();
+                            if (data.description) {
+                              form.setValue('mlsDescription', data.description);
+                              toast({ title: 'Description generated!', description: 'Review and edit as needed before copying to MLS.' });
+                            } else {
+                              toast({ title: 'Generation failed', description: data.error || 'Please try again.', variant: 'destructive' });
+                            }
+                          } catch {
+                            toast({ title: 'Error', description: 'Failed to generate description. Please try again.', variant: 'destructive' });
+                          } finally {
+                            setMlsGenerating(false);
+                          }
+                        }}
+                      >
+                        {mlsGenerating ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
+                        ) : (
+                          <><WandSparkles className="h-4 w-4" /> Generate MLS Description</>
+                        )}
+                      </Button>
+                      {form.watch('mlsDescription') && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={mlsGenerating || !mlsBrainDump.trim()}
+                          onClick={async () => {
+                            if (!mlsBrainDump.trim()) return;
+                            setMlsGenerating(true);
+                            try {
+                              const token = await user?.getIdToken();
+                              const res = await fetch('/api/agent/generate-mls-description', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                body: JSON.stringify({
+                                  brainDump: mlsBrainDump,
+                                  address: form.getValues('address'),
+                                  propertyType: form.getValues('closingType'),
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.description) {
+                                form.setValue('mlsDescription', data.description);
+                                toast({ title: 'Description regenerated!' });
+                              }
+                            } catch { /* non-fatal */ } finally {
+                              setMlsGenerating(false);
+                            }
+                          }}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Generated description output */}
+                    <FormField control={form.control} name="mlsDescription" render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <FormLabel className="mb-0">Generated MLS Description</FormLabel>
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                navigator.clipboard.writeText(field.value || '');
+                                toast({ title: 'Copied to clipboard!' });
+                              }}
+                            >
+                              <Copy className="h-3.5 w-3.5" /> Copy
+                            </Button>
+                          )}
+                        </div>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Your AI-generated description will appear here. You can edit it before copying to MLS."
+                            className="min-h-[200px] text-sm"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Review and edit the description as needed. This will be saved with your listing submission.
+                        </FormDescription>
+                      </FormItem>
                     )} />
                   </CardContent>
                 </CollapsibleContent>

@@ -206,6 +206,9 @@ export async function POST(req: NextRequest) {
 
       notes: toStr(body.notes),
 
+      // MLS Description (AI-generated or manually entered)
+      mlsDescription: toStr(body.mlsDescription) || null,
+
       // Buyer closing cost paid by seller
       buyerClosingCostTotal: toNum(body.buyerClosingCostTotal),
       buyerClosingCostAgentCommission: toNum(body.buyerClosingCostAgentCommission),
@@ -325,6 +328,7 @@ export async function POST(req: NextRequest) {
       titleOfficerPhone: toStr(body.titleOfficerPhone) || null,
       notes: toStr(body.notes) || null,
       additionalComments: toStr(body.additionalComments) || null,
+      mlsDescription: toStr(body.mlsDescription) || null,
       documents: Array.isArray(body.documents)
         ? body.documents.filter((d: any) => d?.url && d?.name)
         : [],
