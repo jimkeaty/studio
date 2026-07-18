@@ -57,6 +57,8 @@ import {
   History,
   GitMerge,
   Sofa,
+  ClipboardCheck,
+  FileSignature,
   type LucideIcon,
 } from 'lucide-react';
 import { useAgentPlugins } from '@/hooks/useAgentPlugins';
@@ -76,6 +78,8 @@ const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   BarChart3,
   Target,
   GraduationCap,
+  ClipboardCheck,
+  FileSignature,
 };
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 

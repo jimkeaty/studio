@@ -55,6 +55,15 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
     badge: 'New',
     defaultEnabled: true, // All Keaty agents get this
   },
+  {
+    id: 'smart-offer',
+    name: 'Smart Offer',
+    description: 'Streamlined offer intake tool — agents submit buyer offers with all required details, track offer status, and receive instant notifications.',
+    iconName: 'FileSignature',
+    category: 'productivity',
+    badge: 'New',
+    defaultEnabled: true, // All Keaty agents get this
+  },
   // Future plugins can be added here:
   // {
   //   id: 'market-pulse',
