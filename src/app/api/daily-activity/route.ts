@@ -39,6 +39,39 @@ async function requireUser(req: Request): Promise<{ uid: string; role: string }>
 }
 
 /**
+ * Resolve all possible agentId values for a given uid.
+ * Handles documents stored under Firebase UID, agentId slug, or profile docId.
+ * Mirrors the same logic in the range route for consistency.
+ */
+async function resolveAgentIds(uid: string): Promise<string[]> {
+  const ids = new Set<string>([uid]);
+  try {
+    const profileByIdSnap = await adminDb.collection('agentProfiles').doc(uid).get();
+    if (profileByIdSnap.exists) {
+      const d = profileByIdSnap.data();
+      if (d?.agentId) ids.add(String(d.agentId));
+      if (d?.firebaseUid) ids.add(String(d.firebaseUid));
+    } else {
+      // uid might be a slug — look up by agentId field
+      const profileBySlugSnap = await adminDb
+        .collection('agentProfiles')
+        .where('agentId', '==', uid)
+        .limit(1)
+        .get();
+      if (!profileBySlugSnap.empty) {
+        ids.add(profileBySlugSnap.docs[0].id);
+        const d = profileBySlugSnap.docs[0].data();
+        if (d?.firebaseUid) ids.add(String(d.firebaseUid));
+        if (d?.agentId) ids.add(String(d.agentId));
+      }
+    }
+  } catch {
+    // Non-fatal — fall back to single uid
+  }
+  return Array.from(ids);
+}
+
+/**
  * Prevent saving future dates.
  * - All users can edit any past date (no rolling lock window)
  * - Future dates are still blocked
@@ -87,37 +120,48 @@ export async function GET(req: Request) {
       return jsonError(400, "Missing required query param: date", "bad_request/missing-date");
     }
 
-    const docId = `${uid}_${date}`;
-    const ref = adminDb.collection("daily_activity").doc(docId);
-    const snap = await ref.get();
+    // ── Resolve all possible document IDs for this agent ────────────────────
+    // Documents may be stored under the Firebase UID, the agentId slug, or the
+    // profile docId — depending on how the data was originally imported or saved.
+    // We try all resolved IDs and merge the results (taking the max per field),
+    // matching the same logic used in the range endpoint.
+    const agentIdList = await resolveAgentIds(uid);
 
-    const dailyActivity = snap.exists
-      ? { ...emptyDailyActivity(date), ...(snap.data() ?? {}) }
-      : emptyDailyActivity(date);
+    // Fetch all possible daily_activity documents for this date
+    const docSnaps = await Promise.all(
+      agentIdList.map(agentIdVal =>
+        adminDb.collection("daily_activity").doc(`${agentIdVal}_${date}`).get().catch(() => null)
+      )
+    );
 
-    // Guarantee counts are numbers
-    dailyActivity.callsCount = toNumberOrZero(dailyActivity.callsCount);
-    dailyActivity.engagementsCount = toNumberOrZero(dailyActivity.engagementsCount);
-    dailyActivity.appointmentsSetCount = toNumberOrZero(dailyActivity.appointmentsSetCount);
-    dailyActivity.appointmentsHeldCount = toNumberOrZero(dailyActivity.appointmentsHeldCount);
-    dailyActivity.contractsWrittenCount = toNumberOrZero(dailyActivity.contractsWrittenCount);
+    // Merge results — take the higher value for each numeric field
+    let dailyActivity = emptyDailyActivity(date);
+    let foundAny = false;
+    for (const snap of docSnaps) {
+      if (!snap?.exists) continue;
+      foundAny = true;
+      const data = snap.data() ?? {};
+      dailyActivity = {
+        ...dailyActivity,
+        // Prefer non-empty string fields from the first found document
+        notes: dailyActivity.notes || String(data.notes ?? ""),
+        startTime: dailyActivity.startTime || String(data.startTime ?? ""),
+        endTime: dailyActivity.endTime || String(data.endTime ?? ""),
+        // Take the max of numeric fields across all matching documents
+        callsCount: Math.max(dailyActivity.callsCount, toNumberOrZero(data.callsCount)),
+        engagementsCount: Math.max(dailyActivity.engagementsCount, toNumberOrZero(data.engagementsCount)),
+        appointmentsSetCount: Math.max(dailyActivity.appointmentsSetCount, toNumberOrZero(data.appointmentsSetCount)),
+        appointmentsHeldCount: Math.max(dailyActivity.appointmentsHeldCount, toNumberOrZero(data.appointmentsHeldCount)),
+        contractsWrittenCount: Math.max(dailyActivity.contractsWrittenCount, toNumberOrZero(data.contractsWrittenCount)),
+      };
+    }
+    // If no document found, dailyActivity stays as the empty default
+    void foundAny;
 
     // ── Overlay appointment counts from the appointments collection ──────────
     // This ensures pipeline appointments (bulk-uploaded or manually added) are
     // reflected in the KPI tracker numbers for the matching date.
     try {
-      // Resolve all possible agentId values (UID, slug, profile docId)
-      const agentIdSet = new Set<string>([uid]);
-      const profileSnap = await adminDb.collection('agentProfiles').doc(uid).get();
-      if (profileSnap.exists) {
-        const d = profileSnap.data();
-        if (d?.agentId) agentIdSet.add(String(d.agentId));
-      } else {
-        const bySlug = await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get();
-        if (!bySlug.empty) agentIdSet.add(bySlug.docs[0].id);
-      }
-      const agentIdList = Array.from(agentIdSet);
-
       // Query appointments for this date across all resolved agentIds
       const apptSnaps = await Promise.all(
         agentIdList.map(aid =>
@@ -186,8 +230,25 @@ export async function POST(req: Request) {
         ? (body as any).dailyActivity
         : body;
 
-    const docId = `${uid}_${date}`;
-    const ref = adminDb.collection("daily_activity").doc(docId);
+    // ── Find the canonical document to write to ──────────────────────────────
+    // If a document already exists under a slug or alternate ID, write to that
+    // document to avoid creating a duplicate. Fall back to {uid}_{date}.
+    const agentIdList = await resolveAgentIds(uid);
+    let canonicalDocId = `${uid}_${date}`;
+    try {
+      for (const agentIdVal of agentIdList) {
+        const candidateId = `${agentIdVal}_${date}`;
+        const candidateSnap = await adminDb.collection("daily_activity").doc(candidateId).get();
+        if (candidateSnap.exists) {
+          canonicalDocId = candidateId;
+          break;
+        }
+      }
+    } catch {
+      // Non-fatal — fall back to uid-keyed doc
+    }
+
+    const ref = adminDb.collection("daily_activity").doc(canonicalDocId);
 
     const dataToSave: Record<string, any> = {
       agentId: uid,
