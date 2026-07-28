@@ -24,7 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info, Paintbrush, WandSparkles, RefreshCw, Copy, CheckCheck } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info, Paintbrush, WandSparkles, RefreshCw, Copy, CheckCheck, Trees } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -618,6 +618,9 @@ export default function AddTransactionPage() {
   // MLS Input Form upload (for listing transactions)
   const mlsPdfInputRef = useRef<HTMLInputElement>(null);
   const [mlsPdfName, setMlsPdfName] = useState<string>('');
+  // Land agreement upload
+  const landPdfInputRef = useRef<HTMLInputElement>(null);
+  const [pdfDocType, setPdfDocType] = useState<'residential' | 'land' | null>(null);
 
   const handlePdfUpload = async (file: File) => {
     if (!user) return;
@@ -776,6 +779,116 @@ export default function AddTransactionPage() {
       }
       setPdfStep('form');
       toast({ title: '✅ Purchase agreement scanned', description: `${Object.values(conf).filter(v => (v as number) >= 0.7).length} fields auto-filled. Review highlighted fields before submitting.` });
+    } catch (err: any) {
+      toast({ title: 'Extraction error', description: err.message, variant: 'destructive' });
+      setPdfStep('form');
+    }
+  };
+
+  // ── Land Agreement upload handler ───────────────────────────────────────────
+  const handleLandPdfUpload = async (file: File) => {
+    if (!user) return;
+    setPdfStep('extracting');
+    setPdfName(file.name);
+    try {
+      const token = await user.getIdToken();
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/agent/parse-land-agreement', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast({ title: 'Extraction failed', description: data.error || 'Could not read the land agreement. Please fill the form manually.', variant: 'destructive' });
+        setPdfStep('form');
+        return;
+      }
+      const f = data.fields || {};
+      const conf = data.confidence || {};
+      setPdfConfidence(conf);
+      const lowConf = new Set<string>(Object.entries(conf).filter(([, v]) => (v as number) < 0.7 && (v as number) > 0).map(([k]) => k));
+      setPdfHighlightFields(lowConf);
+      const setIfPresent = (key: string, val: unknown) => {
+        if (val !== null && val !== undefined && val !== '') form.setValue(key as any, val as any);
+      };
+      // Core fields
+      setIfPresent('address', f.address);
+      setIfPresent('salePrice', f.salePrice);
+      setIfPresent('contractDate', f.contractDate);
+      setIfPresent('projectedCloseDate', f.projectedCloseDate);
+      setIfPresent('inspectionDeadline', f.inspectionDeadline);
+      setIfPresent('appraisalDeadline', f.appraisalDeadline);
+      setIfPresent('earnestMoney', f.earnestMoney);
+      // Deposit holder
+      if (f.depositHeldBy) {
+        const dh = String(f.depositHeldBy).toLowerCase().replace(/\s+/g, '_');
+        if (dh === 'listing_broker') form.setValue('depositHolder', 'listing_broker');
+        else if (dh === 'selling_broker') form.setValue('depositHolder', 'selling_broker');
+        else { form.setValue('depositHolder', 'other'); form.setValue('depositHolderOther', String(f.depositHeldBy)); }
+      }
+      // Buyer / Seller names
+      setIfPresent('buyerName', f.buyerName);
+      setIfPresent('buyer2Name', f.buyer2Name);
+      setIfPresent('sellerName', f.sellerName);
+      setIfPresent('seller2Name', f.seller2Name);
+      // Agent info — map based on closing type
+      // For a listing transaction: the other agent is the buyer's agent
+      // For a buyer transaction: the other agent is the listing agent
+      const isListingSide = f.closingType === 'listing' || f.isDualAgent;
+      if (isListingSide) {
+        setIfPresent('otherAgentName', f.buyerAgentName);
+        setIfPresent('otherAgentPhone', f.buyerAgentPhone);
+        setIfPresent('otherAgentEmail', f.buyerAgentEmail);
+        setIfPresent('otherBrokerage', f.buyerBrokerage);
+      } else {
+        setIfPresent('otherAgentName', f.listingAgentName);
+        setIfPresent('otherAgentPhone', f.listingAgentPhone);
+        setIfPresent('otherAgentEmail', f.listingAgentEmail);
+        setIfPresent('otherBrokerage', f.listingBrokerage);
+      }
+      // closingType / dealType / clientType
+      if (f.closingType && ['buyer','listing','dual'].includes(f.closingType as string)) {
+        form.setValue('closingType', f.closingType as any);
+      }
+      // Always set dealType to land
+      form.setValue('dealType', 'land' as any);
+      if (f.clientType && ['buyer','seller','dual'].includes(f.clientType as string)) {
+        form.setValue('clientType', f.clientType as any);
+      }
+      // clientName fallback
+      if (!form.getValues('clientName')) {
+        const cn = (f.closingType === 'listing' ? f.sellerName : f.buyerName) || f.buyerName || f.sellerName || '';
+        if (cn) form.setValue('clientName', cn as string);
+      }
+      // Extra notes
+      const extraNotes: string[] = [];
+      if (f.legalDescription) extraNotes.push(`Legal Description: ${f.legalDescription}`);
+      if (f.acres) extraNotes.push(`Acreage: ${f.acres} acres`);
+      if (f.lotDimensions) extraNotes.push(`Lot Dimensions: ${f.lotDimensions}`);
+      if (f.mineralRights && f.mineralRights !== 'not_mentioned') extraNotes.push(`Mineral Rights: ${f.mineralRights}`);
+      if (f.surveyResponsibility) extraNotes.push(`Survey Responsibility: ${f.surveyResponsibility}`);
+      if (f.loanType) extraNotes.push(`Loan Type: ${f.loanType}`);
+      if (f.loanAmount) extraNotes.push(`Loan Amount: $${Number(f.loanAmount).toLocaleString()}`);
+      if (f.downPaymentAmount) extraNotes.push(`Down Payment: $${Number(f.downPaymentAmount).toLocaleString()}`);
+      if (f.commissionNotes) extraNotes.push(`Commission: ${f.commissionNotes}`);
+      if (f.additionalTerms && f.additionalTerms !== 'No Additional Terms.') extraNotes.push(`Additional Terms:\n${f.additionalTerms}`);
+      if (f.notes) extraNotes.push(f.notes as string);
+      if (extraNotes.length > 0) {
+        const existing = form.getValues('notes') || '';
+        form.setValue('notes', (existing ? existing + '\n\n' : '') + '[Land Agreement – AI Extracted]\n' + extraNotes.join('\n'));
+      }
+      // Auto-save the uploaded PDF as a transaction document
+      if (data.savedDoc) {
+        setUploadedDocs(prev => {
+          const alreadyExists = prev.some((d: UploadedDoc) => d.storagePath === data.savedDoc.storagePath);
+          return alreadyExists ? prev : [data.savedDoc as UploadedDoc, ...prev];
+        });
+      }
+      setPdfStep('form');
+      const filledCount = Object.values(conf).filter(v => (v as number) >= 0.7).length;
+      toast({ title: '✅ Land agreement scanned', description: `${filledCount} fields auto-filled. Review highlighted fields before submitting.` });
     } catch (err: any) {
       toast({ title: 'Extraction error', description: err.message, variant: 'destructive' });
       setPdfStep('form');
@@ -1872,16 +1985,55 @@ export default function AddTransactionPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold">Upload Purchase Agreement</h2>
-                <p className="text-muted-foreground mt-1 max-w-md">Drop your PDF here and we'll auto-fill the form — property address, dates, buyer/seller info, lender, title company, co-agent, financing terms, and more.</p>
+                <p className="text-muted-foreground mt-1 max-w-md">Select your agreement type, then upload the PDF and we'll auto-fill the form — property address, dates, buyer/seller info, financing terms, and more.</p>
               </div>
+
+              {/* Document type selector */}
+              <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-1">
+                <button
+                  type="button"
+                  onClick={() => setPdfDocType('residential')}
+                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
+                    pdfDocType === 'residential'
+                      ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
+                      : 'border-muted-foreground/20 bg-background hover:border-primary/40 hover:bg-primary/5'
+                  }`}
+                >
+                  <Home className="h-6 w-6 text-primary" />
+                  <div>
+                    <p className="text-sm font-semibold">Residential</p>
+                    <p className="text-xs text-muted-foreground">LA LREC Agreement to Buy &amp; Sell</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPdfDocType('land')}
+                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
+                    pdfDocType === 'land'
+                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-400/30'
+                      : 'border-muted-foreground/20 bg-background hover:border-amber-400/40 hover:bg-amber-50/50'
+                  }`}
+                >
+                  <Trees className="h-6 w-6 text-amber-600" />
+                  <div>
+                    <p className="text-sm font-semibold">Vacant Land</p>
+                    <p className="text-xs text-muted-foreground">LA Lot(s) or Vacant Land Agreement</p>
+                  </div>
+                </button>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-3 mt-2">
                 <Button
                   type="button"
                   size="lg"
-                  onClick={() => pdfInputRef.current?.click()}
+                  disabled={!pdfDocType}
+                  onClick={() => {
+                    if (pdfDocType === 'land') landPdfInputRef.current?.click();
+                    else pdfInputRef.current?.click();
+                  }}
                   className="gap-2"
                 >
-                  <UploadCloud className="h-5 w-5" /> Choose PDF
+                  <UploadCloud className="h-5 w-5" /> {pdfDocType ? `Upload ${pdfDocType === 'land' ? 'Land' : 'Residential'} Agreement` : 'Select Agreement Type First'}
                 </Button>
                 <Button
                   type="button"
@@ -1894,6 +2046,7 @@ export default function AddTransactionPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">PDF only · Max 25 MB · Text-based PDFs only (not scanned images)</p>
+              {/* Residential agreement input */}
               <input
                 ref={pdfInputRef}
                 type="file"
@@ -1902,6 +2055,18 @@ export default function AddTransactionPage() {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handlePdfUpload(file);
+                  e.target.value = '';
+                }}
+              />
+              {/* Land agreement input */}
+              <input
+                ref={landPdfInputRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLandPdfUpload(file);
                   e.target.value = '';
                 }}
               />
