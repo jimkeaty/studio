@@ -74,8 +74,21 @@ export async function splitCoAgentTransaction(
   const primarySalePrice = round2(totalSalePrice * (primarySplitPct / 100));
   const coSalePrice = round2(totalSalePrice * (coSplitPct / 100));
 
-  const primaryGci = round2(totalGci * (primarySplitPct / 100));
-  const coGci = round2(totalGci * (coSplitPct / 100));
+  // ── Outbound referral fee: deducted OFF THE TOP before splitting GCI between agents ──
+  // The referral fee is paid to an outside broker/relocation company from total GCI.
+  // All agent/broker splits are calculated on the net-after-referral amount.
+  const referralFee = tx.outboundReferralFee as Record<string, any> | undefined;
+  const referralPct = referralFee ? Number(referralFee.referralPercent ?? 0) : 0;
+  const referralDollarOverride = referralFee ? Number(referralFee.referralDollar ?? 0) : 0;
+  const referralFeeDollar = referralPct > 0
+    ? (referralDollarOverride > 0 ? referralDollarOverride : round2(totalGci * (referralPct / 100)))
+    : 0;
+  // Net GCI available for agent/broker splits after referral is paid out
+  const netAfterReferral = round2(Math.max(0, totalGci - referralFeeDollar));
+
+  // Split the POST-REFERRAL net between primary and co-agent
+  const primaryGci = round2(netAfterReferral * (primarySplitPct / 100));
+  const coGci = round2(netAfterReferral * (coSplitPct / 100));
 
   const primaryFee = totalTxFee > 0 ? round2(totalTxFee * (primarySplitPct / 100)) : null;
   const coFee = totalTxFee > 0 ? round2(totalTxFee * (coSplitPct / 100)) : null;
@@ -88,34 +101,32 @@ export async function splitCoAgentTransaction(
   const primaryCommissionBasePrice = round2(totalCommissionBasePrice * (primarySplitPct / 100));
   const coCommissionBasePrice = round2(totalCommissionBasePrice * (coSplitPct / 100));
 
-  // ── Commission tier lookups ──────────────────────────────────────────────────
+  // ── Commission tier lookups ──────────────────────────────────────────
   const primaryAgentId = String(tx.agentId || '').trim();
   const primaryAgentDisplayName = String(tx.agentDisplayName || '').trim();
 
   let primaryCalc: Awaited<ReturnType<typeof resolveTransactionCalculation>> | null = null;
   let coCalc: Awaited<ReturnType<typeof resolveTransactionCalculation>> | null = null;
 
-  // Referral fee is proportional to each agent's share of the GCI
-  const referralFee = tx.outboundReferralFee as Record<string, any> | undefined;
-  const referralPct = referralFee ? Number(referralFee.referralPercent ?? 0) : 0;
-
   try {
+    // primaryGci is already post-referral; pass referralFeePercent: null to avoid double-deduction
     primaryCalc = await resolveTransactionCalculation({
       agentId: primaryAgentId,
       agentDisplayName: primaryAgentDisplayName,
       commission: primaryGci,
-      referralFeePercent: referralPct > 0 ? referralPct : null,
+      referralFeePercent: null,
     });
   } catch (err) {
     console.warn('[splitCoAgentTransaction] Primary agent tier lookup failed:', err);
   }
 
   try {
+    // coGci is already post-referral; pass referralFeePercent: null to avoid double-deduction
     coCalc = await resolveTransactionCalculation({
       agentId: coAgentId,
       agentDisplayName: coAgentDisplayName,
       commission: coGci,
-      referralFeePercent: referralPct > 0 ? referralPct : null,
+      referralFeePercent: null,
     });
   } catch (err) {
     console.warn('[splitCoAgentTransaction] Co-agent tier lookup failed:', err);

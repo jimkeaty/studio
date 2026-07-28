@@ -151,17 +151,30 @@ export async function POST(req: NextRequest) {
       const coSplitPct = toNumber(body.coAgentSplitPercent)
 
       if (coAgentId && coAgentDisplayName && primarySplitPct + coSplitPct === 100) {
-        // Step 1: Determine each agent's share of the gross commission
-        const primaryShare = commission * (primarySplitPct / 100)
-        const coShare = commission * (coSplitPct / 100)
+        // Step 1: Deduct outbound referral fee OFF THE TOP before splitting between agents.
+        // The referral fee is paid to an outside broker/relocation company from total GCI.
+        // All agent/broker splits are calculated on the net-after-referral amount.
+        const _refFeeData = body.outboundReferralFee as Record<string, any> | null | undefined
+        const _refPct = _refFeeData ? Number(_refFeeData.referralPercent ?? 0) : 0
+        const _refDollarOverride = _refFeeData ? Number(_refFeeData.referralDollar ?? 0) : 0
+        const _refFeeDollar = _refPct > 0
+          ? (_refDollarOverride > 0 ? _refDollarOverride : Number((commission * (_refPct / 100)).toFixed(2)))
+          : 0
+        const _netAfterReferral = Number(Math.max(0, commission - _refFeeDollar).toFixed(2))
 
-        // Step 2: Re-run primary agent calculation on their reduced share
+        // Step 2: Split the POST-REFERRAL net between primary and co-agent
+        const primaryShare = Number((_netAfterReferral * (primarySplitPct / 100)).toFixed(2))
+        const coShare = Number((_netAfterReferral * (coSplitPct / 100)).toFixed(2))
+
+        // Step 3: Re-run primary agent calculation on their reduced share
+        // (referralFeePercent: null — deduction already applied in primaryShare)
         try {
           const primaryCalc = await resolveTransactionCalculation({
             agentId,
             agentDisplayName,
             commission: primaryShare,
             transactionDate: closedDate || contractDate,
+            referralFeePercent: null,
           })
           splitSnapshot = primaryCalc.splitSnapshot
           creditSnapshot = primaryCalc.creditSnapshot
@@ -171,7 +184,8 @@ export async function POST(req: NextRequest) {
           // Keep existing splitSnapshot if recalc fails
         }
 
-        // Step 3: Run co-agent calculation on their share
+        // Step 4: Run co-agent calculation on their share
+        // (referralFeePercent: null — deduction already applied in coShare)
         let coSplitSnapshot: any = null
         let coCreditSnapshot: any = null
         try {
@@ -180,6 +194,7 @@ export async function POST(req: NextRequest) {
             agentDisplayName: coAgentDisplayName,
             commission: coShare,
             transactionDate: closedDate || contractDate,
+            referralFeePercent: null,
           })
           coSplitSnapshot = coCalc.splitSnapshot
           coCreditSnapshot = coCalc.creditSnapshot
