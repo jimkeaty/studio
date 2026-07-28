@@ -792,6 +792,145 @@ export const ARTICLES: Article[] = [
 </table>
     `,
   },
+
+  // ── COMMISSION CALCULATION ──────────────────────────────────────────────────
+  {
+    id: 'commission-calculation-process',
+    title: 'Commission Calculation: The Complete Process',
+    description:
+      'Understand exactly how commissions are calculated — including referral fee deductions, co-agent splits, compliance fees, and the correct order of operations. Updated July 2026.',
+    category: 'Team & Commission',
+    audience: 'both',
+    readingTimeMinutes: 8,
+    publishedAt: '2026-07-28',
+    content: `
+<h2>Overview</h2>
+<p>Every commission calculation in Smart Broker follows a strict order of operations. The sequence matters — applying steps out of order produces incorrect results. This guide explains each step, with worked examples, so agents and staff can verify calculations and enter transactions accurately.</p>
+
+<h2>The Order of Operations</h2>
+<p>Regardless of who enters the transaction (agent, TC, or admin), the system always calculates commissions in this exact sequence:</p>
+<ol>
+  <li><strong>Gross Commission Income (GCI)</strong> — Total commission before any deductions</li>
+  <li><strong>Deduct Outbound Referral Fee off the top</strong> (if any)</li>
+  <li><strong>Split the remaining net between Primary Agent and Co-Agent</strong> (if any)</li>
+  <li><strong>Apply each agent's broker/agent split tier</strong> to their individual share</li>
+  <li><strong>Deduct agent-paid compliance fee</strong> from agent net (if applicable)</li>
+</ol>
+
+<h2>Step 1 — Gross Commission Income (GCI)</h2>
+<p>GCI is the total commission earned on the transaction before any deductions. It is calculated as:</p>
+<blockquote>GCI = Commission Base Price × Commission Percentage</blockquote>
+<p>The <strong>Commission Base Price</strong> is the sale price minus any seller concessions (if populated). If no concessions are entered, the sale price is used directly. The list price is used for active listings before a sale price is known.</p>
+<p><strong>Example:</strong> Sale price $500,000, 3% commission, no concessions → GCI = <strong>$15,000</strong></p>
+
+<h2>Step 2 — Outbound Referral Fee Deduction</h2>
+<p>If the transaction includes an outbound referral fee (paid to an outside broker, relocation company, or referring agent), that fee is <strong>deducted from GCI first</strong>, before any agent or broker splits are calculated.</p>
+<blockquote>Net After Referral = GCI − Referral Fee Dollar Amount</blockquote>
+<p>All subsequent calculations — agent split, broker split, co-agent split — are based on the <strong>Net After Referral</strong>, not the original GCI. This is the most important rule in this guide.</p>
+<table>
+  <thead><tr><th>Scenario</th><th>GCI</th><th>Referral %</th><th>Referral $</th><th>Net After Referral</th></tr></thead>
+  <tbody>
+    <tr><td>No referral</td><td>$15,000</td><td>0%</td><td>$0</td><td>$15,000</td></tr>
+    <tr><td>25% referral to KW</td><td>$15,000</td><td>25%</td><td>$3,750</td><td><strong>$11,250</strong></td></tr>
+    <tr><td>30% relocation referral</td><td>$15,000</td><td>30%</td><td>$4,500</td><td><strong>$10,500</strong></td></tr>
+    <tr><td>40% referral (dollar override)</td><td>$15,000</td><td>—</td><td>$6,000</td><td><strong>$9,000</strong></td></tr>
+  </tbody>
+</table>
+<p><strong>Common mistake to avoid:</strong> Do not enter a reduced GCI to account for the referral. Enter the full GCI and use the Outbound Referral Fee field. The system deducts it automatically.</p>
+
+<h2>Step 3 — Co-Agent Split</h2>
+<p>If the transaction has a co-listing agent or co-buyer agent, the <strong>Net After Referral</strong> (not the original GCI) is split between the primary agent and the co-agent according to the agreed percentages. The split percentages must total 100%.</p>
+<blockquote>
+  Primary Agent Share = Net After Referral × Primary Split %<br/>
+  Co-Agent Share = Net After Referral × Co-Agent Split %
+</blockquote>
+<p><strong>Example:</strong> GCI = $15,000, 25% referral to KW, 60/40 co-listing split</p>
+<table>
+  <thead><tr><th>Item</th><th>Calculation</th><th>Amount</th></tr></thead>
+  <tbody>
+    <tr><td>GCI</td><td>—</td><td>$15,000</td></tr>
+    <tr><td>Referral fee (25%)</td><td>$15,000 × 25%</td><td>−$3,750</td></tr>
+    <tr><td><strong>Net After Referral</strong></td><td>—</td><td><strong>$11,250</strong></td></tr>
+    <tr><td>Primary agent share (60%)</td><td>$11,250 × 60%</td><td><strong>$6,750</strong></td></tr>
+    <tr><td>Co-agent share (40%)</td><td>$11,250 × 40%</td><td><strong>$4,500</strong></td></tr>
+  </tbody>
+</table>
+
+<h2>Step 4 — Broker/Agent Split Tier</h2>
+<p>Each agent's commission tier is applied to their individual share of the net-after-referral GCI. The tier is determined by the agent's commission profile and their year-to-date production.</p>
+<blockquote>
+  Agent Gross = Agent Share × Agent Split %<br/>
+  Broker Retained = Agent Share × Broker Split %
+</blockquote>
+<p><strong>Example (continuing from above):</strong> Primary agent is on a 70/30 split tier.</p>
+<table>
+  <thead><tr><th>Item</th><th>Calculation</th><th>Amount</th></tr></thead>
+  <tbody>
+    <tr><td>Primary agent share</td><td>—</td><td>$6,750</td></tr>
+    <tr><td>Agent gross (70%)</td><td>$6,750 × 70%</td><td>$4,725</td></tr>
+    <tr><td>Broker retained (30%)</td><td>$6,750 × 30%</td><td>$2,025</td></tr>
+  </tbody>
+</table>
+
+<h2>Step 5 — Agent-Paid Compliance Fee</h2>
+<p>If the transaction has a compliance/transaction fee and the agent has selected <strong>"Agent Pays"</strong>, the fee is subtracted from the agent's gross to arrive at the final Agent Net. This deduction does not affect GCI, tier lookup, or broker retained.</p>
+<blockquote>Agent Net = Agent Gross − Compliance Fee</blockquote>
+
+<h2>Complete Worked Example</h2>
+<p>Transaction: $500,000 sale, 3% commission, 25% referral to Keller Williams, co-listing 60/40 split, $150 compliance fee paid by primary agent. Primary agent on 70/30 tier, co-agent on 75/25 tier.</p>
+<table>
+  <thead><tr><th>Step</th><th>Item</th><th>Calculation</th><th>Amount</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>GCI</td><td>$500,000 × 3%</td><td>$15,000</td></tr>
+    <tr><td>2</td><td>Referral fee to KW (25%)</td><td>$15,000 × 25%</td><td>−$3,750</td></tr>
+    <tr><td>2</td><td><strong>Net After Referral</strong></td><td>$15,000 − $3,750</td><td><strong>$11,250</strong></td></tr>
+    <tr><td>3</td><td>Primary agent share (60%)</td><td>$11,250 × 60%</td><td>$6,750</td></tr>
+    <tr><td>3</td><td>Co-agent share (40%)</td><td>$11,250 × 40%</td><td>$4,500</td></tr>
+    <tr><td>4</td><td>Primary: agent gross (70%)</td><td>$6,750 × 70%</td><td>$4,725</td></tr>
+    <tr><td>4</td><td>Primary: broker retained (30%)</td><td>$6,750 × 30%</td><td>$2,025</td></tr>
+    <tr><td>4</td><td>Co-agent: agent gross (75%)</td><td>$4,500 × 75%</td><td>$3,375</td></tr>
+    <tr><td>4</td><td>Co-agent: broker retained (25%)</td><td>$4,500 × 25%</td><td>$1,125</td></tr>
+    <tr><td>5</td><td>Primary: compliance fee</td><td>—</td><td>−$150</td></tr>
+    <tr><td><strong>Final</strong></td><td><strong>Primary agent net</strong></td><td>$4,725 − $150</td><td><strong>$4,575</strong></td></tr>
+    <tr><td><strong>Final</strong></td><td><strong>Co-agent net</strong></td><td>—</td><td><strong>$3,375</strong></td></tr>
+    <tr><td><strong>Final</strong></td><td><strong>Total broker retained</strong></td><td>$2,025 + $1,125</td><td><strong>$3,150</strong></td></tr>
+    <tr><td><strong>Final</strong></td><td><strong>KW referral</strong></td><td>—</td><td><strong>$3,750</strong></td></tr>
+    <tr><td><strong>Check</strong></td><td>Total accounted for</td><td>$4,575 + $3,375 + $3,150 + $3,750 + $150</td><td><strong>$15,000 ✓</strong></td></tr>
+  </tbody>
+</table>
+
+<h2>How to Enter a Referral Fee</h2>
+<ol>
+  <li>Open the <strong>Add Listing</strong> or <strong>Add Transaction</strong> form.</li>
+  <li>Scroll to the <strong>Outbound Referral Fee</strong> section (below the Co-Agent section).</li>
+  <li>Toggle the referral fee switch to <strong>On</strong>.</li>
+  <li>Enter the referring broker/company name and the referral percentage (e.g., 25%).</li>
+  <li>The system automatically calculates the dollar amount and adjusts all commission fields.</li>
+  <li>The Live Split Preview will show an orange warning banner confirming the referral deduction and the net base used for splits.</li>
+</ol>
+<p>If the referral fee was not entered at the time of submission, it can be added or adjusted later by an admin through the Edit Transaction form. The system will automatically recalculate all commission fields when the referral fee is changed.</p>
+
+<h2>How to Enter a Co-Agent</h2>
+<ol>
+  <li>In the <strong>Add Listing</strong> or <strong>Add Transaction</strong> form, scroll to the <strong>Co-Agent</strong> section.</li>
+  <li>Toggle the co-agent switch to <strong>On</strong>.</li>
+  <li>Search for the co-agent by name and select them from the roster.</li>
+  <li>Enter the split percentages (must total 100%).</li>
+  <li>The Live Split Preview will update to show each agent's GCI share based on the post-referral net.</li>
+</ol>
+
+<h2>Quick Reference</h2>
+<table>
+  <thead><tr><th>Situation</th><th>What to do</th><th>What NOT to do</th></tr></thead>
+  <tbody>
+    <tr><td>Transaction with a referral fee</td><td>Enter full GCI + referral % in Outbound Referral Fee field</td><td>Do not manually reduce GCI to account for the referral</td></tr>
+    <tr><td>Co-listing with a referral</td><td>Enter both co-agent split AND referral fee; system handles the order</td><td>Do not calculate each agent's share manually before entering</td></tr>
+    <tr><td>Agent pays compliance fee</td><td>Select "Agent Pays" in the compliance fee section</td><td>Do not subtract the fee from the commission % or GCI</td></tr>
+    <tr><td>Referral fee added after submission</td><td>Admin edits the transaction and adds/changes the referral fee</td><td>The system recalculates automatically; no manual adjustment needed</td></tr>
+  </tbody>
+</table>
+    `,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
