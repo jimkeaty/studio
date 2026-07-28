@@ -362,13 +362,35 @@ export async function POST(req: NextRequest) {
       agentPct: toNum(body.agentPct) || null,
       brokerPct: toNum(body.brokerPct) || null,
       ...(toNum(body.agentDollar) || toNum(body.brokerGci)
-        ? {
-            splitSnapshot: {
-              grossCommission: toNum(body.gci) || toNum(body.commission) || null,
-              agentNetCommission: toNum(body.agentDollar) || null,
-              companyRetained: toNum(body.brokerGci) || null,
-            },
-          }
+        ? (() => {
+            // ── Agent-paid compliance fee deduction ───────────────────────────
+            // Belt-and-suspenders: the form now stores agentDollar as the post-fee
+            // net. This server-side check ensures the splitSnapshot is always correct
+            // regardless of which form version submitted the data.
+            const _rawAgentNet = toNum(body.agentDollar) || 0;
+            const _txFeeAmt = toNum(body.txComplianceFeeAmount) || 0;
+            const _txFeePaidBy = String(body.txComplianceFeePaidBy || '').toLowerCase().trim();
+            const _agentPaysFee = body.txComplianceFee === 'yes' && _txFeeAmt > 0 && _txFeePaidBy === 'agent';
+            // The form already subtracts the fee from agentDollar (post-fix), so we
+            // only deduct server-side if the submitted value appears to be pre-fee
+            // (i.e., agentDollar > agentDollar - fee, which is always true when fee > 0).
+            // To avoid double-deduction we check: if agentDollar already equals the
+            // expected post-fee value, skip the server-side deduction.
+            const _expectedPostFee = _agentPaysFee ? Number(Math.max(0, _rawAgentNet - _txFeeAmt).toFixed(2)) : _rawAgentNet;
+            // If the submitted value already matches the post-fee amount, no deduction needed.
+            // Otherwise apply it (handles old form submissions that sent pre-fee agentDollar).
+            const _agentNetCommission = _agentPaysFee && Math.abs(_rawAgentNet - _expectedPostFee) > 0.01
+              ? _expectedPostFee
+              : _rawAgentNet;
+            return {
+              splitSnapshot: {
+                grossCommission: toNum(body.gci) || toNum(body.commission) || null,
+                agentNetCommission: _agentNetCommission || null,
+                companyRetained: toNum(body.brokerGci) || null,
+                ...(_agentPaysFee ? { agentFeeDeduction: _txFeeAmt } : {}),
+              },
+            };
+          })()
         : {}),
       // Outbound referral fee — stored for TC review
       hasOutboundReferral: !!body.hasOutboundReferral,

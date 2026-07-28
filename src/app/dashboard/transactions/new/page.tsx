@@ -1079,6 +1079,8 @@ export default function AddTransactionPage() {
   const inspectionOrdered = form.watch('inspectionOrdered');
   const warrantyAtClosing = form.watch('warrantyAtClosing');
   const txComplianceFee = form.watch('txComplianceFee');
+  const txComplianceFeeAmount = Number(form.watch('txComplianceFeeAmount')) || 0;
+  const txComplianceFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
   const shortageInCommission = form.watch('shortageInCommission');
   const tcScheduleInspections = form.watch('tcScheduleInspections');
   const occupancyAgreement = form.watch('occupancyAgreement');
@@ -1346,13 +1348,11 @@ export default function AddTransactionPage() {
       const agentPct = tier.agentSplitPercent;    // Effective % of full GCI
       const brokerPct = tier.companySplitPercent;  // Company's % of full GCI
       // Split is applied to netGci (after referral fee deduction)
-      const agentNet = Number((netGci * (agentPct / 100)).toFixed(2));
+      const agentGross = Number((netGci * (agentPct / 100)).toFixed(2));
       const brokerGci = Number((netGci * (brokerPct / 100)).toFixed(2));
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
-      form.setValue('agentPct', agentPct as any);
-      form.setValue('brokerPct', brokerPct as any);
-      form.setValue('agentDollar', agentNet as any);
-      form.setValue('brokerGci', brokerGci as any);
+
+      // Set fee fields first so we can read them back for the deduction
       if (txFee > 0) {
         form.setValue('txComplianceFee', 'yes');
         form.setValue('txComplianceFeeAmount', txFee as any);
@@ -1360,8 +1360,26 @@ export default function AddTransactionPage() {
           form.setValue('txComplianceFeePaidBy', 'agent');
         }
       }
+
+      // ── Agent-paid compliance fee deduction ──────────────────────────────
+      // If the agent is paying the transaction/listing fee personally, subtract
+      // it from their net so agentDollar reflects what they actually take home.
+      // This matches the deduction applied at TC approval and in the admin edit form.
+      // Tier lookup and broker split are NOT affected by this deduction.
+      const currentFeePaidBy = String(form.getValues('txComplianceFeePaidBy') || '').toLowerCase().trim();
+      const currentFeeEnabled = form.getValues('txComplianceFee') === 'yes';
+      const currentFeeAmt = Number(form.getValues('txComplianceFeeAmount')) || 0;
+      const agentPaysThisFee = currentFeeEnabled && currentFeeAmt > 0 && currentFeePaidBy === 'agent';
+      const agentNet = agentPaysThisFee
+        ? Number(Math.max(0, agentGross - currentFeeAmt).toFixed(2))
+        : agentGross;
+
+      form.setValue('agentPct', agentPct as any);
+      form.setValue('brokerPct', brokerPct as any);
+      form.setValue('agentDollar', agentNet as any);
+      form.setValue('brokerGci', brokerGci as any);
     }
-  }, [watchedGCI, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral]);
+  }, [watchedGCI, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy]);
 
   // Sync additionalComments → notes
   const watchedAdditionalComments = form.watch('additionalComments');
