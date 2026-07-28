@@ -24,7 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info, Paintbrush, WandSparkles, RefreshCw, Copy, CheckCheck, Trees } from 'lucide-react';
+import { CheckCircle2, Send, ClipboardList, FileCheck2, Paperclip, X, FileText, Loader2, PlusCircle, Trash2, UploadCloud, Upload, Sparkles, AlertCircle, ChevronRight, ChevronDown, Home, List, Users, ArrowRightLeft, Info, Paintbrush, WandSparkles, RefreshCw, Copy, CheckCheck, Trees, Building2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -620,7 +620,8 @@ export default function AddTransactionPage() {
   const [mlsPdfName, setMlsPdfName] = useState<string>('');
   // Land agreement upload
   const landPdfInputRef = useRef<HTMLInputElement>(null);
-  const [pdfDocType, setPdfDocType] = useState<'residential' | 'land' | null>(null);
+  const commercialPdfInputRef = useRef<HTMLInputElement>(null);
+  const [pdfDocType, setPdfDocType] = useState<'residential' | 'land' | 'commercial' | null>(null);
 
   const handlePdfUpload = async (file: File) => {
     if (!user) return;
@@ -889,6 +890,117 @@ export default function AddTransactionPage() {
       setPdfStep('form');
       const filledCount = Object.values(conf).filter(v => (v as number) >= 0.7).length;
       toast({ title: '✅ Land agreement scanned', description: `${filledCount} fields auto-filled. Review highlighted fields before submitting.` });
+    } catch (err: any) {
+      toast({ title: 'Extraction error', description: err.message, variant: 'destructive' });
+      setPdfStep('form');
+    }
+  };
+
+  // ── Commercial Agreement upload handler ─────────────────────────────────────
+  const handleCommercialPdfUpload = async (file: File) => {
+    if (!user) return;
+    setPdfStep('extracting');
+    setPdfName(file.name);
+    try {
+      const token = await user.getIdToken();
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/agent/parse-commercial-agreement', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast({ title: 'Extraction failed', description: data.error || 'Could not read the commercial agreement. Please fill the form manually.', variant: 'destructive' });
+        setPdfStep('form');
+        return;
+      }
+      const f = data.data?.fields || {};
+      const conf = data.data?._confidence || {};
+      setPdfConfidence(conf);
+      const lowConf = new Set<string>(Object.entries(conf).filter(([, v]) => (v as number) < 0.7 && (v as number) > 0).map(([k]) => k));
+      setPdfHighlightFields(lowConf);
+      const setIfPresent = (key: string, val: unknown) => {
+        if (val !== null && val !== undefined && val !== '') form.setValue(key as any, val as any);
+      };
+      // Core fields
+      setIfPresent('address', f.address);
+      setIfPresent('salePrice', f.salePrice);
+      setIfPresent('contractDate', f.contractDate);
+      setIfPresent('projectedCloseDate', f.projectedCloseDate);
+      setIfPresent('inspectionDeadline', f.inspectionDeadline);
+      setIfPresent('appraisalDeadline', f.appraisalDeadline);
+      setIfPresent('earnestMoney', f.earnestMoney);
+      // Deposit holder
+      if (f.depositHeldBy) {
+        const dh = String(f.depositHeldBy).toLowerCase().replace(/\s+/g, '_');
+        if (dh === 'listing_broker') form.setValue('depositHolder', 'listing_broker');
+        else if (dh === 'selling_broker') form.setValue('depositHolder', 'selling_broker');
+        else { form.setValue('depositHolder', 'other'); form.setValue('depositHolderOther', String(f.depositHeldBy)); }
+      }
+      // Buyer / Seller names
+      setIfPresent('buyerName', f.buyerName);
+      setIfPresent('buyer2Name', f.buyer2Name);
+      setIfPresent('sellerName', f.sellerName);
+      setIfPresent('seller2Name', f.seller2Name);
+      // Agent info — map based on closing type
+      const isListingSide = f.closingType === 'listing' || f.closingType === 'dual';
+      if (isListingSide) {
+        setIfPresent('otherAgentName', f.buyerAgentName);
+        setIfPresent('otherAgentPhone', f.buyerAgentPhone);
+        setIfPresent('otherBrokerage', f.buyerBrokerage);
+      } else {
+        setIfPresent('otherAgentName', f.listingAgentName);
+        setIfPresent('otherAgentPhone', f.listingAgentPhone);
+        setIfPresent('otherBrokerage', f.listingBrokerage);
+      }
+      // closingType / dealType / clientType
+      if (f.closingType && ['buyer', 'listing', 'dual'].includes(f.closingType as string)) {
+        form.setValue('closingType', f.closingType as any);
+      }
+      // Always set dealType to commercial_sale
+      form.setValue('dealType', 'commercial_sale' as any);
+      if (f.clientType && ['buyer', 'seller', 'dual'].includes(f.clientType as string)) {
+        form.setValue('clientType', f.clientType as any);
+      }
+      // clientName fallback
+      if (!form.getValues('clientName')) {
+        const cn = (f.closingType === 'listing' ? f.sellerName : f.buyerName) || f.buyerName || f.sellerName || '';
+        if (cn) form.setValue('clientName', cn as string);
+      }
+      // Extra notes — commercial-specific fields
+      const extraNotes: string[] = [];
+      if (f.legalDescription) extraNotes.push(`Legal Description: ${f.legalDescription}`);
+      if (f.approximateLotSize) extraNotes.push(`Approximate Lot Size: ${f.approximateLotSize}`);
+      if (f.mineralRights && f.mineralRights !== 'not_mentioned') extraNotes.push(`Mineral Rights: ${f.mineralRights}`);
+      if (f.surveyResponsibility) extraNotes.push(`Survey Responsibility: ${f.surveyResponsibility}`);
+      if (f.loanType) extraNotes.push(`Loan Type: ${f.loanType}`);
+      if (f.loanAmount) extraNotes.push(`Loan Amount: $${Number(f.loanAmount).toLocaleString()}`);
+      if (f.downPaymentAmount) extraNotes.push(`Down Payment: $${Number(f.downPaymentAmount).toLocaleString()}`);
+      if (f.financingCommitmentDays) extraNotes.push(`Financing Commitment Period: ${f.financingCommitmentDays} days`);
+      if (f.titleCurativeDays) extraNotes.push(`Title Curative Period: ${f.titleCurativeDays} days`);
+      if (f.serviceContractDisclosureDays) extraNotes.push(`Service Contract Disclosure: ${f.serviceContractDisclosureDays} days`);
+      if (f.depositDueDays) extraNotes.push(`Deposit Due: ${f.depositDueDays} days after Effective Date`);
+      if (f.commissionNotes) extraNotes.push(`Commission: ${f.commissionNotes}`);
+      if (f.sellerEmail) extraNotes.push(`Seller Email: ${f.sellerEmail}`);
+      if (f.buyerEmail) extraNotes.push(`Buyer Email: ${f.buyerEmail}`);
+      if (f.additionalTerms && f.additionalTerms !== 'No Additional Terms.') extraNotes.push(`Additional Terms:\n${f.additionalTerms}`);
+      if (f.notes) extraNotes.push(f.notes as string);
+      if (extraNotes.length > 0) {
+        const existing = form.getValues('notes') || '';
+        form.setValue('notes', (existing ? existing + '\n\n' : '') + '[Commercial Agreement – AI Extracted]\n' + extraNotes.join('\n'));
+      }
+      // Auto-save the uploaded PDF as a transaction document
+      if (data.savedDoc) {
+        setUploadedDocs(prev => {
+          const alreadyExists = prev.some((d: UploadedDoc) => d.storagePath === data.savedDoc.storagePath);
+          return alreadyExists ? prev : [data.savedDoc as UploadedDoc, ...prev];
+        });
+      }
+      setPdfStep('form');
+      const filledCount = Object.values(conf).filter(v => (v as number) >= 0.7).length;
+      toast({ title: '✅ Commercial agreement scanned', description: `${filledCount} fields auto-filled. Review highlighted fields before submitting.` });
     } catch (err: any) {
       toast({ title: 'Extraction error', description: err.message, variant: 'destructive' });
       setPdfStep('form');
@@ -1989,7 +2101,7 @@ export default function AddTransactionPage() {
               </div>
 
               {/* Document type selector */}
-              <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-1">
+              <div className="grid grid-cols-3 gap-3 w-full max-w-lg mt-1">
                 <button
                   type="button"
                   onClick={() => setPdfDocType('residential')}
@@ -2020,6 +2132,21 @@ export default function AddTransactionPage() {
                     <p className="text-xs text-muted-foreground">LA Lot(s) or Vacant Land Agreement</p>
                   </div>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPdfDocType('commercial')}
+                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
+                    pdfDocType === 'commercial'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/30 ring-2 ring-blue-400/30'
+                      : 'border-muted-foreground/20 bg-background hover:border-blue-400/40 hover:bg-blue-50/50'
+                  }`}
+                >
+                  <Building2 className="h-6 w-6 text-blue-600" />
+                  <div>
+                    <p className="text-sm font-semibold">Commercial</p>
+                    <p className="text-xs text-muted-foreground">LA Commercial Agreement to Buy &amp; Sell</p>
+                  </div>
+                </button>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 mt-2">
@@ -2029,11 +2156,12 @@ export default function AddTransactionPage() {
                   disabled={!pdfDocType}
                   onClick={() => {
                     if (pdfDocType === 'land') landPdfInputRef.current?.click();
+                    else if (pdfDocType === 'commercial') commercialPdfInputRef.current?.click();
                     else pdfInputRef.current?.click();
                   }}
                   className="gap-2"
                 >
-                  <UploadCloud className="h-5 w-5" /> {pdfDocType ? `Upload ${pdfDocType === 'land' ? 'Land' : 'Residential'} Agreement` : 'Select Agreement Type First'}
+                  <UploadCloud className="h-5 w-5" /> {pdfDocType ? `Upload ${pdfDocType === 'land' ? 'Land' : pdfDocType === 'commercial' ? 'Commercial' : 'Residential'} Agreement` : 'Select Agreement Type First'}
                 </Button>
                 <Button
                   type="button"
@@ -2067,6 +2195,18 @@ export default function AddTransactionPage() {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleLandPdfUpload(file);
+                  e.target.value = '';
+                }}
+              />
+              {/* Commercial agreement input */}
+              <input
+                ref={commercialPdfInputRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleCommercialPdfUpload(file);
                   e.target.value = '';
                 }}
               />
