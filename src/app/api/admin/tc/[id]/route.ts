@@ -559,26 +559,42 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       } else {
         // ── Live calculation via team resolver ────────────────────────────────────────
         const commission = rawGci;
+        const txDate = intake.closedDate || intake.contractDate || null;
 
-        // If co-agent is present, split the gross first then calculate each agent independently
+        // ── Outbound referral fee: deducted OFF THE TOP before any agent/co-agent split ──
+        // The referral fee is a % of TOTAL GCI paid to an outside broker/relocation company.
+        // We deduct it first, then split the remaining net between primary and co-agent.
+        // The resolver does NOT receive referralFeePercent — the deduction is already done here
+        // to prevent double-deduction (the resolver would deduct again if passed referralFeePercent).
+        const referralFeeData = intake.outboundReferralFee as Record<string, any> | null | undefined;
+        const referralPct = referralFeeData ? Number(referralFeeData.referralPercent ?? 0) : 0;
+        const referralDollarOverride = referralFeeData ? Number(referralFeeData.referralDollar ?? 0) : 0;
+        const referralFeeDollar = referralPct > 0
+          ? (referralDollarOverride > 0 ? referralDollarOverride : Number((commission * (referralPct / 100)).toFixed(2)))
+          : 0;
+        // Net GCI available for agent/broker splits after referral is paid out
+        const netAfterReferral = Number(Math.max(0, commission - referralFeeDollar).toFixed(2));
+
+        // If co-agent is present, split the POST-REFERRAL net between primary and co-agent
         const hasCoAgent = !!intake.hasCoAgent;
         const coAgentId = hasCoAgent ? String(intake.coAgentId || '').trim() : '';
         const coAgentDisplayName = hasCoAgent ? String(intake.coAgentDisplayName || '').trim() : '';
         const primarySplitPct = hasCoAgent ? toNum(intake.primaryAgentSplitPercent ?? 50) : 100;
         const coSplitPct = hasCoAgent ? toNum(intake.coAgentSplitPercent ?? 50) : 0;
+        // Shares are based on netAfterReferral, NOT gross commission
+        const primaryShare = hasCoAgent && coAgentId
+          ? Number((netAfterReferral * (primarySplitPct / 100)).toFixed(2))
+          : netAfterReferral;
+        const coShare = hasCoAgent && coAgentId
+          ? Number((netAfterReferral * (coSplitPct / 100)).toFixed(2))
+          : 0;
 
-        const primaryShare = hasCoAgent && coAgentId ? commission * (primarySplitPct / 100) : commission;
-        const coShare = hasCoAgent && coAgentId ? commission * (coSplitPct / 100) : 0;
-
-        const txDate = intake.closedDate || intake.contractDate || null;
-        // Outbound referral fee — deducted from each agent's share before broker/agent split
-        const referralFeeData = intake.outboundReferralFee as Record<string, any> | null | undefined;
-        const referralPct = referralFeeData ? Number(referralFeeData.referralPercent ?? 0) : 0;
         let calc: Awaited<ReturnType<typeof resolveTransactionCalculation>>;
         try {
+          // Referral deduction already applied in primaryShare; pass null to avoid double-deduction
           calc = await resolveTransactionCalculation({
             agentId, agentDisplayName, commission: primaryShare, transactionDate: txDate,
-            referralFeePercent: referralPct > 0 ? referralPct : null,
+            referralFeePercent: null,
           });
         } catch (calcErr: any) {
           // Commission profile not found — fall back to a zero-split snapshot so
@@ -636,12 +652,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           let coSplitSnapshot: any = null;
           let coCreditSnapshot: any = null;
           try {
+            // coShare is already post-referral (netAfterReferral × coSplitPct); pass null to avoid double-deduction
             const coCalc = await resolveTransactionCalculation({
               agentId: coAgentId,
               agentDisplayName: coAgentDisplayName,
               commission: coShare,
               transactionDate: txDate,
-              referralFeePercent: referralPct > 0 ? referralPct : null,
+              referralFeePercent: null,
             });
             coSplitSnapshot = coCalc.splitSnapshot;
             coCreditSnapshot = coCalc.creditSnapshot;

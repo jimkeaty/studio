@@ -2597,22 +2597,36 @@ export default function AddTransactionPage() {
                   const pPct = watchedPrimaryPct;
                   const cPct = watchedCoPct;
                   const fmt = (n: number) => n > 0 ? '$' + Math.round(n).toLocaleString() : '—';
+                  // ── Referral fee deduction ──────────────────────────────────────────────────
+                  // Co-agent splits are calculated on post-referral GCI, not gross GCI.
+                  const _hasRef = form.watch('hasOutboundReferral');
+                  const _refPct = Number(form.watch('outboundReferralFeePercent') || 0);
+                  const _refDollar = Number(form.watch('outboundReferralFeeDollar') || 0);
+                  const _refFee = _hasRef && _refPct > 0
+                    ? (_refDollar > 0 ? _refDollar : Math.round(gci * (_refPct / 100) * 100) / 100)
+                    : 0;
+                  const _netGci = Math.max(0, gci - _refFee);
                   if (gci <= 0 && sp <= 0) return null;
                   return (
                     <div className="rounded-lg border border-blue-300 bg-white p-3 space-y-2">
                       <p className="text-xs font-bold text-blue-800">Live Split Preview</p>
+                      {_refFee > 0 && (
+                        <p className="text-[10px] text-orange-600 font-medium">
+                          ⚠️ {_refPct}% referral fee (${Math.round(_refFee).toLocaleString()}) deducted from GCI. Splits based on ${Math.round(_netGci).toLocaleString()} net.
+                        </p>
+                      )}
                       <div className="grid grid-cols-2 gap-2">
                         <div className="rounded-md bg-blue-50 border border-blue-200 p-2 text-center">
                           <p className="text-[10px] font-semibold text-blue-600 truncate">{primaryName}</p>
                           <p className="text-sm font-bold text-gray-900">{pPct}%</p>
                           {sp > 0 && <p className="text-[10px] text-gray-500">Vol: {fmt(sp * pPct / 100)}</p>}
-                          {gci > 0 && <p className="text-[10px] text-green-700 font-semibold">GCI: {fmt(gci * pPct / 100)}</p>}
+                          {gci > 0 && <p className="text-[10px] text-green-700 font-semibold">GCI: {fmt(_netGci * pPct / 100)}</p>}
                         </div>
                         <div className="rounded-md bg-indigo-50 border border-indigo-200 p-2 text-center">
                           <p className="text-[10px] font-semibold text-indigo-600 truncate">{coName}</p>
                           <p className="text-sm font-bold text-gray-900">{cPct}%</p>
                           {sp > 0 && <p className="text-[10px] text-gray-500">Vol: {fmt(sp * cPct / 100)}</p>}
-                          {gci > 0 && <p className="text-[10px] text-green-700 font-semibold">GCI: {fmt(gci * cPct / 100)}</p>}
+                          {gci > 0 && <p className="text-[10px] text-green-700 font-semibold">GCI: {fmt(_netGci * cPct / 100)}</p>}
                         </div>
                       </div>
                       <p className="text-[10px] text-blue-600 italic">
