@@ -978,7 +978,9 @@ export default function AddTransactionPage() {
       if (f.loanType) extraNotes.push(`Loan Type: ${f.loanType}`);
       if (f.loanAmount) extraNotes.push(`Loan Amount: $${Number(f.loanAmount).toLocaleString()}`);
       if (f.downPaymentAmount) extraNotes.push(`Down Payment: $${Number(f.downPaymentAmount).toLocaleString()}`);
-      if (f.financingCommitmentDays) extraNotes.push(`Financing Commitment Period: ${f.financingCommitmentDays} days`);
+      // financingCommitmentDeadline → finalLoanCommitmentDeadline form field
+      setIfPresent('finalLoanCommitmentDeadline', f.financingCommitmentDeadline);
+      if (f.financingCommitmentDays && !f.financingCommitmentDeadline) extraNotes.push(`Financing Commitment Period: ${f.financingCommitmentDays} days after Effective Date (deadline not calculated — contract date missing)`);
       if (f.titleCurativeDays) extraNotes.push(`Title Curative Period: ${f.titleCurativeDays} days`);
       if (f.serviceContractDisclosureDays) extraNotes.push(`Service Contract Disclosure: ${f.serviceContractDisclosureDays} days`);
       if (f.depositDueDays) extraNotes.push(`Deposit Due: ${f.depositDueDays} days after Effective Date`);

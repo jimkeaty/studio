@@ -49,6 +49,7 @@ Return this exact JSON shape:
     "loanAmount": null,
     "downPaymentAmount": null,
     "financingCommitmentDays": null,
+    "financingCommitmentDeadline": "",
     "appraisalConditioned": false,
     "appraisalPeriodDays": null,
     "appraisalDeadline": "",
@@ -110,7 +111,8 @@ Return this exact JSON shape:
     "dueDiligenceDays": 0.0,
     "closingDays": 0.0,
     "additionalTerms": 0.0,
-    "commissionNotes": 0.0
+    "commissionNotes": 0.0,
+    "financingCommitmentDeadline": 0.0
   }
 }
 
@@ -204,6 +206,18 @@ These are the ONLY calculations you are permitted to perform. All other fields m
    - appraisalDeadline = contractDate + appraisalPeriodDays calendar days.
    - Return in YYYY-MM-DD format.
    - If appraisalConditioned = false, return appraisalDeadline: "" with confidence 0.0.
+
+5. FINAL LOAN COMMITMENT DEADLINE (= financingCommitmentDeadline):
+   - This is the deadline by which the Buyer must obtain a FINAL WRITTEN LOAN COMMITMENT from their lender.
+   - This is DIFFERENT from the loan application deadline — it is the lender's final approval, not the application submission.
+   - Only calculate if ALL of the following are true:
+     a) loanType is NOT "cash" (i.e., the buyer is financing the purchase)
+     b) contractDate is known
+     c) financingCommitmentDays is known (the number from line 22)
+   - financingCommitmentDeadline = contractDate + financingCommitmentDays calendar days.
+   - Example: contractDate = 2026-06-01, financingCommitmentDays = 30 → financingCommitmentDeadline = 2026-07-01.
+   - Return in YYYY-MM-DD format.
+   - If loanType = "cash" OR financingCommitmentDays is blank, return financingCommitmentDeadline: "" with confidence 0.0.
 
 === CLOSING TYPE AND CLIENT TYPE RULES ===
 
