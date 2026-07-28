@@ -397,6 +397,28 @@ export async function POST(req: NextRequest) {
       outboundReferralPercent: toNum(body.outboundReferralPercent) || null,
       outboundReferralDollar: toNum(body.outboundReferralDollar) || null,
       outboundReferralRecipient: toStr(body.outboundReferralRecipient) || null,
+      // Sign order — stored so staff can see the full request details in the Staff Queue item
+      signOrderRequested: body.signOrderRequested === true,
+      ...(body.signOrderRequested === true ? {
+        signServiceType: toStr(body.signServiceType) || null,
+        signAdditionalOptions: Array.isArray(body.signAdditionalOptions) ? body.signAdditionalOptions : [],
+        signRiderExt: toStr(body.signRiderExt) || null,
+        signRequestedDate: toStr(body.signRequestedDate) || null,
+        signOwnerName: toStr(body.signOwnerName) || null,
+        signSpecialRequests: toStr(body.signSpecialRequests) || null,
+      } : {}),
+      // ShowingTime setup — stored so staff can see the full request details in the Staff Queue item
+      showingTimeRequested: body.showingTimeRequested === true,
+      ...(body.showingTimeRequested === true ? {
+        showingNewOrChange: toStr(body.showingNewOrChange) || null,
+        showingApptHandling: Array.isArray(body.showingApptHandling) ? body.showingApptHandling : [],
+        showingLockboxType: toStr(body.showingLockboxType) || null,
+        showingLockboxLocation: toStr(body.showingLockboxLocation) || null,
+        showingAlarmDisarm: toStr(body.showingAlarmDisarm) || null,
+        showingAlarmArm: toStr(body.showingAlarmArm) || null,
+        showingNotesToAgent: Array.isArray(body.showingNotesToAgent) ? body.showingNotesToAgent : [],
+        showingNotesToStaff: toStr(body.showingNotesToStaff) || null,
+      } : {}),
       // Review status flags — only set reviewStatus/tcIntakeId when TC intake was created
       ...(ref ? { reviewStatus: 'pending_review', tcIntakeId: ref.id } : {}),
       year: new Date().getFullYear(),

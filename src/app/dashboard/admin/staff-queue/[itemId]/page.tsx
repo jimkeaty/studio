@@ -33,7 +33,7 @@ import {
   ArrowLeft, Check, CheckCircle2, XCircle, Eye, Save, ExternalLink,
   ClipboardList, UserCheck, Activity, Archive, Trash2,
   Phone, Mail, Building2, User, Users, RefreshCw, AlertTriangle, FileText, Paperclip,
-  UploadCloud, X, DollarSign, Banknote,
+  UploadCloud, X, DollarSign, Banknote, Hammer, Calendar, MapPin, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -977,6 +977,125 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Sign Order Request Card ─────────────────────────────────────────── */}
+      {transaction?.signOrderRequested && (
+        <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+              <Hammer className="h-4 w-4" /> Sign Order Request
+              <Badge className="ml-auto bg-amber-500 text-white text-xs">Action Required</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              {transaction.signServiceType && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Service Type</dt>
+                  <dd className="font-medium mt-0.5">{transaction.signServiceType}</dd>
+                </div>
+              )}
+              {transaction.signRequestedDate && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Requested Date</dt>
+                  <dd className="font-medium mt-0.5">{transaction.signRequestedDate}</dd>
+                </div>
+              )}
+              {transaction.signOwnerName && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" /> Owner Name (for sign)</dt>
+                  <dd className="font-medium mt-0.5">{transaction.signOwnerName}</dd>
+                </div>
+              )}
+              {transaction.signRiderExt && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Rider / Extension</dt>
+                  <dd className="font-medium mt-0.5">{transaction.signRiderExt}</dd>
+                </div>
+              )}
+              {transaction.signAdditionalOptions?.length > 0 && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-muted-foreground">Additional Options</dt>
+                  <dd className="font-medium mt-0.5">{transaction.signAdditionalOptions.join(', ')}</dd>
+                </div>
+              )}
+              {transaction.signSpecialRequests && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-muted-foreground">Special Requests</dt>
+                  <dd className="mt-0.5 whitespace-pre-wrap">{transaction.signSpecialRequests}</dd>
+                </div>
+              )}
+            </dl>
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+              <Info className="h-3 w-3" /> Add QR code/text rider number as needed before forwarding to PostMan337.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── ShowingTime Setup Request Card ───────────────────────────────────── */}
+      {transaction?.showingTimeRequested && (
+        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-blue-800 dark:text-blue-300">
+              <Calendar className="h-4 w-4" /> ShowingTime Setup Request
+              <Badge className="ml-auto bg-blue-500 text-white text-xs">Action Required</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              {transaction.showingNewOrChange && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Request Type</dt>
+                  <dd className="font-medium mt-0.5 capitalize">{transaction.showingNewOrChange.replace(/_/g, ' ')}</dd>
+                </div>
+              )}
+              {transaction.showingLockboxType && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Lockbox Type</dt>
+                  <dd className="font-medium mt-0.5">{transaction.showingLockboxType}</dd>
+                </div>
+              )}
+              {transaction.showingLockboxLocation && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> Lockbox Location</dt>
+                  <dd className="font-medium mt-0.5">{transaction.showingLockboxLocation}</dd>
+                </div>
+              )}
+              {transaction.showingAlarmDisarm && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Alarm Disarm Code</dt>
+                  <dd className="font-medium mt-0.5">{transaction.showingAlarmDisarm}</dd>
+                </div>
+              )}
+              {transaction.showingAlarmArm && (
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Alarm Arm Code</dt>
+                  <dd className="font-medium mt-0.5">{transaction.showingAlarmArm}</dd>
+                </div>
+              )}
+              {transaction.showingApptHandling?.length > 0 && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-muted-foreground">Appointment Handling</dt>
+                  <dd className="font-medium mt-0.5">{transaction.showingApptHandling.join(', ')}</dd>
+                </div>
+              )}
+              {transaction.showingNotesToAgent?.length > 0 && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-muted-foreground">Notes to Agent</dt>
+                  <dd className="mt-0.5">{transaction.showingNotesToAgent.join('; ')}</dd>
+                </div>
+              )}
+              {transaction.showingNotesToStaff && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-muted-foreground">Notes to Staff</dt>
+                  <dd className="mt-0.5 whitespace-pre-wrap">{transaction.showingNotesToStaff}</dd>
+                </div>
+              )}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Transaction Checklists (stacked layers) — MOVED UP for visibility ─── */}
       <div className="space-y-4">
