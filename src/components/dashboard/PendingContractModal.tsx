@@ -46,6 +46,8 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ContractFields {
+  /** Uploaded contract document to be saved to the transaction's documents array */
+  documents?: Array<{ name: string; url: string; storagePath: string; uploadedAt: string }>;
   contractDate?: string;
   salePrice?: number | null;
   listPrice?: number | null;
@@ -163,6 +165,8 @@ export function PendingContractModal({
   const [pdfName, setPdfName] = useState('');
   const [extractError, setExtractError] = useState<string | null>(null);
   const [highlightFields, setHighlightFields] = useState<Set<string>>(new Set());
+  // Stores the uploaded contract document so it can be saved to the transaction
+  const [uploadedDoc, setUploadedDoc] = useState<{ name: string; url: string; storagePath: string; uploadedAt: string } | null>(null);
 
   // ── Form state ──────────────────────────────────────────────────────────────
   const [contractDate, setContractDate] = useState('');
@@ -207,6 +211,7 @@ export function PendingContractModal({
       setPdfName('');
       setExtractError(null);
       setHighlightFields(new Set());
+      setUploadedDoc(null);
     }
     onOpenChange(v);
   };
@@ -221,6 +226,26 @@ export function PendingContractModal({
 
     try {
       setStep('extracting');
+
+      // ── Upload the file to storage so it's saved to the transaction ──────────
+      const uploadFd = new FormData();
+      uploadFd.append('file', file);
+      const uploadRes = await fetch('/api/agent/transactions/upload-document', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+        body: uploadFd,
+      });
+      const uploadData = await uploadRes.json();
+      if (uploadRes.ok && uploadData.ok) {
+        setUploadedDoc({
+          name: uploadData.name,
+          url: uploadData.url,
+          storagePath: uploadData.storagePath,
+          uploadedAt: uploadData.uploadedAt,
+        });
+      }
+
+      // ── Extract fields from the document ─────────────────────────────────────
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/agent/parse-purchase-agreement', {
@@ -302,6 +327,8 @@ export function PendingContractModal({
 
   // ── Build fields object ─────────────────────────────────────────────────────
   const buildFields = (): ContractFields => ({
+    // Include the uploaded contract document so it gets saved to the transaction
+    ...(uploadedDoc ? { documents: [uploadedDoc] } : {}),
     contractDate: contractDate || undefined,
     salePrice: salePrice ? Number(salePrice) : undefined,
     listPrice: listPrice ? Number(listPrice) : undefined,

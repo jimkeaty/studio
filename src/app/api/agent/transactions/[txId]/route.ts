@@ -235,7 +235,7 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { resubmitToTc, notifyPendingContract, ...rawUpdates } = body;
+    const { resubmitToTc, notifyPendingContract, _replaceDocuments, ...rawUpdates } = body;
 
     // Validate status
     if (rawUpdates.status && !AGENT_ALLOWED_STATUSES.has(rawUpdates.status)) {
@@ -318,6 +318,19 @@ export async function PATCH(
       } catch (_) {}
     }
 
+    // ── Documents: merge (append) new documents instead of replacing the array ──
+    // When _replaceDocuments=true (delete/archive), use the provided array as-is.
+    // Otherwise append new documents to existing ones (never lose existing docs).
+    if (Array.isArray(updates.documents)) {
+      if (!_replaceDocuments) {
+        // Append mode: merge new docs with existing, deduplicating by storagePath
+        const existingDocs: any[] = Array.isArray(txData.documents) ? txData.documents : [];
+        const existingPaths = new Set(existingDocs.map((d: any) => d.storagePath).filter(Boolean));
+        const newDocs = (updates.documents as any[]).filter((d: any) => !existingPaths.has(d.storagePath));
+        updates.documents = [...existingDocs, ...newDocs];
+      }
+      // else: _replaceDocuments=true — use the provided array as-is (for delete/archive)
+    }
     // Save updates to the transaction document
     await txRef.update(updates);
 

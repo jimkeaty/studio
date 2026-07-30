@@ -1,6 +1,6 @@
 'use client';
 export const dynamic = 'force-dynamic';
-import { useEffect, useState, useCallback, use } from 'react';
+import { useEffect, useState, useCallback, use, useRef } from 'react';
 import { useUser } from '@/firebase';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
@@ -200,6 +200,13 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const [form, setForm] = useState<Record<string, any>>({});
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({ after_closing: true });
 
+  // ── Document management state ────────────────────────────────────────────────────────────
+  type TxDoc = { name: string; url: string; storagePath: string; uploadedAt: string; archived?: boolean };
+  const [docs, setDocs] = useState<TxDoc[]>([]);
+  const [docUploading, setDocUploading] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const docFileRef = useRef<HTMLInputElement>(null);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
@@ -211,6 +218,8 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       if (txData.ok) {
         const tx = txData.transaction || txData;
         setTransaction(tx);
+        // Initialise documents from transaction
+        setDocs(Array.isArray(tx.documents) ? tx.documents : []);
         // Initialise form state from transaction data
         setForm({
           status: tx.status || '',
@@ -374,6 +383,98 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
     } catch {
       toast({ title: 'Error', description: 'Network error. Please try again.', variant: 'destructive' });
     } finally { setSaving(false); }
+  };
+
+  // ── Document management handlers ────────────────────────────────────────────────────────────
+  const handleDocUpload = async (files: FileList | null) => {
+    if (!files || !user) return;
+    setDocUploading(true);
+    try {
+      const token = await user.getIdToken();
+      const newDocs: TxDoc[] = [];
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/agent/transactions/upload-document', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          toast({ title: 'Upload failed', description: data.error || file.name, variant: 'destructive' });
+        } else {
+          newDocs.push({ name: data.name, url: data.url, storagePath: data.storagePath, uploadedAt: data.uploadedAt });
+        }
+      }
+      if (newDocs.length > 0) {
+        // Save to transaction via PATCH (merge logic on server appends to existing)
+        const patchRes = await fetch(`/api/agent/transactions/${txId}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documents: newDocs }),
+        });
+        const patchData = await patchRes.json();
+        if (patchData.ok) {
+          setDocs(prev => [...prev, ...newDocs]);
+          toast({ title: `${newDocs.length === 1 ? 'Document' : `${newDocs.length} documents`} uploaded`, description: newDocs.map(d => d.name).join(', ') });
+        } else {
+          toast({ title: 'Upload error', description: patchData.error || 'Could not save documents.', variant: 'destructive' });
+        }
+      }
+    } catch (err: any) {
+      toast({ title: 'Upload error', description: err.message, variant: 'destructive' });
+    } finally {
+      setDocUploading(false);
+      if (docFileRef.current) docFileRef.current.value = '';
+    }
+  };
+
+  const handleDocDelete = async (storagePath: string) => {
+    if (!user) return;
+    if (!confirm('Delete this document? This cannot be undone.')) return;
+    try {
+      const token = await user.getIdToken();
+      const remaining = docs.filter(d => d.storagePath !== storagePath);
+      const res = await fetch(`/api/agent/transactions/${txId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        // Send the full remaining list — server will overwrite (delete logic)
+        body: JSON.stringify({ _replaceDocuments: true, documents: remaining }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDocs(remaining);
+        toast({ title: 'Document deleted' });
+      } else {
+        toast({ title: 'Error', description: data.error || 'Could not delete.', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDocArchive = async (storagePath: string) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const updated = docs.map(d => d.storagePath === storagePath ? { ...d, archived: !d.archived } : d);
+      const res = await fetch(`/api/agent/transactions/${txId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _replaceDocuments: true, documents: updated }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDocs(updated);
+        const doc = docs.find(d => d.storagePath === storagePath);
+        toast({ title: doc?.archived ? 'Document restored' : 'Document archived' });
+      } else {
+        toast({ title: 'Error', description: data.error || 'Could not archive.', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
   };
 
   const handleToggleTask = async (task: AgentTask) => {
@@ -857,24 +958,110 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       </SectionCard>
 
       {/* ── Documents ─────────────────────────────────────────────────────── */}
-      {Array.isArray(tx.documents) && tx.documents.length > 0 && (
-        <SectionCard title="Documents" icon={<FileText className="h-4 w-4" />}>
-          <div className="space-y-2">
-            {tx.documents.map((doc: any, idx: number) => (
-              <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
-                <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <a href={doc.url} target="_blank" rel="noopener noreferrer"
-                    className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1">
-                    {doc.name}<ExternalLink className="h-3 w-3 flex-shrink-0" />
-                  </a>
-                  {doc.uploadedAt && <p className="text-xs text-muted-foreground">{formatDate(doc.uploadedAt)}</p>}
-                </div>
-              </div>
-            ))}
+      <SectionCard title="Documents" icon={<FileText className="h-4 w-4" />}>
+        <div className="space-y-3">
+          {/* Upload button */}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={docUploading}
+              onClick={() => docFileRef.current?.click()}
+            >
+              {docUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              {docUploading ? 'Uploading…' : 'Upload Document'}
+            </Button>
+            <input
+              ref={docFileRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic"
+              className="hidden"
+              onChange={e => handleDocUpload(e.target.files)}
+            />
+            {docs.some(d => d.archived) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground text-xs"
+                onClick={() => setShowArchived(v => !v)}
+              >
+                {showArchived ? 'Hide Archived' : `Show Archived (${docs.filter(d => d.archived).length})`}
+              </Button>
+            )}
           </div>
-        </SectionCard>
-      )}
+
+          {/* Active documents */}
+          {docs.filter(d => !d.archived).length === 0 && (
+            <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
+          )}
+          {docs.filter(d => !d.archived).map((doc, idx) => (
+            <div key={doc.storagePath || idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
+              <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                  className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1">
+                  {doc.name}<ExternalLink className="h-3 w-3 flex-shrink-0" />
+                </a>
+                {doc.uploadedAt && <p className="text-xs text-muted-foreground">{formatDate(doc.uploadedAt)}</p>}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => handleDocArchive(doc.storagePath)}
+                  title="Archive document"
+                >
+                  Archive
+                </Button>
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                  onClick={() => handleDocDelete(doc.storagePath)}
+                  title="Delete document"
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+
+          {/* Archived documents (collapsed by default) */}
+          {showArchived && docs.filter(d => d.archived).map((doc, idx) => (
+            <div key={doc.storagePath || idx} className="flex items-center gap-3 rounded-lg border border-dashed bg-muted/20 px-3 py-2 opacity-60">
+              <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                  className="text-sm font-medium truncate hover:underline text-muted-foreground flex items-center gap-1">
+                  {doc.name}<ExternalLink className="h-3 w-3 flex-shrink-0" />
+                </a>
+                {doc.uploadedAt && <p className="text-xs text-muted-foreground">{formatDate(doc.uploadedAt)} — Archived</p>}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => handleDocArchive(doc.storagePath)}
+                  title="Restore document"
+                >
+                  Restore
+                </Button>
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                  onClick={() => handleDocDelete(doc.storagePath)}
+                  title="Delete document"
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
 
       {/* ── Agent Tasks ───────────────────────────────────────────────────── */}
       {totalCount > 0 && (
