@@ -46,6 +46,32 @@ const INSPECTION_TYPE_OPTIONS = [
   'Foundation Inspection',
   'Pool',
   'Survey',
+  'Water Well Inspection',
+  'Septic/Sewer Inspection',
+  'Elevation Certificate',
+  'Stucco Inspection',
+];
+const SIGN_SERVICE_OPTIONS = [
+  'Install Sign Post',
+  'Repair Sign Post or Panel',
+  'Remove Sign Post (No Fee)',
+  'Commercial Sign-Frame 4x4',
+  'Commercial Sign-Frame 4x8',
+  'Other',
+];
+const SIGN_ADDITIONAL_OPTIONS = [
+  'Directional Sign (+$2.00)',
+  'Attach Personalized Name Rider',
+  'Text2 Rider',
+  'Phone# Rider EXT',
+];
+const SHOWING_NOTES_TO_AGENT_OPTIONS = [
+  'Leave card',
+  'Lock doors',
+  'Turn off lights',
+  'Scramble lockbox when leaving',
+  'Remove shoes or wear booties',
+  'Return and secure key in lockbox',
 ];
 
 type AgentOption = { agentId: string; agentName: string };
@@ -209,6 +235,46 @@ const schema = z.object({
   outboundReferralDollar: z.coerce.number().min(0).optional().or(z.literal('')),
   outboundReferralBrokerName: z.string().optional(),
   outboundReferralContactName: z.string().optional(),
+  // Pre-listing inspection
+  preListingInspectionOrdered: z.enum(['yes', 'no']).optional(),
+  preListingTargetInspectionDate: z.string().optional().or(z.literal('')),
+  preListingInspectionTypes: z.array(z.string()).optional(),
+  preListingTcScheduleInspections: z.enum(['yes', 'no', 'other']).optional(),
+  preListingTcScheduleInspectionsOther: z.string().optional(),
+  preListingInspectorName: z.string().optional(),
+  // Sign order
+  signOrderRequested: z.boolean().optional(),
+  signServiceType: z.string().optional(),
+  signInstallDate: z.string().optional().or(z.literal('')),
+  signRider: z.string().optional(),
+  signAdditionalOptions: z.array(z.string()).optional(),
+  signOwnerName: z.string().optional(),
+  signSpecialRequests: z.string().optional(),
+  // ShowingTime
+  showingTimeRequested: z.boolean().optional(),
+  showingNewOrChange: z.string().optional(),
+  showingApptHandling: z.array(z.string()).optional(),
+  showingApptType: z.string().optional(),
+  showingApptOverlaps: z.string().optional(),
+  showingAccessType: z.string().optional(),
+  showingLockboxCode: z.string().optional(),
+  showingAlarmCode: z.string().optional(),
+  showingDisarmCode: z.string().optional(),
+  showingLeadTime: z.coerce.number().optional().or(z.literal('')),
+  showingMaxApptLength: z.coerce.number().optional().or(z.literal('')),
+  showingNoSameDayAppts: z.boolean().optional(),
+  showingShareAgentInfo: z.string().optional(),
+  showingNotesToAgent: z.array(z.string()).optional(),
+  showingNotesToStaff: z.string().optional(),
+  showingCallOrder2Name: z.string().optional(),
+  showingCallOrder2Mobile: z.string().optional(),
+  showingCallOrder2Email: z.string().optional(),
+  showingCallOrder3Name: z.string().optional(),
+  showingCallOrder3Mobile: z.string().optional(),
+  showingCallOrder3Email: z.string().optional(),
+  // MLS / listing
+  mlsDescription: z.string().optional(),
+  listingExpirationDate: z.string().optional().or(z.literal('')),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -358,6 +424,14 @@ export default function EditTransactionPage() {
   const isActiveListing = watchedStatus === 'active' && (watchedClosingType === 'listing' || watchedClosingType === 'dual');
   const watchedReferralPct = form.watch('outboundReferralPercent');
   const watchedReferralDollar = form.watch('outboundReferralDollar');
+  const preListingInspectionOrdered = form.watch('preListingInspectionOrdered');
+  const preListingInspectionTypes = form.watch('preListingInspectionTypes') || [];
+  const preListingTcScheduleInspections = form.watch('preListingTcScheduleInspections');
+  const signOrderRequested = form.watch('signOrderRequested');
+  const signAdditionalOptions = form.watch('signAdditionalOptions') || [];
+  const showingTimeRequested = form.watch('showingTimeRequested');
+  const showingApptHandling = form.watch('showingApptHandling') || [];
+  const showingNotesToAgent = form.watch('showingNotesToAgent') || [];
 
   // Reset CBP + commPct locks when deal type or closing type changes
   useEffect(() => {
@@ -739,6 +813,46 @@ export default function EditTransactionPage() {
           buyerBringToClosing: n(tx.buyerBringToClosing),
           additionalComments: tx.additionalComments || '',
           notes: tx.notes || '',
+          // Pre-listing inspection
+          preListingInspectionOrdered: (tx.preListingInspectionOrdered as any) || undefined,
+          preListingTargetInspectionDate: d(tx.preListingTargetInspectionDate),
+          preListingInspectionTypes: Array.isArray(tx.preListingInspectionTypes) ? tx.preListingInspectionTypes : [],
+          preListingTcScheduleInspections: (tx.preListingTcScheduleInspections as any) || undefined,
+          preListingTcScheduleInspectionsOther: tx.preListingTcScheduleInspectionsOther || '',
+          preListingInspectorName: tx.preListingInspectorName || '',
+          // Sign order
+          signOrderRequested: tx.signOrderRequested || false,
+          signServiceType: tx.signServiceType || '',
+          signInstallDate: d(tx.signInstallDate),
+          signRider: tx.signRider || '',
+          signAdditionalOptions: Array.isArray(tx.signAdditionalOptions) ? tx.signAdditionalOptions : [],
+          signOwnerName: tx.signOwnerName || '',
+          signSpecialRequests: tx.signSpecialRequests || '',
+          // ShowingTime
+          showingTimeRequested: tx.showingTimeRequested || false,
+          showingNewOrChange: tx.showingNewOrChange || '',
+          showingApptHandling: Array.isArray(tx.showingApptHandling) ? tx.showingApptHandling : [],
+          showingApptType: tx.showingApptType || '',
+          showingApptOverlaps: tx.showingApptOverlaps || '',
+          showingAccessType: tx.showingAccessType || '',
+          showingLockboxCode: tx.showingLockboxCode || '',
+          showingAlarmCode: tx.showingAlarmCode || '',
+          showingDisarmCode: tx.showingDisarmCode || '',
+          showingLeadTime: n(tx.showingLeadTime),
+          showingMaxApptLength: n(tx.showingMaxApptLength),
+          showingNoSameDayAppts: tx.showingNoSameDayAppts || false,
+          showingShareAgentInfo: tx.showingShareAgentInfo || '',
+          showingNotesToAgent: Array.isArray(tx.showingNotesToAgent) ? tx.showingNotesToAgent : [],
+          showingNotesToStaff: tx.showingNotesToStaff || '',
+          showingCallOrder2Name: tx.showingCallOrder2Name || '',
+          showingCallOrder2Mobile: tx.showingCallOrder2Mobile || '',
+          showingCallOrder2Email: tx.showingCallOrder2Email || '',
+          showingCallOrder3Name: tx.showingCallOrder3Name || '',
+          showingCallOrder3Mobile: tx.showingCallOrder3Mobile || '',
+          showingCallOrder3Email: tx.showingCallOrder3Email || '',
+          // MLS / listing
+          mlsDescription: tx.mlsDescription || '',
+          listingExpirationDate: d(tx.listingExpirationDate),
         });
         // Detect if the stored GCI differs from what CBP×pct would calculate.
         // If so, the GCI was manually set (or based on concessions) — lock it so the
@@ -2483,6 +2597,301 @@ export default function EditTransactionPage() {
               </Grid2>
             )}
           </Section>
+
+          {/* ── MLS Description ──────────────────────────────────────────────────── */}
+          {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+          <Section title="MLS Information">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="mlsNumber" render={({ field }) => (
+                <FormItem><FormLabel>MLS Number</FormLabel><FormControl><Input placeholder="MLS#" {...field} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="listingExpirationDate" render={({ field }) => (
+                <FormItem><FormLabel>Listing Expiration Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+            </div>
+            <FormField control={form.control} name="mlsDescription" render={({ field }) => (
+              <FormItem><FormLabel>MLS Description</FormLabel><FormControl>
+                <Textarea placeholder="Public MLS listing description..." className="min-h-[120px]" {...field} />
+              </FormControl></FormItem>
+            )} />
+          </Section>
+          )}
+
+          {/* ── Pre-Listing Inspection ──────────────────────────────────────────── */}
+          {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+          <Section title="Pre-Listing Inspection">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="preListingInspectionOrdered" render={({ field }) => (
+                <FormItem><FormLabel>Pre-Listing Inspection Ordered?</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="preListingTargetInspectionDate" render={({ field }) => (
+                <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+            </div>
+            <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
+              <FormItem><FormLabel>TC to help schedule?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {preListingTcScheduleInspections === 'other' && (
+              <FormField control={form.control} name="preListingTcScheduleInspectionsOther" render={({ field }) => (
+                <FormItem><FormLabel>Please specify</FormLabel><FormControl><Input placeholder="Describe what you need..." {...field} /></FormControl></FormItem>
+              )} />
+            )}
+            <FormField control={form.control} name="preListingInspectorName" render={({ field }) => (
+              <FormItem><FormLabel>Inspector Name</FormLabel><FormControl><Input placeholder="Inspector name" {...field} /></FormControl></FormItem>
+            )} />
+            <div>
+              <p className="text-sm font-medium mb-2">Inspection Types</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {INSPECTION_TYPE_OPTIONS.map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preListingInspectionTypes.includes(type)}
+                      onChange={() => {
+                        const current = form.getValues('preListingInspectionTypes') || [];
+                        if (current.includes(type)) {
+                          form.setValue('preListingInspectionTypes', current.filter((t: string) => t !== type));
+                        } else {
+                          form.setValue('preListingInspectionTypes', [...current, type]);
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </Section>
+          )}
+
+          {/* ── Sign Order ──────────────────────────────────────────────────────── */}
+          {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+          <Section title="Sign Order">
+            <label className="flex items-center gap-2 text-sm cursor-pointer font-medium">
+              <input
+                type="checkbox"
+                checked={signOrderRequested}
+                onChange={e => form.setValue('signOrderRequested', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              Sign order requested
+            </label>
+            {signOrderRequested && (
+              <div className="space-y-4 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="signServiceType" render={({ field }) => (
+                    <FormItem><FormLabel>Service Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          {SIGN_SERVICE_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="signInstallDate" render={({ field }) => (
+                    <FormItem><FormLabel>Install Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="signRider" render={({ field }) => (
+                    <FormItem><FormLabel>Rider</FormLabel><FormControl><Input placeholder="Rider text..." {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="signOwnerName" render={({ field }) => (
+                    <FormItem><FormLabel>Owner Name on Sign</FormLabel><FormControl><Input placeholder="Name for sign panel..." {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-2">Additional Options</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SIGN_ADDITIONAL_OPTIONS.map((opt) => (
+                      <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={signAdditionalOptions.includes(opt)}
+                          onChange={() => {
+                            const current = form.getValues('signAdditionalOptions') || [];
+                            if (current.includes(opt)) {
+                              form.setValue('signAdditionalOptions', current.filter((o: string) => o !== opt));
+                            } else {
+                              form.setValue('signAdditionalOptions', [...current, opt]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        {opt}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
+                  <FormItem><FormLabel>Special Requests</FormLabel><FormControl>
+                    <Textarea placeholder="Any special sign placement notes..." className="min-h-[80px]" {...field} />
+                  </FormControl></FormItem>
+                )} />
+              </div>
+            )}
+          </Section>
+          )}
+
+          {/* ── ShowingTime Setup ───────────────────────────────────────────────── */}
+          {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+          <Section title="ShowingTime Setup">
+            <label className="flex items-center gap-2 text-sm cursor-pointer font-medium">
+              <input
+                type="checkbox"
+                checked={showingTimeRequested}
+                onChange={e => form.setValue('showingTimeRequested', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              ShowingTime setup requested
+            </label>
+            {showingTimeRequested && (
+              <div className="space-y-4 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="showingApptType" render={({ field }) => (
+                    <FormItem><FormLabel>Appointment Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="appointment_required">Appointment Required</SelectItem>
+                          <SelectItem value="go_and_show">Go and Show</SelectItem>
+                          <SelectItem value="call_first">Call First</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingAccessType" render={({ field }) => (
+                    <FormItem><FormLabel>Access Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="lockbox">Lockbox</SelectItem>
+                          <SelectItem value="call_listing_agent">Call Listing Agent</SelectItem>
+                          <SelectItem value="call_owner">Call Owner</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <FormField control={form.control} name="showingLockboxCode" render={({ field }) => (
+                    <FormItem><FormLabel>Lockbox Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingAlarmCode" render={({ field }) => (
+                    <FormItem><FormLabel>Alarm Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingDisarmCode" render={({ field }) => (
+                    <FormItem><FormLabel>Disarm Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <FormField control={form.control} name="showingLeadTime" render={({ field }) => (
+                    <FormItem><FormLabel>Lead Time (min)</FormLabel><FormControl><Input type="number" min={0} placeholder="60" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingMaxApptLength" render={({ field }) => (
+                    <FormItem><FormLabel>Max Appt Length (min)</FormLabel><FormControl><Input type="number" min={0} placeholder="60" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingShareAgentInfo" render={({ field }) => (
+                    <FormItem><FormLabel>Share Agent Info</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes</SelectItem>
+                          <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.watch('showingNoSameDayAppts') || false}
+                    onChange={e => form.setValue('showingNoSameDayAppts', e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  No same-day appointments
+                </label>
+                <div>
+                  <p className="text-sm font-medium mb-2">Notes to Agent</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SHOWING_NOTES_TO_AGENT_OPTIONS.map((note) => (
+                      <label key={note} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showingNotesToAgent.includes(note)}
+                          onChange={() => {
+                            const current = form.getValues('showingNotesToAgent') || [];
+                            if (current.includes(note)) {
+                              form.setValue('showingNotesToAgent', current.filter((n: string) => n !== note));
+                            } else {
+                              form.setValue('showingNotesToAgent', [...current, note]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        {note}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <FormField control={form.control} name="showingNotesToStaff" render={({ field }) => (
+                  <FormItem><FormLabel>Notes to Staff</FormLabel><FormControl>
+                    <Textarea placeholder="Internal notes for staff..." className="min-h-[80px]" {...field} />
+                  </FormControl></FormItem>
+                )} />
+                <div>
+                  <p className="text-sm font-medium mb-2">Call Order — Contact 2</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <FormField control={form.control} name="showingCallOrder2Name" render={({ field }) => (
+                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2Mobile" render={({ field }) => (
+                      <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2Email" render={({ field }) => (
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Email" {...field} /></FormControl></FormItem>
+                    )} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-2">Call Order — Contact 3</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <FormField control={form.control} name="showingCallOrder3Name" render={({ field }) => (
+                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3Mobile" render={({ field }) => (
+                      <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3Email" render={({ field }) => (
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Email" {...field} /></FormControl></FormItem>
+                    )} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </Section>
+          )}
 
           {/* ── Additional Comments ──────────────────────────── */}
           <Section title="Additional Comments">

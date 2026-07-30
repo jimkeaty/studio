@@ -272,6 +272,27 @@ const UPDATABLE_FIELDS = new Set([
   'hasCoAgent', 'coAgent',
   // Outbound referral fee — paid to outside broker/relocation company off the top of GCI
   'outboundReferralFee',
+  // Pre-listing inspection
+  'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
+  'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
+  // Sign order
+  'signOrderRequested', 'signServiceType', 'signInstallDate', 'signRider',
+  'signAdditionalOptions', 'signOwnerName', 'signSpecialRequests',
+  // ShowingTime
+  'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
+  'showingApptOverlaps', 'showingAccessType', 'showingLockboxCode', 'showingAlarmCode',
+  'showingDisarmCode', 'showingLeadTime', 'showingMaxApptLength', 'showingNoSameDayAppts',
+  'showingShareAgentInfo', 'showingNotesToAgent', 'showingNotesToStaff',
+  'showingCallOrder2Name', 'showingCallOrder2Mobile', 'showingCallOrder2Email',
+  'showingCallOrder3Name', 'showingCallOrder3Mobile', 'showingCallOrder3Email',
+  // MLS / listing
+  'mlsDescription', 'listingExpirationDate',
+  // Additional deadline fields
+  'appraisalDeadline', 'titleDeadline', 'loanApplicationDeadline', 'finalLoanCommitmentDeadline',
+  // Inbound referral
+  'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
+  // MLS number
+  'mlsNumber',
 ]);
 
 export async function PATCH(req: NextRequest) {
