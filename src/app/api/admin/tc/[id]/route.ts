@@ -115,12 +115,40 @@ export async function GET(req: NextRequest, { params }: Params) {
       // Checklist subcollection may not exist
     }
 
+    // ── Merge transaction document (single source of truth) ──────────────
+    // New records: tcIntakes is a lightweight wrapper; all data is in transactions.
+    // Old records: tcIntakes has the full data; transactions may have a subset.
+    // Strategy: start with tcIntakes data, then overlay transaction data on top
+    // so that new records (which have full data in transactions) always win.
+    const intakeData = serializeFirestore(doc.data()!);
+    const transactionId = intakeData.transactionId || intakeData.approvedTransactionId || null;
+    let transactionData: Record<string, any> = {};
+    if (transactionId) {
+      try {
+        const txDoc = await adminDb.collection('transactions').doc(transactionId).get();
+        if (txDoc.exists) {
+          transactionData = serializeFirestore(txDoc.data()!);
+        }
+      } catch { /* non-fatal — fall back to intake data */ }
+    }
+    // Merge: intake fields first, then transaction fields overlay (transaction wins for new records)
+    // Always preserve tcIntakes-specific workflow fields
+    const mergedIntake = {
+      ...intakeData,
+      ...transactionData,
+      id: doc.id,
+      status: intakeData.status,
+      tcStatus: intakeData.tcStatus || intakeData.status,
+      assignedTcProfileId: intakeData.assignedTcProfileId || null,
+      reviewedAt: intakeData.reviewedAt || null,
+      reviewedBy: intakeData.reviewedBy || null,
+      approvedTransactionId: intakeData.approvedTransactionId || transactionId,
+      transactionId: transactionId,
+      submittedAt: intakeData.submittedAt,
+    };
     return NextResponse.json({
       ok: true,
-      intake: {
-        id: doc.id,
-        ...serializeFirestore(doc.data()!),
-      },
+      intake: mergedIntake,
       checklist,
     });
   } catch (err: any) {
@@ -293,47 +321,77 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const editableFields = [
         // Core
         'closingType', 'dealType', 'address', 'clientName', 'dealSource', 'listingStatus',
+        'status', 'mlsNumber', 'listingExpirationDate', 'mlsDescription',
         // Financial
-        'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'gci',
-        'transactionFee', 'earnestMoney', 'depositHolderOther',
+        'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'gci',
+        'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
         'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
+        'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
         // Dates
         'listingDate', 'contractDate', 'optionExpiration', 'inspectionDeadline',
-        'surveyDeadline', 'projectedCloseDate', 'closedDate',
+        'surveyDeadline', 'projectedCloseDate', 'closedDate', 'closingDate',
         'loanApplicationDeadline', 'appraisalDeadline', 'titleDeadline', 'finalLoanCommitmentDeadline',
         // Client contact
         'clientType', 'clientEmail', 'clientPhone', 'clientNewAddress',
         'client2Name', 'client2Email', 'client2Phone',
-        // Buyer contact
+        // Buyer contacts
         'buyerName', 'buyerEmail', 'buyerPhone',
         'buyer2Name', 'buyer2Email', 'buyer2Phone',
-        // Seller contact
+        'buyer3Name', 'buyer3Email', 'buyer3Phone',
+        'buyer4Name', 'buyer4Email', 'buyer4Phone',
+        // Seller contacts
         'sellerName', 'sellerEmail', 'sellerPhone',
         'seller2Name', 'seller2Email', 'seller2Phone',
+        'seller3Name', 'seller3Email', 'seller3Phone',
+        'seller4Name', 'seller4Email', 'seller4Phone',
         // Other agent
-        'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
+        'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage', 'otherAgentBrokerage',
         // Lender
         'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone', 'lenderOffice',
         // Title
         'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
         'titleAttorney', 'titleOffice',
-        // Inspection
-        'targetInspectionDate', 'inspectionTypes', 'tcScheduleInspectionsOther', 'inspectorName',
-        // Seller commission
-        'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+        // Pre-listing inspection
+        'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
+        'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
+        // Buyer inspection
+        'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
+        'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
+        // Media order
+        'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
+        // Sign order
+        'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
+        'signRequestedDate', 'signOwnerName', 'signSpecialRequests',
+        // ShowingTime
+        'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
+        'showingNoSameDayAppts', 'showingLeadTimeRequired', 'showingLeadTimeSuggested',
+        'showingMaxApptLength', 'showingApptOverlaps', 'showingVirtualPreference', 'showingShareAgentInfo',
+        'showingLockboxType', 'showingLockboxLocation', 'showingAccessType', 'showingAccessNotes',
+        'showingAccessDoor', 'showingDisarmCode', 'showingArmCode', 'showingPasscode', 'showingAlarmNotes',
+        'showingAlarmDisarm', 'showingAlarmArm',
+        'showingNotesToAgent', 'showingNotesToAgentOther', 'showingNotesToStaff',
+        'showingCallOrder2Name', 'showingCallOrder2Mobile', 'showingCallOrder2AltPhone',
+        'showingCallOrder2Email', 'showingCallOrder2Type', 'showingCallOrder2Confirm', 'showingCallOrder2Notify',
+        'showingCallOrder3Name', 'showingCallOrder3Mobile', 'showingCallOrder3AltPhone',
+        'showingCallOrder3Email', 'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
         // Buyer closing costs
         'buyerClosingCostTotal', 'buyerClosingCostAgentCommission',
-        'buyerClosingCostTxFee', 'buyerClosingCostOther',
+        'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther',
+        'buyerBringToClosing',
         // Compliance / warranty
-        'warrantyPaidBy', 'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
-        'occupancyDates', 'shortageAmount', 'buyerBringToClosing',
+        'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
+        'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+        'occupancyAgreement', 'occupancyDates',
+        'shortageInCommission', 'shortageAmount',
+        // Referrals
+        'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
+        'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralFee',
+        'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
         // Notes
         'notes', 'additionalComments',
         // Co-agent
         'hasCoAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
         'primaryAgentSplitPercent', 'coAgentSplitPercent',
-        // Outbound referral fee
-        'outboundReferralFee',
         // Documents
         'documents',
       ];
@@ -351,19 +409,60 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Fields that are intake-only (workflow status, checklist, etc.) are excluded.
       const linkedTxId = toOptStr(intake.approvedTransactionId);
       if (linkedTxId) {
+        // Sync ALL editable fields to the transactions document (single source of truth).
+        // Since transactions is now the canonical record, every TC edit must be mirrored there.
         const txSyncFields = [
-          'address', 'listingStatus', 'closingType', 'dealType', 'clientName',
-          'listPrice', 'salePrice', 'listingDate', 'contractDate', 'optionExpiration',
-          'inspectionDeadline', 'projectedCloseDate', 'closedDate',
-          'clientType', 'clientEmail', 'clientPhone',
+          'address', 'listingStatus', 'status', 'closingType', 'dealType', 'clientName',
+          'mlsNumber', 'listingExpirationDate', 'mlsDescription', 'dealSource',
+          'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'gci',
+          'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
+          'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
+          'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+          'listingDate', 'contractDate', 'optionExpiration', 'inspectionDeadline',
+          'surveyDeadline', 'projectedCloseDate', 'closedDate', 'closingDate',
+          'loanApplicationDeadline', 'appraisalDeadline', 'titleDeadline', 'finalLoanCommitmentDeadline',
+          'clientType', 'clientEmail', 'clientPhone', 'clientNewAddress',
+          'client2Name', 'client2Email', 'client2Phone',
           'buyerName', 'buyerEmail', 'buyerPhone',
           'buyer2Name', 'buyer2Email', 'buyer2Phone',
+          'buyer3Name', 'buyer3Email', 'buyer3Phone',
+          'buyer4Name', 'buyer4Email', 'buyer4Phone',
           'sellerName', 'sellerEmail', 'sellerPhone',
           'seller2Name', 'seller2Email', 'seller2Phone',
-          'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
-          'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
-          'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
+          'seller3Name', 'seller3Email', 'seller3Phone',
+          'seller4Name', 'seller4Email', 'seller4Phone',
+          'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage', 'otherAgentBrokerage',
+          'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone', 'lenderOffice',
+          'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone', 'titleAttorney', 'titleOffice',
+          'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
+          'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
+          'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
+          'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
+          'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
+          'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
+          'signRequestedDate', 'signOwnerName', 'signSpecialRequests',
+          'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
+          'showingNoSameDayAppts', 'showingLeadTimeRequired', 'showingLeadTimeSuggested',
+          'showingMaxApptLength', 'showingApptOverlaps', 'showingVirtualPreference', 'showingShareAgentInfo',
+          'showingLockboxType', 'showingLockboxLocation', 'showingAccessType', 'showingAccessNotes',
+          'showingAccessDoor', 'showingDisarmCode', 'showingArmCode', 'showingPasscode', 'showingAlarmNotes',
+          'showingAlarmDisarm', 'showingAlarmArm',
+          'showingNotesToAgent', 'showingNotesToAgentOther', 'showingNotesToStaff',
+          'showingCallOrder2Name', 'showingCallOrder2Mobile', 'showingCallOrder2AltPhone',
+          'showingCallOrder2Email', 'showingCallOrder2Type', 'showingCallOrder2Confirm', 'showingCallOrder2Notify',
+          'showingCallOrder3Name', 'showingCallOrder3Mobile', 'showingCallOrder3AltPhone',
+          'showingCallOrder3Email', 'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
+          'buyerClosingCostTotal', 'buyerClosingCostAgentCommission',
+          'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther', 'buyerBringToClosing',
+          'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
+          'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+          'occupancyAgreement', 'occupancyDates', 'shortageInCommission', 'shortageAmount',
+          'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
+          'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralFee',
+          'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
           'notes', 'additionalComments',
+          'hasCoAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
+          'primaryAgentSplitPercent', 'coAgentSplitPercent',
           'documents',
         ];
         const txSyncUpdate: Record<string, any> = { updatedAt: now };

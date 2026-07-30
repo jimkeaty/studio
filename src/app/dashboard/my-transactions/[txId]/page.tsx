@@ -9,12 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft, CheckCircle2, ClipboardList, AlertTriangle,
   Home, Users, Calendar, ChevronDown, ChevronUp,
+  Building2, User, Hammer, MapPin, Info, DollarSign, FileText, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,6 +51,43 @@ const STATUS_COLORS: Record<string, string> = {
   canceled:        'bg-red-100 text-red-800',
 };
 
+function Dl({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium mt-0.5">{value}</dd>
+    </div>
+  );
+}
+
+function SectionCard({ title, icon, children, defaultCollapsed = false }: {
+  title: string; icon?: React.ReactNode; children: React.ReactNode; defaultCollapsed?: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  return (
+    <Card>
+      <CardHeader
+        className="cursor-pointer select-none"
+        onClick={() => setCollapsed(c => !c)}
+      >
+        <CardTitle className="text-base flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">{icon}{title}</span>
+          {collapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+        </CardTitle>
+      </CardHeader>
+      {!collapsed && <CardContent>{children}</CardContent>}
+    </Card>
+  );
+}
+
+function Grid2({ children }: { children: React.ReactNode }) {
+  return <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">{children}</dl>;
+}
+function Grid3({ children }: { children: React.ReactNode }) {
+  return <dl className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">{children}</dl>;
+}
+
 export default function TransactionDetailPage({ params }: { params: Promise<{ txId: string }> }) {
   const { txId } = use(params);
   const { user, loading: userLoading } = useUser();
@@ -65,14 +102,12 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
     if (!user) return;
     try {
       const token = await user.getIdToken();
-      // Load transaction
       const txRes = await fetch(`/api/agent/transactions/${txId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const txData = await txRes.json();
       if (txData.ok) setTransaction(txData.transaction || txData);
 
-      // Load agent tasks
       const taskRes = await fetch(`/api/agent/agent-tasks?transactionId=${txId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -92,7 +127,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
     if (!user) return;
     const token = await user.getIdToken();
     const newCompleted = !task.completed;
-    // Optimistic update
     setTasks(prev => prev.map(t =>
       t.id === task.id ? { ...t, completed: newCompleted, completedAt: newCompleted ? new Date().toISOString() : null } : t
     ));
@@ -103,7 +137,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
         body: JSON.stringify({ taskId: task.id, completed: newCompleted }),
       });
     } catch {
-      // Revert on error
       setTasks(prev => prev.map(t => t.id === task.id ? task : t));
     }
   };
@@ -132,10 +165,21 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
     );
   }
 
-  const address = transaction?.propertyAddress || transaction?.address || 'Transaction';
-  const status = transaction?.status || 'active';
-  const side = transaction?.side || transaction?.dealType || transaction?.closingType || '';
-  const closeDate = transaction?.projectedCloseDate || transaction?.closedDate || transaction?.closingDate;
+  const tx = transaction;
+  if (!tx) {
+    return (
+      <Alert className="max-w-lg mx-auto mt-8">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Transaction Not Found</AlertTitle>
+        <AlertDescription>This transaction could not be loaded.</AlertDescription>
+      </Alert>
+    );
+  }
+
+  const address = tx.propertyAddress || tx.address || 'Transaction';
+  const status = tx.status || 'active';
+  const side = tx.side || tx.dealType || tx.closingType || '';
+  const closeDate = tx.projectedCloseDate || tx.closedDate || tx.closingDate;
 
   // Group tasks by phase
   const phases: Record<string, AgentTask[]> = {};
@@ -149,6 +193,12 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const completedCount = tasks.filter(t => t.completed).length;
   const totalCount = tasks.length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Agent commission fields (visible to agent)
+  const agentNet = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? null;
+  const agentPct = tx.splitSnapshot?.agentSplitPercent ?? tx.agentPct ?? null;
+  const sellerCommPct = tx.sellerPayingListingAgent ?? tx.commissionPercent ?? null;
+  const buyerCommPct = tx.sellerPayingBuyerAgent ?? null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
@@ -203,7 +253,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                 </CardDescription>
               </div>
             </div>
-            {/* Progress bar */}
             <div className="w-full bg-muted rounded-full h-1.5 mt-2">
               <div
                 className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
@@ -217,7 +266,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
               const phaseCompleted = phaseTasks.filter(t => t.completed).length;
               const isCollapsed = collapsedPhases[ph];
               const allDone = phaseCompleted === phaseTasks.length;
-
               return (
                 <div key={ph}>
                   <button
@@ -242,7 +290,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                       : <ChevronUp className="h-4 w-4 text-muted-foreground" />
                     }
                   </button>
-
                   {!isCollapsed && (
                     <div className="mt-3 space-y-2 pl-6">
                       {phaseTasks.map(task => (
@@ -287,44 +334,306 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
         </Card>
       )}
 
-      {/* Transaction Details */}
-      {transaction && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Transaction Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-              {transaction.clientName && (
-                <div><dt className="text-xs text-muted-foreground">Client</dt><dd className="font-medium">{transaction.clientName}</dd></div>
-              )}
-              {transaction.sellerName && (
-                <div><dt className="text-xs text-muted-foreground">Seller</dt><dd className="font-medium">{transaction.sellerName}</dd></div>
-              )}
-              {transaction.buyerName && (
-                <div><dt className="text-xs text-muted-foreground">Buyer</dt><dd className="font-medium">{transaction.buyerName}</dd></div>
-              )}
-              {transaction.listPrice && (
-                <div><dt className="text-xs text-muted-foreground">List Price</dt><dd className="font-medium">${Number(transaction.listPrice).toLocaleString()}</dd></div>
-              )}
-              {transaction.salePrice && (
-                <div><dt className="text-xs text-muted-foreground">Sale Price</dt><dd className="font-medium">${Number(transaction.salePrice).toLocaleString()}</dd></div>
-              )}
-              {transaction.contractDate && (
-                <div><dt className="text-xs text-muted-foreground">Contract Date</dt><dd className="font-medium">{formatDate(transaction.contractDate)}</dd></div>
-              )}
-              {closeDate && (
-                <div><dt className="text-xs text-muted-foreground">Projected Close</dt><dd className="font-medium">{formatDate(closeDate)}</dd></div>
-              )}
-              {transaction.titleCompany && (
-                <div><dt className="text-xs text-muted-foreground">Title Company</dt><dd className="font-medium">{transaction.titleCompany}</dd></div>
-              )}
-              {transaction.mortgageCompany && (
-                <div><dt className="text-xs text-muted-foreground">Lender</dt><dd className="font-medium">{transaction.mortgageCompany}</dd></div>
-              )}
-            </dl>
-          </CardContent>
-        </Card>
+      {/* ── Transaction Details ──────────────────────────────────────────────── */}
+      <SectionCard title="Transaction Details" icon={<Home className="h-4 w-4" />}>
+        <Grid3>
+          <Dl label="Property Address" value={tx.propertyAddress || tx.address} />
+          <Dl label="MLS Number" value={tx.mlsNumber} />
+          <Dl label="Deal Type" value={tx.dealType?.replace(/_/g, ' ')} />
+          <Dl label="Transaction Type" value={tx.closingType?.replace(/_/g, ' ')} />
+          <Dl label="Deal Source" value={tx.dealSource?.replace(/_/g, ' ')} />
+          <Dl label="Listing Date" value={formatDate(tx.listingDate)} />
+          <Dl label="Listing Expiration" value={formatDate(tx.listingExpirationDate)} />
+          <Dl label="List Price" value={tx.listPrice ? `$${Number(tx.listPrice).toLocaleString()}` : null} />
+          <Dl label="Sale Price" value={tx.salePrice ? `$${Number(tx.salePrice).toLocaleString()}` : null} />
+        </Grid3>
+        {tx.mlsDescription && (
+          <div className="mt-4">
+            <dt className="text-xs text-muted-foreground mb-1">MLS Description</dt>
+            <dd className="text-sm whitespace-pre-wrap border rounded-md p-3 bg-muted/30">{tx.mlsDescription}</dd>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* ── Commission (agent-visible only) ─────────────────────────────────── */}
+      <SectionCard title="My Commission" icon={<DollarSign className="h-4 w-4" />}>
+        <Grid3>
+          <Dl label="Seller Commission %" value={sellerCommPct != null ? `${sellerCommPct}%` : null} />
+          <Dl label="Buyer Agent Commission %" value={buyerCommPct != null ? `${buyerCommPct}%` : null} />
+          <Dl label="My Split %" value={agentPct != null ? `${agentPct}%` : null} />
+          <Dl label="Net to Me" value={agentNet != null ? `$${Number(agentNet).toLocaleString()}` : null} />
+          <Dl label="Earnest Money" value={tx.earnestMoney ? `$${Number(tx.earnestMoney).toLocaleString()}` : null} />
+        </Grid3>
+      </SectionCard>
+
+      {/* ── Key Dates ────────────────────────────────────────────────────────── */}
+      <SectionCard title="Key Dates" icon={<Calendar className="h-4 w-4" />}>
+        <Grid3>
+          <Dl label="Contract Date" value={formatDate(tx.contractDate)} />
+          <Dl label="Projected Close" value={formatDate(tx.projectedCloseDate)} />
+          <Dl label="Closed Date" value={formatDate(tx.closedDate || tx.closingDate)} />
+          <Dl label="Option Expiration" value={formatDate(tx.optionExpiration)} />
+          <Dl label="Inspection Deadline" value={formatDate(tx.inspectionDeadline)} />
+          <Dl label="Survey Deadline" value={formatDate(tx.surveyDeadline)} />
+          <Dl label="Loan App Deadline" value={formatDate(tx.loanApplicationDeadline)} />
+          <Dl label="Appraisal Deadline" value={formatDate(tx.appraisalDeadline)} />
+          <Dl label="Title Deadline" value={formatDate(tx.titleDeadline)} />
+          <Dl label="Final Loan Commitment" value={formatDate(tx.finalLoanCommitmentDeadline)} />
+        </Grid3>
+      </SectionCard>
+
+      {/* ── Client / Buyer / Seller ──────────────────────────────────────────── */}
+      <SectionCard title="Client Information" icon={<User className="h-4 w-4" />}>
+        <Grid3>
+          <Dl label="Client Name" value={tx.clientName} />
+          <Dl label="Client Email" value={tx.clientEmail} />
+          <Dl label="Client Phone" value={tx.clientPhone} />
+          <Dl label="Client 2 Name" value={tx.client2Name} />
+          <Dl label="Client 2 Email" value={tx.client2Email} />
+          <Dl label="Client 2 Phone" value={tx.client2Phone} />
+          <Dl label="Buyer Name" value={tx.buyerName} />
+          <Dl label="Buyer Email" value={tx.buyerEmail} />
+          <Dl label="Buyer Phone" value={tx.buyerPhone} />
+          <Dl label="Buyer 2 Name" value={tx.buyer2Name} />
+          <Dl label="Seller Name" value={tx.sellerName} />
+          <Dl label="Seller Email" value={tx.sellerEmail} />
+          <Dl label="Seller Phone" value={tx.sellerPhone} />
+          <Dl label="Seller 2 Name" value={tx.seller2Name} />
+        </Grid3>
+      </SectionCard>
+
+      {/* ── Other Agent ─────────────────────────────────────────────────────── */}
+      {(tx.otherAgentName || tx.otherBrokerage) && (
+        <SectionCard title="Other Agent / Co-op" icon={<Users className="h-4 w-4" />}>
+          <Grid3>
+            <Dl label="Other Agent" value={tx.otherAgentName} />
+            <Dl label="Brokerage" value={tx.otherBrokerage || tx.otherAgentBrokerage} />
+            <Dl label="Email" value={tx.otherAgentEmail} />
+            <Dl label="Phone" value={tx.otherAgentPhone} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── Lender ──────────────────────────────────────────────────────────── */}
+      {(tx.mortgageCompany || tx.loanOfficer) && (
+        <SectionCard title="Lender Information" icon={<Building2 className="h-4 w-4" />}>
+          <Grid3>
+            <Dl label="Mortgage Company" value={tx.mortgageCompany} />
+            <Dl label="Lender Office" value={tx.lenderOffice} />
+            <Dl label="Loan Officer" value={tx.loanOfficer} />
+            <Dl label="Loan Officer Email" value={tx.loanOfficerEmail} />
+            <Dl label="Loan Officer Phone" value={tx.loanOfficerPhone} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── Title ───────────────────────────────────────────────────────────── */}
+      {(tx.titleCompany || tx.titleOfficer || tx.titleAttorney) && (
+        <SectionCard title="Title Information" icon={<Building2 className="h-4 w-4" />}>
+          <Grid3>
+            <Dl label="Title Company" value={tx.titleCompany} />
+            <Dl label="Title Office" value={tx.titleOffice} />
+            <Dl label="Title Officer" value={tx.titleOfficer} />
+            <Dl label="Title Officer Email" value={tx.titleOfficerEmail} />
+            <Dl label="Title Officer Phone" value={tx.titleOfficerPhone} />
+            <Dl label="Title Attorney" value={tx.titleAttorney} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── Pre-Listing Inspection ───────────────────────────────────────────── */}
+      {tx.preListingInspectionOrdered && (
+        <SectionCard title="Pre-Listing Inspection" icon={<Hammer className="h-4 w-4" />}>
+          <Grid3>
+            <Dl label="Ordered" value={tx.preListingInspectionOrdered ? 'Yes' : 'No'} />
+            <Dl label="Target Date" value={formatDate(tx.preListingTargetInspectionDate)} />
+            <Dl label="Inspector" value={tx.preListingInspectorName} />
+            <Dl label="TC Scheduling" value={tx.preListingTcScheduleInspections ? 'Yes' : null} />
+            <Dl label="Notes" value={tx.preListingTcScheduleInspectionsOther} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── Buyer Inspection ─────────────────────────────────────────────────── */}
+      {tx.inspectionOrdered && (
+        <SectionCard title="Buyer Inspection" icon={<Hammer className="h-4 w-4" />}>
+          <Grid3>
+            <Dl label="Ordered" value={tx.inspectionOrdered ? 'Yes' : 'No'} />
+            <Dl label="Target Date" value={formatDate(tx.targetInspectionDate)} />
+            <Dl label="Inspector" value={tx.inspectorName} />
+            <Dl label="TC Scheduling" value={tx.tcScheduleInspections ? 'Yes' : null} />
+            <Dl label="Notes" value={tx.tcScheduleInspectionsOther} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── Media Order ──────────────────────────────────────────────────────── */}
+      {(tx.mediaTypes?.length > 0 || tx.mediaRequestedDate || tx.mediaNotes) && (
+        <SectionCard title="Media Order" icon={<MapPin className="h-4 w-4" />} defaultCollapsed={true}>
+          <Grid3>
+            <Dl label="Requested Date" value={formatDate(tx.mediaRequestedDate)} />
+            <Dl label="Media Types" value={Array.isArray(tx.mediaTypes) ? tx.mediaTypes.join(', ') : tx.mediaTypes} />
+            <Dl label="Notes" value={tx.mediaNotes} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── Sign Order ───────────────────────────────────────────────────────── */}
+      {tx.signOrderRequested && (
+        <SectionCard title="Sign Order" icon={<Hammer className="h-4 w-4" />} defaultCollapsed={true}>
+          <Grid3>
+            <Dl label="Service Type" value={tx.signServiceType} />
+            <Dl label="Rider / Extension" value={tx.signRiderExt} />
+            <Dl label="Requested Install Date" value={formatDate(tx.signRequestedDate)} />
+            <Dl label="Owner Name" value={tx.signOwnerName} />
+            <Dl label="Special Requests" value={tx.signSpecialRequests} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── ShowingTime ──────────────────────────────────────────────────────── */}
+      {tx.showingTimeRequested && (
+        <SectionCard title="ShowingTime Setup" icon={<Calendar className="h-4 w-4" />} defaultCollapsed={true}>
+          <Grid3>
+            <Dl label="New or Change" value={tx.showingNewOrChange} />
+            <Dl label="Appointment Handling" value={tx.showingApptHandling} />
+            <Dl label="Appointment Type" value={tx.showingApptType} />
+            <Dl label="Lockbox Type" value={tx.showingLockboxType} />
+            <Dl label="Lockbox Location" value={tx.showingLockboxLocation} />
+            <Dl label="Access Type" value={tx.showingAccessType} />
+            <Dl label="Alarm Disarm Code" value={tx.showingDisarmCode} />
+            <Dl label="Alarm Arm Code" value={tx.showingArmCode} />
+            <Dl label="Lead Time Required" value={tx.showingLeadTimeRequired} />
+          </Grid3>
+          {tx.showingAccessNotes && (
+            <div className="mt-3">
+              <dt className="text-xs text-muted-foreground">Access Notes</dt>
+              <dd className="text-sm mt-0.5">{tx.showingAccessNotes}</dd>
+            </div>
+          )}
+          {tx.showingNotesToAgent && (
+            <div className="mt-3">
+              <dt className="text-xs text-muted-foreground">Notes to Showing Agent</dt>
+              <dd className="text-sm mt-0.5">{tx.showingNotesToAgent}</dd>
+            </div>
+          )}
+          {tx.showingNotesToStaff && (
+            <div className="mt-3">
+              <dt className="text-xs text-muted-foreground">Notes to Staff</dt>
+              <dd className="text-sm mt-0.5">{tx.showingNotesToStaff}</dd>
+            </div>
+          )}
+          {tx.showingCallOrder2Name && (
+            <div className="mt-3 border rounded-md p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Call Order Contact #2</p>
+              <Grid3>
+                <Dl label="Name" value={tx.showingCallOrder2Name} />
+                <Dl label="Mobile" value={tx.showingCallOrder2Mobile} />
+                <Dl label="Email" value={tx.showingCallOrder2Email} />
+              </Grid3>
+            </div>
+          )}
+          {tx.showingCallOrder3Name && (
+            <div className="mt-3 border rounded-md p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Call Order Contact #3</p>
+              <Grid3>
+                <Dl label="Name" value={tx.showingCallOrder3Name} />
+                <Dl label="Mobile" value={tx.showingCallOrder3Mobile} />
+                <Dl label="Email" value={tx.showingCallOrder3Email} />
+              </Grid3>
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {/* ── Additional Info ──────────────────────────────────────────────────── */}
+      {(tx.warrantyAtClosing || tx.occupancyAgreement || tx.shortageInCommission || tx.txComplianceFee) && (
+        <SectionCard title="Additional Transaction Info" icon={<Info className="h-4 w-4" />} defaultCollapsed={true}>
+          <Grid3>
+            <Dl label="Warranty at Closing" value={tx.warrantyAtClosing} />
+            <Dl label="Warranty Amount" value={tx.warrantyAmount ? `$${Number(tx.warrantyAmount).toLocaleString()}` : null} />
+            <Dl label="Warranty Paid By" value={tx.warrantyPaidBy} />
+            <Dl label="Occupancy Agreement" value={tx.occupancyAgreement} />
+            <Dl label="Occupancy Dates" value={tx.occupancyDates} />
+            <Dl label="Shortage in Commission" value={tx.shortageInCommission} />
+            <Dl label="Shortage Amount" value={tx.shortageAmount ? `$${Number(tx.shortageAmount).toLocaleString()}` : null} />
+            <Dl label="Compliance Fee" value={tx.txComplianceFee} />
+            <Dl label="Compliance Fee Amount" value={tx.txComplianceFeeAmount ? `$${Number(tx.txComplianceFeeAmount).toLocaleString()}` : null} />
+            <Dl label="Compliance Fee Paid By" value={tx.txComplianceFeePaidBy} />
+          </Grid3>
+        </SectionCard>
+      )}
+
+      {/* ── Referrals ────────────────────────────────────────────────────────── */}
+      {(tx.hasOutboundReferral || tx.hasInboundReferral) && (
+        <SectionCard title="Referral Information" icon={<Users className="h-4 w-4" />} defaultCollapsed={true}>
+          {tx.hasOutboundReferral && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Outbound Referral</p>
+              <Grid3>
+                <Dl label="Referral Agent" value={tx.outboundReferralAgentName} />
+                <Dl label="Brokerage" value={tx.outboundReferralBrokerage} />
+                <Dl label="Fee %" value={tx.outboundReferralFeePercent != null ? `${tx.outboundReferralFeePercent}%` : null} />
+              </Grid3>
+            </div>
+          )}
+          {tx.hasInboundReferral && (
+            <div className={tx.hasOutboundReferral ? 'mt-4' : ''}>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Inbound Referral</p>
+              <Grid3>
+                <Dl label="Referring Agent" value={tx.inboundReferralAgentName} />
+                <Dl label="Fee %" value={tx.inboundReferralFeePercent != null ? `${tx.inboundReferralFeePercent}%` : null} />
+              </Grid3>
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {/* ── Notes ────────────────────────────────────────────────────────────── */}
+      {(tx.notes || tx.additionalComments) && (
+        <SectionCard title="Notes" icon={<Info className="h-4 w-4" />}>
+          {tx.notes && (
+            <div>
+              <dt className="text-xs text-muted-foreground mb-1">Transaction Notes</dt>
+              <dd className="text-sm whitespace-pre-wrap">{tx.notes}</dd>
+            </div>
+          )}
+          {tx.additionalComments && (
+            <div className={tx.notes ? 'mt-3' : ''}>
+              <dt className="text-xs text-muted-foreground mb-1">Additional Comments</dt>
+              <dd className="text-sm whitespace-pre-wrap">{tx.additionalComments}</dd>
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {/* ── Documents ────────────────────────────────────────────────────────── */}
+      {Array.isArray(tx.documents) && tx.documents.length > 0 && (
+        <SectionCard title="Documents" icon={<FileText className="h-4 w-4" />}>
+          <div className="space-y-2">
+            {tx.documents.map((doc: any, idx: number) => (
+              <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
+                <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <a
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1"
+                  >
+                    {doc.name}
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                  </a>
+                  {doc.uploadedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(doc.uploadedAt)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
       )}
     </div>
   );

@@ -165,6 +165,110 @@ const schema = z.object({
   txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   txComplianceFeePaidBy: z.string().optional(),
 
+  // MLS
+  mlsNumber: z.string().optional(),
+  listingExpirationDate: z.string().optional().or(z.literal('')),
+  mlsDescription: z.string().optional(),
+
+  // Pre-listing inspection
+  preListingInspectionOrdered: z.boolean().optional(),
+  preListingTargetInspectionDate: z.string().optional().or(z.literal('')),
+  preListingInspectionTypes: z.array(z.string()).optional(),
+  preListingTcScheduleInspections: z.boolean().optional(),
+  preListingTcScheduleInspectionsOther: z.string().optional(),
+  preListingInspectorName: z.string().optional(),
+
+  // Buyer inspection
+  inspectionOrdered: z.boolean().optional(),
+  targetInspectionDate: z.string().optional().or(z.literal('')),
+  inspectionTypes: z.array(z.string()).optional(),
+  tcScheduleInspections: z.boolean().optional(),
+  tcScheduleInspectionsOther: z.string().optional(),
+  inspectorName: z.string().optional(),
+
+  // Media order
+  mediaTypes: z.array(z.string()).optional(),
+  mediaRequestedDate: z.string().optional().or(z.literal('')),
+  mediaNotes: z.string().optional(),
+
+  // Sign order
+  signOrderRequested: z.boolean().optional(),
+  signServiceType: z.string().optional(),
+  signAdditionalOptions: z.array(z.string()).optional(),
+  signRiderExt: z.string().optional(),
+  signRequestedDate: z.string().optional().or(z.literal('')),
+  signOwnerName: z.string().optional(),
+  signSpecialRequests: z.string().optional(),
+
+  // ShowingTime
+  showingTimeRequested: z.boolean().optional(),
+  showingNewOrChange: z.string().optional(),
+  showingApptHandling: z.string().optional(),
+  showingApptType: z.string().optional(),
+  showingNoSameDayAppts: z.boolean().optional(),
+  showingLeadTimeRequired: z.string().optional(),
+  showingLeadTimeSuggested: z.string().optional(),
+  showingMaxApptLength: z.string().optional(),
+  showingApptOverlaps: z.boolean().optional(),
+  showingVirtualPreference: z.string().optional(),
+  showingShareAgentInfo: z.boolean().optional(),
+  showingLockboxType: z.string().optional(),
+  showingLockboxLocation: z.string().optional(),
+  showingAccessType: z.string().optional(),
+  showingAccessNotes: z.string().optional(),
+  showingAccessDoor: z.string().optional(),
+  showingDisarmCode: z.string().optional(),
+  showingArmCode: z.string().optional(),
+  showingPasscode: z.string().optional(),
+  showingAlarmNotes: z.string().optional(),
+  showingAlarmDisarm: z.string().optional(),
+  showingAlarmArm: z.string().optional(),
+  showingNotesToAgent: z.string().optional(),
+  showingNotesToAgentOther: z.string().optional(),
+  showingNotesToStaff: z.string().optional(),
+  showingCallOrder2Name: z.string().optional(),
+  showingCallOrder2Mobile: z.string().optional(),
+  showingCallOrder2AltPhone: z.string().optional(),
+  showingCallOrder2Email: z.string().optional(),
+  showingCallOrder2Type: z.string().optional(),
+  showingCallOrder2Confirm: z.boolean().optional(),
+  showingCallOrder2Notify: z.boolean().optional(),
+  showingCallOrder3Name: z.string().optional(),
+  showingCallOrder3Mobile: z.string().optional(),
+  showingCallOrder3AltPhone: z.string().optional(),
+  showingCallOrder3Email: z.string().optional(),
+  showingCallOrder3Type: z.string().optional(),
+  showingCallOrder3Confirm: z.boolean().optional(),
+  showingCallOrder3Notify: z.boolean().optional(),
+
+  // Warranty / occupancy / shortage
+  warrantyAtClosing: z.string().optional(),
+  warrantyAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+  warrantyPaidBy: z.string().optional(),
+  occupancyAgreement: z.string().optional(),
+  occupancyDates: z.string().optional(),
+  shortageInCommission: z.string().optional(),
+  shortageAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Referrals
+  hasOutboundReferral: z.boolean().optional(),
+  outboundReferralAgentName: z.string().optional(),
+  outboundReferralBrokerage: z.string().optional(),
+  outboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  outboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+  hasInboundReferral: z.boolean().optional(),
+  inboundReferralAgentName: z.string().optional(),
+  inboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  inboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Seller commission fields
+  sellerPayingListingAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  sellerPayingBuyerAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+
+  // Buyer closing costs
+  buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
+
   staffNotes: z.string().optional(),
   notes: z.string().optional(),
   additionalComments: z.string().optional(),
@@ -387,6 +491,100 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           txComplianceFee: src.txComplianceFee || undefined,
           txComplianceFeeAmount: src.txComplianceFeeAmount ?? '',
           txComplianceFeePaidBy: src.txComplianceFeePaidBy || '',
+          // MLS
+          mlsNumber: src.mlsNumber || '',
+          listingExpirationDate: src.listingExpirationDate?.split('T')[0] || '',
+          mlsDescription: src.mlsDescription || '',
+          // Pre-listing inspection
+          preListingInspectionOrdered: !!src.preListingInspectionOrdered,
+          preListingTargetInspectionDate: src.preListingTargetInspectionDate?.split('T')[0] || '',
+          preListingInspectionTypes: src.preListingInspectionTypes || [],
+          preListingTcScheduleInspections: !!src.preListingTcScheduleInspections,
+          preListingTcScheduleInspectionsOther: src.preListingTcScheduleInspectionsOther || '',
+          preListingInspectorName: src.preListingInspectorName || '',
+          // Buyer inspection
+          inspectionOrdered: !!src.inspectionOrdered,
+          targetInspectionDate: src.targetInspectionDate?.split('T')[0] || '',
+          inspectionTypes: src.inspectionTypes || [],
+          tcScheduleInspections: !!src.tcScheduleInspections,
+          tcScheduleInspectionsOther: src.tcScheduleInspectionsOther || '',
+          inspectorName: src.inspectorName || '',
+          // Media order
+          mediaTypes: src.mediaTypes || [],
+          mediaRequestedDate: src.mediaRequestedDate?.split('T')[0] || '',
+          mediaNotes: src.mediaNotes || '',
+          // Sign order
+          signOrderRequested: !!src.signOrderRequested,
+          signServiceType: src.signServiceType || '',
+          signAdditionalOptions: src.signAdditionalOptions || [],
+          signRiderExt: src.signRiderExt || '',
+          signRequestedDate: src.signRequestedDate?.split('T')[0] || '',
+          signOwnerName: src.signOwnerName || '',
+          signSpecialRequests: src.signSpecialRequests || '',
+          // ShowingTime
+          showingTimeRequested: !!src.showingTimeRequested,
+          showingNewOrChange: src.showingNewOrChange || '',
+          showingApptHandling: src.showingApptHandling || '',
+          showingApptType: src.showingApptType || '',
+          showingNoSameDayAppts: !!src.showingNoSameDayAppts,
+          showingLeadTimeRequired: src.showingLeadTimeRequired || '',
+          showingLeadTimeSuggested: src.showingLeadTimeSuggested || '',
+          showingMaxApptLength: src.showingMaxApptLength || '',
+          showingApptOverlaps: !!src.showingApptOverlaps,
+          showingVirtualPreference: src.showingVirtualPreference || '',
+          showingShareAgentInfo: !!src.showingShareAgentInfo,
+          showingLockboxType: src.showingLockboxType || '',
+          showingLockboxLocation: src.showingLockboxLocation || '',
+          showingAccessType: src.showingAccessType || '',
+          showingAccessNotes: src.showingAccessNotes || '',
+          showingAccessDoor: src.showingAccessDoor || '',
+          showingDisarmCode: src.showingDisarmCode || '',
+          showingArmCode: src.showingArmCode || '',
+          showingPasscode: src.showingPasscode || '',
+          showingAlarmNotes: src.showingAlarmNotes || '',
+          showingAlarmDisarm: src.showingAlarmDisarm || '',
+          showingAlarmArm: src.showingAlarmArm || '',
+          showingNotesToAgent: src.showingNotesToAgent || '',
+          showingNotesToAgentOther: src.showingNotesToAgentOther || '',
+          showingNotesToStaff: src.showingNotesToStaff || '',
+          showingCallOrder2Name: src.showingCallOrder2Name || '',
+          showingCallOrder2Mobile: src.showingCallOrder2Mobile || '',
+          showingCallOrder2AltPhone: src.showingCallOrder2AltPhone || '',
+          showingCallOrder2Email: src.showingCallOrder2Email || '',
+          showingCallOrder2Type: src.showingCallOrder2Type || '',
+          showingCallOrder2Confirm: !!src.showingCallOrder2Confirm,
+          showingCallOrder2Notify: !!src.showingCallOrder2Notify,
+          showingCallOrder3Name: src.showingCallOrder3Name || '',
+          showingCallOrder3Mobile: src.showingCallOrder3Mobile || '',
+          showingCallOrder3AltPhone: src.showingCallOrder3AltPhone || '',
+          showingCallOrder3Email: src.showingCallOrder3Email || '',
+          showingCallOrder3Type: src.showingCallOrder3Type || '',
+          showingCallOrder3Confirm: !!src.showingCallOrder3Confirm,
+          showingCallOrder3Notify: !!src.showingCallOrder3Notify,
+          // Warranty / occupancy / shortage
+          warrantyAtClosing: src.warrantyAtClosing || '',
+          warrantyAmount: src.warrantyAmount ?? '',
+          warrantyPaidBy: src.warrantyPaidBy || '',
+          occupancyAgreement: src.occupancyAgreement || '',
+          occupancyDates: src.occupancyDates || '',
+          shortageInCommission: src.shortageInCommission || '',
+          shortageAmount: src.shortageAmount ?? '',
+          // Referrals
+          hasOutboundReferral: !!src.hasOutboundReferral,
+          outboundReferralAgentName: src.outboundReferralAgentName || '',
+          outboundReferralBrokerage: src.outboundReferralBrokerage || '',
+          outboundReferralFeePercent: src.outboundReferralFeePercent ?? '',
+          outboundReferralFeeDollar: src.outboundReferralFeeDollar ?? '',
+          hasInboundReferral: !!src.hasInboundReferral,
+          inboundReferralAgentName: src.inboundReferralAgentName || '',
+          inboundReferralFeePercent: src.inboundReferralFeePercent ?? '',
+          inboundReferralFeeDollar: src.inboundReferralFeeDollar ?? '',
+          // Seller commission
+          sellerPayingListingAgent: src.sellerPayingListingAgent ?? '',
+          sellerPayingBuyerAgent: src.sellerPayingBuyerAgent ?? '',
+          // Buyer closing costs
+          buyerClosingCostTotal: src.buyerClosingCostTotal ?? '',
+          buyerBringToClosing: src.buyerBringToClosing ?? '',
           staffNotes: data.item.staffNotes || '',
           notes: src.notes || '',
           additionalComments: src.additionalComments || '',
@@ -1735,6 +1933,270 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           </SectionCard>
 
           {/* Compliance Fee */}
+          {/* ── MLS Information ────────────────────────────────────────────── */}
+          <SectionCard title="MLS Information" icon={<Info className="h-4 w-4" />}>
+            <Grid3>
+              <FormField control={form.control} name="mlsNumber" render={({ field }) => (
+                <FormItem><FormLabel>MLS Number</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="listingExpirationDate" render={({ field }) => (
+                <FormItem><FormLabel>Listing Expiration Date</FormLabel><FormControl><Input {...field} type="date" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <FormField control={form.control} name="mlsDescription" render={({ field }) => (
+              <FormItem><FormLabel>MLS Description</FormLabel><FormControl><Textarea {...field} rows={4} disabled={isReadOnly} /></FormControl></FormItem>
+            )} />
+          </SectionCard>
+
+          {/* ── Pre-Listing Inspection ─────────────────────────────────────── */}
+          <SectionCard title="Pre-Listing Inspection" icon={<Hammer className="h-4 w-4" />}>
+            <Grid2>
+              <FormField control={form.control} name="preListingInspectionOrdered" render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="font-normal">Pre-listing inspection ordered</FormLabel>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="font-normal">TC to schedule inspection</FormLabel>
+                </FormItem>
+              )} />
+            </Grid2>
+            <Grid3>
+              <FormField control={form.control} name="preListingTargetInspectionDate" render={({ field }) => (
+                <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input {...field} type="date" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="preListingInspectorName" render={({ field }) => (
+                <FormItem><FormLabel>Inspector Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="preListingTcScheduleInspectionsOther" render={({ field }) => (
+                <FormItem><FormLabel>Inspection Notes</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* ── Buyer Inspection ──────────────────────────────────────────── */}
+          <SectionCard title="Buyer Inspection" icon={<Hammer className="h-4 w-4" />}>
+            <Grid2>
+              <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="font-normal">Inspection ordered</FormLabel>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="font-normal">TC to schedule inspection</FormLabel>
+                </FormItem>
+              )} />
+            </Grid2>
+            <Grid3>
+              <FormField control={form.control} name="targetInspectionDate" render={({ field }) => (
+                <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input {...field} type="date" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="inspectorName" render={({ field }) => (
+                <FormItem><FormLabel>Inspector Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="tcScheduleInspectionsOther" render={({ field }) => (
+                <FormItem><FormLabel>Inspection Notes</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* ── Media Order ───────────────────────────────────────────────── */}
+          <SectionCard title="Media Order" icon={<MapPin className="h-4 w-4" />}>
+            <Grid2>
+              <FormField control={form.control} name="mediaRequestedDate" render={({ field }) => (
+                <FormItem><FormLabel>Requested Date</FormLabel><FormControl><Input {...field} type="date" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid2>
+            <FormField control={form.control} name="mediaNotes" render={({ field }) => (
+              <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
+            )} />
+          </SectionCard>
+
+          {/* ── Sign Order ────────────────────────────────────────────────── */}
+          <SectionCard title="Sign Order" icon={<Hammer className="h-4 w-4" />}>
+            <FormField control={form.control} name="signOrderRequested" render={({ field }) => (
+              <FormItem className="flex items-center gap-2 space-y-0">
+                <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                <FormLabel className="font-normal">Sign order requested</FormLabel>
+              </FormItem>
+            )} />
+            <Grid3>
+              <FormField control={form.control} name="signServiceType" render={({ field }) => (
+                <FormItem><FormLabel>Service Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="signRiderExt" render={({ field }) => (
+                <FormItem><FormLabel>Rider / Extension</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
+                <FormItem><FormLabel>Requested Install Date</FormLabel><FormControl><Input {...field} type="date" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="signOwnerName" render={({ field }) => (
+                <FormItem><FormLabel>Owner Name (for sign)</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
+              <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
+            )} />
+          </SectionCard>
+
+          {/* ── ShowingTime Setup ─────────────────────────────────────────── */}
+          <SectionCard title="ShowingTime Setup" icon={<Calendar className="h-4 w-4" />}>
+            <FormField control={form.control} name="showingTimeRequested" render={({ field }) => (
+              <FormItem className="flex items-center gap-2 space-y-0">
+                <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                <FormLabel className="font-normal">ShowingTime setup requested</FormLabel>
+              </FormItem>
+            )} />
+            <Grid3>
+              <FormField control={form.control} name="showingNewOrChange" render={({ field }) => (
+                <FormItem><FormLabel>New or Change</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingApptHandling" render={({ field }) => (
+                <FormItem><FormLabel>Appointment Handling</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingApptType" render={({ field }) => (
+                <FormItem><FormLabel>Appointment Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingLockboxType" render={({ field }) => (
+                <FormItem><FormLabel>Lockbox Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingLockboxLocation" render={({ field }) => (
+                <FormItem><FormLabel>Lockbox Location</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingAccessType" render={({ field }) => (
+                <FormItem><FormLabel>Access Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingDisarmCode" render={({ field }) => (
+                <FormItem><FormLabel>Alarm Disarm Code</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingArmCode" render={({ field }) => (
+                <FormItem><FormLabel>Alarm Arm Code</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="showingLeadTimeRequired" render={({ field }) => (
+                <FormItem><FormLabel>Lead Time Required</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <FormField control={form.control} name="showingAccessNotes" render={({ field }) => (
+              <FormItem><FormLabel>Access Notes</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
+            )} />
+            <FormField control={form.control} name="showingNotesToAgent" render={({ field }) => (
+              <FormItem><FormLabel>Notes to Showing Agent</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
+            )} />
+            <FormField control={form.control} name="showingNotesToStaff" render={({ field }) => (
+              <FormItem><FormLabel>Notes to Staff</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
+            )} />
+            {/* Call Order 2 */}
+            <div className="border rounded-md p-4 space-y-3">
+              <p className="text-sm font-medium text-muted-foreground">Call Order Contact #2</p>
+              <Grid3>
+                <FormField control={form.control} name="showingCallOrder2Name" render={({ field }) => (
+                  <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="showingCallOrder2Mobile" render={({ field }) => (
+                  <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="showingCallOrder2Email" render={({ field }) => (
+                  <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+              </Grid3>
+            </div>
+            {/* Call Order 3 */}
+            <div className="border rounded-md p-4 space-y-3">
+              <p className="text-sm font-medium text-muted-foreground">Call Order Contact #3</p>
+              <Grid3>
+                <FormField control={form.control} name="showingCallOrder3Name" render={({ field }) => (
+                  <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="showingCallOrder3Mobile" render={({ field }) => (
+                  <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="showingCallOrder3Email" render={({ field }) => (
+                  <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+              </Grid3>
+            </div>
+          </SectionCard>
+
+          {/* ── Warranty / Occupancy / Shortage ───────────────────────────── */}
+          <SectionCard title="Additional Transaction Info" icon={<Info className="h-4 w-4" />}>
+            <Grid3>
+              <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
+                <FormItem><FormLabel>Warranty at Closing</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="warrantyAmount" render={({ field }) => (
+                <FormItem><FormLabel>Warranty Amount ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="warrantyPaidBy" render={({ field }) => (
+                <FormItem><FormLabel>Warranty Paid By</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="occupancyAgreement" render={({ field }) => (
+                <FormItem><FormLabel>Occupancy Agreement</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="occupancyDates" render={({ field }) => (
+                <FormItem><FormLabel>Occupancy Dates</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="shortageInCommission" render={({ field }) => (
+                <FormItem><FormLabel>Shortage in Commission</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="shortageAmount" render={({ field }) => (
+                <FormItem><FormLabel>Shortage Amount ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostTotal" render={({ field }) => (
+                <FormItem><FormLabel>Buyer Closing Costs (Total $)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
+                <FormItem><FormLabel>Buyer Bring to Closing ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+          </SectionCard>
+
+          {/* ── Referrals ─────────────────────────────────────────────────── */}
+          <SectionCard title="Referral Information" icon={<Users className="h-4 w-4" />}>
+            <div className="space-y-4">
+              <FormField control={form.control} name="hasOutboundReferral" render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="font-normal">Outbound referral fee applies</FormLabel>
+                </FormItem>
+              )} />
+              <Grid3>
+                <FormField control={form.control} name="outboundReferralAgentName" render={({ field }) => (
+                  <FormItem><FormLabel>Referral Agent Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="outboundReferralBrokerage" render={({ field }) => (
+                  <FormItem><FormLabel>Referral Brokerage</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="outboundReferralFeePercent" render={({ field }) => (
+                  <FormItem><FormLabel>Referral Fee (%)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+              </Grid3>
+            </div>
+            <Separator />
+            <div className="space-y-4">
+              <FormField control={form.control} name="hasInboundReferral" render={({ field }) => (
+                <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="font-normal">Inbound referral fee applies</FormLabel>
+                </FormItem>
+              )} />
+              <Grid3>
+                <FormField control={form.control} name="inboundReferralAgentName" render={({ field }) => (
+                  <FormItem><FormLabel>Referring Agent Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="inboundReferralFeePercent" render={({ field }) => (
+                  <FormItem><FormLabel>Inbound Fee (%)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+              </Grid3>
+            </div>
+          </SectionCard>
+
+          {/* ── Transaction Compliance Fee ─────────────────────────────────── */}
           <SectionCard title="Transaction Compliance Fee">
             <Grid3>
               <FormField control={form.control} name="txComplianceFee" render={({ field }) => (

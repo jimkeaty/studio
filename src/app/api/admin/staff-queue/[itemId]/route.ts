@@ -33,23 +33,74 @@ function jsonError(status: number, error: string) {
 
 // All transaction fields staff can edit from the Staff Queue detail page
 const EDITABLE_TX_FIELDS = new Set([
+  // Core
   'status', 'address', 'propertyAddress', 'closingType', 'dealType', 'dealSource',
-  'clientName', 'clientEmail', 'clientPhone', 'clientNewAddress',
+  'clientName', 'mlsNumber', 'listingExpirationDate', 'mlsDescription',
+  // Client contacts
+  'clientType', 'clientEmail', 'clientPhone', 'clientNewAddress',
   'client2Name', 'client2Email', 'client2Phone',
+  // Buyer contacts
   'buyerName', 'buyerEmail', 'buyerPhone', 'buyer2Name', 'buyer2Email', 'buyer2Phone',
   'buyer3Name', 'buyer3Email', 'buyer3Phone', 'buyer4Name', 'buyer4Email', 'buyer4Phone',
+  // Seller contacts
   'sellerName', 'sellerEmail', 'sellerPhone', 'seller2Name', 'seller2Email', 'seller2Phone',
   'seller3Name', 'seller3Email', 'seller3Phone', 'seller4Name', 'seller4Email', 'seller4Phone',
-  'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage',
-  'listPrice', 'salePrice', 'commissionPercent', 'gci', 'transactionFee',
-  'brokerPct', 'brokerGci', 'agentPct', 'agentDollar', 'earnestMoney',
-  'listingDate', 'contractDate', 'closedDate', 'projectedCloseDate',
+  // Other agent
+  'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage', 'otherAgentBrokerage',
+  // Financial
+  'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'gci',
+  'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
+  'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
+  'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+  // Dates
+  'listingDate', 'contractDate', 'closedDate', 'closingDate', 'projectedCloseDate',
   'optionExpiration', 'inspectionDeadline', 'surveyDeadline',
   'loanApplicationDeadline', 'appraisalDeadline', 'titleDeadline', 'finalLoanCommitmentDeadline',
+  // Lender
   'mortgageCompany', 'lenderOffice', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
+  // Title
   'titleCompany', 'titleOffice', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone', 'titleAttorney',
+  // Pre-listing inspection
+  'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
+  'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
+  // Buyer inspection
+  'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
+  'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
+  // Media order
+  'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
+  // Sign order
+  'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
+  'signRequestedDate', 'signOwnerName', 'signSpecialRequests',
+  // ShowingTime
+  'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
+  'showingNoSameDayAppts', 'showingLeadTimeRequired', 'showingLeadTimeSuggested',
+  'showingMaxApptLength', 'showingApptOverlaps', 'showingVirtualPreference', 'showingShareAgentInfo',
+  'showingLockboxType', 'showingLockboxLocation', 'showingAccessType', 'showingAccessNotes',
+  'showingAccessDoor', 'showingDisarmCode', 'showingArmCode', 'showingPasscode', 'showingAlarmNotes',
+  'showingAlarmDisarm', 'showingAlarmArm',
+  'showingNotesToAgent', 'showingNotesToAgentOther', 'showingNotesToStaff',
+  'showingCallOrder2Name', 'showingCallOrder2Mobile', 'showingCallOrder2AltPhone',
+  'showingCallOrder2Email', 'showingCallOrder2Type', 'showingCallOrder2Confirm', 'showingCallOrder2Notify',
+  'showingCallOrder3Name', 'showingCallOrder3Mobile', 'showingCallOrder3AltPhone',
+  'showingCallOrder3Email', 'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
+  // Buyer closing costs
+  'buyerClosingCostTotal', 'buyerClosingCostAgentCommission',
+  'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther', 'buyerBringToClosing',
+  // Compliance / warranty
+  'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+  'occupancyAgreement', 'occupancyDates', 'shortageInCommission', 'shortageAmount',
+  // Referrals
+  'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
+  'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralFee',
+  'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
+  // Notes
   'notes', 'additionalComments', 'staffNotes',
+  // Co-agent
+  'hasCoAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
+  'primaryAgentSplitPercent', 'coAgentSplitPercent',
+  // Documents
+  'documents',
 ]);
 
 // Fields that trigger a commission recalculation when changed
