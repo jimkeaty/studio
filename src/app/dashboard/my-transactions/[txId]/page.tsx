@@ -1017,14 +1017,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                 >
                   Archive
                 </Button>
-                <Button
-                  type="button" variant="ghost" size="sm"
-                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                  onClick={() => handleDocDelete(doc.storagePath)}
-                  title="Delete document"
-                >
-                  Delete
-                </Button>
               </div>
             </div>
           ))}
@@ -1048,14 +1040,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                   title="Restore document"
                 >
                   Restore
-                </Button>
-                <Button
-                  type="button" variant="ghost" size="sm"
-                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                  onClick={() => handleDocDelete(doc.storagePath)}
-                  title="Delete document"
-                >
-                  Delete
                 </Button>
               </div>
             </div>
