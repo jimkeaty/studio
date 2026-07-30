@@ -155,6 +155,42 @@ const schema = z.object({
   // Notes
   notes: z.string().optional(),
   additionalComments: z.string().optional(),
+  // MLS
+  mlsNumber: z.string().optional(),
+  listingExpirationDate: z.string().optional(),
+  mlsDescription: z.string().optional(),
+  // Pre-listing inspection
+  preListingInspectionOrdered: z.string().optional(),
+  preListingTargetInspectionDate: z.string().optional(),
+  preListingInspectionTypes: z.array(z.string()).optional(),
+  preListingTcScheduleInspections: z.string().optional(),
+  preListingInspectorName: z.string().optional(),
+  // Sign order
+  signOrderRequested: z.boolean().optional(),
+  signServiceType: z.string().optional(),
+  signAdditionalOptions: z.array(z.string()).optional(),
+  signRiderExt: z.string().optional(),
+  signRequestedDate: z.string().optional(),
+  signOwnerName: z.string().optional(),
+  signSpecialRequests: z.string().optional(),
+  // ShowingTime
+  showingTimeRequested: z.boolean().optional(),
+  showingApptType: z.string().optional(),
+  showingAccessType: z.string().optional(),
+  showingLockboxType: z.string().optional(),
+  showingLockboxLocation: z.string().optional(),
+  showingAlarmCode: z.string().optional(),
+  showingDisarmCode: z.string().optional(),
+  showingArmCode: z.string().optional(),
+  showingNoSameDayAppts: z.boolean().optional(),
+  showingLeadTimeRequired: z.string().optional(),
+  showingMaxApptLength: z.string().optional(),
+  showingNotesToAgent: z.array(z.string()).optional(),
+  showingNotesToStaff: z.string().optional(),
+  showingCallOrder2Name: z.string().optional(),
+  showingCallOrder2Phone: z.string().optional(),
+  showingCallOrder3Name: z.string().optional(),
+  showingCallOrder3Phone: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -350,6 +386,42 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           txComplianceFeePaidBy: i.txComplianceFeePaidBy || '',
           notes: i.notes || '',
           additionalComments: i.additionalComments || '',
+          // MLS
+          mlsNumber: i.mlsNumber || '',
+          listingExpirationDate: i.listingExpirationDate || '',
+          mlsDescription: i.mlsDescription || '',
+          // Pre-listing inspection
+          preListingInspectionOrdered: i.preListingInspectionOrdered || '',
+          preListingTargetInspectionDate: i.preListingTargetInspectionDate || '',
+          preListingInspectionTypes: Array.isArray(i.preListingInspectionTypes) ? i.preListingInspectionTypes : [],
+          preListingTcScheduleInspections: i.preListingTcScheduleInspections || '',
+          preListingInspectorName: i.preListingInspectorName || '',
+          // Sign order
+          signOrderRequested: Boolean(i.signOrderRequested),
+          signServiceType: i.signServiceType || '',
+          signAdditionalOptions: Array.isArray(i.signAdditionalOptions) ? i.signAdditionalOptions : [],
+          signRiderExt: i.signRiderExt || '',
+          signRequestedDate: i.signRequestedDate || '',
+          signOwnerName: i.signOwnerName || '',
+          signSpecialRequests: i.signSpecialRequests || '',
+          // ShowingTime
+          showingTimeRequested: Boolean(i.showingTimeRequested),
+          showingApptType: i.showingApptType || '',
+          showingAccessType: i.showingAccessType || '',
+          showingLockboxType: i.showingLockboxType || '',
+          showingLockboxLocation: i.showingLockboxLocation || '',
+          showingAlarmCode: i.showingAlarmCode || '',
+          showingDisarmCode: i.showingDisarmCode || '',
+          showingArmCode: i.showingArmCode || '',
+          showingNoSameDayAppts: Boolean(i.showingNoSameDayAppts),
+          showingLeadTimeRequired: i.showingLeadTimeRequired || '',
+          showingMaxApptLength: i.showingMaxApptLength || '',
+          showingNotesToAgent: Array.isArray(i.showingNotesToAgent) ? i.showingNotesToAgent : [],
+          showingNotesToStaff: i.showingNotesToStaff || '',
+          showingCallOrder2Name: i.showingCallOrder2Name || '',
+          showingCallOrder2Phone: i.showingCallOrder2Phone || '',
+          showingCallOrder3Name: i.showingCallOrder3Name || '',
+          showingCallOrder3Phone: i.showingCallOrder3Phone || '',
         });
 
         if (data.checklist) setChecklist(data.checklist);
@@ -1387,7 +1459,221 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             )}
           </SectionCard>
 
-          {/* Section 11: Notes */}
+          {/* Section 11: MLS Information */}
+          {(intake?.closingType === 'listing' || intake?.closingType === 'dual') && (
+            <SectionCard title="MLS Information">
+              <Grid3>
+                <FormField control={form.control} name="mlsNumber" render={({ field }) => (
+                  <FormItem><FormLabel>MLS Number</FormLabel><FormControl><Input placeholder="MLS#" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="listingExpirationDate" render={({ field }) => (
+                  <FormItem><FormLabel>Listing Expiration Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+              </Grid3>
+              <FormField control={form.control} name="mlsDescription" render={({ field }) => (
+                <FormItem><FormLabel>MLS Description</FormLabel><FormControl><Textarea className="min-h-[120px]" placeholder="Property description for MLS..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </SectionCard>
+          )}
+
+          {/* Section 12: Pre-Listing Inspection */}
+          {(intake?.closingType === 'listing' || intake?.closingType === 'dual') && (
+            <SectionCard title="Pre-Listing Inspection">
+              <FormField control={form.control} name="preListingInspectionOrdered" render={({ field }) => (
+                <FormItem><FormLabel>Pre-Listing Inspection Ordered?</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              {form.watch('preListingInspectionOrdered') === 'yes' && (
+                <>
+                  <Grid2>
+                    <FormField control={form.control} name="preListingTargetInspectionDate" render={({ field }) => (
+                      <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="preListingInspectorName" render={({ field }) => (
+                      <FormItem><FormLabel>Inspector Name</FormLabel><FormControl><Input placeholder="Inspector company/name" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid2>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Inspection Types</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {['Home Inspection','Termite/WDO','Mold','Radon','Sewer Scope','Pool/Spa','Roof','Foundation','Electrical','HVAC','Plumbing','Other'].map((type) => (
+                        <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={(form.watch('preListingInspectionTypes') || []).includes(type)}
+                            onCheckedChange={(checked) => {
+                              const current = form.watch('preListingInspectionTypes') || [];
+                              form.setValue('preListingInspectionTypes', checked ? [...current, type] : current.filter((t: string) => t !== type));
+                            }}
+                            disabled={isReadOnly}
+                          />
+                          {type}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
+                    <FormItem><FormLabel>TC to Schedule Inspections?</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes — TC will schedule</SelectItem>
+                          <SelectItem value="no">No — Agent will schedule</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </>
+              )}
+            </SectionCard>
+          )}
+
+          {/* Section 13: Sign Order */}
+          {(intake?.closingType === 'listing' || intake?.closingType === 'dual') && (
+            <SectionCard title="Sign Order">
+              <FormField control={form.control} name="signOrderRequested" render={({ field }) => (
+                <FormItem className="flex items-center gap-3">
+                  <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="!mt-0">Sign Order Requested</FormLabel>
+                </FormItem>
+              )} />
+              {form.watch('signOrderRequested') && (
+                <>
+                  <Grid2>
+                    <FormField control={form.control} name="signServiceType" render={({ field }) => (
+                      <FormItem><FormLabel>Sign Service Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="Install Sign Post">Install Sign Post</SelectItem>
+                            <SelectItem value="Install Sign Post & Directional">Install Sign Post & Directional</SelectItem>
+                            <SelectItem value="Remove Sign Post">Remove Sign Post</SelectItem>
+                            <SelectItem value="Change Rider">Change Rider</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
+                      <FormItem><FormLabel>Requested Install Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid2>
+                  <Grid2>
+                    <FormField control={form.control} name="signRiderExt" render={({ field }) => (
+                      <FormItem><FormLabel>Rider / Extension</FormLabel><FormControl><Input placeholder="e.g. Text2, QR Code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="signOwnerName" render={({ field }) => (
+                      <FormItem><FormLabel>Owner Name (for sign)</FormLabel><FormControl><Input placeholder="Name on sign" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid2>
+                  <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
+                    <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea className="min-h-[60px]" placeholder="Any special instructions..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                </>
+              )}
+            </SectionCard>
+          )}
+
+          {/* Section 14: ShowingTime Setup */}
+          {(intake?.closingType === 'listing' || intake?.closingType === 'dual') && (
+            <SectionCard title="ShowingTime Setup">
+              <FormField control={form.control} name="showingTimeRequested" render={({ field }) => (
+                <FormItem className="flex items-center gap-3">
+                  <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel className="!mt-0">ShowingTime Setup Requested</FormLabel>
+                </FormItem>
+              )} />
+              {form.watch('showingTimeRequested') && (
+                <>
+                  <Grid3>
+                    <FormField control={form.control} name="showingApptType" render={({ field }) => (
+                      <FormItem><FormLabel>Appointment Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="Appointment Required">Appointment Required</SelectItem>
+                            <SelectItem value="Go & Show">Go & Show</SelectItem>
+                            <SelectItem value="Vacant">Vacant</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingAccessType" render={({ field }) => (
+                      <FormItem><FormLabel>Access Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="Lockbox">Lockbox</SelectItem>
+                            <SelectItem value="Combo Lockbox">Combo Lockbox</SelectItem>
+                            <SelectItem value="Electronic Lockbox">Electronic Lockbox</SelectItem>
+                            <SelectItem value="Call First">Call First</SelectItem>
+                            <SelectItem value="Vacant">Vacant</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingMaxApptLength" render={({ field }) => (
+                      <FormItem><FormLabel>Max Appt Length</FormLabel><FormControl><Input placeholder="e.g. 1 hour" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                  <Grid3>
+                    <FormField control={form.control} name="showingLockboxType" render={({ field }) => (
+                      <FormItem><FormLabel>Lockbox Type</FormLabel><FormControl><Input placeholder="e.g. Supra, Combo" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingLockboxLocation" render={({ field }) => (
+                      <FormItem><FormLabel>Lockbox Location</FormLabel><FormControl><Input placeholder="e.g. Front door" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingLeadTimeRequired" render={({ field }) => (
+                      <FormItem><FormLabel>Lead Time Required</FormLabel><FormControl><Input placeholder="e.g. 2 hours" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                  <Grid3>
+                    <FormField control={form.control} name="showingAlarmCode" render={({ field }) => (
+                      <FormItem><FormLabel>Alarm Code</FormLabel><FormControl><Input placeholder="Alarm code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingDisarmCode" render={({ field }) => (
+                      <FormItem><FormLabel>Disarm Code</FormLabel><FormControl><Input placeholder="Disarm code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingArmCode" render={({ field }) => (
+                      <FormItem><FormLabel>Arm Code</FormLabel><FormControl><Input placeholder="Arm code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                  <FormField control={form.control} name="showingNoSameDayAppts" render={({ field }) => (
+                    <FormItem className="flex items-center gap-3">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                      <FormLabel className="!mt-0">No Same-Day Appointments</FormLabel>
+                    </FormItem>
+                  )} />
+                  <Grid2>
+                    <FormField control={form.control} name="showingCallOrder2Name" render={({ field }) => (
+                      <FormItem><FormLabel>Call Order Contact 2 — Name</FormLabel><FormControl><Input placeholder="Name" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2Phone" render={({ field }) => (
+                      <FormItem><FormLabel>Call Order Contact 2 — Phone</FormLabel><FormControl><Input placeholder="Phone" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid2>
+                  <Grid2>
+                    <FormField control={form.control} name="showingCallOrder3Name" render={({ field }) => (
+                      <FormItem><FormLabel>Call Order Contact 3 — Name</FormLabel><FormControl><Input placeholder="Name" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3Phone" render={({ field }) => (
+                      <FormItem><FormLabel>Call Order Contact 3 — Phone</FormLabel><FormControl><Input placeholder="Phone" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid2>
+                  <FormField control={form.control} name="showingNotesToStaff" render={({ field }) => (
+                    <FormItem><FormLabel>Notes to Staff</FormLabel><FormControl><Textarea className="min-h-[60px]" placeholder="Internal notes for staff..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                </>
+              )}
+            </SectionCard>
+          )}
+
+          {/* Section 15: Notes */}
           <SectionCard title="Notes & Comments">
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem>
