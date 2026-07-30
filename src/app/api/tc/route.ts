@@ -276,9 +276,14 @@ export async function POST(req: NextRequest) {
     // This includes buyer transactions, listings, dual agency, and referrals.
     // If workingWithTc is false, skip tcIntakes entirely. The transaction doc is still
     // created below so the agent sees it in their ledger immediately.
+    //
+    // IMPORTANT: Pre-allocate document references so we can use a batch write.
+    // This ensures tcIntakes + transactions + staffQueue all succeed or all fail
+    // atomically, preventing orphaned staffQueue items that point to non-existent
+    // transaction documents (the root cause of the staff queue missing data bug).
     let ref: FirebaseFirestore.DocumentReference | null = null;
     if (workingWithTc) {
-      ref = await adminDb.collection('tcIntakes').add(intake);
+      ref = adminDb.collection('tcIntakes').doc(); // pre-allocate ID without writing yet
     }
 
     // ── Create a transactions doc immediately so the agent sees it right away ──
@@ -426,13 +431,58 @@ export async function POST(req: NextRequest) {
       createdAt: now,
       updatedAt: now,
     };
-    const txRef = await adminDb.collection('transactions').add(txDoc);
+
+    // ── Atomic batch write: tcIntakes + transactions + staffQueue ─────────────
+    // Pre-allocate the transaction document reference so we can link it in the
+    // staffQueue item before committing. All three writes go in one batch so
+    // they all succeed or all fail — no more orphaned staffQueue items.
+    const txRef = adminDb.collection('transactions').doc(); // pre-allocate ID
+    const mainBatch = adminDb.batch();
+
+    // Write the transaction document
+    mainBatch.set(txRef, txDoc);
+
+    // Write the TC intake document (if working with TC)
+    if (ref) {
+      // Add approvedTransactionId to intake so approval route can update the transaction in place
+      mainBatch.set(ref, { ...intake, approvedTransactionId: txRef.id });
+    }
+
+    // Write the staff queue item (if listing type)
+    let staffQueueRef: FirebaseFirestore.DocumentReference | null = null;
+    if (isListingType) {
+      staffQueueRef = adminDb.collection('staffQueue').doc();
+      const staffQueueItem: Record<string, any> = {
+        transactionId: txRef.id,
+        tcIntakeId: (workingWithTc && ref) ? ref.id : null,
+        agentId,
+        agentName: agentDisplayName,
+        submittedBy: uid,
+        submittedByName: agentDisplayName,
+        actionType: 'new_listing',
+        closingType,
+        previousStatus: null,
+        newStatus: toStr(body.status) || 'active',
+        notes: toStr(body.notes) || null,
+        tcWorking: workingWithTc,
+        status: 'pending_review',
+        reviewedBy: null,
+        reviewedByName: null,
+        reviewedAt: null,
+        staffNotes: null,
+        address: address,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      mainBatch.set(staffQueueRef, staffQueueItem);
+    }
+
+    // Commit all three writes atomically
+    await mainBatch.commit();
 
     if (ref) {
-      // Link the tcIntake back to this transaction so approval updates it in place
-      await ref.update({ approvedTransactionId: txRef.id });
-
       // Create default checklist items as a subcollection (same as admin-created intakes)
+      // These are non-critical and written after the main batch
       const defaultChecklist = [
         { order: 1, label: 'Contract received & verified' },
         { order: 2, label: 'Earnest money deposit confirmed' },
@@ -469,40 +519,8 @@ export async function POST(req: NextRequest) {
       await batch.commit();
     }
 
-    // ── Queue routing ─────────────────────────────────────────────────────────
-    // Rules:
-    //   - TC queue (tcIntakes): ANY transaction type (buyer, listing, dual, referral) where the
-    //     agent toggled "Working with TC" ON. The TC queue handles all transaction types.
-    //   - Staff queue: ALL listings go here (regardless of TC flag) so staff always sees new listings.
-    //     Buyer/referral transactions are NOT added to the staff queue on new submission — they appear
-    //     in the transaction ledger and only hit the staff queue when they close.
-    // Staff queue — always for listings
-    if (isListingType) {
-      const staffQueueItem: Record<string, any> = {
-        transactionId: txRef.id, // Link immediately since we create the transaction doc above
-        tcIntakeId: (workingWithTc && ref) ? ref.id : null, // Only link TC intake when agent is using TC
-        agentId,
-        agentName: agentDisplayName,
-        submittedBy: uid,
-        submittedByName: agentDisplayName,
-        actionType: 'new_listing',
-        closingType,
-        previousStatus: null,
-        newStatus: toStr(body.status) || 'active',
-        notes: toStr(body.notes) || null,
-        tcWorking: workingWithTc,
-        status: 'pending_review',
-        reviewedBy: null,
-        reviewedByName: null,
-        reviewedAt: null,
-        staffNotes: null,
-        address: address,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      };
-      await adminDb.collection('staffQueue').add(staffQueueItem);
-    }
-    // Buyer/referral transactions with workingWithTc=false are saved to the transaction ledger only (no staff queue or TC queue entry on new submission)
+    // Buyer/referral transactions with workingWithTc=false are saved to the transaction ledger only.
+    // Staff queue for listings was already written atomically in mainBatch above.
 
     // ── Agent Task Workflow: auto-create on new transaction ───────────────────
     try {
