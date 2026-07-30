@@ -21,7 +21,7 @@ import {
   ArrowLeft, CheckCircle2, ClipboardList, AlertTriangle,
   Home, Users, Calendar, ChevronDown, ChevronUp,
   Building2, User, Hammer, MapPin, Info, DollarSign, FileText, ExternalLink,
-  Save, Loader2, Camera, Eye, Wrench,
+  Save, Loader2, Camera, Eye, Wrench, Paintbrush,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -948,6 +948,35 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           )}
         </div>
       </SectionCard>
+
+      {/* ── Staging Consult ──────────────────────────────────────────── */}
+      {(transaction?.stagingConsultRequested || transaction?.stagingServiceType || transaction?.stagingConsultationDate || transaction?.stagingStagerName) && (
+        <SectionCard title="Staging Consult" icon={<Paintbrush className="h-4 w-4" />}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {transaction.stagingStagerName && <Dl label="Stager" value={transaction.stagingStagerName} />}
+            {transaction.stagingStagerEmail && <Dl label="Stager Email" value={transaction.stagingStagerEmail} />}
+            {transaction.stagingServiceType && <Dl label="Service Type" value={transaction.stagingServiceType} />}
+            {transaction.stagingPaymentMethod && <Dl label="Payment Method" value={transaction.stagingPaymentMethod} />}
+            {transaction.stagingCoordinateWith && <Dl label="Coordinate With" value={transaction.stagingCoordinateWith} />}
+            {transaction.stagingPhotographerDate && <Dl label="Photographer Date" value={transaction.stagingPhotographerDate} />}
+            {transaction.stagingConsultationDate && <Dl label="Consultation Date" value={transaction.stagingConsultationDate} />}
+            {transaction.stagingConsultationTime && <Dl label="Consultation Time" value={transaction.stagingConsultationTime} />}
+            {transaction.stagingCurrentlyOnMarket && <Dl label="Currently on Market" value={transaction.stagingCurrentlyOnMarket} />}
+            {transaction.stagingTargetedMarketDate && <Dl label="Targeted Market Date" value={transaction.stagingTargetedMarketDate} />}
+            {transaction.stagingHomeStyle && <Dl label="Home Style" value={transaction.stagingHomeStyle} />}
+            {transaction.stagingOccupancy && <Dl label="Occupancy" value={transaction.stagingOccupancy} />}
+            {transaction.stagingReasonForSelling && <Dl label="Reason for Selling" value={transaction.stagingReasonForSelling} />}
+            {transaction.stagingRequestSentAt && <Dl label="Request Sent" value={transaction.stagingRequestSentAt} />}
+          </div>
+          {transaction.stagingSpecialNotes && (
+            <div className="mt-3">
+              <p className="text-xs text-muted-foreground">Special Notes</p>
+              <p className="text-sm mt-0.5">{transaction.stagingSpecialNotes}</p>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground italic mt-2">Staging consult submitted with this transaction. Contact your TC or staff to update staging details.</p>
+        </SectionCard>
+      )}
 
       {/* ── Notes ─────────────────────────────────────────────────────────── */}
       <SectionCard title="Notes" icon={<FileText className="h-4 w-4" />}>

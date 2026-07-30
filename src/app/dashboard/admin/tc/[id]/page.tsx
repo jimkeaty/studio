@@ -33,7 +33,7 @@ import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, AlertTriangle, ExternalLink,
   ClipboardList, UserCheck, Clock, Activity, Archive, Trash2, DollarSign,
   Phone, Mail, Building2, User, Users, RefreshCw, Paperclip, FileText, UploadCloud, X,
-  Info, Hammer, MapPin, Calendar,
+  Info, Hammer, MapPin, Calendar, Paintbrush,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -2098,7 +2098,35 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             </SectionCard>
           )}
 
-          {/* Section 15: Notes */}
+          {/* Section 15: Staging Consult */}
+          {(intake?.stagingConsultRequested || intake?.stagingServiceType || intake?.stagingConsultationDate || intake?.stagingStagerName) && (
+            <SectionCard title="Staging Consult" icon={<Paintbrush className="h-4 w-4" />}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <Dl label="Stager" value={intake?.stagingStagerName} />
+                <Dl label="Stager Email" value={intake?.stagingStagerEmail} />
+                <Dl label="Service Type" value={intake?.stagingServiceType} />
+                <Dl label="Payment Method" value={intake?.stagingPaymentMethod} />
+                <Dl label="Coordinate With" value={intake?.stagingCoordinateWith} />
+                <Dl label="Photographer Date" value={formatDateShort(intake?.stagingPhotographerDate)} />
+                <Dl label="Consultation Date" value={formatDateShort(intake?.stagingConsultationDate)} />
+                <Dl label="Consultation Time" value={intake?.stagingConsultationTime} />
+                <Dl label="Currently on Market" value={intake?.stagingCurrentlyOnMarket} />
+                <Dl label="Targeted Market Date" value={formatDateShort(intake?.stagingTargetedMarketDate)} />
+                <Dl label="Home Style" value={intake?.stagingHomeStyle} />
+                <Dl label="Occupancy" value={intake?.stagingOccupancy} />
+                <Dl label="Reason for Selling" value={intake?.stagingReasonForSelling} />
+                <Dl label="Request Sent" value={formatDateShort(intake?.stagingRequestSentAt)} />
+              </div>
+              {intake?.stagingSpecialNotes && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Special Notes</p>
+                  <p className="text-sm mt-0.5">{intake.stagingSpecialNotes}</p>
+                </div>
+              )}
+            </SectionCard>
+          )}
+
+          {/* Section 16: Notes */}
           <SectionCard title="Notes & Comments">
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem>

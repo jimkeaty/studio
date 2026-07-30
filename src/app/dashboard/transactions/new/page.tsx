@@ -1915,7 +1915,30 @@ export default function AddTransactionPage() {
       const res = await fetch('/api/tc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...values, clientName: resolvedClientName, documents: uploadedDocs }),
+        body: JSON.stringify({
+          ...values,
+          clientName: resolvedClientName,
+          documents: uploadedDocs,
+          // Staging consult — include in main payload so it saves to the transaction document
+          ...(stagingSent ? {
+            stagingConsultRequested: true,
+            stagingServiceType: stagingRequestData.serviceType,
+            stagingCoordinateWith: stagingRequestData.coordinateWith,
+            stagingPhotographerDate: stagingRequestData.photographerDate,
+            stagingConsultationDate: stagingRequestData.consultationDate,
+            stagingConsultationTime: stagingRequestData.consultationTime,
+            stagingPaymentMethod: stagingRequestData.paymentMethod,
+            stagingCurrentlyOnMarket: stagingRequestData.currentlyOnMarket,
+            stagingTargetedMarketDate: stagingRequestData.targetedMarketDate,
+            stagingHomeStyle: stagingRequestData.homeStyle,
+            stagingOccupancy: stagingRequestData.occupancy,
+            stagingReasonForSelling: stagingRequestData.reasonForSelling,
+            stagingSpecialNotes: stagingRequestData.specialNotes,
+            stagingStagerName: stagers.find(s => s.id === stagingRequestData.stagerId)?.name || '',
+            stagingStagerEmail: stagers.find(s => s.id === stagingRequestData.stagerId)?.email || '',
+            stagingRequestSentAt: new Date().toISOString(),
+          } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Submission failed');

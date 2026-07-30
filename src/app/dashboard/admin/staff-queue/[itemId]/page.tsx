@@ -33,7 +33,7 @@ import {
   ArrowLeft, Check, CheckCircle2, XCircle, Eye, Save, ExternalLink,
   ClipboardList, UserCheck, Activity, Archive, Trash2,
   Phone, Mail, Building2, User, Users, RefreshCw, AlertTriangle, FileText, Paperclip,
-  UploadCloud, X, DollarSign, Banknote, Hammer, Calendar, MapPin, Info,
+  UploadCloud, X, DollarSign, Banknote, Hammer, Calendar, MapPin, Info, Paintbrush,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -2246,6 +2246,34 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
               )}
             </Grid3>
           </SectionCard>
+
+          {/* Staging Consult */}
+          {(transaction?.stagingConsultRequested || transaction?.stagingServiceType || transaction?.stagingConsultationDate || transaction?.stagingStagerName) && (
+            <SectionCard title="Staging Consult" icon={<Paintbrush className="h-4 w-4" />}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {transaction?.stagingStagerName && <Dl label="Stager" value={transaction.stagingStagerName} />}
+                {transaction?.stagingStagerEmail && <Dl label="Stager Email" value={transaction.stagingStagerEmail} />}
+                {transaction?.stagingServiceType && <Dl label="Service Type" value={transaction.stagingServiceType} />}
+                {transaction?.stagingPaymentMethod && <Dl label="Payment Method" value={transaction.stagingPaymentMethod} />}
+                {transaction?.stagingCoordinateWith && <Dl label="Coordinate With" value={transaction.stagingCoordinateWith} />}
+                {transaction?.stagingPhotographerDate && <Dl label="Photographer Date" value={transaction.stagingPhotographerDate} />}
+                {transaction?.stagingConsultationDate && <Dl label="Consultation Date" value={transaction.stagingConsultationDate} />}
+                {transaction?.stagingConsultationTime && <Dl label="Consultation Time" value={transaction.stagingConsultationTime} />}
+                {transaction?.stagingCurrentlyOnMarket && <Dl label="Currently on Market" value={transaction.stagingCurrentlyOnMarket} />}
+                {transaction?.stagingTargetedMarketDate && <Dl label="Targeted Market Date" value={transaction.stagingTargetedMarketDate} />}
+                {transaction?.stagingHomeStyle && <Dl label="Home Style" value={transaction.stagingHomeStyle} />}
+                {transaction?.stagingOccupancy && <Dl label="Occupancy" value={transaction.stagingOccupancy} />}
+                {transaction?.stagingReasonForSelling && <Dl label="Reason for Selling" value={transaction.stagingReasonForSelling} />}
+                {transaction?.stagingRequestSentAt && <Dl label="Request Sent" value={transaction.stagingRequestSentAt} />}
+              </div>
+              {transaction?.stagingSpecialNotes && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Special Notes</p>
+                  <p className="text-sm mt-0.5">{transaction.stagingSpecialNotes}</p>
+                </div>
+              )}
+            </SectionCard>
+          )}
 
           {/* Notes */}
           <SectionCard title="Notes">

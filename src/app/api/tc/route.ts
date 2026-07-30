@@ -391,6 +391,24 @@ export async function POST(req: NextRequest) {
       commercialLeaseGci: toNum(body.commercialLeaseGci) || null,
       commercialLeaseEffectivePct: toNum(body.commercialLeaseEffectivePct) || null,
 
+      // Staging consult — stored directly on the transaction (same pattern as inspection/showing/media)
+      stagingConsultRequested: toBool(body.stagingConsultRequested),
+      stagingServiceType: toStr(body.stagingServiceType) || null,
+      stagingCoordinateWith: toStr(body.stagingCoordinateWith) || null,
+      stagingPhotographerDate: toStr(body.stagingPhotographerDate) || null,
+      stagingConsultationDate: toStr(body.stagingConsultationDate) || null,
+      stagingConsultationTime: toStr(body.stagingConsultationTime) || null,
+      stagingPaymentMethod: toStr(body.stagingPaymentMethod) || null,
+      stagingCurrentlyOnMarket: toStr(body.stagingCurrentlyOnMarket) || null,
+      stagingTargetedMarketDate: toStr(body.stagingTargetedMarketDate) || null,
+      stagingHomeStyle: toStr(body.stagingHomeStyle) || null,
+      stagingOccupancy: toStr(body.stagingOccupancy) || null,
+      stagingReasonForSelling: toStr(body.stagingReasonForSelling) || null,
+      stagingSpecialNotes: toStr(body.stagingSpecialNotes) || null,
+      stagingStagerName: toStr(body.stagingStagerName) || null,
+      stagingStagerEmail: toStr(body.stagingStagerEmail) || null,
+      stagingRequestSentAt: toStr(body.stagingRequestSentAt) || null,
+
       // Notes & documents
       notes: toStr(body.notes) || null,
       additionalComments: toStr(body.additionalComments) || null,
