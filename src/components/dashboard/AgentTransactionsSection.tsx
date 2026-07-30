@@ -30,6 +30,7 @@ import { AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, 
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { exportToCsv } from '@/lib/exportToCsv';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
@@ -699,6 +700,7 @@ type Props = {
 
 export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Props) {
   const { user } = useUser();
+  const router = useRouter();
   const [transactions, setTransactions] = useState<AgentTx[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -946,11 +948,10 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
     setPendingModalTx(null);
   };
 
-  /* ─── Open edit drawer ───────────────────────────────────────────────── */
+  /* ─── Navigate to full transaction detail page (Option B) ───────────────────────────────────────────────── */
 
   const openEdit = (tx: AgentTx) => {
-    setEditTx(tx);
-    setEditOpen(true);
+    router.push(`/dashboard/my-transactions/${tx.id}`);
   };
 
   const handleSaved = (updated: AgentTx) => {

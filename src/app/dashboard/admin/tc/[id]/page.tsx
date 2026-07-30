@@ -1230,33 +1230,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             </div>
           </SectionCard>
 
-          {/* Section 4: Client Contact */}
-          <SectionCard title="Client Contact" icon={<User className="h-4 w-4" />}>
-            <Grid3>
-              <FormField control={form.control} name="clientEmail" render={({ field }) => (
-                <FormItem><FormLabel>Client Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="clientPhone" render={({ field }) => (
-                <FormItem><FormLabel>Client Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
-                <FormItem><FormLabel>Client New Address</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-            </Grid3>
-            <Grid3>
-              <FormField control={form.control} name="client2Name" render={({ field }) => (
-                <FormItem><FormLabel>Client 2 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="client2Email" render={({ field }) => (
-                <FormItem><FormLabel>Client 2 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="client2Phone" render={({ field }) => (
-                <FormItem><FormLabel>Client 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-            </Grid3>
-          </SectionCard>
-
-          {/* Section 5: Buyer Contact */}
+          {/* Section 4: Buyer Contact */}
           <SectionCard title="Buyer Contact" icon={<User className="h-4 w-4" />}>
             <Grid3>
               <FormField control={form.control} name="buyerName" render={({ field }) => (

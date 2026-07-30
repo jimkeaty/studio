@@ -13,7 +13,7 @@ function serializeFirestore(val: any): any {
   if (val == null) return val;
   if (typeof val?.toDate === 'function') return val.toDate().toISOString();
   if (Array.isArray(val)) return val.map(serializeFirestore);
-  if (typeof val === 'object' && val.constructor === Object) {
+  if (typeof val === 'object') {
     const out: any = {};
     for (const [k, v] of Object.entries(val)) {
       out[k] = serializeFirestore(v);
