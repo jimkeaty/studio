@@ -2003,6 +2003,24 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <FormItem><FormLabel>Inspection Notes</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </Grid3>
+            <div>
+              <p className="text-sm font-medium mb-2">Inspection Types</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {['General Home Inspection','Roof Inspection','Termite Inspection','Foundation Inspection','Sewer Inspection','HVAC Inspection','Pool Inspection','Water Well Inspection','Survey','Elevation Certificate','Stucco Inspection'].map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={(form.watch('inspectionTypes') || []).includes(type)}
+                      onCheckedChange={(checked) => {
+                        const current = form.watch('inspectionTypes') || [];
+                        form.setValue('inspectionTypes', checked ? [...current, type] : current.filter((t: string) => t !== type));
+                      }}
+                      disabled={isReadOnly}
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </div>
           </SectionCard>
 
           {/* ── Media Order ───────────────────────────────────────────────── */}

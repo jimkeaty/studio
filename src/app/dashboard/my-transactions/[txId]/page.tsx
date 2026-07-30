@@ -458,18 +458,38 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       {tx.inspectionOrdered && (
         <SectionCard title="Buyer Inspection" icon={<Hammer className="h-4 w-4" />}>
           <Grid3>
-            <Dl label="Ordered" value={tx.inspectionOrdered ? 'Yes' : 'No'} />
+            <Dl label="Ordered" value={tx.inspectionOrdered === 'yes' || tx.inspectionOrdered === true ? 'Yes' : 'No'} />
             <Dl label="Target Date" value={formatDate(tx.targetInspectionDate)} />
             <Dl label="Inspector" value={tx.inspectorName} />
-            <Dl label="TC Scheduling" value={tx.tcScheduleInspections ? 'Yes' : null} />
+            <Dl label="TC Scheduling" value={tx.tcScheduleInspections === 'yes' || tx.tcScheduleInspections === true ? 'Yes — TC will schedule' : tx.tcScheduleInspections === 'no' || tx.tcScheduleInspections === false ? 'No — Agent will schedule' : null} />
             <Dl label="Notes" value={tx.tcScheduleInspectionsOther} />
           </Grid3>
+          {Array.isArray(tx.inspectionTypes) && tx.inspectionTypes.length > 0 && (
+            <div className="mt-3">
+              <dt className="text-xs text-muted-foreground mb-2">Inspection Types</dt>
+              <div className="flex flex-wrap gap-2">
+                {tx.inspectionTypes.map((t: string) => (
+                  <span key={t} className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
         </SectionCard>
       )}
 
       {/* ── Media Order ──────────────────────────────────────────────────────── */}
       {(tx.closingType === 'listing' || tx.closingType === 'dual') && (
         <SectionCard title="Media Order" icon={<MapPin className="h-4 w-4" />} defaultCollapsed={true}>
+          {Array.isArray(tx.mediaTypes) && tx.mediaTypes.length > 0 && (
+            <div className="mb-4">
+              <dt className="text-xs text-muted-foreground mb-2">Media Types Requested</dt>
+              <div className="flex flex-wrap gap-2">
+                {tx.mediaTypes.map((t: string) => (
+                  <span key={t} className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
             <div>
               <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
@@ -507,13 +527,28 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
             <Dl label="New or Change" value={tx.showingNewOrChange} />
             <Dl label="Appointment Handling" value={tx.showingApptHandling} />
             <Dl label="Appointment Type" value={tx.showingApptType} />
+            <Dl label="Lead Time Required" value={tx.showingLeadTimeRequired} />
+            <Dl label="Lead Time Suggested" value={tx.showingLeadTimeSuggested} />
+            <Dl label="Max Appt Length" value={tx.showingMaxApptLength} />
+            <Dl label="Virtual Showing" value={tx.showingVirtualPreference} />
             <Dl label="Lockbox Type" value={tx.showingLockboxType} />
             <Dl label="Lockbox Location" value={tx.showingLockboxLocation} />
             <Dl label="Access Type" value={tx.showingAccessType} />
+            <Dl label="Access Door" value={tx.showingAccessDoor} />
+            <Dl label="Passcode / Gate Code" value={tx.showingPasscode} />
+            <Dl label="Alarm Code" value={tx.showingAlarmCode} />
             <Dl label="Alarm Disarm Code" value={tx.showingDisarmCode} />
             <Dl label="Alarm Arm Code" value={tx.showingArmCode} />
-            <Dl label="Lead Time Required" value={tx.showingLeadTimeRequired} />
+            {tx.showingNoSameDayAppts && <Dl label="Same-Day Appts" value="No same-day appointments" />}
+            {tx.showingApptOverlaps && <Dl label="Overlaps" value="Allow appointment overlaps" />}
+            {tx.showingShareAgentInfo && <Dl label="Share Agent Info" value="Yes — share with showing agents" />}
           </Grid3>
+          {tx.showingAlarmNotes && (
+            <div className="mt-3">
+              <dt className="text-xs text-muted-foreground">Alarm Notes</dt>
+              <dd className="text-sm mt-0.5">{tx.showingAlarmNotes}</dd>
+            </div>
+          )}
           {tx.showingAccessNotes && (
             <div className="mt-3">
               <dt className="text-xs text-muted-foreground">Access Notes</dt>
