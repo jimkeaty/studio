@@ -25,6 +25,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'closingDate',
   'closedDate',
   'listingDate',
+  'listingExpirationDate',
   // Seller
   'sellerName', 'sellerEmail', 'sellerPhone',
   'seller2Name', 'seller2Email', 'seller2Phone',
@@ -39,15 +40,61 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherAgentBrokerage',
   // Client
   'clientName', 'clientEmail', 'clientPhone', 'clientType',
+  'client2Name', 'client2Email', 'client2Phone',
   // Lender
   'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
+  'lenderOffice',
   // Title
   'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
-  // Dates
+  'titleOffice', 'titleAttorney',
+  // Key dates
   'optionExpiration', 'inspectionDeadline', 'projectedCloseDate',
+  'appraisalDeadline', 'surveyDeadline', 'titleDeadline',
+  'finalLoanCommitmentDeadline', 'loanApplicationDeadline',
+  // Financial
+  'earnestMoney', 'depositHolder', 'depositHolderOther',
+  'buyerClosingCostTotal', 'buyerBringToClosing',
   // Commission
   'commissionPercent', 'commissionBasePrice', 'gci', 'transactionFee',
   'sellerCommissionPct', 'buyerCommissionPct',
+  'sellerPayingListingAgent', 'sellerPayingBuyerAgent',
+  // Additional transaction info
+  'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
+  'shortageInCommission', 'shortageAmount',
+  'occupancyAgreement', 'occupancyDates',
+  'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+  // Referrals
+  'hasOutboundReferral', 'outboundReferralRecipient', 'outboundReferralPercent',
+  'outboundReferralFee', 'outboundReferralDollar',
+  'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralBrokerage',
+  'inboundReferralFeePercent',
+  // Buyer inspection
+  'inspectionOrdered', 'targetInspectionDate', 'inspectorName',
+  'inspectionTypes', 'tcScheduleInspections', 'tcScheduleInspectionsOther',
+  // Pre-listing inspection
+  'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectorName',
+  'preListingInspectionTypes', 'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther',
+  // Media order
+  'mediaRequested', 'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
+  // Sign order
+  'signOrderRequested', 'signServiceType', 'signInstallDate', 'signOwnerName',
+  'signRider', 'signAdditionalOptions', 'signSpecialRequests',
+  // ShowingTime
+  'showingTimeRequested', 'showingApptType', 'showingNewOrChange',
+  'showingApptHandling', 'showingLeadTime', 'showingLeadTimeSuggested',
+  'showingMaxApptLength', 'showingApptOverlaps', 'showingNoSameDayAppts',
+  'showingVirtualPreference', 'showingShareAgentInfo',
+  'showingAccessType', 'showingAccessDoor', 'showingLockboxCode',
+  'showingAlarmCode', 'showingDisarmCode', 'showingPasscode', 'showingAlarmNotes',
+  'showingAccessNotes', 'showingNotesToAgent', 'showingNotesToStaff',
+  'showingCallOrder1Name', 'showingCallOrder1Mobile', 'showingCallOrder1AltPhone',
+  'showingCallOrder1Email', 'showingCallOrder1Type', 'showingCallOrder1Confirm', 'showingCallOrder1Notify',
+  'showingCallOrder2Name', 'showingCallOrder2Mobile', 'showingCallOrder2AltPhone',
+  'showingCallOrder2Email', 'showingCallOrder2Type', 'showingCallOrder2Confirm', 'showingCallOrder2Notify',
+  'showingCallOrder3Name', 'showingCallOrder3Mobile', 'showingCallOrder3AltPhone',
+  'showingCallOrder3Email', 'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
+  // Deal source
+  'dealSource',
   // Notes
   'notes', 'additionalComments',
   // Documents (Purchase Agreement, Listing Paperwork, etc.)

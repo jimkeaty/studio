@@ -1,32 +1,60 @@
 'use client';
 export const dynamic = 'force-dynamic';
-
 import { useEffect, useState, useCallback, use } from 'react';
 import { useUser } from '@/firebase';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, CheckCircle2, ClipboardList, AlertTriangle,
   Home, Users, Calendar, ChevronDown, ChevronUp,
   Building2, User, Hammer, MapPin, Info, DollarSign, FileText, ExternalLink,
+  Save, Loader2, Camera, Eye, Wrench,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// ─── Constants (mirrors Add Transaction form) ─────────────────────────────────
+const INSPECTION_TYPE_OPTIONS = [
+  'General Home Inspection', 'Roof Inspection', 'Termite Inspection',
+  'Radon Inspection', 'Sewer Scope Inspection', 'Water Well Inspection',
+  'Septic/Sewer Inspection', 'HVAC Inspection', 'Generator Inspection',
+  'Foundation Inspection', 'Pool', 'Survey', 'Elevation Certificate',
+];
+const MEDIA_TYPE_OPTIONS = [
+  'Photos', 'Twilight', 'Blue Sky', 'Stars', 'Full Production Video',
+  'Virtual Tour', '3D Floor Plan', 'Virtual Staging', 'Floor Plan',
+  'Drone', 'Sun Dial (Time-Lapse Sunlight)',
+];
+const SIGN_SERVICE_OPTIONS = [
+  'Install Sign Post', 'Repair Sign Post or Panel', 'Remove Sign Post (No Fee)',
+  'Commercial Sign-Frame 4x4', 'Commercial Sign-Frame 4x8', 'Other',
+];
+const SIGN_ADDITIONAL_OPTIONS = [
+  'Directional Sign (+$2.00)', 'Attach Personalized Name Rider',
+  'Text2 Rider', 'Phone# Rider EXT',
+];
+const SHOWING_NOTES_TO_AGENT_OPTIONS = [
+  'Leave card', 'Lock doors', 'Turn off lights',
+  'Scramble lockbox when leaving', 'Remove shoes or wear booties',
+  'Return and secure key in lockbox',
+];
+
 type AgentTask = {
-  id: string;
-  label: string;
-  group: string;
-  phase: string;
-  completed: boolean;
-  completedAt: string | null;
-  dueDate: string | null;
-  reminderSentAt: string | null;
+  id: string; label: string; group: string; phase: string;
+  completed: boolean; completedAt: string | null;
+  dueDate: string | null; reminderSentAt: string | null;
 };
 
 function formatDate(d?: string | null) {
@@ -35,22 +63,22 @@ function formatDate(d?: string | null) {
 }
 
 const PHASE_LABELS: Record<string, string> = {
-  after_listing:    'After Listing Taken',
-  before_closing:   'Before Closing',
-  after_closing:    'After Closing',
-  after_contract:   'After Contract Executed',
+  after_listing: 'After Listing Taken',
+  before_closing: 'Before Closing',
+  after_closing: 'After Closing',
+  after_contract: 'After Contract Executed',
 };
-
 const STATUS_COLORS: Record<string, string> = {
-  active:          'bg-green-100 text-green-800',
-  pending:         'bg-yellow-100 text-yellow-800',
-  under_contract:  'bg-blue-100 text-blue-800',
-  closed:          'bg-gray-100 text-gray-700',
-  coming_soon:     'bg-purple-100 text-purple-800',
-  expired:         'bg-red-100 text-red-800',
-  canceled:        'bg-red-100 text-red-800',
+  active: 'bg-green-100 text-green-800',
+  pending: 'bg-yellow-100 text-yellow-800',
+  under_contract: 'bg-blue-100 text-blue-800',
+  closed: 'bg-gray-100 text-gray-700',
+  coming_soon: 'bg-purple-100 text-purple-800',
+  expired: 'bg-red-100 text-red-800',
+  canceled: 'bg-red-100 text-red-800',
 };
 
+// ─── Read-only display helpers ────────────────────────────────────────────────
 function Dl({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
@@ -60,17 +88,95 @@ function Dl({ label, value }: { label: string; value?: string | null }) {
     </div>
   );
 }
+function Grid2({ children }: { children: React.ReactNode }) {
+  return <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">{children}</dl>;
+}
+function Grid3({ children }: { children: React.ReactNode }) {
+  return <dl className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">{children}</dl>;
+}
 
+// ─── Editable field helpers ───────────────────────────────────────────────────
+function EInput({ label, name, value, onChange, type = 'text', placeholder }: {
+  label: string; name: string; value: string; onChange: (n: string, v: string) => void;
+  type?: string; placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input type={type} value={value} placeholder={placeholder}
+        onChange={e => onChange(name, e.target.value)} className="h-8 text-sm" />
+    </div>
+  );
+}
+function ESelect({ label, name, value, onChange, options }: {
+  label: string; name: string; value: string; onChange: (n: string, v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select value={value || ''} onValueChange={v => onChange(name, v)}>
+        <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select..." /></SelectTrigger>
+        <SelectContent>
+          {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+function ETextarea({ label, name, value, onChange, placeholder }: {
+  label: string; name: string; value: string; onChange: (n: string, v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Textarea value={value} placeholder={placeholder} rows={3}
+        onChange={e => onChange(name, e.target.value)} className="text-sm" />
+    </div>
+  );
+}
+function ESwitch({ label, name, value, onChange }: {
+  label: string; name: string; value: boolean; onChange: (n: string, v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Switch checked={value} onCheckedChange={v => onChange(name, v)} id={`sw-${name}`} />
+      <Label htmlFor={`sw-${name}`} className="text-sm cursor-pointer">{label}</Label>
+    </div>
+  );
+}
+function ECheckboxGroup({ label, name, options, value, onChange }: {
+  label: string; name: string; options: string[];
+  value: string[]; onChange: (n: string, v: string[]) => void;
+}) {
+  const toggle = (opt: string) => {
+    const next = value.includes(opt) ? value.filter(x => x !== opt) : [...value, opt];
+    onChange(name, next);
+  };
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-1">
+        {options.map(opt => (
+          <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox checked={value.includes(opt)} onCheckedChange={() => toggle(opt)} />
+            {opt}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section card with collapse ───────────────────────────────────────────────
 function SectionCard({ title, icon, children, defaultCollapsed = false }: {
   title: string; icon?: React.ReactNode; children: React.ReactNode; defaultCollapsed?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   return (
     <Card>
-      <CardHeader
-        className="cursor-pointer select-none"
-        onClick={() => setCollapsed(c => !c)}
-      >
+      <CardHeader className="cursor-pointer select-none" onClick={() => setCollapsed(c => !c)}>
         <CardTitle className="text-base flex items-center justify-between gap-2">
           <span className="flex items-center gap-2">{icon}{title}</span>
           {collapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
@@ -81,22 +187,18 @@ function SectionCard({ title, icon, children, defaultCollapsed = false }: {
   );
 }
 
-function Grid2({ children }: { children: React.ReactNode }) {
-  return <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">{children}</dl>;
-}
-function Grid3({ children }: { children: React.ReactNode }) {
-  return <dl className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">{children}</dl>;
-}
-
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function TransactionDetailPage({ params }: { params: Promise<{ txId: string }> }) {
   const { txId } = use(params);
   const { user, loading: userLoading } = useUser();
+  const { toast } = useToast();
   const [transaction, setTransaction] = useState<any>(null);
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({
-    after_closing: true,
-  });
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [form, setForm] = useState<Record<string, any>>({});
+  const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({ after_closing: true });
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -106,22 +208,173 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
         headers: { Authorization: `Bearer ${token}` },
       });
       const txData = await txRes.json();
-      if (txData.ok) setTransaction(txData.transaction || txData);
-
+      if (txData.ok) {
+        const tx = txData.transaction || txData;
+        setTransaction(tx);
+        // Initialise form state from transaction data
+        setForm({
+          status: tx.status || '',
+          propertyAddress: tx.propertyAddress || tx.address || '',
+          listPrice: tx.listPrice ? String(tx.listPrice) : '',
+          salePrice: tx.salePrice ? String(tx.salePrice) : '',
+          listingDate: tx.listingDate || '',
+          listingExpirationDate: tx.listingExpirationDate || '',
+          contractDate: tx.contractDate || '',
+          closingDate: tx.closingDate || '',
+          closedDate: tx.closedDate || '',
+          projectedCloseDate: tx.projectedCloseDate || '',
+          optionExpiration: tx.optionExpiration || '',
+          inspectionDeadline: tx.inspectionDeadline || '',
+          appraisalDeadline: tx.appraisalDeadline || '',
+          surveyDeadline: tx.surveyDeadline || '',
+          titleDeadline: tx.titleDeadline || '',
+          finalLoanCommitmentDeadline: tx.finalLoanCommitmentDeadline || '',
+          loanApplicationDeadline: tx.loanApplicationDeadline || '',
+          // Seller
+          sellerName: tx.sellerName || '', sellerEmail: tx.sellerEmail || '', sellerPhone: tx.sellerPhone || '',
+          seller2Name: tx.seller2Name || '', seller2Email: tx.seller2Email || '', seller2Phone: tx.seller2Phone || '',
+          // Buyer
+          buyerName: tx.buyerName || '', buyerEmail: tx.buyerEmail || '', buyerPhone: tx.buyerPhone || '',
+          buyer2Name: tx.buyer2Name || '', buyer2Email: tx.buyer2Email || '', buyer2Phone: tx.buyer2Phone || '',
+          // Other agent
+          otherAgentName: tx.otherAgentName || '', otherAgentEmail: tx.otherAgentEmail || '',
+          otherAgentPhone: tx.otherAgentPhone || '', otherAgentBrokerage: tx.otherAgentBrokerage || '',
+          // Lender
+          mortgageCompany: tx.mortgageCompany || '', loanOfficer: tx.loanOfficer || '',
+          loanOfficerEmail: tx.loanOfficerEmail || '', loanOfficerPhone: tx.loanOfficerPhone || '',
+          lenderOffice: tx.lenderOffice || '',
+          // Title
+          titleCompany: tx.titleCompany || '', titleOfficer: tx.titleOfficer || '',
+          titleOfficerEmail: tx.titleOfficerEmail || '', titleOfficerPhone: tx.titleOfficerPhone || '',
+          titleOffice: tx.titleOffice || '', titleAttorney: tx.titleAttorney || '',
+          // Financial
+          earnestMoney: tx.earnestMoney ? String(tx.earnestMoney) : '',
+          depositHolder: tx.depositHolder || '', depositHolderOther: tx.depositHolderOther || '',
+          buyerClosingCostTotal: tx.buyerClosingCostTotal ? String(tx.buyerClosingCostTotal) : '',
+          // Additional info
+          warrantyAtClosing: tx.warrantyAtClosing || '',
+          warrantyAmount: tx.warrantyAmount ? String(tx.warrantyAmount) : '',
+          warrantyPaidBy: tx.warrantyPaidBy || '',
+          shortageInCommission: tx.shortageInCommission || '',
+          shortageAmount: tx.shortageAmount ? String(tx.shortageAmount) : '',
+          occupancyAgreement: tx.occupancyAgreement || '',
+          occupancyDates: tx.occupancyDates || '',
+          txComplianceFee: tx.txComplianceFee || '',
+          txComplianceFeeAmount: tx.txComplianceFeeAmount ? String(tx.txComplianceFeeAmount) : '',
+          txComplianceFeePaidBy: tx.txComplianceFeePaidBy || '',
+          // Buyer inspection
+          inspectionOrdered: tx.inspectionOrdered || '',
+          targetInspectionDate: tx.targetInspectionDate || '',
+          inspectorName: tx.inspectorName || '',
+          inspectionTypes: Array.isArray(tx.inspectionTypes) ? tx.inspectionTypes : [],
+          tcScheduleInspections: tx.tcScheduleInspections || '',
+          // Pre-listing inspection
+          preListingInspectionOrdered: tx.preListingInspectionOrdered || '',
+          preListingTargetInspectionDate: tx.preListingTargetInspectionDate || '',
+          preListingInspectorName: tx.preListingInspectorName || '',
+          preListingInspectionTypes: Array.isArray(tx.preListingInspectionTypes) ? tx.preListingInspectionTypes : [],
+          preListingTcScheduleInspections: tx.preListingTcScheduleInspections || '',
+          // Media
+          mediaRequested: tx.mediaRequested === true || tx.mediaRequested === 'yes',
+          mediaTypes: Array.isArray(tx.mediaTypes) ? tx.mediaTypes : [],
+          mediaRequestedDate: tx.mediaRequestedDate || '',
+          mediaNotes: tx.mediaNotes || '',
+          // Sign order
+          signOrderRequested: tx.signOrderRequested === true || tx.signOrderRequested === 'yes',
+          signServiceType: tx.signServiceType || '',
+          signInstallDate: tx.signInstallDate || '',
+          signOwnerName: tx.signOwnerName || '',
+          signRider: Array.isArray(tx.signRider) ? tx.signRider : [],
+          signAdditionalOptions: Array.isArray(tx.signAdditionalOptions) ? tx.signAdditionalOptions : [],
+          signSpecialRequests: tx.signSpecialRequests || '',
+          // ShowingTime
+          showingTimeRequested: tx.showingTimeRequested === true || tx.showingTimeRequested === 'yes',
+          showingApptType: tx.showingApptType || '',
+          showingNewOrChange: tx.showingNewOrChange || '',
+          showingApptHandling: tx.showingApptHandling || '',
+          showingLeadTime: tx.showingLeadTime || '',
+          showingLeadTimeSuggested: tx.showingLeadTimeSuggested || '',
+          showingMaxApptLength: tx.showingMaxApptLength || '',
+          showingApptOverlaps: Boolean(tx.showingApptOverlaps),
+          showingNoSameDayAppts: Boolean(tx.showingNoSameDayAppts),
+          showingVirtualPreference: tx.showingVirtualPreference || '',
+          showingShareAgentInfo: Boolean(tx.showingShareAgentInfo),
+          showingAccessType: tx.showingAccessType || '',
+          showingAccessDoor: tx.showingAccessDoor || '',
+          showingLockboxCode: tx.showingLockboxCode || '',
+          showingAlarmCode: tx.showingAlarmCode || '',
+          showingDisarmCode: tx.showingDisarmCode || '',
+          showingPasscode: tx.showingPasscode || '',
+          showingAlarmNotes: tx.showingAlarmNotes || '',
+          showingAccessNotes: tx.showingAccessNotes || '',
+          showingNotesToAgent: Array.isArray(tx.showingNotesToAgent) ? tx.showingNotesToAgent : [],
+          showingNotesToStaff: tx.showingNotesToStaff || '',
+          showingCallOrder1Name: tx.showingCallOrder1Name || '',
+          showingCallOrder1Mobile: tx.showingCallOrder1Mobile || '',
+          showingCallOrder1Email: tx.showingCallOrder1Email || '',
+          showingCallOrder2Name: tx.showingCallOrder2Name || '',
+          showingCallOrder2Mobile: tx.showingCallOrder2Mobile || '',
+          showingCallOrder2Email: tx.showingCallOrder2Email || '',
+          showingCallOrder3Name: tx.showingCallOrder3Name || '',
+          showingCallOrder3Mobile: tx.showingCallOrder3Mobile || '',
+          showingCallOrder3Email: tx.showingCallOrder3Email || '',
+          // Notes
+          notes: tx.notes || '',
+          additionalComments: tx.additionalComments || '',
+          // TC
+          workingWithTc: Boolean(tx.workingWithTc),
+        });
+      }
       const taskRes = await fetch(`/api/agent/agent-tasks?transactionId=${txId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const taskData = await taskRes.json();
       if (taskData.ok) setTasks(taskData.tasks || []);
-    } catch { /* non-fatal */ } finally {
-      setLoading(false);
-    }
+    } catch { /* non-fatal */ } finally { setLoading(false); }
   }, [user, txId]);
 
   useEffect(() => {
     if (!userLoading && user) loadData();
     else if (!userLoading && !user) setLoading(false);
   }, [user, userLoading, loadData]);
+
+  const setField = (name: string, value: any) => {
+    setForm(prev => ({ ...prev, [name]: value }));
+    setDirty(true);
+  };
+
+  const handleSave = async () => {
+    if (!user || !dirty) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/agent/transactions/${txId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          // Coerce numeric fields
+          listPrice: form.listPrice ? Number(form.listPrice) : undefined,
+          salePrice: form.salePrice ? Number(form.salePrice) : undefined,
+          earnestMoney: form.earnestMoney ? Number(form.earnestMoney) : undefined,
+          buyerClosingCostTotal: form.buyerClosingCostTotal ? Number(form.buyerClosingCostTotal) : undefined,
+          warrantyAmount: form.warrantyAmount ? Number(form.warrantyAmount) : undefined,
+          shortageAmount: form.shortageAmount ? Number(form.shortageAmount) : undefined,
+          txComplianceFeeAmount: form.txComplianceFeeAmount ? Number(form.txComplianceFeeAmount) : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        toast({ title: 'Saved', description: 'Transaction updated successfully.' });
+        setDirty(false);
+        await loadData();
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed to save.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Network error. Please try again.', variant: 'destructive' });
+    } finally { setSaving(false); }
+  };
 
   const handleToggleTask = async (task: AgentTask) => {
     if (!user) return;
@@ -141,9 +394,7 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
     }
   };
 
-  const togglePhase = (phase: string) => {
-    setCollapsedPhases(prev => ({ ...prev, [phase]: !prev[phase] }));
-  };
+  const togglePhase = (phase: string) => setCollapsedPhases(prev => ({ ...prev, [phase]: !prev[phase] }));
 
   if (userLoading || loading) {
     return (
@@ -154,7 +405,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       </div>
     );
   }
-
   if (!user) {
     return (
       <Alert variant="destructive" className="max-w-lg mx-auto mt-8">
@@ -164,7 +414,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       </Alert>
     );
   }
-
   const tx = transaction;
   if (!tx) {
     return (
@@ -179,7 +428,8 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const address = tx.propertyAddress || tx.address || 'Transaction';
   const status = tx.status || 'active';
   const side = tx.side || tx.dealType || tx.closingType || '';
-  const closeDate = tx.projectedCloseDate || tx.closedDate || tx.closingDate;
+  const isListing = side === 'listing' || side === 'dual';
+  const isBuyer = side === 'buyer';
 
   // Group tasks by phase
   const phases: Record<string, AgentTask[]> = {};
@@ -188,470 +438,425 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
     if (!phases[ph]) phases[ph] = [];
     phases[ph].push(task);
   }
-
   const phaseOrder = ['after_listing', 'after_contract', 'before_closing', 'after_closing'];
   const completedCount = tasks.filter(t => t.completed).length;
   const totalCount = tasks.length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // Agent commission fields (visible to agent)
+  // Commission (read-only)
   const agentNet = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? null;
   const agentPct = tx.splitSnapshot?.agentSplitPercent ?? tx.agentPct ?? null;
   const sellerCommPct = tx.sellerPayingListingAgent ?? tx.commissionPercent ?? null;
-  const buyerCommPct = tx.sellerPayingBuyerAgent ?? null;
+
+  const f = form; // shorthand
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-          <Link href="/dashboard/my-transactions" className="hover:underline flex items-center gap-1">
-            <ArrowLeft className="h-3 w-3" /> My Transactions
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <Link href="/dashboard/my-transactions" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2">
+            <ArrowLeft className="h-4 w-4" /> My Transactions
           </Link>
-        </div>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{address}</h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <Badge className={cn('text-sm', STATUS_COLORS[status] || 'bg-muted text-foreground')}>
-                {status.replace(/_/g, ' ')}
-              </Badge>
-              {side && (
-                <Badge variant="outline" className="capitalize">
-                  {side === 'buyer' ? <><Users className="h-3 w-3 mr-1" />Buyer</> : <><Home className="h-3 w-3 mr-1" />Listing</>}
-                </Badge>
-              )}
-              {closeDate && (
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> Close: {formatDate(closeDate)}
-                </span>
-              )}
-            </div>
+          <h1 className="text-xl font-bold">{address}</h1>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <Badge className={cn('text-xs', STATUS_COLORS[status] || 'bg-gray-100 text-gray-700')}>
+              {status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+            </Badge>
+            {side && <Badge variant="outline" className="text-xs capitalize">{side}</Badge>}
           </div>
         </div>
+        <Button onClick={handleSave} disabled={!dirty || saving} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saving ? 'Saving…' : 'Save Changes'}
+        </Button>
       </div>
 
-      {/* Agent Task Workflow */}
-      {tasks.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="pt-6 pb-6 text-center">
-            <ClipboardList className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">No task workflow has been set up for this transaction yet.</p>
-            <p className="text-xs text-muted-foreground mt-1">Tasks are created automatically when a transaction is added.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4" /> My Task Workflow
-                </CardTitle>
-                <CardDescription>
-                  {completedCount} of {totalCount} tasks completed · {pct}%
-                </CardDescription>
-              </div>
-            </div>
-            <div className="w-full bg-muted rounded-full h-1.5 mt-2">
-              <div
-                className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
+      {dirty && (
+        <Alert className="border-yellow-300 bg-yellow-50">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800 text-sm">You have unsaved changes. Click Save Changes to update this transaction.</AlertDescription>
+        </Alert>
+      )}
+
+      {/* ── Commission (read-only) ─────────────────────────────────────────── */}
+      {(agentNet !== null || agentPct !== null || sellerCommPct !== null) && (
+        <Card className="border-green-200 bg-green-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-green-700" />
+              My Commission
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {phaseOrder.filter(ph => phases[ph]?.length > 0).map(ph => {
-              const phaseTasks = phases[ph] || [];
-              const phaseCompleted = phaseTasks.filter(t => t.completed).length;
-              const isCollapsed = collapsedPhases[ph];
-              const allDone = phaseCompleted === phaseTasks.length;
-              return (
-                <div key={ph}>
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between text-left"
-                    onClick={() => togglePhase(ph)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {allDone
-                        ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        : <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                      }
-                      <span className="text-sm font-semibold">
-                        {PHASE_LABELS[ph] || ph.replace(/_/g, ' ')}
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {phaseCompleted}/{phaseTasks.length}
-                      </Badge>
-                    </div>
-                    {isCollapsed
-                      ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                      : <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                    }
-                  </button>
-                  {!isCollapsed && (
-                    <div className="mt-3 space-y-2 pl-6">
-                      {phaseTasks.map(task => (
-                        <div
-                          key={task.id}
-                          className={cn(
-                            'flex items-start gap-3 p-3 rounded-md border transition-colors',
-                            task.completed
-                              ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
-                              : 'bg-background'
-                          )}
-                        >
-                          <Checkbox
-                            checked={task.completed}
-                            onCheckedChange={() => handleToggleTask(task)}
-                            className="mt-0.5"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className={cn('text-sm', task.completed && 'line-through text-muted-foreground')}>
-                              {task.label}
-                            </p>
-                            {task.completed && task.completedAt && (
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                ✓ Completed {formatDate(task.completedAt)}
-                              </p>
-                            )}
-                            {!task.completed && task.dueDate && (
-                              <p className="text-xs text-amber-600 mt-0.5">
-                                Due: {formatDate(task.dueDate)}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <Separator className="mt-4" />
-                </div>
-              );
-            })}
+          <CardContent>
+            <Grid3>
+              {sellerCommPct !== null && <Dl label="Commission %" value={`${sellerCommPct}%`} />}
+              {agentPct !== null && <Dl label="My Split %" value={`${agentPct}%`} />}
+              {agentNet !== null && <Dl label="Net to Me" value={`$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />}
+            </Grid3>
           </CardContent>
         </Card>
       )}
 
-      {/* ── Transaction Details ──────────────────────────────────────────────── */}
-      <SectionCard title="Transaction Details" icon={<Home className="h-4 w-4" />}>
-        <Grid3>
-          <Dl label="Property Address" value={tx.propertyAddress || tx.address} />
-          <Dl label="MLS Number" value={tx.mlsNumber} />
-          <Dl label="Deal Type" value={tx.dealType?.replace(/_/g, ' ')} />
-          <Dl label="Transaction Type" value={tx.closingType?.replace(/_/g, ' ')} />
-          <Dl label="Deal Source" value={tx.dealSource?.replace(/_/g, ' ')} />
-          <Dl label="Listing Date" value={formatDate(tx.listingDate)} />
-          <Dl label="Listing Expiration" value={formatDate(tx.listingExpirationDate)} />
-          <Dl label="List Price" value={tx.listPrice ? `$${Number(tx.listPrice).toLocaleString()}` : null} />
-          <Dl label="Sale Price" value={tx.salePrice ? `$${Number(tx.salePrice).toLocaleString()}` : null} />
-        </Grid3>
-        {tx.mlsDescription && (
-          <div className="mt-4">
-            <dt className="text-xs text-muted-foreground mb-1">MLS Description</dt>
-            <dd className="text-sm whitespace-pre-wrap border rounded-md p-3 bg-muted/30">{tx.mlsDescription}</dd>
+      {/* ── Status & Transaction Type ──────────────────────────────────────── */}
+      <SectionCard title="Transaction Status" icon={<Info className="h-4 w-4" />}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ESelect label="Status" name="status" value={f.status} onChange={setField} options={[
+            { value: 'active', label: 'Active' },
+            { value: 'pending', label: 'Pending' },
+            { value: 'coming_soon', label: 'Coming Soon' },
+            { value: 'temp_off_market', label: 'Temp Off Market' },
+            { value: 'closed', label: 'Closed' },
+            { value: 'expired', label: 'Expired' },
+            { value: 'canceled', label: 'Canceled' },
+          ]} />
+          <ESwitch label="Working with a TC" name="workingWithTc" value={Boolean(f.workingWithTc)} onChange={setField} />
+        </div>
+      </SectionCard>
+
+      {/* ── Property Details ───────────────────────────────────────────────── */}
+      <SectionCard title="Property Details" icon={<Home className="h-4 w-4" />}>
+        <div className="space-y-4">
+          <EInput label="Property Address" name="propertyAddress" value={f.propertyAddress} onChange={setField} placeholder="123 Main St, City, State ZIP" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <EInput label="List Price" name="listPrice" value={f.listPrice} onChange={setField} type="number" placeholder="0" />
+            <EInput label="Sale Price" name="salePrice" value={f.salePrice} onChange={setField} type="number" placeholder="0" />
           </div>
-        )}
+        </div>
       </SectionCard>
 
-      {/* ── Commission (agent-visible only) ─────────────────────────────────── */}
-      <SectionCard title="My Commission" icon={<DollarSign className="h-4 w-4" />}>
-        <Grid3>
-          <Dl label="Seller Commission %" value={sellerCommPct != null ? `${sellerCommPct}%` : null} />
-          <Dl label="Buyer Agent Commission %" value={buyerCommPct != null ? `${buyerCommPct}%` : null} />
-          <Dl label="My Split %" value={agentPct != null ? `${agentPct}%` : null} />
-          <Dl label="Net to Me" value={agentNet != null ? `$${Number(agentNet).toLocaleString()}` : null} />
-          <Dl label="Earnest Money" value={tx.earnestMoney ? `$${Number(tx.earnestMoney).toLocaleString()}` : null} />
-        </Grid3>
-      </SectionCard>
-
-      {/* ── Key Dates ────────────────────────────────────────────────────────── */}
+      {/* ── Key Dates ─────────────────────────────────────────────────────── */}
       <SectionCard title="Key Dates" icon={<Calendar className="h-4 w-4" />}>
-        <Grid3>
-          <Dl label="Contract Date" value={formatDate(tx.contractDate)} />
-          <Dl label="Projected Close" value={formatDate(tx.projectedCloseDate)} />
-          <Dl label="Closed Date" value={formatDate(tx.closedDate || tx.closingDate)} />
-          <Dl label="Option Expiration" value={formatDate(tx.optionExpiration)} />
-          <Dl label="Inspection Deadline" value={formatDate(tx.inspectionDeadline)} />
-          <Dl label="Survey Deadline" value={formatDate(tx.surveyDeadline)} />
-          <Dl label="Loan App Deadline" value={formatDate(tx.loanApplicationDeadline)} />
-          <Dl label="Appraisal Deadline" value={formatDate(tx.appraisalDeadline)} />
-          <Dl label="Title Deadline" value={formatDate(tx.titleDeadline)} />
-          <Dl label="Final Loan Commitment" value={formatDate(tx.finalLoanCommitmentDeadline)} />
-        </Grid3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {isListing && <EInput label="Listing Date" name="listingDate" value={f.listingDate} onChange={setField} type="date" />}
+          {isListing && <EInput label="Listing Expiration" name="listingExpirationDate" value={f.listingExpirationDate} onChange={setField} type="date" />}
+          <EInput label="Contract Date" name="contractDate" value={f.contractDate} onChange={setField} type="date" />
+          <EInput label="Option Expiration" name="optionExpiration" value={f.optionExpiration} onChange={setField} type="date" />
+          <EInput label="Inspection Deadline" name="inspectionDeadline" value={f.inspectionDeadline} onChange={setField} type="date" />
+          <EInput label="Appraisal Deadline" name="appraisalDeadline" value={f.appraisalDeadline} onChange={setField} type="date" />
+          <EInput label="Survey Deadline" name="surveyDeadline" value={f.surveyDeadline} onChange={setField} type="date" />
+          <EInput label="Title Deadline" name="titleDeadline" value={f.titleDeadline} onChange={setField} type="date" />
+          <EInput label="Loan Application Deadline" name="loanApplicationDeadline" value={f.loanApplicationDeadline} onChange={setField} type="date" />
+          <EInput label="Final Loan Commitment" name="finalLoanCommitmentDeadline" value={f.finalLoanCommitmentDeadline} onChange={setField} type="date" />
+          <EInput label="Projected Close Date" name="projectedCloseDate" value={f.projectedCloseDate} onChange={setField} type="date" />
+          <EInput label="Closing Date" name="closingDate" value={f.closingDate} onChange={setField} type="date" />
+          <EInput label="Closed Date" name="closedDate" value={f.closedDate} onChange={setField} type="date" />
+        </div>
       </SectionCard>
 
-      {/* ── Client / Buyer / Seller ──────────────────────────────────────────── */}
-      <SectionCard title="Client Information" icon={<User className="h-4 w-4" />}>
-        <Grid3>
-          <Dl label="Client Name" value={tx.clientName} />
-          <Dl label="Client Email" value={tx.clientEmail} />
-          <Dl label="Client Phone" value={tx.clientPhone} />
-          <Dl label="Client 2 Name" value={tx.client2Name} />
-          <Dl label="Client 2 Email" value={tx.client2Email} />
-          <Dl label="Client 2 Phone" value={tx.client2Phone} />
-          <Dl label="Buyer Name" value={tx.buyerName} />
-          <Dl label="Buyer Email" value={tx.buyerEmail} />
-          <Dl label="Buyer Phone" value={tx.buyerPhone} />
-          <Dl label="Buyer 2 Name" value={tx.buyer2Name} />
-          <Dl label="Seller Name" value={tx.sellerName} />
-          <Dl label="Seller Email" value={tx.sellerEmail} />
-          <Dl label="Seller Phone" value={tx.sellerPhone} />
-          <Dl label="Seller 2 Name" value={tx.seller2Name} />
-        </Grid3>
-      </SectionCard>
-
-      {/* ── Other Agent ─────────────────────────────────────────────────────── */}
-      {(tx.otherAgentName || tx.otherBrokerage) && (
-        <SectionCard title="Other Agent / Co-op" icon={<Users className="h-4 w-4" />}>
-          <Grid3>
-            <Dl label="Other Agent" value={tx.otherAgentName} />
-            <Dl label="Brokerage" value={tx.otherBrokerage || tx.otherAgentBrokerage} />
-            <Dl label="Email" value={tx.otherAgentEmail} />
-            <Dl label="Phone" value={tx.otherAgentPhone} />
-          </Grid3>
-        </SectionCard>
-      )}
-
-      {/* ── Lender ──────────────────────────────────────────────────────────── */}
-      {(tx.mortgageCompany || tx.loanOfficer) && (
-        <SectionCard title="Lender Information" icon={<Building2 className="h-4 w-4" />}>
-          <Grid3>
-            <Dl label="Mortgage Company" value={tx.mortgageCompany} />
-            <Dl label="Lender Office" value={tx.lenderOffice} />
-            <Dl label="Loan Officer" value={tx.loanOfficer} />
-            <Dl label="Loan Officer Email" value={tx.loanOfficerEmail} />
-            <Dl label="Loan Officer Phone" value={tx.loanOfficerPhone} />
-          </Grid3>
-        </SectionCard>
-      )}
-
-      {/* ── Title ───────────────────────────────────────────────────────────── */}
-      {(tx.titleCompany || tx.titleOfficer || tx.titleAttorney) && (
-        <SectionCard title="Title Information" icon={<Building2 className="h-4 w-4" />}>
-          <Grid3>
-            <Dl label="Title Company" value={tx.titleCompany} />
-            <Dl label="Title Office" value={tx.titleOffice} />
-            <Dl label="Title Officer" value={tx.titleOfficer} />
-            <Dl label="Title Officer Email" value={tx.titleOfficerEmail} />
-            <Dl label="Title Officer Phone" value={tx.titleOfficerPhone} />
-            <Dl label="Title Attorney" value={tx.titleAttorney} />
-          </Grid3>
-        </SectionCard>
-      )}
-
-      {/* ── Pre-Listing Inspection ───────────────────────────────────────────── */}
-      {tx.preListingInspectionOrdered && (
-        <SectionCard title="Pre-Listing Inspection" icon={<Hammer className="h-4 w-4" />}>
-          <Grid3>
-            <Dl label="Ordered" value={tx.preListingInspectionOrdered ? 'Yes' : 'No'} />
-            <Dl label="Target Date" value={formatDate(tx.preListingTargetInspectionDate)} />
-            <Dl label="Inspector" value={tx.preListingInspectorName} />
-            <Dl label="TC Scheduling" value={tx.preListingTcScheduleInspections ? 'Yes' : null} />
-            <Dl label="Notes" value={tx.preListingTcScheduleInspectionsOther} />
-          </Grid3>
-        </SectionCard>
-      )}
-
-      {/* ── Buyer Inspection ─────────────────────────────────────────────────── */}
-      {tx.inspectionOrdered && (
-        <SectionCard title="Buyer Inspection" icon={<Hammer className="h-4 w-4" />}>
-          <Grid3>
-            <Dl label="Ordered" value={tx.inspectionOrdered === 'yes' || tx.inspectionOrdered === true ? 'Yes' : 'No'} />
-            <Dl label="Target Date" value={formatDate(tx.targetInspectionDate)} />
-            <Dl label="Inspector" value={tx.inspectorName} />
-            <Dl label="TC Scheduling" value={tx.tcScheduleInspections === 'yes' || tx.tcScheduleInspections === true ? 'Yes — TC will schedule' : tx.tcScheduleInspections === 'no' || tx.tcScheduleInspections === false ? 'No — Agent will schedule' : null} />
-            <Dl label="Notes" value={tx.tcScheduleInspectionsOther} />
-          </Grid3>
-          {Array.isArray(tx.inspectionTypes) && tx.inspectionTypes.length > 0 && (
-            <div className="mt-3">
-              <dt className="text-xs text-muted-foreground mb-2">Inspection Types</dt>
-              <div className="flex flex-wrap gap-2">
-                {tx.inspectionTypes.map((t: string) => (
-                  <span key={t} className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{t}</span>
-                ))}
-              </div>
+      {/* ── Seller Info ────────────────────────────────────────────────────── */}
+      {(isListing || side === 'dual') && (
+        <SectionCard title="Seller Information" icon={<User className="h-4 w-4" />}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Seller Name" name="sellerName" value={f.sellerName} onChange={setField} />
+              <EInput label="Seller Email" name="sellerEmail" value={f.sellerEmail} onChange={setField} type="email" />
+              <EInput label="Seller Phone" name="sellerPhone" value={f.sellerPhone} onChange={setField} />
             </div>
-          )}
-        </SectionCard>
-      )}
-
-      {/* ── Media Order ──────────────────────────────────────────────────────── */}
-      {(tx.closingType === 'listing' || tx.closingType === 'dual') && (
-        <SectionCard title="Media Order" icon={<MapPin className="h-4 w-4" />} defaultCollapsed={true}>
-          {Array.isArray(tx.mediaTypes) && tx.mediaTypes.length > 0 && (
-            <div className="mb-4">
-              <dt className="text-xs text-muted-foreground mb-2">Media Types Requested</dt>
-              <div className="flex flex-wrap gap-2">
-                {tx.mediaTypes.map((t: string) => (
-                  <span key={t} className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{t}</span>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Seller 2 Name" name="seller2Name" value={f.seller2Name} onChange={setField} />
+              <EInput label="Seller 2 Email" name="seller2Email" value={f.seller2Email} onChange={setField} type="email" />
+              <EInput label="Seller 2 Phone" name="seller2Phone" value={f.seller2Phone} onChange={setField} />
             </div>
-          )}
-          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
-            <div>
-              <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
-              <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form. Staff will follow up to confirm scheduling.</p>
-            </div>
-            <a
-              href="https://mediaengagellc.com/order/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 text-sm transition-colors"
-            >
-              📷 Order Media at Media Engage
-            </a>
           </div>
         </SectionCard>
       )}
 
-      {/* ── Sign Order ───────────────────────────────────────────────────────── */}
-      {tx.signOrderRequested && (
-        <SectionCard title="Sign Order" icon={<Hammer className="h-4 w-4" />} defaultCollapsed={true}>
-          <Grid3>
-            <Dl label="Service Type" value={tx.signServiceType} />
-            <Dl label="Rider / Extension" value={tx.signRiderExt} />
-            <Dl label="Requested Install Date" value={formatDate(tx.signRequestedDate)} />
-            <Dl label="Owner Name" value={tx.signOwnerName} />
-            <Dl label="Special Requests" value={tx.signSpecialRequests} />
-          </Grid3>
+      {/* ── Buyer Info ─────────────────────────────────────────────────────── */}
+      {(isBuyer || side === 'dual' || f.buyerName) && (
+        <SectionCard title="Buyer Information" icon={<User className="h-4 w-4" />}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Buyer Name" name="buyerName" value={f.buyerName} onChange={setField} />
+              <EInput label="Buyer Email" name="buyerEmail" value={f.buyerEmail} onChange={setField} type="email" />
+              <EInput label="Buyer Phone" name="buyerPhone" value={f.buyerPhone} onChange={setField} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Buyer 2 Name" name="buyer2Name" value={f.buyer2Name} onChange={setField} />
+              <EInput label="Buyer 2 Email" name="buyer2Email" value={f.buyer2Email} onChange={setField} type="email" />
+              <EInput label="Buyer 2 Phone" name="buyer2Phone" value={f.buyer2Phone} onChange={setField} />
+            </div>
+          </div>
         </SectionCard>
       )}
 
-      {/* ── ShowingTime ──────────────────────────────────────────────────────── */}
-      {tx.showingTimeRequested && (
-        <SectionCard title="ShowingTime Setup" icon={<Calendar className="h-4 w-4" />} defaultCollapsed={true}>
-          <Grid3>
-            <Dl label="New or Change" value={tx.showingNewOrChange} />
-            <Dl label="Appointment Handling" value={tx.showingApptHandling} />
-            <Dl label="Appointment Type" value={tx.showingApptType} />
-            <Dl label="Lead Time Required" value={tx.showingLeadTimeRequired} />
-            <Dl label="Lead Time Suggested" value={tx.showingLeadTimeSuggested} />
-            <Dl label="Max Appt Length" value={tx.showingMaxApptLength} />
-            <Dl label="Virtual Showing" value={tx.showingVirtualPreference} />
-            <Dl label="Lockbox Type" value={tx.showingLockboxType} />
-            <Dl label="Lockbox Location" value={tx.showingLockboxLocation} />
-            <Dl label="Access Type" value={tx.showingAccessType} />
-            <Dl label="Access Door" value={tx.showingAccessDoor} />
-            <Dl label="Passcode / Gate Code" value={tx.showingPasscode} />
-            <Dl label="Alarm Code" value={tx.showingAlarmCode} />
-            <Dl label="Alarm Disarm Code" value={tx.showingDisarmCode} />
-            <Dl label="Alarm Arm Code" value={tx.showingArmCode} />
-            {tx.showingNoSameDayAppts && <Dl label="Same-Day Appts" value="No same-day appointments" />}
-            {tx.showingApptOverlaps && <Dl label="Overlaps" value="Allow appointment overlaps" />}
-            {tx.showingShareAgentInfo && <Dl label="Share Agent Info" value="Yes — share with showing agents" />}
-          </Grid3>
-          {tx.showingAlarmNotes && (
-            <div className="mt-3">
-              <dt className="text-xs text-muted-foreground">Alarm Notes</dt>
-              <dd className="text-sm mt-0.5">{tx.showingAlarmNotes}</dd>
-            </div>
+      {/* ── Cooperating Agent ─────────────────────────────────────────────── */}
+      <SectionCard title="Cooperating Agent" icon={<Users className="h-4 w-4" />} defaultCollapsed={!f.otherAgentName}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <EInput label="Agent Name" name="otherAgentName" value={f.otherAgentName} onChange={setField} />
+          <EInput label="Brokerage" name="otherAgentBrokerage" value={f.otherAgentBrokerage} onChange={setField} />
+          <EInput label="Email" name="otherAgentEmail" value={f.otherAgentEmail} onChange={setField} type="email" />
+          <EInput label="Phone" name="otherAgentPhone" value={f.otherAgentPhone} onChange={setField} />
+        </div>
+      </SectionCard>
+
+      {/* ── Lender ────────────────────────────────────────────────────────── */}
+      <SectionCard title="Lender / Mortgage" icon={<Building2 className="h-4 w-4" />} defaultCollapsed={!f.mortgageCompany}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <EInput label="Mortgage Company" name="mortgageCompany" value={f.mortgageCompany} onChange={setField} />
+          <EInput label="Lender Office" name="lenderOffice" value={f.lenderOffice} onChange={setField} />
+          <EInput label="Loan Officer" name="loanOfficer" value={f.loanOfficer} onChange={setField} />
+          <EInput label="Loan Officer Email" name="loanOfficerEmail" value={f.loanOfficerEmail} onChange={setField} type="email" />
+          <EInput label="Loan Officer Phone" name="loanOfficerPhone" value={f.loanOfficerPhone} onChange={setField} />
+        </div>
+      </SectionCard>
+
+      {/* ── Title ─────────────────────────────────────────────────────────── */}
+      <SectionCard title="Title Company" icon={<FileText className="h-4 w-4" />} defaultCollapsed={!f.titleCompany}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <EInput label="Title Company" name="titleCompany" value={f.titleCompany} onChange={setField} />
+          <EInput label="Title Office" name="titleOffice" value={f.titleOffice} onChange={setField} />
+          <EInput label="Title Officer" name="titleOfficer" value={f.titleOfficer} onChange={setField} />
+          <EInput label="Title Attorney" name="titleAttorney" value={f.titleAttorney} onChange={setField} />
+          <EInput label="Title Officer Email" name="titleOfficerEmail" value={f.titleOfficerEmail} onChange={setField} type="email" />
+          <EInput label="Title Officer Phone" name="titleOfficerPhone" value={f.titleOfficerPhone} onChange={setField} />
+        </div>
+      </SectionCard>
+
+      {/* ── Financial Details ─────────────────────────────────────────────── */}
+      <SectionCard title="Financial Details" icon={<DollarSign className="h-4 w-4" />} defaultCollapsed={!f.earnestMoney}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <EInput label="Earnest Money" name="earnestMoney" value={f.earnestMoney} onChange={setField} type="number" />
+          <ESelect label="Deposit Holder" name="depositHolder" value={f.depositHolder} onChange={setField} options={[
+            { value: 'listing_brokerage', label: 'Listing Brokerage' },
+            { value: 'title_company', label: 'Title Company' },
+            { value: 'other', label: 'Other' },
+          ]} />
+          {f.depositHolder === 'other' && (
+            <EInput label="Deposit Holder (Other)" name="depositHolderOther" value={f.depositHolderOther} onChange={setField} />
           )}
-          {tx.showingAccessNotes && (
-            <div className="mt-3">
-              <dt className="text-xs text-muted-foreground">Access Notes</dt>
-              <dd className="text-sm mt-0.5">{tx.showingAccessNotes}</dd>
-            </div>
-          )}
-          {tx.showingNotesToAgent && (
-            <div className="mt-3">
-              <dt className="text-xs text-muted-foreground">Notes to Showing Agent</dt>
-              <dd className="text-sm mt-0.5">{tx.showingNotesToAgent}</dd>
-            </div>
-          )}
-          {tx.showingNotesToStaff && (
-            <div className="mt-3">
-              <dt className="text-xs text-muted-foreground">Notes to Staff</dt>
-              <dd className="text-sm mt-0.5">{tx.showingNotesToStaff}</dd>
-            </div>
-          )}
-          {tx.showingCallOrder2Name && (
-            <div className="mt-3 border rounded-md p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Call Order Contact #2</p>
-              <Grid3>
-                <Dl label="Name" value={tx.showingCallOrder2Name} />
-                <Dl label="Mobile" value={tx.showingCallOrder2Mobile} />
-                <Dl label="Email" value={tx.showingCallOrder2Email} />
-              </Grid3>
-            </div>
-          )}
-          {tx.showingCallOrder3Name && (
-            <div className="mt-3 border rounded-md p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Call Order Contact #3</p>
-              <Grid3>
-                <Dl label="Name" value={tx.showingCallOrder3Name} />
-                <Dl label="Mobile" value={tx.showingCallOrder3Mobile} />
-                <Dl label="Email" value={tx.showingCallOrder3Email} />
-              </Grid3>
-            </div>
-          )}
+          <EInput label="Buyer Closing Costs Paid by Seller" name="buyerClosingCostTotal" value={f.buyerClosingCostTotal} onChange={setField} type="number" />
+        </div>
+      </SectionCard>
+
+      {/* ── Buyer Inspection ──────────────────────────────────────────────── */}
+      {isBuyer && (
+        <SectionCard title="Buyer Inspection" icon={<Wrench className="h-4 w-4" />} defaultCollapsed={!f.inspectionOrdered || f.inspectionOrdered === 'no'}>
+          <div className="space-y-4">
+            <ESelect label="Inspection Ordered?" name="inspectionOrdered" value={f.inspectionOrdered} onChange={setField} options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+              { value: 'waived', label: 'Waived' },
+            ]} />
+            {f.inspectionOrdered === 'yes' && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <EInput label="Target Inspection Date" name="targetInspectionDate" value={f.targetInspectionDate} onChange={setField} type="date" />
+                  <EInput label="Inspector Name" name="inspectorName" value={f.inspectorName} onChange={setField} />
+                </div>
+                <ECheckboxGroup label="Inspection Types" name="inspectionTypes"
+                  options={INSPECTION_TYPE_OPTIONS} value={f.inspectionTypes} onChange={setField} />
+                <ESelect label="TC to Schedule Inspections?" name="tcScheduleInspections" value={f.tcScheduleInspections} onChange={setField} options={[
+                  { value: 'yes', label: 'Yes — TC will schedule' },
+                  { value: 'no', label: 'No — Agent will schedule' },
+                  { value: 'other', label: 'Other' },
+                ]} />
+              </>
+            )}
+          </div>
         </SectionCard>
       )}
 
-      {/* ── Additional Info ──────────────────────────────────────────────────── */}
-      {(tx.warrantyAtClosing || tx.occupancyAgreement || tx.shortageInCommission || tx.txComplianceFee) && (
-        <SectionCard title="Additional Transaction Info" icon={<Info className="h-4 w-4" />} defaultCollapsed={true}>
-          <Grid3>
-            <Dl label="Warranty at Closing" value={tx.warrantyAtClosing} />
-            <Dl label="Warranty Amount" value={tx.warrantyAmount ? `$${Number(tx.warrantyAmount).toLocaleString()}` : null} />
-            <Dl label="Warranty Paid By" value={tx.warrantyPaidBy} />
-            <Dl label="Occupancy Agreement" value={tx.occupancyAgreement} />
-            <Dl label="Occupancy Dates" value={tx.occupancyDates} />
-            <Dl label="Shortage in Commission" value={tx.shortageInCommission} />
-            <Dl label="Shortage Amount" value={tx.shortageAmount ? `$${Number(tx.shortageAmount).toLocaleString()}` : null} />
-            <Dl label="Compliance Fee" value={tx.txComplianceFee} />
-            <Dl label="Compliance Fee Amount" value={tx.txComplianceFeeAmount ? `$${Number(tx.txComplianceFeeAmount).toLocaleString()}` : null} />
-            <Dl label="Compliance Fee Paid By" value={tx.txComplianceFeePaidBy} />
-          </Grid3>
+      {/* ── Pre-Listing Inspection ────────────────────────────────────────── */}
+      {isListing && (
+        <SectionCard title="Pre-Listing Inspection" icon={<Wrench className="h-4 w-4" />} defaultCollapsed={!f.preListingInspectionOrdered || f.preListingInspectionOrdered === 'no'}>
+          <div className="space-y-4">
+            <ESelect label="Pre-Listing Inspection Ordered?" name="preListingInspectionOrdered" value={f.preListingInspectionOrdered} onChange={setField} options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]} />
+            {f.preListingInspectionOrdered === 'yes' && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <EInput label="Target Inspection Date" name="preListingTargetInspectionDate" value={f.preListingTargetInspectionDate} onChange={setField} type="date" />
+                  <EInput label="Inspector Name" name="preListingInspectorName" value={f.preListingInspectorName} onChange={setField} />
+                </div>
+                <ECheckboxGroup label="Inspection Types" name="preListingInspectionTypes"
+                  options={INSPECTION_TYPE_OPTIONS} value={f.preListingInspectionTypes} onChange={setField} />
+                <ESelect label="TC to Schedule Inspections?" name="preListingTcScheduleInspections" value={f.preListingTcScheduleInspections} onChange={setField} options={[
+                  { value: 'yes', label: 'Yes — TC will schedule' },
+                  { value: 'no', label: 'No — Agent will schedule' },
+                  { value: 'other', label: 'Other' },
+                ]} />
+              </>
+            )}
+          </div>
         </SectionCard>
       )}
 
-      {/* ── Referrals ────────────────────────────────────────────────────────── */}
-      {(tx.hasOutboundReferral || tx.hasInboundReferral) && (
-        <SectionCard title="Referral Information" icon={<Users className="h-4 w-4" />} defaultCollapsed={true}>
-          {tx.hasOutboundReferral && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Outbound Referral</p>
-              <Grid3>
-                <Dl label="Referral Agent" value={tx.outboundReferralAgentName} />
-                <Dl label="Brokerage" value={tx.outboundReferralBrokerage} />
-                <Dl label="Fee %" value={tx.outboundReferralFeePercent != null ? `${tx.outboundReferralFeePercent}%` : null} />
-              </Grid3>
-            </div>
-          )}
-          {tx.hasInboundReferral && (
-            <div className={tx.hasOutboundReferral ? 'mt-4' : ''}>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Inbound Referral</p>
-              <Grid3>
-                <Dl label="Referring Agent" value={tx.inboundReferralAgentName} />
-                <Dl label="Fee %" value={tx.inboundReferralFeePercent != null ? `${tx.inboundReferralFeePercent}%` : null} />
-              </Grid3>
-            </div>
-          )}
+      {/* ── Media Order ───────────────────────────────────────────────────── */}
+      {isListing && (
+        <SectionCard title="Media Order" icon={<Camera className="h-4 w-4" />} defaultCollapsed={!f.mediaRequested}>
+          <div className="space-y-4">
+            <ESwitch label="Media Requested" name="mediaRequested" value={Boolean(f.mediaRequested)} onChange={setField} />
+            {f.mediaRequested && (
+              <>
+                <ECheckboxGroup label="Media Types" name="mediaTypes"
+                  options={MEDIA_TYPE_OPTIONS} value={f.mediaTypes} onChange={setField} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <EInput label="Requested Date" name="mediaRequestedDate" value={f.mediaRequestedDate} onChange={setField} type="date" />
+                </div>
+                <ETextarea label="Media Notes" name="mediaNotes" value={f.mediaNotes} onChange={setField} />
+              </>
+            )}
+          </div>
         </SectionCard>
       )}
 
-      {/* ── Notes ────────────────────────────────────────────────────────────── */}
-      {(tx.notes || tx.additionalComments) && (
-        <SectionCard title="Notes" icon={<Info className="h-4 w-4" />}>
-          {tx.notes && (
-            <div>
-              <dt className="text-xs text-muted-foreground mb-1">Transaction Notes</dt>
-              <dd className="text-sm whitespace-pre-wrap">{tx.notes}</dd>
-            </div>
-          )}
-          {tx.additionalComments && (
-            <div className={tx.notes ? 'mt-3' : ''}>
-              <dt className="text-xs text-muted-foreground mb-1">Additional Comments</dt>
-              <dd className="text-sm whitespace-pre-wrap">{tx.additionalComments}</dd>
-            </div>
-          )}
+      {/* ── Sign Order ────────────────────────────────────────────────────── */}
+      {isListing && (
+        <SectionCard title="Sign Order" icon={<MapPin className="h-4 w-4" />} defaultCollapsed={!f.signOrderRequested}>
+          <div className="space-y-4">
+            <ESwitch label="Sign Order Requested" name="signOrderRequested" value={Boolean(f.signOrderRequested)} onChange={setField} />
+            {f.signOrderRequested && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ESelect label="Sign Service Type" name="signServiceType" value={f.signServiceType} onChange={setField}
+                    options={SIGN_SERVICE_OPTIONS.map(o => ({ value: o, label: o }))} />
+                  <EInput label="Install Date" name="signInstallDate" value={f.signInstallDate} onChange={setField} type="date" />
+                  <EInput label="Owner / Occupant Name" name="signOwnerName" value={f.signOwnerName} onChange={setField} />
+                </div>
+                <ECheckboxGroup label="Sign Riders" name="signRider"
+                  options={['Open House', 'For Sale', 'Sold', 'Under Contract', 'Price Reduced']} value={f.signRider} onChange={setField} />
+                <ECheckboxGroup label="Additional Options" name="signAdditionalOptions"
+                  options={SIGN_ADDITIONAL_OPTIONS} value={f.signAdditionalOptions} onChange={setField} />
+                <ETextarea label="Special Requests" name="signSpecialRequests" value={f.signSpecialRequests} onChange={setField} />
+              </>
+            )}
+          </div>
         </SectionCard>
       )}
 
-      {/* ── Documents ────────────────────────────────────────────────────────── */}
+      {/* ── ShowingTime ───────────────────────────────────────────────────── */}
+      {isListing && (
+        <SectionCard title="ShowingTime Setup" icon={<Eye className="h-4 w-4" />} defaultCollapsed={!f.showingTimeRequested}>
+          <div className="space-y-4">
+            <ESwitch label="ShowingTime Requested" name="showingTimeRequested" value={Boolean(f.showingTimeRequested)} onChange={setField} />
+            {f.showingTimeRequested && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <ESelect label="Appointment Type" name="showingApptType" value={f.showingApptType} onChange={setField} options={[
+                    { value: 'appointment_required', label: 'Appointment Required' },
+                    { value: 'go_and_show', label: 'Go and Show' },
+                    { value: 'call_first', label: 'Call First' },
+                  ]} />
+                  <ESelect label="New or Change" name="showingNewOrChange" value={f.showingNewOrChange} onChange={setField} options={[
+                    { value: 'new', label: 'New Setup' },
+                    { value: 'change', label: 'Change Existing' },
+                  ]} />
+                  <ESelect label="Appointment Handling" name="showingApptHandling" value={f.showingApptHandling} onChange={setField} options={[
+                    { value: 'auto_approve', label: 'Auto-Approve' },
+                    { value: 'call_to_confirm', label: 'Call to Confirm' },
+                    { value: 'text_to_confirm', label: 'Text to Confirm' },
+                  ]} />
+                  <EInput label="Lead Time (hours)" name="showingLeadTime" value={f.showingLeadTime} onChange={setField} />
+                  <EInput label="Lead Time Suggested" name="showingLeadTimeSuggested" value={f.showingLeadTimeSuggested} onChange={setField} />
+                  <EInput label="Max Appointment Length" name="showingMaxApptLength" value={f.showingMaxApptLength} onChange={setField} />
+                  <ESelect label="Virtual Preference" name="showingVirtualPreference" value={f.showingVirtualPreference} onChange={setField} options={[
+                    { value: 'yes', label: 'Yes — allow virtual' },
+                    { value: 'no', label: 'No — in-person only' },
+                  ]} />
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  <ESwitch label="Allow Appointment Overlaps" name="showingApptOverlaps" value={Boolean(f.showingApptOverlaps)} onChange={setField} />
+                  <ESwitch label="No Same-Day Appointments" name="showingNoSameDayAppts" value={Boolean(f.showingNoSameDayAppts)} onChange={setField} />
+                  <ESwitch label="Share Agent Info with Showing Agents" name="showingShareAgentInfo" value={Boolean(f.showingShareAgentInfo)} onChange={setField} />
+                </div>
+                <Separator />
+                <p className="text-sm font-medium">Access Information</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <ESelect label="Access Type" name="showingAccessType" value={f.showingAccessType} onChange={setField} options={[
+                    { value: 'lockbox', label: 'Lockbox' },
+                    { value: 'call_agent', label: 'Call Agent' },
+                    { value: 'call_owner', label: 'Call Owner' },
+                    { value: 'key_at_office', label: 'Key at Office' },
+                    { value: 'other', label: 'Other' },
+                  ]} />
+                  <EInput label="Access Door" name="showingAccessDoor" value={f.showingAccessDoor} onChange={setField} placeholder="Front, Back, Garage..." />
+                  <EInput label="Lockbox Code" name="showingLockboxCode" value={f.showingLockboxCode} onChange={setField} />
+                  <EInput label="Alarm Code" name="showingAlarmCode" value={f.showingAlarmCode} onChange={setField} />
+                  <EInput label="Disarm Code" name="showingDisarmCode" value={f.showingDisarmCode} onChange={setField} />
+                  <EInput label="Passcode / Gate Code" name="showingPasscode" value={f.showingPasscode} onChange={setField} />
+                </div>
+                <ETextarea label="Alarm Notes" name="showingAlarmNotes" value={f.showingAlarmNotes} onChange={setField} />
+                <ETextarea label="Access Notes" name="showingAccessNotes" value={f.showingAccessNotes} onChange={setField} />
+                <Separator />
+                <p className="text-sm font-medium">Call Order — Contact 1</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <EInput label="Name" name="showingCallOrder1Name" value={f.showingCallOrder1Name} onChange={setField} />
+                  <EInput label="Mobile" name="showingCallOrder1Mobile" value={f.showingCallOrder1Mobile} onChange={setField} />
+                  <EInput label="Email" name="showingCallOrder1Email" value={f.showingCallOrder1Email} onChange={setField} type="email" />
+                </div>
+                <p className="text-sm font-medium">Call Order — Contact 2</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <EInput label="Name" name="showingCallOrder2Name" value={f.showingCallOrder2Name} onChange={setField} />
+                  <EInput label="Mobile" name="showingCallOrder2Mobile" value={f.showingCallOrder2Mobile} onChange={setField} />
+                  <EInput label="Email" name="showingCallOrder2Email" value={f.showingCallOrder2Email} onChange={setField} type="email" />
+                </div>
+                <p className="text-sm font-medium">Call Order — Contact 3</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <EInput label="Name" name="showingCallOrder3Name" value={f.showingCallOrder3Name} onChange={setField} />
+                  <EInput label="Mobile" name="showingCallOrder3Mobile" value={f.showingCallOrder3Mobile} onChange={setField} />
+                  <EInput label="Email" name="showingCallOrder3Email" value={f.showingCallOrder3Email} onChange={setField} type="email" />
+                </div>
+                <ECheckboxGroup label="Notes to Showing Agent" name="showingNotesToAgent"
+                  options={SHOWING_NOTES_TO_AGENT_OPTIONS} value={f.showingNotesToAgent} onChange={setField} />
+                <ETextarea label="Notes to Staff" name="showingNotesToStaff" value={f.showingNotesToStaff} onChange={setField} />
+              </>
+            )}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* ── Additional Transaction Info ────────────────────────────────────── */}
+      <SectionCard title="Additional Transaction Info" icon={<Info className="h-4 w-4" />} defaultCollapsed={!f.warrantyAtClosing && !f.occupancyAgreement && !f.shortageInCommission && !f.txComplianceFee}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <ESelect label="Warranty at Closing?" name="warrantyAtClosing" value={f.warrantyAtClosing} onChange={setField} options={[
+            { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' },
+          ]} />
+          {f.warrantyAtClosing === 'yes' && (
+            <>
+              <EInput label="Warranty Amount" name="warrantyAmount" value={f.warrantyAmount} onChange={setField} type="number" />
+              <ESelect label="Warranty Paid By" name="warrantyPaidBy" value={f.warrantyPaidBy} onChange={setField} options={[
+                { value: 'seller', label: 'Seller' }, { value: 'buyer', label: 'Buyer' },
+              ]} />
+            </>
+          )}
+          <ESelect label="Shortage in Commission?" name="shortageInCommission" value={f.shortageInCommission} onChange={setField} options={[
+            { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' },
+          ]} />
+          {f.shortageInCommission === 'yes' && (
+            <EInput label="Shortage Amount" name="shortageAmount" value={f.shortageAmount} onChange={setField} type="number" />
+          )}
+          <ESelect label="Occupancy Agreement?" name="occupancyAgreement" value={f.occupancyAgreement} onChange={setField} options={[
+            { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' },
+          ]} />
+          {f.occupancyAgreement === 'yes' && (
+            <EInput label="Occupancy Dates" name="occupancyDates" value={f.occupancyDates} onChange={setField} placeholder="e.g. 3 days post-close" />
+          )}
+          <ESelect label="Transaction Compliance Fee?" name="txComplianceFee" value={f.txComplianceFee} onChange={setField} options={[
+            { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' },
+          ]} />
+          {f.txComplianceFee === 'yes' && (
+            <>
+              <EInput label="Compliance Fee Amount" name="txComplianceFeeAmount" value={f.txComplianceFeeAmount} onChange={setField} type="number" />
+              <ESelect label="Compliance Fee Paid By" name="txComplianceFeePaidBy" value={f.txComplianceFeePaidBy} onChange={setField} options={[
+                { value: 'seller', label: 'Seller' }, { value: 'buyer', label: 'Buyer' },
+              ]} />
+            </>
+          )}
+        </div>
+      </SectionCard>
+
+      {/* ── Notes ─────────────────────────────────────────────────────────── */}
+      <SectionCard title="Notes" icon={<FileText className="h-4 w-4" />}>
+        <div className="space-y-4">
+          <ETextarea label="Transaction Notes" name="notes" value={f.notes} onChange={setField} placeholder="Add notes about this transaction..." />
+          <ETextarea label="Additional Comments" name="additionalComments" value={f.additionalComments} onChange={setField} />
+        </div>
+      </SectionCard>
+
+      {/* ── Documents ─────────────────────────────────────────────────────── */}
       {Array.isArray(tx.documents) && tx.documents.length > 0 && (
         <SectionCard title="Documents" icon={<FileText className="h-4 w-4" />}>
           <div className="space-y-2">
@@ -659,25 +864,86 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
               <div key={idx} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
                 <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <a
-                    href={doc.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1"
-                  >
-                    {doc.name}
-                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                  <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                    className="text-sm font-medium truncate hover:underline text-primary flex items-center gap-1">
+                    {doc.name}<ExternalLink className="h-3 w-3 flex-shrink-0" />
                   </a>
-                  {doc.uploadedAt && (
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(doc.uploadedAt)}
-                    </p>
-                  )}
+                  {doc.uploadedAt && <p className="text-xs text-muted-foreground">{formatDate(doc.uploadedAt)}</p>}
                 </div>
               </div>
             ))}
           </div>
         </SectionCard>
+      )}
+
+      {/* ── Agent Tasks ───────────────────────────────────────────────────── */}
+      {totalCount > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              My Tasks
+              <Badge variant="outline" className="ml-auto text-xs">{completedCount}/{totalCount} — {pct}%</Badge>
+            </CardTitle>
+            <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+              <div className="bg-primary h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {phaseOrder.filter(ph => phases[ph]?.length > 0).map(ph => (
+              <div key={ph}>
+                <button
+                  onClick={() => togglePhase(ph)}
+                  className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full text-left mb-2"
+                >
+                  {collapsedPhases[ph] ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+                  {PHASE_LABELS[ph] || ph}
+                  <span className="ml-auto text-xs">
+                    {phases[ph].filter(t => t.completed).length}/{phases[ph].length}
+                  </span>
+                </button>
+                {!collapsedPhases[ph] && (
+                  <div className="space-y-2 pl-4">
+                    {phases[ph].map(task => (
+                      <label key={task.id} className="flex items-start gap-3 cursor-pointer group">
+                        <Checkbox
+                          checked={task.completed}
+                          onCheckedChange={() => handleToggleTask(task)}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className={cn('text-sm', task.completed && 'line-through text-muted-foreground')}>
+                            {task.label}
+                          </span>
+                          {task.dueDate && !task.completed && (
+                            <p className="text-xs text-muted-foreground mt-0.5">Due: {formatDate(task.dueDate)}</p>
+                          )}
+                          {task.completed && task.completedAt && (
+                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-green-500" />
+                              Completed {formatDate(task.completedAt)}
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Sticky Save Bar ───────────────────────────────────────────────── */}
+      {dirty && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t px-4 py-3 flex items-center justify-between gap-4 shadow-lg">
+          <p className="text-sm text-muted-foreground">You have unsaved changes</p>
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
       )}
     </div>
   );
