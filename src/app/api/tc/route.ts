@@ -283,8 +283,8 @@ export async function POST(req: NextRequest) {
       mediaRequestedDate: toStr(body.mediaRequestedDate) || null,
       mediaNotes: toStr(body.mediaNotes) || null,
 
-      // Sign order
-      signOrderRequested: toBool(body.signOrderRequested),
+      // Sign order — infer requested from presence of signServiceType if explicit flag not set
+      signOrderRequested: toBool(body.signOrderRequested) || !!(toStr(body.signServiceType)),
       signServiceType: toStr(body.signServiceType) || null,
       signAdditionalOptions: toArr(body.signAdditionalOptions),
       signRiderExt: toStr(body.signRiderExt) || null,
@@ -292,8 +292,8 @@ export async function POST(req: NextRequest) {
       signOwnerName: toStr(body.signOwnerName) || null,
       signSpecialRequests: toStr(body.signSpecialRequests) || null,
 
-      // ShowingTime setup
-      showingTimeRequested: toBool(body.showingTimeRequested),
+      // ShowingTime setup — infer requested from presence of showingApptType or showingDisarmCode
+      showingTimeRequested: toBool(body.showingTimeRequested) || !!(toStr(body.showingApptType) || toStr(body.showingDisarmCode) || toStr(body.showingAlarmCode)),
       showingNewOrChange: toStr(body.showingNewOrChange) || null,
       showingApptHandling: toArr(body.showingApptHandling),
       showingApptType: toStr(body.showingApptType) || null,

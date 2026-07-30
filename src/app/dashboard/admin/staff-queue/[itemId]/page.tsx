@@ -495,26 +495,26 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           mlsNumber: src.mlsNumber || '',
           listingExpirationDate: src.listingExpirationDate?.split('T')[0] || '',
           mlsDescription: src.mlsDescription || '',
-          // Pre-listing inspection
-          preListingInspectionOrdered: !!src.preListingInspectionOrdered,
+          // Pre-listing inspection — stored as 'yes'/'no' string or boolean
+          preListingInspectionOrdered: src.preListingInspectionOrdered === 'yes' || src.preListingInspectionOrdered === true,
           preListingTargetInspectionDate: src.preListingTargetInspectionDate?.split('T')[0] || '',
-          preListingInspectionTypes: src.preListingInspectionTypes || [],
-          preListingTcScheduleInspections: !!src.preListingTcScheduleInspections,
+          preListingInspectionTypes: Array.isArray(src.preListingInspectionTypes) ? src.preListingInspectionTypes : [],
+          preListingTcScheduleInspections: src.preListingTcScheduleInspections === 'yes' || src.preListingTcScheduleInspections === true,
           preListingTcScheduleInspectionsOther: src.preListingTcScheduleInspectionsOther || '',
           preListingInspectorName: src.preListingInspectorName || '',
-          // Buyer inspection
-          inspectionOrdered: !!src.inspectionOrdered,
+          // Buyer inspection — stored as 'yes'/'no' string or boolean
+          inspectionOrdered: src.inspectionOrdered === 'yes' || src.inspectionOrdered === true,
           targetInspectionDate: src.targetInspectionDate?.split('T')[0] || '',
-          inspectionTypes: src.inspectionTypes || [],
-          tcScheduleInspections: !!src.tcScheduleInspections,
+          inspectionTypes: Array.isArray(src.inspectionTypes) ? src.inspectionTypes : [],
+          tcScheduleInspections: src.tcScheduleInspections === 'yes' || src.tcScheduleInspections === true,
           tcScheduleInspectionsOther: src.tcScheduleInspectionsOther || '',
           inspectorName: src.inspectorName || '',
           // Media order
           mediaTypes: src.mediaTypes || [],
           mediaRequestedDate: src.mediaRequestedDate?.split('T')[0] || '',
           mediaNotes: src.mediaNotes || '',
-          // Sign order
-          signOrderRequested: !!src.signOrderRequested,
+          // Sign order — infer from signServiceType presence if flag is false
+          signOrderRequested: src.signOrderRequested === true || src.signOrderRequested === 'yes' || !!(src.signServiceType),
           signServiceType: src.signServiceType || '',
           signAdditionalOptions: src.signAdditionalOptions || [],
           signRiderExt: src.signRiderExt || '',
@@ -522,7 +522,8 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           signOwnerName: src.signOwnerName || '',
           signSpecialRequests: src.signSpecialRequests || '',
           // ShowingTime
-          showingTimeRequested: !!src.showingTimeRequested,
+          // ShowingTime — infer from showingApptType or disarm code presence if flag is false
+          showingTimeRequested: src.showingTimeRequested === true || src.showingTimeRequested === 'yes' || !!(src.showingApptType || src.showingDisarmCode || src.showingAlarmCode),
           showingNewOrChange: src.showingNewOrChange || '',
           showingApptHandling: src.showingApptHandling || '',
           showingApptType: src.showingApptType || '',
@@ -1975,6 +1976,28 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <FormItem><FormLabel>Inspection Notes</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </Grid3>
+            <div>
+              <p className="text-sm font-medium mb-2">Inspection Types</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {['General Home Inspection','Roof Inspection','Termite Inspection','Foundation Inspection','Sewer Inspection','HVAC Inspection','Pool Inspection','Water Well Inspection','Survey','Elevation Certificate','Stucco Inspection'].map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={(form.watch('preListingInspectionTypes') || []).includes(type)}
+                      onCheckedChange={(checked) => {
+                        const current = form.getValues('preListingInspectionTypes') || [];
+                        if (checked) {
+                          form.setValue('preListingInspectionTypes', [...current, type]);
+                        } else {
+                          form.setValue('preListingInspectionTypes', current.filter((t: string) => t !== type));
+                        }
+                      }}
+                      disabled={isReadOnly}
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </div>
           </SectionCard>
 
           {/* ── Buyer Inspection ──────────────────────────────────────────── */}

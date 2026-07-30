@@ -396,16 +396,16 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           preListingInspectionTypes: Array.isArray(i.preListingInspectionTypes) ? i.preListingInspectionTypes : [],
           preListingTcScheduleInspections: i.preListingTcScheduleInspections || '',
           preListingInspectorName: i.preListingInspectorName || '',
-          // Sign order
-          signOrderRequested: Boolean(i.signOrderRequested),
+          // Sign order — infer from signServiceType presence if flag is false
+          signOrderRequested: i.signOrderRequested === true || i.signOrderRequested === 'yes' || !!(i.signServiceType),
           signServiceType: i.signServiceType || '',
           signAdditionalOptions: Array.isArray(i.signAdditionalOptions) ? i.signAdditionalOptions : [],
           signRiderExt: i.signRiderExt || '',
           signRequestedDate: i.signRequestedDate || '',
           signOwnerName: i.signOwnerName || '',
           signSpecialRequests: i.signSpecialRequests || '',
-          // ShowingTime
-          showingTimeRequested: Boolean(i.showingTimeRequested),
+          // ShowingTime — infer from showingApptType or disarm code presence if flag is false
+          showingTimeRequested: i.showingTimeRequested === true || i.showingTimeRequested === 'yes' || !!(i.showingApptType || i.showingDisarmCode || i.showingAlarmCode),
           showingApptType: i.showingApptType || '',
           showingAccessType: i.showingAccessType || '',
           showingLockboxType: i.showingLockboxType || '',
@@ -1503,7 +1503,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                   <div>
                     <p className="text-sm font-medium mb-2">Inspection Types</p>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {['Home Inspection','Termite/WDO','Mold','Radon','Sewer Scope','Pool/Spa','Roof','Foundation','Electrical','HVAC','Plumbing','Other'].map((type) => (
+                      {['General Home Inspection','Roof Inspection','Termite Inspection','Foundation Inspection','Sewer Inspection','HVAC Inspection','Pool Inspection','Water Well Inspection','Survey','Elevation Certificate','Stucco Inspection'].map((type) => (
                         <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
                           <Checkbox
                             checked={(form.watch('preListingInspectionTypes') || []).includes(type)}
