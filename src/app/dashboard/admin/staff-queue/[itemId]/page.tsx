@@ -1934,6 +1934,21 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                   <FormLabel className="font-normal">Pre-listing inspection ordered</FormLabel>
                 </FormItem>
               )} />
+              {/* Scheduling status badge — derived from the string value stored on the transaction */}
+              {transaction?.preListingTcScheduleInspections && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Status:</span>
+                  {transaction.preListingTcScheduleInspections === 'already_scheduled' && (
+                    <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
+                  )}
+                  {(transaction.preListingTcScheduleInspections === 'yes' || transaction.preListingTcScheduleInspections === 'no' || transaction.preListingTcScheduleInspections === true) && (
+                    <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
+                  )}
+                  {transaction.preListingTcScheduleInspections === 'other' && (
+                    <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
+                  )}
+                </div>
+              )}
               <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
                 <FormItem className="flex items-center gap-2 space-y-0">
                   <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
@@ -1985,6 +2000,21 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                   <FormLabel className="font-normal">Inspection ordered</FormLabel>
                 </FormItem>
               )} />
+              {/* Scheduling status badge — derived from the string value stored on the transaction */}
+              {transaction?.tcScheduleInspections && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Status:</span>
+                  {transaction.tcScheduleInspections === 'already_scheduled' && (
+                    <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
+                  )}
+                  {(transaction.tcScheduleInspections === 'yes' || transaction.tcScheduleInspections === 'no' || transaction.tcScheduleInspections === true) && (
+                    <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
+                  )}
+                  {transaction.tcScheduleInspections === 'other' && (
+                    <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
+                  )}
+                </div>
+              )}
               <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
                 <FormItem className="flex items-center gap-2 space-y-0">
                   <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
@@ -2250,6 +2280,14 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           {/* Staging Consult */}
           {(transaction?.stagingConsultRequested || transaction?.stagingServiceType || transaction?.stagingConsultationDate || transaction?.stagingStagerName) && (
             <SectionCard title="Staging Consult" icon={<Paintbrush className="h-4 w-4" />}>
+              {/* Scheduling status badge */}
+              <div className="mb-3">
+                {transaction?.stagingRequestSentAt ? (
+                  <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5">🔵 Request Sent to Stager</span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Coordinate</span>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {transaction?.stagingStagerName && <Dl label="Stager" value={transaction.stagingStagerName} />}
                 {transaction?.stagingStagerEmail && <Dl label="Stager Email" value={transaction.stagingStagerEmail} />}

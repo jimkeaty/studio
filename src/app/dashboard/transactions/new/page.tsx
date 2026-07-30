@@ -439,14 +439,14 @@ const schema = z.object({
   preListingInspectionOrdered: z.enum(['yes', 'no']).optional(),
   preListingTargetInspectionDate: z.string().optional().or(z.literal('')),
   preListingInspectionTypes: z.array(z.string()).optional(),
-  preListingTcScheduleInspections: z.enum(['yes', 'no', 'other']).optional(),
+  preListingTcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).optional(),
   preListingTcScheduleInspectionsOther: z.string().optional(),
   preListingInspectorName: z.string().optional(),
   // Buyer/Pending Inspections
   inspectionOrdered: z.enum(['yes', 'no']).optional(),
   targetInspectionDate: z.string().optional().or(z.literal('')),
   inspectionTypes: z.array(z.string()).optional(),
-  tcScheduleInspections: z.enum(['yes', 'no', 'other']).optional(),
+  tcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).optional(),
   tcScheduleInspectionsOther: z.string().optional(),
   inspectorName: z.string().optional(),
   // Media Order (listing-only)
@@ -3654,13 +3654,13 @@ export default function AddTransactionPage() {
               </Grid2>
               <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Do you want TC to help schedule pre-listing inspections?</FormLabel>
+                  <FormLabel>Pre-Listing Inspection Scheduling Status</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
                     <SelectContent>
-                      <SelectItem value="yes">Yes</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="already_scheduled">✅ Already Scheduled — I contacted the inspector</SelectItem>
+                      <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
+                      <SelectItem value="other">📝 Other / Notes</SelectItem>
                     </SelectContent>
                   </Select>
                 </FormItem>
@@ -4805,13 +4805,13 @@ export default function AddTransactionPage() {
 
             <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
               <FormItem>
-                <FormLabel>Do you want TC to help schedule inspections?</FormLabel>
+                <FormLabel>Inspection Scheduling Status</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="already_scheduled">✅ Already Scheduled — I contacted the inspector</SelectItem>
+                    <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
+                    <SelectItem value="other">📝 Other / Notes</SelectItem>
                   </SelectContent>
                 </Select>
               </FormItem>

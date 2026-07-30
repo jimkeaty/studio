@@ -747,10 +747,25 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                 </div>
                 <ECheckboxGroup label="Inspection Types" name="inspectionTypes"
                   options={INSPECTION_TYPE_OPTIONS} value={f.inspectionTypes} onChange={setField} />
-                <ESelect label="TC to Schedule Inspections?" name="tcScheduleInspections" value={f.tcScheduleInspections} onChange={setField} options={[
-                  { value: 'yes', label: 'Yes — TC will schedule' },
-                  { value: 'no', label: 'No — Agent will schedule' },
-                  { value: 'other', label: 'Other' },
+                {/* Scheduling status badge */}
+                {f.tcScheduleInspections && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Status:</span>
+                    {f.tcScheduleInspections === 'already_scheduled' && (
+                      <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
+                    )}
+                    {(f.tcScheduleInspections === 'yes' || f.tcScheduleInspections === 'no') && (
+                      <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
+                    )}
+                    {f.tcScheduleInspections === 'other' && (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
+                    )}
+                  </div>
+                )}
+                <ESelect label="Inspection Scheduling Status" name="tcScheduleInspections" value={f.tcScheduleInspections} onChange={setField} options={[
+                  { value: 'already_scheduled', label: '✅ Already Scheduled — I contacted the inspector' },
+                  { value: 'yes', label: '📋 TC / Staff to Schedule' },
+                  { value: 'other', label: '📝 Other / Notes' },
                 ]} />
               </>
             )}
@@ -774,10 +789,25 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                 </div>
                 <ECheckboxGroup label="Inspection Types" name="preListingInspectionTypes"
                   options={INSPECTION_TYPE_OPTIONS} value={f.preListingInspectionTypes} onChange={setField} />
-                <ESelect label="TC to Schedule Inspections?" name="preListingTcScheduleInspections" value={f.preListingTcScheduleInspections} onChange={setField} options={[
-                  { value: 'yes', label: 'Yes — TC will schedule' },
-                  { value: 'no', label: 'No — Agent will schedule' },
-                  { value: 'other', label: 'Other' },
+                {/* Scheduling status badge */}
+                {f.preListingTcScheduleInspections && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Status:</span>
+                    {f.preListingTcScheduleInspections === 'already_scheduled' && (
+                      <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
+                    )}
+                    {(f.preListingTcScheduleInspections === 'yes' || f.preListingTcScheduleInspections === 'no') && (
+                      <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
+                    )}
+                    {f.preListingTcScheduleInspections === 'other' && (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
+                    )}
+                  </div>
+                )}
+                <ESelect label="Pre-Listing Inspection Scheduling Status" name="preListingTcScheduleInspections" value={f.preListingTcScheduleInspections} onChange={setField} options={[
+                  { value: 'already_scheduled', label: '✅ Already Scheduled — I contacted the inspector' },
+                  { value: 'yes', label: '📋 TC / Staff to Schedule' },
+                  { value: 'other', label: '📝 Other / Notes' },
                 ]} />
               </>
             )}
@@ -952,6 +982,14 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       {/* ── Staging Consult ──────────────────────────────────────────── */}
       {(transaction?.stagingConsultRequested || transaction?.stagingServiceType || transaction?.stagingConsultationDate || transaction?.stagingStagerName) && (
         <SectionCard title="Staging Consult" icon={<Paintbrush className="h-4 w-4" />}>
+          {/* Scheduling status badge */}
+          <div className="mb-3">
+            {transaction?.stagingRequestSentAt ? (
+              <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5">🔵 Request Sent to Stager</span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Coordinate</span>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {transaction.stagingStagerName && <Dl label="Stager" value={transaction.stagingStagerName} />}
             {transaction.stagingStagerEmail && <Dl label="Stager Email" value={transaction.stagingStagerEmail} />}

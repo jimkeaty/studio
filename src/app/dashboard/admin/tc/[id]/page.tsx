@@ -1595,13 +1595,29 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                       ))}
                     </div>
                   </div>
+                  {/* Scheduling status badge */}
+                  {form.watch('preListingTcScheduleInspections') && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">Status:</span>
+                      {form.watch('preListingTcScheduleInspections') === 'already_scheduled' && (
+                        <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
+                      )}
+                      {(form.watch('preListingTcScheduleInspections') === 'yes' || form.watch('preListingTcScheduleInspections') === 'no') && (
+                        <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
+                      )}
+                      {form.watch('preListingTcScheduleInspections') === 'other' && (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
+                      )}
+                    </div>
+                  )}
                   <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
-                    <FormItem><FormLabel>TC to Schedule Inspections?</FormLabel>
+                    <FormItem><FormLabel>Pre-Listing Inspection Scheduling Status</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="yes">Yes — TC will schedule</SelectItem>
-                          <SelectItem value="no">No — Agent will schedule</SelectItem>
+                          <SelectItem value="already_scheduled">✅ Already Scheduled — Agent contacted inspector</SelectItem>
+                          <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
+                          <SelectItem value="other">📝 Other / Notes</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
@@ -1916,14 +1932,29 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                       ))}
                     </div>
                   </div>
+                  {/* Scheduling status badge */}
+                  {form.watch('tcScheduleInspections') && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">Status:</span>
+                      {form.watch('tcScheduleInspections') === 'already_scheduled' && (
+                        <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
+                      )}
+                      {(form.watch('tcScheduleInspections') === 'yes' || form.watch('tcScheduleInspections') === 'no') && (
+                        <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
+                      )}
+                      {form.watch('tcScheduleInspections') === 'other' && (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
+                      )}
+                    </div>
+                  )}
                   <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
-                    <FormItem><FormLabel>TC to Schedule Inspections?</FormLabel>
+                    <FormItem><FormLabel>Inspection Scheduling Status</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="yes">Yes — TC will schedule</SelectItem>
-                          <SelectItem value="no">No — Agent will schedule</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          <SelectItem value="already_scheduled">✅ Already Scheduled — Agent contacted inspector</SelectItem>
+                          <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
+                          <SelectItem value="other">📝 Other / Notes</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
@@ -2101,6 +2132,14 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           {/* Section 15: Staging Consult */}
           {(intake?.stagingConsultRequested || intake?.stagingServiceType || intake?.stagingConsultationDate || intake?.stagingStagerName) && (
             <SectionCard title="Staging Consult" icon={<Paintbrush className="h-4 w-4" />}>
+              {/* Scheduling status badge */}
+              <div className="mb-3">
+                {intake?.stagingRequestSentAt ? (
+                  <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5">🔵 Request Sent to Stager</span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Coordinate</span>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <Dl label="Stager" value={intake?.stagingStagerName} />
                 <Dl label="Stager Email" value={intake?.stagingStagerEmail} />
