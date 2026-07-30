@@ -3821,53 +3821,31 @@ export default function AddTransactionPage() {
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
             <Collapsible open={mediaOrderOpen} onOpenChange={setMediaOrderOpen}>
               <Card>
-                <CardHeader
-                  className="cursor-pointer select-none py-4"
-                  onClick={() => setMediaOrderOpen(!mediaOrderOpen)}
-                >
+                <CardHeader className="py-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base">Media Order</CardTitle>
-                      <CardDescription>Select the media you want ordered for this listing. Leave blank and staff will coordinate for you.</CardDescription>
+                      <CardDescription>Order media directly through Media Engage for this listing.</CardDescription>
                     </div>
-                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${mediaOrderOpen ? 'rotate-180' : ''}`} />
+                    <span className="text-2xl">📸</span>
                   </div>
                 </CardHeader>
-                <CollapsibleContent>
-                  <CardContent className="space-y-5 pt-0">
-                    <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4 flex items-start gap-3">
-                      <span className="text-blue-600 dark:text-blue-400 text-xl mt-0.5">📸</span>
-                      <div className="text-sm text-blue-800 dark:text-blue-300">
-                        <p className="font-semibold mb-1">Need help scheduling media?</p>
-                        <p>You can order directly through <a href="https://mediaengagellc.com/order/" target="_blank" rel="noopener noreferrer" className="underline font-medium hover:text-blue-600">Media Engage</a>, or leave this section blank and staff will coordinate scheduling for you.</p>
-                      </div>
-                    </div>
+                <CardContent className="pt-0">
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
                     <div>
-                      <p className="text-sm font-medium mb-3">Select media to order (check all that apply):</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {MEDIA_TYPE_OPTIONS.map((type) => (
-                          <label key={type} className="flex items-center gap-2 cursor-pointer text-sm">
-                            <input
-                              type="checkbox"
-                              checked={mediaTypes.includes(type)}
-                              onChange={() => toggleMediaType(type)}
-                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                            />
-                            {type}
-                          </label>
-                        ))}
-                      </div>
+                      <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form. Staff will follow up to confirm scheduling.</p>
                     </div>
-                    <Grid2>
-                      <FormField control={form.control} name="mediaRequestedDate" render={({ field }) => (
-                        <FormItem><FormLabel>Requested Media Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormDescription>When would you like media scheduled?</FormDescription></FormItem>
-                      )} />
-                    </Grid2>
-                    <FormField control={form.control} name="mediaNotes" render={({ field }) => (
-                      <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea placeholder="Any special instructions for the media team..." {...field} /></FormControl></FormItem>
-                    )} />
-                  </CardContent>
-                </CollapsibleContent>
+                    <a
+                      href="https://mediaengagellc.com/order/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-md bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 text-sm transition-colors"
+                    >
+                      📷 Order Media at Media Engage
+                    </a>
+                  </div>
+                </CardContent>
               </Card>
             </Collapsible>
           )}

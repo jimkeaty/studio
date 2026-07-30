@@ -468,13 +468,22 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       )}
 
       {/* ── Media Order ──────────────────────────────────────────────────────── */}
-      {(tx.mediaTypes?.length > 0 || tx.mediaRequestedDate || tx.mediaNotes) && (
+      {(tx.closingType === 'listing' || tx.closingType === 'dual') && (
         <SectionCard title="Media Order" icon={<MapPin className="h-4 w-4" />} defaultCollapsed={true}>
-          <Grid3>
-            <Dl label="Requested Date" value={formatDate(tx.mediaRequestedDate)} />
-            <Dl label="Media Types" value={Array.isArray(tx.mediaTypes) ? tx.mediaTypes.join(', ') : tx.mediaTypes} />
-            <Dl label="Notes" value={tx.mediaNotes} />
-          </Grid3>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
+            <div>
+              <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
+              <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form. Staff will follow up to confirm scheduling.</p>
+            </div>
+            <a
+              href="https://mediaengagellc.com/order/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 text-sm transition-colors"
+            >
+              📷 Order Media at Media Engage
+            </a>
+          </div>
         </SectionCard>
       )}
 

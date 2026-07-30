@@ -2008,14 +2008,20 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
 
           {/* ── Media Order ───────────────────────────────────────────────── */}
           <SectionCard title="Media Order" icon={<MapPin className="h-4 w-4" />}>
-            <Grid2>
-              <FormField control={form.control} name="mediaRequestedDate" render={({ field }) => (
-                <FormItem><FormLabel>Requested Date</FormLabel><FormControl><Input {...field} type="date" disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-            </Grid2>
-            <FormField control={form.control} name="mediaNotes" render={({ field }) => (
-              <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
-            )} />
+            <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
+              <div>
+                <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
+                <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form.</p>
+              </div>
+              <a
+                href="https://mediaengagellc.com/order/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-md bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 text-sm transition-colors"
+              >
+                📷 Order Media at Media Engage
+              </a>
+            </div>
           </SectionCard>
 
           {/* ── Sign Order ────────────────────────────────────────────────── */}
