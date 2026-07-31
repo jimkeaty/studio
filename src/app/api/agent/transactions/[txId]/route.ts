@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-import { getAllStaffUids, getTcUids } from '@/lib/notifications/getRecipientUids';
+import { getAllStaffUids, getTcUids, getStaffUidsForAgent } from '@/lib/notifications/getRecipientUids';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
 import { resolveGCI } from '@/lib/commissions';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
@@ -334,6 +334,47 @@ export async function PATCH(
     // Save updates to the transaction document
     await txRef.update(updates);
 
+    // ── TC Queue sync: if this transaction has a linked tcIntakes record, mirror key field
+    //    changes back so the TC queue always shows current data without requiring a re-approval.
+    //    Only sync non-workflow fields (never overwrite TC queue status, checklist, etc.).
+    void (async () => {
+      try {
+        const linkedIntakeSnap = await adminDb
+          .collection('tcIntakes')
+          .where('approvedTransactionId', '==', txId)
+          .limit(1)
+          .get();
+        if (!linkedIntakeSnap.empty) {
+          const TC_SYNC_FIELDS = new Set([
+            'address', 'propertyAddress', 'listPrice', 'salePrice', 'commissionPercent',
+            'gci', 'transactionFee', 'earnestMoney', 'closingType', 'dealType',
+            'listingDate', 'contractDate', 'closingDate', 'closedDate', 'optionExpiration',
+            'inspectionDeadline', 'projectedCloseDate',
+            'sellerName', 'sellerEmail', 'sellerPhone',
+            'seller2Name', 'seller2Email', 'seller2Phone',
+            'buyerName', 'buyerEmail', 'buyerPhone',
+            'buyer2Name', 'buyer2Email', 'buyer2Phone',
+            'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherAgentBrokerage',
+            'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
+            'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
+            'inspectionTypes', 'inspectorName', 'targetInspectionDate', 'tcScheduleInspections',
+            'mediaTypes', 'mediaRequestedDate', 'mediaOrderNotes',
+            'notes', 'additionalComments', 'documents',
+            'status',
+          ]);
+          const intakeSyncUpdates: Record<string, any> = { updatedAt: new Date().toISOString() };
+          for (const [k, v] of Object.entries(updates)) {
+            if (TC_SYNC_FIELDS.has(k)) intakeSyncUpdates[k] = v;
+          }
+          if (Object.keys(intakeSyncUpdates).length > 1) {
+            await linkedIntakeSnap.docs[0].ref.update(intakeSyncUpdates);
+          }
+        }
+      } catch (syncErr) {
+        console.error('[agent PATCH] tcIntakes sync error (non-fatal):', syncErr);
+      }
+    })();
+
     // ── Staff Queue: notify staff based on transaction type and status change ──
     // Rules:
     //   - Listing/dual transactions: notify on any MLS status change
@@ -619,13 +660,12 @@ export async function PATCH(
               url: '/dashboard/admin/staff-queue',
             });
           }
-          // Notify TC only if assigned to this specific agent
-          const agentProfileDoc = await adminDb.collection('agentProfiles').doc(txData.agentId || uid).get().catch(() => null);
-          const assignedTcUid = agentProfileDoc?.data()?.assignedTcUid as string | undefined;
-          if (assignedTcUid) {
+          // Notify TC — use assigned TC if set, otherwise fall back to all TC coordinators
+          const tcRecipientsForPending = await getStaffUidsForAgent(adminDb, txData.agentId || uid);
+          if (tcRecipientsForPending.length > 0) {
             await sendNotification(adminDb, {
               type: 'tc_new_intake',
-              recipientUids: [assignedTcUid],
+              recipientUids: tcRecipientsForPending,
               title: 'Listing Under Contract — TC Review',
               body: `${agentName}'s listing at ${txAddress} is now Pending. Contract details submitted for your review.`,
               url: '/dashboard/admin/tc',
@@ -690,16 +730,19 @@ export async function PATCH(
     // Fires on any field edit or document upload (regardless of TC assignment)
     void (async () => {
       try {
-        const isDocUpload = updates.documents !== undefined;
+        const isDocUpload = updates.documents !== undefined && !_replaceDocuments;
         const isFieldEdit = Object.keys(updates).some(k =>
-          !['status', 'documents', 'updatedAt'].includes(k)
+          !['status', 'documents', 'updatedAt', 'lastUpdatedBy'].includes(k)
         );
         if (isDocUpload || isFieldEdit) {
           const txAddress = String(txData.propertyAddress || txData.address || 'a transaction');
           const agentName = String(txData.agentDisplayName || 'Agent');
-          const changeDesc = isDocUpload
-            ? 'uploaded a document'
-            : `updated fields: ${Object.keys(updates).filter(k => !['updatedAt'].includes(k)).slice(0, 3).join(', ')}`;
+          // Use clear, distinct language for document uploads vs transaction field edits
+          const changeDesc = isDocUpload && !isFieldEdit
+            ? 'uploaded a new document'
+            : isFieldEdit && !isDocUpload
+            ? 'updated the transaction details'
+            : 'updated the transaction and uploaded a document';
 
           // Set agentUpdateBanner on all active checklists for this transaction
           const checklistSnap = await adminDb.collection('transactionChecklists')

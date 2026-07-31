@@ -1000,7 +1000,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                   <Button
                     size="sm"
                     className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={form.handleSubmit(handleApprove)}
+                    onClick={handleApprove}
                     disabled={acting}
                   >
                     <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -2250,7 +2250,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               <Button
                 type="button"
                 className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={form.handleSubmit(handleApprove)}
+                onClick={handleApprove}
                 disabled={acting}
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
