@@ -1369,8 +1369,17 @@ export default function AddTransactionPage() {
   useEffect(() => {
     if (cbpManuallyEdited.current) return;
     const sp = Number(watchedSalePrice) || 0;
-    if (sp > 0) form.setValue('commissionBasePrice', sp as any);
-  }, [watchedSalePrice]);
+    const lp = Number(watchedListPrice) || 0;
+    const currentStatus = form.getValues('status') as string || '';
+    const isActiveListing = ['active', 'coming_soon', 'temp_off_market'].includes(currentStatus);
+    if (sp > 0) {
+      // Sale price is set — always use it as commission base
+      form.setValue('commissionBasePrice', sp as any);
+    } else if (isActiveListing && lp > 0) {
+      // Active listing with no sale price — use list price as estimated base
+      form.setValue('commissionBasePrice', lp as any);
+    }
+  }, [watchedSalePrice, watchedListPrice]);
 
   useEffect(() => {
     // Only auto-fill commissionPercent when in percent mode
@@ -5601,9 +5610,17 @@ export default function AddTransactionPage() {
                     ? Number((leaderStructureGross - agentDollar).toFixed(2))
                     : 0;
 
+                  const currentSalePrice = Number(form.watch('salePrice')) || 0;
+                  const currentListPrice = Number(form.watch('listPrice')) || 0;
+                  const currentStatus2 = form.watch('status') as string || '';
+                  const isActiveListing2 = ['active', 'coming_soon', 'temp_off_market'].includes(currentStatus2);
+                  const isEstimatedFromListPrice = isActiveListing2 && currentSalePrice === 0 && currentListPrice > 0;
                   return (
                     <div className="mt-4 rounded-xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 dark:border-green-700 p-4">
                       <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-3">💰 Your Estimated Earnings on This Deal</p>
+                      {isEstimatedFromListPrice && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mb-2 font-medium">⚠️ Estimated based on list price — will update to sale price when pending</p>
+                      )}
 
                       {isTeamMemberWithLeader ? (
                         // ── Two-step team member breakdown ────────────────────────────────────

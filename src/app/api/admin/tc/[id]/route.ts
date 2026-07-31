@@ -577,11 +577,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         /* non-fatal — proceed with original agentId */ }
 
       // Determine GCI for split calculation
+      // For active listings with no sale price, use list price as commission base
+      const intakeStatus = intake.status || '';
+      const isActiveListing = ['active', 'coming_soon', 'temp_off_market'].includes(intakeStatus);
+      const effectiveBase = (Number(intake.salePrice) > 0)
+        ? intake.salePrice
+        : (isActiveListing && Number(intake.listPrice) > 0 ? intake.listPrice : intake.commissionBasePrice);
       const rawGci = resolveGCI({
-        commissionBasePrice: intake.commissionBasePrice,
+        commissionBasePrice: effectiveBase,
         salePrice: intake.salePrice,
         commissionPercent: intake.commissionPercent,
         gci: intake.gci,
+        listPrice: intake.listPrice,
+        status: intakeStatus,
       });
       const rawAgentDollar = intake.agentDollar ? toNum(intake.agentDollar) : null;
       const rawBrokerGci = intake.brokerGci ? toNum(intake.brokerGci) : null;

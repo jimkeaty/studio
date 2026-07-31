@@ -548,6 +548,11 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const agentNet = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? null;
   const agentPct = tx.splitSnapshot?.agentSplitPercent ?? tx.agentPct ?? null;
   const sellerCommPct = tx.sellerPayingListingAgent ?? tx.commissionPercent ?? null;
+  const txSalePrice = Number(tx.salePrice) || 0;
+  const txListPrice = Number(tx.listPrice) || 0;
+  const txStatus = tx.status || '';
+  const isActiveTx = ['active', 'coming_soon', 'temp_off_market'].includes(txStatus);
+  const commissionIsEstimated = isActiveTx && txSalePrice === 0 && txListPrice > 0;
 
   const f = form; // shorthand
 
@@ -587,13 +592,21 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
             <CardTitle className="text-base flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-green-700" />
               My Commission
+              {commissionIsEstimated && (
+                <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                  ⚠️ Estimated (based on list price)
+                </span>
+              )}
             </CardTitle>
+            {commissionIsEstimated && (
+              <p className="text-xs text-amber-600 mt-1">Will recalculate from sale price once marked pending.</p>
+            )}
           </CardHeader>
           <CardContent>
             <Grid3>
               {sellerCommPct !== null && <Dl label="Commission %" value={`${sellerCommPct}%`} />}
               {agentPct !== null && <Dl label="My Split %" value={`${agentPct}%`} />}
-              {agentNet !== null && <Dl label="Net to Me" value={`$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />}
+              {agentNet !== null && <Dl label={commissionIsEstimated ? 'Est. Net to Me' : 'Net to Me'} value={`$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />}
             </Grid3>
           </CardContent>
         </Card>

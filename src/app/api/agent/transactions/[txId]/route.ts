@@ -261,23 +261,48 @@ export async function PATCH(
     }
 
     // ── Auto-calculate GCI and splitSnapshot whenever commission-relevant fields change ──
-    // Triggered when: salePrice, commissionPercent, commissionBasePrice, or gci is edited.
-    // This mirrors what the TC approval route does so the transaction ledger always shows
-    // the correct commission breakdown without requiring a TC to re-approve.
+    // Triggered when: salePrice, listPrice, commissionPercent, commissionBasePrice, gci, or status changes.
+    // Status-aware base price:
+    //   - Active / Coming Soon / Temp Off Market → listPrice is the fallback base
+    //   - Pending / Closed / any other → salePrice is the base
+    // When going active→pending and salePrice is now set, auto-update commissionBasePrice.
     const commissionFieldsChanged = (
       updates.salePrice !== undefined ||
+      updates.listPrice !== undefined ||
       updates.commissionPercent !== undefined ||
       updates.commissionBasePrice !== undefined ||
-      updates.gci !== undefined
+      updates.gci !== undefined ||
+      (updates.status !== undefined && updates.status !== txData.status)
     );
+
+    // Auto-set commissionBasePrice to salePrice when going pending (if not manually set)
+    const isGoingPending = updates.status === 'pending' && txData.status !== 'pending';
+    if (isGoingPending) {
+      const sp = Number(updates.salePrice ?? txData.salePrice) || 0;
+      const cbp = Number(updates.commissionBasePrice ?? txData.commissionBasePrice) || 0;
+      if (sp > 0 && cbp === 0) {
+        updates.commissionBasePrice = sp;
+      }
+    }
+
     if (commissionFieldsChanged) {
       try {
         const mergedForCalc = { ...txData, ...updates };
+        const effectiveStatus = String(mergedForCalc.status ?? txData.status ?? '');
         const rawGci = resolveGCI({
           commissionBasePrice: mergedForCalc.commissionBasePrice ?? null,
           salePrice: mergedForCalc.salePrice ?? null,
+          listPrice: mergedForCalc.listPrice ?? null,
+          status: effectiveStatus,
           commissionPercent: mergedForCalc.commissionPercent ?? null,
           gci: mergedForCalc.gci ?? null,
+        });
+        // Tag the GCI as estimated when it's based on list price (active listing, no sale price)
+        const { isEstimatedCommission } = await import('@/lib/commissions');
+        updates.commissionIsEstimated = isEstimatedCommission({
+          commissionBasePrice: mergedForCalc.commissionBasePrice ?? null,
+          salePrice: mergedForCalc.salePrice ?? null,
+          status: effectiveStatus,
         });
         if (rawGci > 0) {
           // Store the computed GCI on the transaction so the ledger can display it
