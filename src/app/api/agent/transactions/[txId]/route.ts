@@ -638,8 +638,10 @@ export async function PATCH(
           }
         }
 
-        // Active → Pending listing with contract details: notify agent + all staff + assigned TC
-        if (notifyPendingContract && newStatus === 'pending' && previousStatus !== 'pending') {
+        // Active → Pending: notify agent + all staff + TC whenever workingWithTc is true.
+        // This fires regardless of how the agent triggered the status change (modal, detail page, etc.)
+        const isActiveToPending = newStatus === 'pending' && previousStatus !== 'pending';
+        if (isActiveToPending && effectiveWorkingWithTc) {
           // Notify the agent themselves
           const agentUid = txData.agentId || uid;
           await sendNotification(adminDb, {
