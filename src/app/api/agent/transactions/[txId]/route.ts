@@ -633,16 +633,30 @@ export async function PATCH(
             }
           }
 
-          // ── Notify agent on active→pending (confirmation) ────────────────────
+          // ── Notify agent on every status change ───────────────────────────────
+          let agentTitle = 'Transaction Status Updated';
+          let agentBody = `${txAddress} has been updated from ${prevLabel} to ${newLabel}.`;
           if (isActiveToPending) {
-            await sendNotification(adminDb, {
-              type: 'tx_status_change',
-              recipientUids: [agentUid],
-              title: 'Listing Under Contract',
-              body: `${txAddress} has been marked as Pending. Contract details have been submitted for staff review.`,
-              url: '/dashboard',
-            });
+            agentTitle = 'Listing Under Contract';
+            agentBody = `${txAddress} has been marked as Pending. Contract details have been submitted for staff review.`;
+          } else if (isPendingToClosed) {
+            agentTitle = 'Transaction Closed';
+            agentBody = `${txAddress} has been marked as Closed.`;
+          } else if (isPendingToCanceled) {
+            agentTitle = 'Transaction Canceled';
+            agentBody = `${txAddress} has been marked as Canceled.`;
+          } else if (isPendingToBackOnMarket) {
+            agentTitle = 'Listing Back on Market';
+            agentBody = `${txAddress} is back on market.`;
           }
+          await sendNotification(adminDb, {
+            type: 'tx_status_change',
+            recipientUids: [agentUid],
+            title: agentTitle,
+            body: agentBody,
+            url: '/dashboard/my-transactions',
+            data: { transactionId: txId },
+          });
         }
 
         // ── TC resubmission notification ─────────────────────────────────────
