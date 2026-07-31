@@ -539,24 +539,113 @@ export async function PATCH(
       try {
         const txAddress = String(txData.propertyAddress || txData.address || 'your transaction');
         const agentName = String(txData.agentDisplayName || 'Agent');
-        // Notify TC/staff about the status change
-        // Use effectiveWorkingWithTc (which prefers the incoming update value over stale txData)
-        // so that toggling TC on and changing status in the same save correctly routes to TC.
-        if (newStatus && newStatus !== previousStatus) {
-          const recipientUids = effectiveWorkingWithTc
-            ? await getTcUids(adminDb)
-            : await getAllStaffUids(adminDb);
-          if (recipientUids.length > 0) {
+        const agentUid = txData.agentId || uid;
+
+        // ── Status change notifications ─────────────────────────────────────────
+        // Rules:
+        //   STAFF: always notified on any listing status change, regardless of TC
+        //   TC:    always notified on any status change when workingWithTc=true
+        //   Both get specific rich messages for key transitions (active→pending, etc.)
+        const isStatusChange = !!(newStatus && newStatus !== previousStatus);
+
+        if (isStatusChange) {
+          // Human-readable status labels
+          const STATUS_LABELS: Record<string, string> = {
+            active: 'Active',
+            pending: 'Pending',
+            closed: 'Closed',
+            canceled: 'Canceled',
+            coming_soon: 'Coming Soon',
+            temp_off_market: 'Temporarily Off Market',
+            back_on_market: 'Back on Market',
+            expired: 'Expired',
+          };
+          const prevLabel = STATUS_LABELS[previousStatus ?? ''] ?? previousStatus ?? 'Unknown';
+          const newLabel = STATUS_LABELS[newStatus] ?? newStatus;
+
+          const isActiveToPending = newStatus === 'pending' && previousStatus !== 'pending';
+          const isPendingToClosed = newStatus === 'closed' && previousStatus === 'pending';
+          const isPendingToCanceled = newStatus === 'canceled' && previousStatus === 'pending';
+          const isPendingToBackOnMarket = newStatus === 'back_on_market' && previousStatus === 'pending';
+
+          // ── Staff notifications (always fire for listing status changes) ──────
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            let staffTitle = 'Transaction Status Updated';
+            let staffBody = `${agentName} changed ${txAddress} from ${prevLabel} to ${newLabel}.`;
+            let staffUrl = '/dashboard/admin/staff-queue';
+
+            if (isActiveToPending) {
+              staffTitle = 'Listing Under Contract — Action Required';
+              staffBody = `${agentName}’s listing at ${txAddress} is now Pending. Contract details submitted. Please update MLS.`;
+            } else if (isPendingToClosed) {
+              staffTitle = 'Listing Closed';
+              staffBody = `${agentName}’s listing at ${txAddress} has been marked Closed.`;
+            } else if (isPendingToCanceled) {
+              staffTitle = 'Listing Canceled';
+              staffBody = `${agentName}’s listing at ${txAddress} has been marked Canceled.`;
+            } else if (isPendingToBackOnMarket) {
+              staffTitle = 'Listing Back on Market';
+              staffBody = `${agentName}’s listing at ${txAddress} is back on market (was Pending).`;
+            }
+
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: staffTitle,
+              body: staffBody,
+              url: staffUrl,
+              data: { transactionId: txId },
+            });
+          }
+
+          // ── TC notifications (only when workingWithTc=true) ──────────────────
+          if (effectiveWorkingWithTc) {
+            // Use assigned TC first, fall back to all TC coordinators
+            const tcRecipients = await getStaffUidsForAgent(adminDb, agentUid);
+            if (tcRecipients.length > 0) {
+              let tcTitle = 'Transaction Status Updated';
+              let tcBody = `${agentName} changed ${txAddress} from ${prevLabel} to ${newLabel}.`;
+              let tcUrl = '/dashboard/admin/tc';
+
+              if (isActiveToPending) {
+                tcTitle = 'Listing Under Contract — TC Review';
+                tcBody = `${agentName}’s listing at ${txAddress} is now Pending. Contract details submitted for your review.`;
+              } else if (isPendingToClosed) {
+                tcTitle = 'Transaction Closed';
+                tcBody = `${agentName}’s transaction at ${txAddress} has been marked Closed.`;
+              } else if (isPendingToCanceled) {
+                tcTitle = 'Transaction Canceled';
+                tcBody = `${agentName}’s transaction at ${txAddress} has been marked Canceled. Please update your records.`;
+              } else if (isPendingToBackOnMarket) {
+                tcTitle = 'Transaction Back on Market';
+                tcBody = `${agentName}’s transaction at ${txAddress} is back on market (was Pending). Please update MLS.`;
+              }
+
+              await sendNotification(adminDb, {
+                type: isActiveToPending ? 'tc_new_intake' : 'tx_status_change',
+                recipientUids: tcRecipients,
+                title: tcTitle,
+                body: tcBody,
+                url: tcUrl,
+                data: { transactionId: txId },
+              });
+            }
+          }
+
+          // ── Notify agent on active→pending (confirmation) ────────────────────
+          if (isActiveToPending) {
             await sendNotification(adminDb, {
               type: 'tx_status_change',
-              recipientUids,
-              title: 'Transaction Status Updated',
-              body: `${agentName} changed ${txAddress} from ${previousStatus ?? 'unknown'} to ${newStatus}.`,
-              url: '/dashboard/admin/transactions',
+              recipientUids: [agentUid],
+              title: 'Listing Under Contract',
+              body: `${txAddress} has been marked as Pending. Contract details have been submitted for staff review.`,
+              url: '/dashboard',
             });
           }
         }
-        // Notify TC about resubmission (any transaction type with workingWithTc=true)
+
+        // ── TC resubmission notification ─────────────────────────────────────
         if (shouldResubmitToTc) {
           const tcUids = await getTcUids(adminDb);
           if (tcUids.length > 0) {
@@ -566,14 +655,13 @@ export async function PATCH(
               title: 'Transaction Resubmitted to TC',
               body: `${agentName} resubmitted ${txAddress} for TC review (status: pending).`,
               url: '/dashboard/admin/tc',
+              data: { transactionId: txId },
             });
           }
         }
+
         // ── TC: document uploaded ────────────────────────────────────────────
-        // When the agent saves a new document (documents array changed) and the
-        // transaction is marked workingWithTc, notify the TC so they know a new
-        // file is available to review.
-        if (effectiveWorkingWithTc && updates.documents !== undefined) {
+        if (effectiveWorkingWithTc && updates.documents !== undefined && !_replaceDocuments) {
           const prevDocs: any[] = Array.isArray(txData.documents) ? txData.documents : [];
           const newDocs: any[] = Array.isArray(updates.documents) ? updates.documents : [];
           if (newDocs.length > prevDocs.length) {
@@ -586,15 +674,13 @@ export async function PATCH(
                 title: 'New Document Uploaded',
                 body: `${agentName} uploaded ${addedCount === 1 ? 'a document' : `${addedCount} documents`} to ${txAddress}.`,
                 url: '/dashboard/admin/tc',
+                data: { transactionId: txId },
               });
             }
           }
         }
 
         // ── TC: meaningful field change ──────────────────────────────────────
-        // When the agent edits important fields (not just status or documents,
-        // which are handled above) on a TC-assigned transaction, notify the TC
-        // so they can review the updated details.
         const TC_WATCHED_FIELDS = new Set([
           'propertyAddress', 'address',
           'salePrice', 'listPrice', 'commissionPercent', 'commissionBasePrice', 'gci',
@@ -611,16 +697,12 @@ export async function PATCH(
           'dealType', 'transactionType', 'closingType',
         ]);
         const watchedFieldsChanged = Object.keys(updates).some(k => TC_WATCHED_FIELDS.has(k));
-        // Only fire this notification when there is NO status change (status changes are
-        // already notified above) and the documents array did not change (handled above).
-        // This avoids duplicate notifications when multiple things change in one save.
-        const isStatusChangeOnly = !!(newStatus && newStatus !== previousStatus);
-        const isDocumentChangeOnly = updates.documents !== undefined;
+        // Only fire when no status change and no document change (those are handled above)
         if (
           effectiveWorkingWithTc &&
           watchedFieldsChanged &&
-          !isStatusChangeOnly &&
-          !isDocumentChangeOnly
+          !isStatusChange &&
+          updates.documents === undefined
         ) {
           const changedFieldNames = Object.keys(updates)
             .filter(k => TC_WATCHED_FIELDS.has(k))
@@ -634,43 +716,7 @@ export async function PATCH(
               title: 'Transaction Details Updated',
               body: `${agentName} updated ${txAddress} (${changedFieldNames}${Object.keys(updates).filter(k => TC_WATCHED_FIELDS.has(k)).length > 3 ? ' and more' : ''}).`,
               url: '/dashboard/admin/tc',
-            });
-          }
-        }
-
-        // Active → Pending: notify agent + all staff + TC whenever workingWithTc is true.
-        // This fires regardless of how the agent triggered the status change (modal, detail page, etc.)
-        const isActiveToPending = newStatus === 'pending' && previousStatus !== 'pending';
-        if (isActiveToPending && effectiveWorkingWithTc) {
-          // Notify the agent themselves
-          const agentUid = txData.agentId || uid;
-          await sendNotification(adminDb, {
-            type: 'tx_status_change',
-            recipientUids: [agentUid],
-            title: 'Listing Under Contract',
-            body: `${txAddress} has been marked as Pending. Contract details have been submitted for staff review.`,
-            url: '/dashboard',
-          });
-          // Notify all staff
-          const staffUids = await getAllStaffUids(adminDb);
-          if (staffUids.length > 0) {
-            await sendNotification(adminDb, {
-              type: 'staff_queue_new',
-              recipientUids: staffUids,
-              title: 'Listing Under Contract — Action Required',
-              body: `${agentName}'s listing at ${txAddress} is now Pending. Contract details submitted. Please update MLS.`,
-              url: '/dashboard/admin/staff-queue',
-            });
-          }
-          // Notify TC — use assigned TC if set, otherwise fall back to all TC coordinators
-          const tcRecipientsForPending = await getStaffUidsForAgent(adminDb, txData.agentId || uid);
-          if (tcRecipientsForPending.length > 0) {
-            await sendNotification(adminDb, {
-              type: 'tc_new_intake',
-              recipientUids: tcRecipientsForPending,
-              title: 'Listing Under Contract — TC Review',
-              body: `${agentName}'s listing at ${txAddress} is now Pending. Contract details submitted for your review.`,
-              url: '/dashboard/admin/tc',
+              data: { transactionId: txId },
             });
           }
         }
