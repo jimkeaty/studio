@@ -215,33 +215,59 @@ export const ARTICLES: Article[] = [
     id: 'agent-add-transaction',
     title: 'Submitting a New Transaction',
     description:
-      'A step-by-step guide to submitting a new listing or deal through the Add Transaction form.',
+      'A step-by-step guide to submitting a new listing or deal, including the only required fields at each stage and what happens after you submit.',
     category: 'Transactions',
     audience: 'agent',
-    readingTimeMinutes: 4,
+    readingTimeMinutes: 5,
     publishedAt: '2026-04-23',
     content: `
 <h2>Overview</h2>
-<p>Use the <strong>Add Transaction</strong> button in the sidebar (or the center button on mobile) to submit any new listing or deal to the system. The form routes your submission to the correct queues automatically.</p>
+<p>Use the <strong>Add Transaction</strong> button in the sidebar (or the center button on mobile) to submit any new listing or deal to the system. The form routes your submission to the correct queues automatically. The system is designed to be as frictionless as possible — you only need a handful of fields to get started, and you can fill in the rest later.</p>
 
-<h2>Step-by-Step</h2>
+<h2>Required Fields by Stage</h2>
+<p>The system enforces a minimal set of required fields at each stage. Everything else is optional and can be added or updated at any time.</p>
+
+<h3>Adding a New Listing (Active or Coming Soon)</h3>
+<table>
+  <thead><tr><th>#</th><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><strong>Status</strong></td><td>Active, Coming Soon, or Pending</td></tr>
+    <tr><td>2</td><td><strong>Closing Type</strong></td><td>Listing, Buyer, Dual, or Referral</td></tr>
+    <tr><td>3</td><td><strong>Property Address</strong></td><td>Street address of the property</td></tr>
+    <tr><td>4</td><td><strong>Client Name</strong></td><td>Seller’s name for listings; buyer’s name for buyer-side deals</td></tr>
+    <tr><td>5</td><td><strong>Working with TC?</strong></td><td>Yes/No — routes submission to TC Queue if Yes</td></tr>
+  </tbody>
+</table>
+<p>All other fields — List Price, Commission %, ShowingTime, Staging, Inspections, Media, Sign Requests — are optional at this stage. Fill them in now or come back later.</p>
+
+<h3>Changing Status: Active / Coming Soon → Pending</h3>
+<p><strong>No additional fields are required</strong> by the system to save this status change. Simply open the transaction from your dashboard and update the Status field. That said, you should upload the executed Purchase Agreement and fill in the Sale Price, Buyer Contact, and Closing Date so your TC and staff can begin processing the file promptly.</p>
+
+<h3>Changing Status: Pending → Closed</h3>
+<p><strong>No additional fields are required</strong> to mark a transaction Closed. The system will automatically route the closed transaction to the Staff Queue for final processing and commission payout.</p>
+
+<h2>Step-by-Step: Submitting a New Listing</h2>
 <ol>
   <li>Click <strong>Add Transaction</strong> in the sidebar.</li>
-  <li>Select a <strong>Status</strong> — this is required. Choose <em>Active</em> for a standard new listing, <em>Coming Soon</em> if the property is not yet ready to go fully Active on the MLS, or <em>Pending</em> if the property is already under contract. See the <a href="/dashboard/training/coming-soon-listings">Coming Soon Listings guide</a> for details on how that status works.</li>
-  <li>Enter the <strong>Property Address</strong> and <strong>Sale Price</strong>.</li>
-  <li>Fill in the relevant <strong>dates</strong> (Contract Date, Projected Close Date, Inspection Deadline).</li>
-  <li>Enter <strong>Buyer</strong> and/or <strong>Seller</strong> contact information.</li>
-  <li>Check <strong>"Working with TC"</strong> if a Transaction Coordinator is handling your paperwork — this routes the submission to the TC Queue as well.</li>
-  <li>Add any notes for the staff or TC in the <strong>Notes</strong> field.</li>
+  <li>Select a <strong>Status</strong>: choose <em>Active</em> for a standard new listing, <em>Coming Soon</em> if the property is not yet ready to go fully Active on the MLS, or <em>Pending</em> if already under contract. See the <a href="/dashboard/training/coming-soon-listings">Coming Soon Listings guide</a> for details.</li>
+  <li>Select the <strong>Closing Type</strong> (Listing for seller-side, Buyer for buyer-side, Dual if representing both).</li>
+  <li>Enter the <strong>Property Address</strong> and <strong>Client Name</strong>.</li>
+  <li>Toggle <strong>"Working with TC"</strong> to Yes if a Transaction Coordinator is handling your paperwork.</li>
+  <li>Fill in any additional details you have available (List Price, Sign Order, ShowingTime, Media, Staging, Inspections).</li>
+  <li>Add any notes for staff or your TC in the <strong>Notes</strong> field.</li>
   <li>Click <strong>Submit</strong>.</li>
 </ol>
 
 <h2>What Happens After You Submit</h2>
 <ul>
-  <li>Your transaction appears immediately in your <strong>My Transactions</strong> section on the dashboard.</li>
-  <li>A <strong>Staff Queue</strong> item is created so staff can update the MLS.</li>
-  <li>If you checked "Working with TC," a <strong>TC Queue</strong> item is also created for your TC to review and process the paperwork.</li>
+  <li>Your transaction appears immediately in your <strong>My Transactions</strong> dashboard.</li>
+  <li>A <strong>Staff Queue</strong> item is created so staff can update the MLS and handle sign/media requests.</li>
+  <li>If you toggled "Working with TC" to Yes, a <strong>TC Queue</strong> item is also created for your TC to review and process the paperwork.</li>
+  <li>You will receive an in-app notification confirming the submission.</li>
 </ul>
+
+<h2>Saving a Draft</h2>
+<p>If you start filling out the form but need to stop before submitting, the system will save your progress as a <strong>Draft</strong>. You can find and resume drafts from the <em>Drafts</em> section on your dashboard. See the <a href="/dashboard/training/agent-transaction-drafts">Saving and Resuming Drafts guide</a> for details.</p>
     `,
   },
 
@@ -932,6 +958,135 @@ export const ARTICLES: Article[] = [
     <tr><td>Referral fee added after submission</td><td>Admin edits the transaction and adds/changes the referral fee</td><td>The system recalculates automatically; no manual adjustment needed</td></tr>
   </tbody>
 </table>
+    `,
+  },
+
+  // ── DOCUMENT MANAGEMENT ────────────────────────────────────────────────────
+  {
+    id: 'document-management',
+    title: 'Document Management: Uploading, Archiving & Restoring',
+    description:
+      'How to upload documents to a transaction, why you archive instead of delete, and how to restore archived files when needed.',
+    category: 'Transactions',
+    audience: 'both',
+    readingTimeMinutes: 4,
+    publishedAt: '2026-08-03',
+    content: `
+<h2>Overview</h2>
+<p>Every transaction in Smart Broker has a dedicated <strong>Documents</strong> section where agents, staff, and TCs can upload, view, and manage files related to that deal. The system is designed to maintain a complete, tamper-proof compliance record — which means documents are never permanently deleted. Instead, they are <strong>archived</strong>.</p>
+
+<h2>Uploading Documents</h2>
+<p>You can upload documents at any point in the transaction lifecycle — when you first submit the listing, after it goes under contract, or at closing. There is no limit on the number of files you can attach to a single transaction.</p>
+<ol>
+  <li>Open the transaction from your <strong>My Transactions</strong> dashboard (agents) or the <strong>Transaction Ledger</strong> (staff/admin).</li>
+  <li>Scroll to the <strong>Documents</strong> section.</li>
+  <li>Click <strong>Upload Document</strong> and select the file from your device.</li>
+  <li>The system will automatically name the document based on its title or header where possible. You can rename it manually if needed.</li>
+  <li>The uploaded file is immediately visible to all parties with access to that transaction (agent, staff, and TC if assigned).</li>
+</ol>
+<blockquote><strong>Tip:</strong> If you upload a Purchase Agreement to start a transaction, the system will automatically save it as a document in the file — no need to re-upload it later.</blockquote>
+
+<h2>Why You Archive Instead of Delete</h2>
+<p>Agents and staff cannot permanently delete documents from a transaction. This is intentional. Real estate transactions are subject to brokerage compliance and record-keeping requirements, and permanently removing a document could create a gap in the audit trail. Instead, the system uses an <strong>Archive</strong> action that hides the document from the main view without destroying it.</p>
+<p>Common reasons to archive a document:</p>
+<ul>
+  <li>You uploaded the wrong version of a contract and replaced it with the correct one.</li>
+  <li>A first offer fell through and you want to keep the file clean for the executed contract.</li>
+  <li>A document was uploaded to the wrong transaction by mistake.</li>
+</ul>
+
+<h2>How to Archive a Document</h2>
+<ol>
+  <li>Open the transaction and scroll to the <strong>Documents</strong> section.</li>
+  <li>Find the document you want to hide.</li>
+  <li>Click the <strong>Archive</strong> button (or the archive icon) next to the document.</li>
+  <li>The document disappears from the main Documents view and moves to the <strong>Archived</strong> tab.</li>
+</ol>
+<p>Archived documents are still stored in the system and are visible to admins and staff in the Archived tab. They do not appear in the active document list shown to agents or TCs by default.</p>
+
+<h2>How to Restore an Archived Document</h2>
+<p>If you archived a document by mistake or need to reference it again, you can restore it at any time.</p>
+<ol>
+  <li>Open the transaction and scroll to the <strong>Documents</strong> section.</li>
+  <li>Click the <strong>Archived</strong> tab to view hidden documents.</li>
+  <li>Find the document and click <strong>Restore</strong>.</li>
+  <li>The document moves back to the active Documents list and is visible to all parties again.</li>
+</ol>
+
+<h2>Quick Reference</h2>
+<table>
+  <thead><tr><th>Action</th><th>Who Can Do It</th><th>What It Does</th></tr></thead>
+  <tbody>
+    <tr><td>Upload</td><td>Agent, Staff, TC</td><td>Adds a file to the transaction. Visible to all parties immediately.</td></tr>
+    <tr><td>Archive</td><td>Agent, Staff, TC</td><td>Hides the file from the main view. File is preserved in the Archived tab.</td></tr>
+    <tr><td>Restore</td><td>Agent, Staff, TC</td><td>Moves an archived file back to the active Documents list.</td></tr>
+    <tr><td>Delete (permanent)</td><td>Nobody</td><td>Not available. Documents cannot be permanently removed.</td></tr>
+  </tbody>
+</table>
+    `,
+  },
+
+  // ── SCHEDULING STATUS BADGES ─────────────────────────────────────────────────
+  {
+    id: 'scheduling-status-badges',
+    title: 'Scheduling Status Badges Explained',
+    description:
+      'Understand the three scheduling status badges used for Staging, Inspections, ShowingTime, and Media — and how they prevent duplicate work between agents, staff, and TCs.',
+    category: 'Transactions',
+    audience: 'both',
+    readingTimeMinutes: 3,
+    publishedAt: '2026-08-03',
+    content: `
+<h2>Overview</h2>
+<p>Several sections of a transaction — Staging Consult, Pre-Listing Inspection, Buyer Inspection, ShowingTime, and Media — include a <strong>scheduling status badge</strong>. These badges exist to prevent duplicate work. Without them, an agent might schedule something themselves while staff is also trying to schedule it, resulting in confusion and double-bookings.</p>
+<p>The badge tells everyone involved exactly who is handling the scheduling — and whether anything needs to be done at all.</p>
+
+<h2>The Three Badge States</h2>
+<table>
+  <thead><tr><th>Badge</th><th>What It Means</th><th>What Staff / TC Should Do</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>TC / Staff to Schedule</strong></td>
+      <td>The agent has left the date/time blank and is requesting that staff or the TC handle the scheduling on their behalf.</td>
+      <td>Take action — contact the vendor or service provider and schedule the appointment. Update the date/time field once confirmed.</td>
+    </tr>
+    <tr>
+      <td><strong>Already Scheduled</strong></td>
+      <td>The agent has already scheduled the appointment and is logging the confirmed date/time for the file record.</td>
+      <td>No action needed — the appointment is handled. Just verify the date looks correct.</td>
+    </tr>
+    <tr>
+      <td><strong>Request Sent</strong></td>
+      <td>The agent clicked a link or button to initiate the request directly with the vendor (e.g., clicked the Staging Consult link). The system sets this badge automatically.</td>
+      <td>No action needed — the agent has already reached out. Monitor for confirmation if needed.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>How the Badge Gets Set</h2>
+<p>The badge is controlled by what the agent does in the transaction form:</p>
+<ul>
+  <li>If the agent <strong>leaves the date/time blank</strong> and does not click any request link, the badge defaults to <strong>TC / Staff to Schedule</strong>.</li>
+  <li>If the agent <strong>enters a confirmed date and time</strong>, the badge updates to <strong>Already Scheduled</strong>.</li>
+  <li>If the agent <strong>clicks the vendor request link</strong> (e.g., the Staging Consult order link), the system automatically sets the badge to <strong>Request Sent</strong>.</li>
+</ul>
+
+<h2>Where You See These Badges</h2>
+<p>The scheduling status badge appears in the same location across all three views of a transaction:</p>
+<ul>
+  <li><strong>Agent Ledger</strong> — so the agent can see what they requested and confirm it was received.</li>
+  <li><strong>Staff Queue</strong> — so staff knows exactly what action is needed from them.</li>
+  <li><strong>TC Queue</strong> — so the TC can coordinate without duplicating what staff is already doing.</li>
+</ul>
+<blockquote>The badge is a communication tool. When in doubt, check the badge before reaching out to the agent — the answer is usually already there.</blockquote>
+
+<h2>Staging Consult: Special Case</h2>
+<p>The Staging Consult section works slightly differently from other scheduling sections. When an agent clicks the <strong>Order Staging Consult</strong> link inside the transaction, two things happen simultaneously:</p>
+<ol>
+  <li>The agent is taken to the staging vendor’s booking page.</li>
+  <li>The badge on the transaction automatically updates to <strong>Request Sent</strong>.</li>
+</ol>
+<p>This means staff and TCs will immediately see that the agent handled it themselves, without needing to ask.</p>
     `,
   },
 
