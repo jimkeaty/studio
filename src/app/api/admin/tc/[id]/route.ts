@@ -514,7 +514,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       let agentId = String(intake.agentId || '').trim();
       const agentDisplayName = String(intake.agentDisplayName || '').trim();
 
-      if (!agentId) return jsonError(400, 'Intake has no agentId — cannot approve');
+      if (!agentId) return jsonError(400, 'Cannot approve: this intake has no agent assigned. Please contact an admin to link the correct agent profile before approving.');
 
       // Normalize agentId: the intake may store the agent's Firebase UID instead of
       // the slug-based agentProfiles document ID. Resolve to the canonical slug so

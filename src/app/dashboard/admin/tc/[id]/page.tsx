@@ -71,9 +71,9 @@ type ActivityEntry = {
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
   // Core
-  closingType: z.enum(['buyer', 'listing', 'referral', 'dual']),
-  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']),
-  address: z.string().min(5),
+  closingType: z.enum(['buyer', 'listing', 'referral', 'dual']).optional().default('buyer'),
+  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']).optional().default('residential_sale'),
+  address: z.string().min(1).optional().or(z.literal('')),
   // clientName is optional for referral and listing types (client may not be known yet)
   clientName: z.string().optional().or(z.literal('')),
   dealSource: z.string().optional(),
