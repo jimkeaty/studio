@@ -219,7 +219,7 @@ export async function rebuildAgentRollup(
 
       // Listings (active, canceled, expired) — calendar year
       if (txType === 'listing' || txType === 'residential_listing') {
-        if (status === 'active' || status === 'listing_active') {
+        if (status === 'active' || status === 'coming_soon' || status === 'listing_active') {
           listingsActive += 1;
         } else if (status === 'canceled' || status === 'cancelled') {
           listingsCanceled += 1;

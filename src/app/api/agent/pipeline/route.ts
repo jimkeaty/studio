@@ -237,7 +237,7 @@ export async function GET(req: NextRequest) {
       // estimated Net to Me correctly.
       if (isAdminCaller) {
         const snap = tx.splitSnapshot as any;
-        if (tx.status === 'active' && agentCurrentSplitPct != null && !snap?.agentSplitPercent) {
+        if ((tx.status === 'active' || tx.status === 'coming_soon') && agentCurrentSplitPct != null && !snap?.agentSplitPercent) {
           return { ...tx, agentSplitPercent: agentCurrentSplitPct };
         }
         return tx;
@@ -254,7 +254,7 @@ export async function GET(req: NextRequest) {
 
       // For active listings: expose commission fields needed to estimate net to agent
       // (sellerPayingListingAgent = listing side %, agentSplitPercent = agent's take-home %)
-      if (tx.status === 'active') {
+      if (tx.status === 'active' || tx.status === 'coming_soon') {
         if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
         if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
         if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
@@ -343,7 +343,7 @@ export async function GET(req: NextRequest) {
     });
 
     const activeTransactions = allTx.filter((t: any) =>
-      t.status === 'active' || t.status === 'temp_off_market'
+      t.status === 'active' || t.status === 'coming_soon' || t.status === 'temp_off_market'
     );
 
     const pendingTransactions = allTx.filter((t: any) =>

@@ -1,8 +1,9 @@
 /**
  * Transaction Checklist Definitions
  *
- * Three checklist types:
+ * Four checklist types:
  *   - new_listing
+ *   - coming_soon
  *   - under_contract_seller
  *   - under_contract_buyer
  *
@@ -16,6 +17,7 @@
 
 export type ChecklistType =
   | 'new_listing'
+  | 'coming_soon'
   | 'under_contract_seller'
   | 'under_contract_buyer';
 
@@ -60,6 +62,28 @@ export const NEW_LISTING_CHECKLIST: ChecklistItemDef[] = [
   // Outreach & Follow-Up
   { id: 'nl_constant_contact',    label: 'Constant Contact — Add to Keaty Hub',                                                                       group: 'Outreach & Follow-Up' },
   { id: 'nl_reverse_prospecting', label: 'Reverse Prospecting on BoomTown',                                                                           group: 'Outreach & Follow-Up' },
+];
+
+/* ─── COMING SOON CHECKLIST ─────────────────────────────────────────────────── */
+export const COMING_SOON_CHECKLIST: ChecklistItemDef[] = [
+  // Setup & MLS
+  { id: 'cs_review_details',      label: 'Review transaction details',                                                                                group: 'Setup & MLS' },
+  { id: 'cs_skyslope',            label: 'Create Skyslope file & verify all documents are uploaded, signed & initialed',                              group: 'Setup & MLS' },
+  { id: 'cs_add_mls_coming_soon', label: 'Add to MLS as Coming Soon status',                                                                          group: 'Setup & MLS' },
+  { id: 'cs_lacdb',               label: 'Add to LACDB as Coming Soon',                                                                               group: 'Setup & MLS', ifApplicable: true },
+  { id: 'cs_sign_ordered',        label: 'Sign ordered',                                                                                              group: 'Setup & MLS', ifApplicable: true },
+  { id: 'cs_home_warranty',       label: 'Home Warranty ordered',                                                                                     group: 'Setup & MLS', ifApplicable: true },
+  { id: 'cs_attach_docs',         label: 'Attach to MLS: Listing General Info, Plat, Floor Plan, Survey, Property Disclosures, Elevation Certificate', group: 'Setup & MLS', ifApplicable: true },
+  // Marketing
+  { id: 'cs_photos',              label: 'Photos added to MLS & Google My Business',                                                                  group: 'Marketing', ifApplicable: true },
+  { id: 'cs_qr_code',             label: 'Add personalized QR code for sign & text rider',                                                            group: 'Marketing' },
+  { id: 'cs_tour_link',           label: 'Link virtual tour',                                                                                         group: 'Marketing', ifApplicable: true },
+  { id: 'cs_listing_email',       label: 'Build Coming Soon email & send to sphere and Realtors',                                                     group: 'Marketing', ifApplicable: true },
+  // Auto-Activate Reminder
+  { id: 'cs_auto_activate_note',  label: 'Note: listing auto-activates in MLS after 30 days — confirm with agent before deadline',                    group: 'Auto-Activate Reminder' },
+  // Outreach & Follow-Up
+  { id: 'cs_constant_contact',    label: 'Constant Contact — Add to Keaty Hub',                                                                       group: 'Outreach & Follow-Up' },
+  { id: 'cs_reverse_prospecting', label: 'Reverse Prospecting on BoomTown',                                                                           group: 'Outreach & Follow-Up' },
 ];
 
 /* ─── UNDER CONTRACT — SELLER SIDE CHECKLIST ────────────────────────────────── */
@@ -166,6 +190,7 @@ export const BUYER_AGENT_TASKS: AgentTaskDef[] = [
 export function getChecklistDef(type: ChecklistType): ChecklistItemDef[] {
   switch (type) {
     case 'new_listing':             return NEW_LISTING_CHECKLIST;
+    case 'coming_soon':             return COMING_SOON_CHECKLIST;
     case 'under_contract_seller':   return UNDER_CONTRACT_SELLER_CHECKLIST;
     case 'under_contract_buyer':    return UNDER_CONTRACT_BUYER_CHECKLIST;
   }
@@ -181,6 +206,7 @@ export function getAgentTaskDef(type: AgentWorkflowType): AgentTaskDef[] {
 export function checklistTypeLabel(type: ChecklistType): string {
   switch (type) {
     case 'new_listing':           return 'New Listing';
+    case 'coming_soon':           return 'Coming Soon';
     case 'under_contract_seller': return 'Under Contract — Seller';
     case 'under_contract_buyer':  return 'Under Contract — Buyer';
   }

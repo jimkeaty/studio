@@ -315,7 +315,7 @@ const schema = z.object({
   agentDisplayName: z.string().optional(),
 
   // Status
-  status: z.enum(['active', 'pending', 'closed', 'cancelled', 'temp_off_market'], { required_error: 'Please select a status to continue' }),
+  status: z.enum(['active', 'coming_soon', 'pending', 'closed', 'cancelled', 'temp_off_market'], { required_error: 'Please select a status to continue' }),
 
   // Basics
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
@@ -2431,6 +2431,7 @@ export default function AddTransactionPage() {
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="coming_soon">Coming Soon</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="temp_off_market">Temp Off Market</SelectItem>
                     <SelectItem value="closed">Closed</SelectItem>

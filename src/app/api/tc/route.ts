@@ -518,13 +518,24 @@ export async function POST(req: NextRequest) {
         }
       }
       if (isListingType && staffQueueRef) {
-        const defaultStaffChecklist = [
-          { label: 'Review new listing', order: 1, completed: false },
-          { label: 'Process sign order (if requested)', order: 2, completed: false },
-          { label: 'Set up ShowingTime (if requested)', order: 3, completed: false },
-          { label: 'Schedule media (if requested)', order: 4, completed: false },
-          { label: 'Schedule pre-listing inspection (if requested)', order: 5, completed: false },
-        ];
+        const listingStatus = toStr(body.status) || 'active';
+        const isComingSoonListing = listingStatus === 'coming_soon';
+        const defaultStaffChecklist = isComingSoonListing
+          ? [
+              { label: 'Review Coming Soon listing details', order: 1, completed: false },
+              { label: 'Add to MLS as Coming Soon status', order: 2, completed: false },
+              { label: 'Add to LACDB as Coming Soon (if applicable)', order: 3, completed: false },
+              { label: 'Process sign order (if requested)', order: 4, completed: false },
+              { label: 'Schedule media (if requested)', order: 5, completed: false },
+              { label: 'Note: listing auto-activates after 30 days — confirm with agent before deadline', order: 6, completed: false },
+            ]
+          : [
+              { label: 'Review new listing', order: 1, completed: false },
+              { label: 'Process sign order (if requested)', order: 2, completed: false },
+              { label: 'Set up ShowingTime (if requested)', order: 3, completed: false },
+              { label: 'Schedule media (if requested)', order: 4, completed: false },
+              { label: 'Schedule pre-listing inspection (if requested)', order: 5, completed: false },
+            ];
         for (const item of defaultStaffChecklist) {
           const itemRef = adminDb.collection('staffQueue').doc(staffQueueRef.id).collection('checklist').doc();
           checklistBatch.set(itemRef, { ...item, createdAt: now });
@@ -554,11 +565,15 @@ export async function POST(req: NextRequest) {
           const staffUids = await getStaffUidsForAgent(adminDb, agentId);
           const allStaffUids = staffUids.length > 0 ? staffUids : await getAllStaffUids(adminDb);
           if (allStaffUids.length > 0) {
+            const listingStatus = toStr(body.status) || 'active';
+            const isComingSoonListing = listingStatus === 'coming_soon';
             await sendNotification(adminDb, {
               type: 'staff_queue_new',
               recipientUids: allStaffUids,
-              title: `New Listing — ${address}`,
-              body: `${agentDisplayName} added a new listing: ${address}`,
+              title: isComingSoonListing ? `New Coming Soon Listing — Add to MLS as Coming Soon` : `New Listing — ${address}`,
+              body: isComingSoonListing
+                ? `${agentDisplayName} added ${address} as Coming Soon. Please add to MLS with Coming Soon status. Auto-activates in 30 days if not changed.`
+                : `${agentDisplayName} added a new listing: ${address}`,
               url: staffQueueRef ? `/dashboard/admin/staff-queue/${staffQueueRef.id}` : '/dashboard/admin/staff-queue',
             });
           }

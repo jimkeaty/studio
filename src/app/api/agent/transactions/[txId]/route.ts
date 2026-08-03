@@ -106,7 +106,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
 ]);
 
 // Statuses an agent is allowed to set
-const AGENT_ALLOWED_STATUSES = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired']);
+const AGENT_ALLOWED_STATUSES = new Set(['active', 'coming_soon', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired']);
 
 // Listing-specific status changes that always trigger a Staff Queue notification
 const LISTING_STATUS_TRIGGERS = new Set(['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'coming_soon']);
@@ -588,6 +588,8 @@ export async function PATCH(
           const prevLabel = STATUS_LABELS[previousStatus ?? ''] ?? previousStatus ?? 'Unknown';
           const newLabel = STATUS_LABELS[newStatus] ?? newStatus;
 
+          const isComingSoon = newStatus === 'coming_soon';
+          const isComingSoonToPending = newStatus === 'pending' && previousStatus === 'coming_soon';
           const isActiveToPending = newStatus === 'pending' && previousStatus !== 'pending';
           const isPendingToClosed = newStatus === 'closed' && previousStatus === 'pending';
           const isPendingToCanceled = newStatus === 'canceled' && previousStatus === 'pending';
@@ -600,18 +602,24 @@ export async function PATCH(
             let staffBody = `${agentName} changed ${txAddress} from ${prevLabel} to ${newLabel}.`;
             let staffUrl = '/dashboard/admin/staff-queue';
 
-            if (isActiveToPending) {
+            if (isComingSoon) {
+              staffTitle = 'New Coming Soon Listing — Add to MLS as Coming Soon';
+              staffBody = `${agentName} added ${txAddress} as Coming Soon. Please add to MLS with Coming Soon status. Auto-activates in 30 days if not changed.`;
+            } else if (isComingSoonToPending) {
+              staffTitle = 'Coming Soon Listing Under Contract — Action Required';
+              staffBody = `${agentName}'s Coming Soon listing at ${txAddress} is now Pending. Contract details submitted. Please update MLS.`;
+            } else if (isActiveToPending) {
               staffTitle = 'Listing Under Contract — Action Required';
-              staffBody = `${agentName}’s listing at ${txAddress} is now Pending. Contract details submitted. Please update MLS.`;
+              staffBody = `${agentName}'s listing at ${txAddress} is now Pending. Contract details submitted. Please update MLS.`;
             } else if (isPendingToClosed) {
               staffTitle = 'Listing Closed';
-              staffBody = `${agentName}’s listing at ${txAddress} has been marked Closed.`;
+              staffBody = `${agentName}'s listing at ${txAddress} has been marked Closed.`;
             } else if (isPendingToCanceled) {
               staffTitle = 'Listing Canceled';
-              staffBody = `${agentName}’s listing at ${txAddress} has been marked Canceled.`;
+              staffBody = `${agentName}'s listing at ${txAddress} has been marked Canceled.`;
             } else if (isPendingToBackOnMarket) {
               staffTitle = 'Listing Back on Market';
-              staffBody = `${agentName}’s listing at ${txAddress} is back on market (was Pending).`;
+              staffBody = `${agentName}'s listing at ${txAddress} is back on market (was Pending).`;
             }
 
             await sendNotification(adminDb, {
@@ -633,18 +641,24 @@ export async function PATCH(
               let tcBody = `${agentName} changed ${txAddress} from ${prevLabel} to ${newLabel}.`;
               let tcUrl = '/dashboard/admin/tc';
 
-              if (isActiveToPending) {
+              if (isComingSoon) {
+                tcTitle = 'New Coming Soon Listing — Add to MLS as Coming Soon';
+                tcBody = `${agentName} added ${txAddress} as Coming Soon. Please add to MLS with Coming Soon status.`;
+              } else if (isComingSoonToPending) {
+                tcTitle = 'Coming Soon Listing Under Contract — TC Review';
+                tcBody = `${agentName}'s Coming Soon listing at ${txAddress} is now Pending. Contract details submitted for your review.`;
+              } else if (isActiveToPending) {
                 tcTitle = 'Listing Under Contract — TC Review';
-                tcBody = `${agentName}’s listing at ${txAddress} is now Pending. Contract details submitted for your review.`;
+                tcBody = `${agentName}'s listing at ${txAddress} is now Pending. Contract details submitted for your review.`;
               } else if (isPendingToClosed) {
                 tcTitle = 'Transaction Closed';
-                tcBody = `${agentName}’s transaction at ${txAddress} has been marked Closed.`;
+                tcBody = `${agentName}'s transaction at ${txAddress} has been marked Closed.`;
               } else if (isPendingToCanceled) {
                 tcTitle = 'Transaction Canceled';
-                tcBody = `${agentName}’s transaction at ${txAddress} has been marked Canceled. Please update your records.`;
+                tcBody = `${agentName}'s transaction at ${txAddress} has been marked Canceled. Please update your records.`;
               } else if (isPendingToBackOnMarket) {
                 tcTitle = 'Transaction Back on Market';
-                tcBody = `${agentName}’s transaction at ${txAddress} is back on market (was Pending). Please update MLS.`;
+                tcBody = `${agentName}'s transaction at ${txAddress} is back on market (was Pending). Please update MLS.`;
               }
 
               await sendNotification(adminDb, {

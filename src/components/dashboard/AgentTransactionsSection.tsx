@@ -123,6 +123,7 @@ const closingTypeLabel: Record<string, string> = {
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   active:          { label: 'Active',          color: 'bg-blue-500/80 text-white' },
+  coming_soon:     { label: 'Coming Soon',     color: 'bg-purple-500/80 text-white' },
   temp_off_market: { label: 'Temp Off Market', color: 'bg-orange-500/80 text-white' },
   pending:         { label: 'Pending',         color: 'bg-yellow-500/80 text-white' },
   closed:          { label: 'Closed',          color: 'bg-green-600/80 text-white' },
@@ -131,7 +132,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   expired:         { label: 'Expired',         color: 'bg-gray-500/80 text-white' },
 };
 
-const AGENT_STATUSES = ['active', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired'] as const;
+const AGENT_STATUSES = ['active', 'coming_soon', 'temp_off_market', 'pending', 'closed', 'cancelled', 'canceled', 'expired'] as const;
 const YEARS = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i));
 
 type SortKey = 'status' | 'address' | 'closingType' | 'dealType' | 'contractDate' | 'closedDate' | 'dealValue' | 'netToMe';
@@ -404,6 +405,7 @@ function AgentEditForm({ tx, open, onClose, onSaved }: EditFormProps) {
                 <SelectTrigger id="edit-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="coming_soon">Coming Soon</SelectItem>
                   <SelectItem value="temp_off_market">Temp Off Market</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="closed">Closed</SelectItem>

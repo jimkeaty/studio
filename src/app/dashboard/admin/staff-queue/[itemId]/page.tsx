@@ -1435,6 +1435,7 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="new_listing">New Listing</SelectItem>
+                  <SelectItem value="coming_soon">Coming Soon</SelectItem>
                   <SelectItem value="under_contract_seller">Under Contract — Seller</SelectItem>
                   <SelectItem value="under_contract_buyer">Under Contract — Buyer</SelectItem>
                 </SelectContent>
