@@ -56,7 +56,10 @@ export const ARTICLES: Article[] = [
   <tbody>
     <tr><td>Agent submits a new listing (Working with TC ✅)</td><td>New Listing</td><td>Yes</td></tr>
     <tr><td>Agent submits a new listing (No TC ❌)</td><td>New Listing</td><td>No</td></tr>
-    <tr><td>Agent changes status to Active, Pending, Temp Off Market, Closed, Cancelled, or Expired</td><td>Status Change</td><td>No</td></tr>
+    <tr><td>Agent submits a new listing as <strong>Coming Soon</strong> (Working with TC ✅)</td><td>New Listing</td><td>Yes</td></tr>
+    <tr><td>Agent submits a new listing as <strong>Coming Soon</strong> (No TC ❌)</td><td>New Listing</td><td>No</td></tr>
+    <tr><td>Agent changes status to Active, Coming Soon, Pending, Temp Off Market, Closed, Cancelled, or Expired</td><td>Status Change</td><td>No</td></tr>
+    <tr><td>System auto-activates a Coming Soon listing (30-day rule)</td><td>Status Change</td><td>Yes (if TC assigned)</td></tr>
     <tr><td>Admin changes status in the Transaction Ledger</td><td>—</td><td>No (not triggered)</td></tr>
   </tbody>
 </table>
@@ -224,7 +227,7 @@ export const ARTICLES: Article[] = [
 <h2>Step-by-Step</h2>
 <ol>
   <li>Click <strong>Add Transaction</strong> in the sidebar.</li>
-  <li>Select a <strong>Status</strong> — this is required. Choose <em>Active</em> for a new listing, or <em>Pending</em> if the property is already under contract.</li>
+  <li>Select a <strong>Status</strong> — this is required. Choose <em>Active</em> for a standard new listing, <em>Coming Soon</em> if the property is not yet ready to go fully Active on the MLS, or <em>Pending</em> if the property is already under contract. See the <a href="/dashboard/training/coming-soon-listings">Coming Soon Listings guide</a> for details on how that status works.</li>
   <li>Enter the <strong>Property Address</strong> and <strong>Sale Price</strong>.</li>
   <li>Fill in the relevant <strong>dates</strong> (Contract Date, Projected Close Date, Inspection Deadline).</li>
   <li>Enter <strong>Buyer</strong> and/or <strong>Seller</strong> contact information.</li>
@@ -927,6 +930,71 @@ export const ARTICLES: Article[] = [
     <tr><td>Co-listing with a referral</td><td>Enter both co-agent split AND referral fee; system handles the order</td><td>Do not calculate each agent's share manually before entering</td></tr>
     <tr><td>Agent pays compliance fee</td><td>Select "Agent Pays" in the compliance fee section</td><td>Do not subtract the fee from the commission % or GCI</td></tr>
     <tr><td>Referral fee added after submission</td><td>Admin edits the transaction and adds/changes the referral fee</td><td>The system recalculates automatically; no manual adjustment needed</td></tr>
+  </tbody>
+</table>
+    `,
+  },
+
+  // ── COMING SOON LISTINGS ────────────────────────────────────────────────────────────────────────────────────
+  {
+    id: 'coming-soon-listings',
+    title: 'Coming Soon Listings: How They Work',
+    description:
+      'Understand the Coming Soon status — what it does, how the 30-day auto-activate rule works, and what staff needs to do when a listing is submitted as Coming Soon.',
+    category: 'Transactions',
+    audience: 'both',
+    readingTimeMinutes: 4,
+    publishedAt: '2026-08-03',
+    content: `
+<h2>What Is a Coming Soon Listing?</h2>
+<p>The <strong>Coming Soon</strong> status is designed for listings that are not yet ready to go fully Active on the MLS but need to be entered into the system. It is identical to the Active status in terms of commission calculations and pipeline tracking — the only difference is the MLS entry instruction and the 30-day auto-activate rule.</p>
+<p>Agents sometimes wonder why their listing shows as Coming Soon in Smart Broker instead of Active. The answer is simple: <strong>Coming Soon in Smart Broker = Coming Soon in the MLS.</strong> When you submit a listing as Coming Soon, staff is instructed to add it to the MLS as Coming Soon, not Active. When you are ready to go Active, simply change the status in your dashboard and staff will update the MLS accordingly.</p>
+
+<h2>How to Submit a Coming Soon Listing</h2>
+<ol>
+  <li>Click <strong>Add Transaction</strong> in the sidebar.</li>
+  <li>Select <strong>Coming Soon</strong> from the Status dropdown.</li>
+  <li>Fill in the required fields: Property Address, Closing Type, and Client Name.</li>
+  <li>Complete any optional fields (List Price, Sign Order, ShowingTime, Media) as needed.</li>
+  <li>Click <strong>Submit</strong>.</li>
+</ol>
+<p>The system will automatically notify staff to add the listing to the MLS as Coming Soon and will generate a Coming Soon-specific checklist in the Staff Queue.</p>
+
+<h2>The 30-Day Auto-Activate Rule</h2>
+<p>MLS rules limit Coming Soon status to a maximum of 30 days. To enforce this automatically, the Smart Broker platform runs a daily background job that checks all Coming Soon listings. If a listing has been in Coming Soon status for <strong>30 days or more</strong> (measured from the Listing Date), the system will automatically transition it to <strong>Active</strong>.</p>
+<table>
+  <thead><tr><th>Event</th><th>Who Gets Notified</th><th>What the Notification Says</th></tr></thead>
+  <tbody>
+    <tr><td>New Coming Soon listing submitted</td><td>Staff</td><td>"Add to MLS as Coming Soon status. Auto-activates in 30 days if not changed."</td></tr>
+    <tr><td>Coming Soon → Pending (manual)</td><td>Staff &amp; TC (if assigned)</td><td>"Coming Soon listing is now Pending. Please update MLS."</td></tr>
+    <tr><td>Auto-activate fires (30 days reached)</td><td>Staff, Agent, TC (if assigned)</td><td>Staff: "Update MLS to Active." Agent: "Your Coming Soon listing has automatically gone Active."</td></tr>
+  </tbody>
+</table>
+<blockquote><strong>Staff tip:</strong> The Coming Soon checklist includes a reminder item — “Note: listing auto-activates after 30 days — confirm with agent before deadline.” Check in with the agent around day 25 to confirm whether they want to manually activate, extend (if MLS rules allow), or cancel before the auto-activate fires.</blockquote>
+
+<h2>Allowed Status Transitions</h2>
+<p>A Coming Soon listing can be manually moved to any of the following statuses at any time — there is no requirement to go through Active first:</p>
+<table>
+  <thead><tr><th>From</th><th>To</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Coming Soon</td><td>Active</td><td>Standard activation — staff should update MLS to Active.</td></tr>
+    <tr><td>Coming Soon</td><td>Pending</td><td>Property went under contract while still in Coming Soon — staff should update MLS to Pending.</td></tr>
+    <tr><td>Coming Soon</td><td>Temp Off Market</td><td>Listing is being pulled temporarily.</td></tr>
+    <tr><td>Coming Soon</td><td>Canceled</td><td>Listing is being withdrawn entirely.</td></tr>
+  </tbody>
+</table>
+
+<h2>Commission Display While Coming Soon</h2>
+<p>While a listing is in Coming Soon status, the agent dashboard displays an <strong>estimated commission</strong> based on the List Price and the agent’s current commission plan split — exactly the same as an Active listing. The badge shows “Estimated” to indicate this is a projection, not a finalized number. Once the listing goes Pending, the system switches to the actual Sale Price.</p>
+
+<h2>Quick Reference for Staff</h2>
+<table>
+  <thead><tr><th>Task</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>New Coming Soon listing in queue</td><td>Add to MLS as Coming Soon. Log MLS# in Staff Notes. Mark Complete.</td></tr>
+    <tr><td>Coming Soon → Active (manual or auto)</td><td>Update MLS status to Active. Log in Staff Notes.</td></tr>
+    <tr><td>Coming Soon → Pending</td><td>Update MLS to Pending. Enter contract details. Log in Staff Notes.</td></tr>
+    <tr><td>Approaching 30-day deadline</td><td>Contact agent to confirm intent before auto-activate fires.</td></tr>
   </tbody>
 </table>
     `,
