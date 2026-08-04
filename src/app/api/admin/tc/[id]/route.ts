@@ -7,7 +7,7 @@ import { isAdminLike, isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { resolveGCI } from '@/lib/commissions';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-import { getAgentUid } from '@/lib/notifications/getRecipientUids';
+import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
 
 function serializeFirestore(val: any): any {
@@ -217,35 +217,57 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         await batch.commit();
       }
 
-      // Notify agent when TC updates checklist or changes status
+      // Notify agent + staff when TC updates checklist or changes status
       void (async () => {
         try {
           const agentIdSlug = String(intake?.agentId || '').trim();
           const submittedByUid0 = String(intake?.submittedByUid || intake?.submittedBy || '').trim() || null;
           const agentUid = submittedByUid0 || (agentIdSlug ? await getAgentUid(adminDb, agentIdSlug, submittedByUid0) : null);
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
-          if (agentUid) {
-            if (body.status && body.status !== intake.status) {
-              // Status change notification
-              const statusLabels: Record<string, string> = {
-                submitted: 'Submitted', in_review: 'In Review',
-                approved: 'Approved', rejected: 'Rejected',
-              };
+          const staffUids = await getAllStaffUids(adminDb);
+          if (body.status && body.status !== intake.status) {
+            // Status change — notify agent and staff
+            const statusLabels: Record<string, string> = {
+              submitted: 'Submitted', in_review: 'In Review',
+              approved: 'Approved', rejected: 'Rejected',
+            };
+            const statusLabel = statusLabels[body.status] ?? body.status;
+            if (agentUid) {
               await sendNotification(adminDb, {
                 type: 'tc_approved',
                 recipientUids: [agentUid],
-                title: `TC Queue Status Updated: ${statusLabels[body.status] ?? body.status}`,
-                body: `Your transaction for ${intakeAddress} is now ${statusLabels[body.status] ?? body.status}.`,
+                title: `TC Queue Status Updated: ${statusLabel}`,
+                body: `Your transaction for ${intakeAddress} is now ${statusLabel}.`,
                 url: '/dashboard/transactions',
               });
-            } else if (body.checklist && Array.isArray(body.checklist) && body.checklist.some((c: any) => c.completed)) {
-              // Checklist task completed notification
+            }
+            if (staffUids.length > 0) {
+              await sendNotification(adminDb, {
+                type: 'tc_approved',
+                recipientUids: staffUids,
+                title: `TC Queue Status Updated: ${statusLabel}`,
+                body: `TC updated ${intakeAddress} to ${statusLabel}.`,
+                url: '/dashboard/admin/staff-queue',
+              });
+            }
+          } else if (body.checklist && Array.isArray(body.checklist) && body.checklist.some((c: any) => c.completed)) {
+            // Checklist task completed — notify agent and staff
+            if (agentUid) {
               await sendNotification(adminDb, {
                 type: 'tc_approved',
                 recipientUids: [agentUid],
                 title: 'TC Checklist Updated',
                 body: `Your TC coordinator updated a checklist task for ${intakeAddress}.`,
                 url: '/dashboard/transactions',
+              });
+            }
+            if (staffUids.length > 0) {
+              await sendNotification(adminDb, {
+                type: 'tc_approved',
+                recipientUids: staffUids,
+                title: 'TC Checklist Updated',
+                body: `TC completed a checklist task for ${intakeAddress}.`,
+                url: '/dashboard/admin/staff-queue',
               });
             }
           }

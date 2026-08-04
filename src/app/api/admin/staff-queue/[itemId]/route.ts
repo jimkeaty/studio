@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-import { getAgentUid } from '@/lib/notifications/getRecipientUids';
+import { getAgentUid, getTcUids } from '@/lib/notifications/getRecipientUids';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { resolveGCI } from '@/lib/commissions';
@@ -493,6 +493,50 @@ export async function PATCH(
         }).catch(e => console.error('[staff-queue PATCH] notification error:', e));
       }
     }
+
+    // ── Notify TC of staff queue actions ────────────────────────────────────────────
+    // TC is notified whenever staff takes action on a queue item so they stay
+    // in sync without having to poll the staff queue manually.
+    void (async () => {
+      try {
+        const txAddress = String(item.address || item.transactionAddress || 'your transaction');
+        let tcTitle: string | null = null;
+        let tcBody: string | null = null;
+
+        if (action === 'complete') {
+          tcTitle = 'Staff Review Complete';
+          tcBody = `Staff completed the review for ${txAddress}.`;
+        } else if (action === 'dismiss') {
+          tcTitle = 'Staff Queue Item Dismissed';
+          tcBody = `Staff dismissed the queue item for ${txAddress}.`;
+        } else if (action === 'start_review') {
+          tcTitle = 'Staff Started Reviewing';
+          tcBody = `${reviewerName} started reviewing ${txAddress}.`;
+        } else if (action === 'save' || txUpdates) {
+          tcTitle = 'Staff Updated Transaction';
+          tcBody = `${reviewerName} made updates to ${txAddress}.`;
+        } else if (checklist && Array.isArray(checklist) && checklist.some((c: any) => c.completed)) {
+          tcTitle = 'Staff Checklist Updated';
+          tcBody = `${reviewerName} completed a checklist task for ${txAddress}.`;
+        } else if (activityEntry) {
+          tcTitle = 'Staff Activity Logged';
+          tcBody = `${reviewerName} logged an activity update for ${txAddress}.`;
+        }
+
+        if (tcTitle && tcBody) {
+          const tcUids = await getTcUids(adminDb);
+          if (tcUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'staff_queue_resolved',
+              recipientUids: tcUids,
+              title: tcTitle,
+              body: tcBody,
+              url: '/dashboard/admin/tc',
+            });
+          }
+        }
+      } catch (e) { console.error('[staff-queue PATCH] TC notification error:', e); }
+    })();
 
     return NextResponse.json({ ok: true, updated: { id: itemId, ...itemUpdates } });
   } catch (err: any) {
