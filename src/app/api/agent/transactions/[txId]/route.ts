@@ -634,8 +634,19 @@ export async function PATCH(
 
           // ── TC notifications (only when workingWithTc=true) ──────────────────
           if (effectiveWorkingWithTc) {
-            // Use assigned TC first, fall back to all TC coordinators
-            const tcRecipients = await getStaffUidsForAgent(adminDb, agentUid);
+            // Resolve TC recipients:
+            // 1. Try agentProfiles by Firebase UID (uid) — most reliable
+            // 2. Try agentProfiles by agentId slug (agentUid from txData.agentId)
+            // 3. Fall back to all TC coordinators
+            let tcRecipients = await getStaffUidsForAgent(adminDb, uid);
+            if (tcRecipients.length === 0 && agentUid !== uid) {
+              tcRecipients = await getStaffUidsForAgent(adminDb, agentUid);
+            }
+            if (tcRecipients.length === 0) {
+              // Hard fallback: notify all TC coordinators
+              const { getTcUids } = await import('@/lib/notifications/getRecipientUids');
+              tcRecipients = await getTcUids(adminDb);
+            }
             if (tcRecipients.length > 0) {
               let tcTitle = 'Transaction Status Updated';
               let tcBody = `${agentName} changed ${txAddress} from ${prevLabel} to ${newLabel}.`;

@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase';
 import type { Transaction } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -97,14 +97,17 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
 
 export default function AdminTransactionLedgerPage() {
   const { user, loading: userLoading } = useUser();
+  const searchParams = useSearchParams();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
+  // When linking from TC Queue with ?txId=, default to 'all' years so the transaction is always visible
+  const [yearFilter, setYearFilter] = useState(() => searchParams?.get('txId') ? 'all' : String(new Date().getFullYear()));
   const [statusFilter, setStatusFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
-  const [addressSearch, setAddressSearch] = useState('');
+  // Pre-populate address search from ?txId= query param (used when linking from TC Queue)
+  const [addressSearch, setAddressSearch] = useState(() => searchParams?.get('txId') ?? '');
 
   // Sort state
   const [sortKey, setSortKey] = useState<SortKey>('closedDate');
@@ -542,7 +545,11 @@ export default function AdminTransactionLedgerPage() {
     let result = transactions.filter(t => {
       const statusMatch = statusFilter === 'all' || t.status === statusFilter;
       const agentMatch = agentFilter === 'all' || (t.agentDisplayName ?? '') === agentFilter;
-      const addressMatch = !addressSearch.trim() || (t.address || '').toLowerCase().includes(addressSearch.trim().toLowerCase());
+      const searchTerm = addressSearch.trim().toLowerCase();
+      const addressMatch = !searchTerm ||
+        (t.address || '').toLowerCase().includes(searchTerm) ||
+        (t.id || '').toLowerCase().includes(searchTerm) ||
+        (t.propertyAddress || '').toLowerCase().includes(searchTerm);
       return statusMatch && agentMatch && addressMatch;
     });
 

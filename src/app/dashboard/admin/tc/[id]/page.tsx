@@ -856,10 +856,11 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             {intake.approvedTransactionId && (
               <div>
                 <dt className="text-xs font-medium text-muted-foreground">Transaction</dt>
-                <dd className="text-sm font-medium mt-0.5">
-                  <Link href="/dashboard/admin/transactions" className="text-primary flex items-center gap-1 hover:underline">
-                    View Ledger <ExternalLink className="h-3 w-3" />
+                <dd className="text-sm font-medium mt-0.5 space-y-1">
+                  <Link href={`/dashboard/admin/transactions?txId=${intake.approvedTransactionId}`} className="text-primary flex items-center gap-1 hover:underline">
+                    View in Ledger <ExternalLink className="h-3 w-3" />
                   </Link>
+                  <span className="block font-mono text-xs text-muted-foreground">{intake.approvedTransactionId}</span>
                 </dd>
               </div>
             )}

@@ -412,9 +412,37 @@ export function SidebarNav() {
           </>
         )}
 
-        {/* TC-only: View Agent Dashboard shortcut (TC users don't see the full admin menu) */}
+        {/* TC-only: TC Queue, Transaction Ledger, and Agent Dashboard (TC users don't see the full admin menu) */}
         {!isImpersonating && isTcOnly && (
           <>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Transactions</p>
+              <SidebarMenuItem>
+                <Link href="/dashboard/admin/tc">
+                  <SidebarMenuButton
+                    isActive={pathname.startsWith('/dashboard/admin/tc')}
+                    tooltip="TC Queue"
+                    className="justify-start"
+                  >
+                    <ClipboardList className="h-4 w-4" />
+                    <span>TC Queue</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <Link href="/dashboard/admin/transactions">
+                  <SidebarMenuButton
+                    isActive={pathname.startsWith('/dashboard/admin/transactions')}
+                    tooltip="Transaction Ledger"
+                    className="justify-start"
+                  >
+                    <Receipt className="h-4 w-4" />
+                    <span>Transaction Ledger</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            </SidebarMenu>
             <SidebarSeparator className="my-2" />
             <SidebarMenu>
               <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Agent Access</p>
