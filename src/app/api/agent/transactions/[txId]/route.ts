@@ -566,10 +566,27 @@ export async function PATCH(
         const agentName = String(txData.agentDisplayName || 'Agent');
         const agentUid = txData.agentId || uid;
 
+        // ── Check if this transaction has a linked approved TC intake ──────────
+        // Once a TC has approved a file, they stay in the loop for ALL subsequent
+        // changes — regardless of the workingWithTc flag on the transaction.
+        let hasLinkedTcIntake = false;
+        try {
+          const linkedIntakeCheck = await adminDb
+            .collection('tcIntakes')
+            .where('approvedTransactionId', '==', txId)
+            .limit(1)
+            .get();
+          hasLinkedTcIntake = !linkedIntakeCheck.empty;
+        } catch {
+          // Non-fatal — fall back to workingWithTc flag only
+        }
+        const isTcManaged = effectiveWorkingWithTc || hasLinkedTcIntake;
+
         // ── Status change notifications ─────────────────────────────────────────
         // Rules:
         //   STAFF: always notified on any listing status change, regardless of TC
-        //   TC:    always notified on any status change when workingWithTc=true
+        //   TC:    notified on any status change when workingWithTc=true OR a TC
+        //          has already approved an intake for this transaction
         //   Both get specific rich messages for key transitions (active→pending, etc.)
         const isStatusChange = !!(newStatus && newStatus !== previousStatus);
 
@@ -632,8 +649,8 @@ export async function PATCH(
             });
           }
 
-          // ── TC notifications (only when workingWithTc=true) ──────────────────
-          if (effectiveWorkingWithTc) {
+          // ── TC notifications (when TC-managed: workingWithTc=true OR linked intake) ──
+          if (isTcManaged) {
             // Resolve TC recipients:
             // 1. Try agentProfiles by Firebase UID (uid) — most reliable
             // 2. Try agentProfiles by agentId slug (agentUid from txData.agentId)
@@ -725,7 +742,7 @@ export async function PATCH(
         }
 
         // ── TC: document uploaded ────────────────────────────────────────────
-        if (effectiveWorkingWithTc && updates.documents !== undefined && !_replaceDocuments) {
+        if (isTcManaged && updates.documents !== undefined && !_replaceDocuments) {
           const prevDocs: any[] = Array.isArray(txData.documents) ? txData.documents : [];
           const newDocs: any[] = Array.isArray(updates.documents) ? updates.documents : [];
           if (newDocs.length > prevDocs.length) {
@@ -763,7 +780,7 @@ export async function PATCH(
         const watchedFieldsChanged = Object.keys(updates).some(k => TC_WATCHED_FIELDS.has(k));
         // Only fire when no status change and no document change (those are handled above)
         if (
-          effectiveWorkingWithTc &&
+          isTcManaged &&
           watchedFieldsChanged &&
           !isStatusChange &&
           updates.documents === undefined
