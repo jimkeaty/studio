@@ -247,21 +247,31 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-function formatDateFull(s?: string | null) {
-  if (!s) return '—';
-  try { return format(parseISO(s), 'MMM d, yyyy h:mm a'); } catch { return s; }
+/** Safely coerce a value to a string — handles Firestore Timestamps, numbers, and objects */
+function safeStr(v: any): string | null {
+  if (v == null) return null;
+  if (typeof v === 'string') return v || null;
+  if (typeof v === 'number') return String(v);
+  if (typeof v?.toDate === 'function') return v.toDate().toISOString();
+  if (typeof v === 'object') return null; // never render raw objects
+  return String(v);
 }
-
-function formatDateShort(s?: string | null) {
-  if (!s) return '—';
-  try { return format(parseISO(s), 'MMM d, yyyy'); } catch { return s; }
+function formatDateFull(s?: any) {
+  const str = safeStr(s);
+  if (!str) return '—';
+  try { return format(parseISO(str), 'MMM d, yyyy h:mm a'); } catch { return str; }
 }
-
-function Dl({ label, value }: { label: string; value?: string | null }) {
+function formatDateShort(s?: any) {
+  const str = safeStr(s);
+  if (!str) return '—';
+  try { return format(parseISO(str), 'MMM d, yyyy'); } catch { return str; }
+}
+function Dl({ label, value }: { label: string; value?: any }) {
+  const display = safeStr(value);
   return (
     <div>
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium mt-0.5">{value || '—'}</dd>
+      <dd className="text-sm font-medium mt-0.5">{display || '—'}</dd>
     </div>
   );
 }
@@ -868,7 +878,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           {intake.commissionOverride && (
             <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
               <p className="text-xs text-orange-600 dark:text-orange-400">
-                <strong>Commission Override</strong> set by {intake.commissionOverrideBy} on {formatDateShort(intake.commissionOverrideAt)}.
+                <strong>Commission Override</strong> set by {safeStr(intake.commissionOverrideBy) || '—'} on {formatDateShort(intake.commissionOverrideAt)}.
                 Auto-calculation will be skipped on approval.
               </p>
             </div>
@@ -1051,8 +1061,8 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           <Archive className="h-4 w-4" />
           <AlertTitle>Archived</AlertTitle>
           <AlertDescription>
-            Archived by {intake.archivedBy} on {formatDateShort(intake.archivedAt)}.
-            {intake.archiveReason && ` Reason: ${intake.archiveReason}`}
+            Archived by {safeStr(intake.archivedBy) || '—'} on {formatDateShort(intake.archivedAt)}.
+            {intake.archiveReason && ` Reason: ${safeStr(intake.archiveReason) || ''}`}
           </AlertDescription>
         </Alert>
       )}
@@ -1062,7 +1072,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         <Alert variant="destructive">
           <XCircle className="h-4 w-4" />
           <AlertTitle>Rejected</AlertTitle>
-          <AlertDescription>{intake.rejectionReason}</AlertDescription>
+          <AlertDescription>{safeStr(intake.rejectionReason) || '—'}</AlertDescription>
         </Alert>
       )}
 
