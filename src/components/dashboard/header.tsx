@@ -181,7 +181,7 @@ export function Header() {
   const [notifOpen, setNotifOpen]       = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading]           = useState(false);
-  const [fetched, setFetched]           = useState(false);
+  const lastFetchedAtRef = useRef<number>(0); // epoch ms of last successful fetch
   const [bellPulse, setBellPulse]       = useState(false); // triggers CSS pulse animation
   const dropdownRef   = useRef<HTMLDivElement>(null);
   const prevUnreadRef = useRef<number>(0);   // tracks previous unread count across polls
@@ -227,16 +227,16 @@ export function Header() {
       console.warn('[Header] Failed to fetch notifications:', err);
     } finally {
       setLoading(false);
-      setFetched(true);
+      lastFetchedAtRef.current = Date.now();
     }
   }, [user]);
 
-  // Fetch on open (if not yet fetched)
+  // Fetch on open if never fetched or data is >30 s stale
   useEffect(() => {
-    if (notifOpen && !fetched) {
+    if (notifOpen && Date.now() - lastFetchedAtRef.current > 30_000) {
       fetchNotifications();
     }
-  }, [notifOpen, fetched, fetchNotifications]);
+  }, [notifOpen, fetchNotifications]);
 
   // Poll every 60 seconds regardless of dropdown state so the badge and
   // bell chime fire even when the panel is closed
