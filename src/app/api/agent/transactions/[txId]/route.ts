@@ -741,22 +741,41 @@ export async function PATCH(
           }
         }
 
-        // ── TC: document uploaded ────────────────────────────────────────────
-        if (isTcManaged && updates.documents !== undefined && !_replaceDocuments) {
+        // ── Document uploaded: notify staff always + TC when TC-managed ────────────
+        if (updates.documents !== undefined && !_replaceDocuments) {
           const prevDocs: any[] = Array.isArray(txData.documents) ? txData.documents : [];
           const newDocs: any[] = Array.isArray(updates.documents) ? updates.documents : [];
           if (newDocs.length > prevDocs.length) {
             const addedCount = newDocs.length - prevDocs.length;
-            const tcUids = await getTcUids(adminDb);
-            if (tcUids.length > 0) {
+            const docBody = `${agentName} uploaded ${addedCount === 1 ? 'a document' : `${addedCount} documents`} to ${txAddress}.`;
+            // Staff always notified on document uploads
+            const staffUids = await getAllStaffUids(adminDb);
+            if (staffUids.length > 0) {
               await sendNotification(adminDb, {
                 type: 'tc_document_uploaded',
-                recipientUids: tcUids,
+                recipientUids: staffUids,
                 title: 'New Document Uploaded',
-                body: `${agentName} uploaded ${addedCount === 1 ? 'a document' : `${addedCount} documents`} to ${txAddress}.`,
-                url: '/dashboard/admin/tc',
+                body: docBody,
+                url: '/dashboard/admin/staff-queue',
                 data: { transactionId: txId },
               });
+            }
+            // TC also notified when TC-managed
+            if (isTcManaged) {
+              const tcUids = await getTcUids(adminDb);
+              // Exclude UIDs already notified as staff to avoid duplicates
+              const staffSet = new Set(staffUids);
+              const tcOnly = tcUids.filter(u => !staffSet.has(u));
+              if (tcOnly.length > 0) {
+                await sendNotification(adminDb, {
+                  type: 'tc_document_uploaded',
+                  recipientUids: tcOnly,
+                  title: 'New Document Uploaded',
+                  body: docBody,
+                  url: '/dashboard/admin/tc',
+                  data: { transactionId: txId },
+                });
+              }
             }
           }
         }
@@ -780,7 +799,6 @@ export async function PATCH(
         const watchedFieldsChanged = Object.keys(updates).some(k => TC_WATCHED_FIELDS.has(k));
         // Only fire when no status change and no document change (those are handled above)
         if (
-          isTcManaged &&
           watchedFieldsChanged &&
           !isStatusChange &&
           updates.documents === undefined
@@ -789,16 +807,34 @@ export async function PATCH(
             .filter(k => TC_WATCHED_FIELDS.has(k))
             .slice(0, 3)
             .join(', ');
-          const tcUids = await getTcUids(adminDb);
-          if (tcUids.length > 0) {
+          const fieldBody = `${agentName} updated ${txAddress} (${changedFieldNames}${Object.keys(updates).filter(k => TC_WATCHED_FIELDS.has(k)).length > 3 ? ' and more' : ''}).`;
+          // Staff always notified on field changes
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
             await sendNotification(adminDb, {
               type: 'tc_field_update',
-              recipientUids: tcUids,
+              recipientUids: staffUids,
               title: 'Transaction Details Updated',
-              body: `${agentName} updated ${txAddress} (${changedFieldNames}${Object.keys(updates).filter(k => TC_WATCHED_FIELDS.has(k)).length > 3 ? ' and more' : ''}).`,
-              url: '/dashboard/admin/tc',
+              body: fieldBody,
+              url: '/dashboard/admin/staff-queue',
               data: { transactionId: txId },
             });
+          }
+          // TC also notified when TC-managed
+          if (isTcManaged) {
+            const tcUids = await getTcUids(adminDb);
+            const staffSet = new Set(staffUids);
+            const tcOnly = tcUids.filter(u => !staffSet.has(u));
+            if (tcOnly.length > 0) {
+              await sendNotification(adminDb, {
+                type: 'tc_field_update',
+                recipientUids: tcOnly,
+                title: 'Transaction Details Updated',
+                body: fieldBody,
+                url: '/dashboard/admin/tc',
+                data: { transactionId: txId },
+              });
+            }
           }
         }
       } catch (notifErr) {
