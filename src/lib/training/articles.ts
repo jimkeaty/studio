@@ -1154,6 +1154,111 @@ export const ARTICLES: Article[] = [
 </table>
     `,
   },
+
+  // ── TC & STAFF NOTIFICATION SYSTEM ────────────────────────────────────────────────
+  {
+    id: 'tc-staff-notification-system',
+    title: 'TC & Staff Notification System: How It Works',
+    description:
+      'A complete guide to how TC coordinators and staff are notified of transaction events, queue actions, status changes, document uploads, and field updates.',
+    category: 'Admin Tools',
+    audience: 'staff',
+    readingTimeMinutes: 6,
+    publishedAt: '2026-08-04',
+    content: `
+<h2>Overview</h2>
+<p>The Smart Broker platform automatically notifies both TC coordinators and staff whenever something meaningful happens on a transaction. Notifications appear in the bell icon in the top-right corner of the dashboard. The bell badge shows a count of unread notifications and plays a chime when new ones arrive.</p>
+
+<blockquote>
+  <strong>Key principle:</strong> Staff are notified on <em>every</em> transaction event, no exceptions. TC coordinators are notified on transactions they are actively managing — either because the agent checked &ldquo;Working with TC&rdquo; at submission, or because a TC has already approved an intake for that transaction.
+</blockquote>
+
+<h2>What Triggers a Notification</h2>
+
+<h3>When an Agent Makes a Change</h3>
+<table>
+  <thead><tr><th>Event</th><th>Staff Notified</th><th>TC Notified</th></tr></thead>
+  <tbody>
+    <tr><td>New listing submitted</td><td>Yes — always</td><td>Yes — if agent checked &ldquo;Working with TC&rdquo;</td></tr>
+    <tr><td>Status change (any)</td><td>Yes — always</td><td>Yes — if TC-managed (see below)</td></tr>
+    <tr><td>Document uploaded</td><td>Yes — always</td><td>Yes — if TC-managed</td></tr>
+    <tr><td>Key field updated (price, dates, client, lender, title, etc.)</td><td>Yes — always</td><td>Yes — if TC-managed</td></tr>
+    <tr><td>Transaction resubmitted to TC</td><td>Yes — always</td><td>Yes — always</td></tr>
+  </tbody>
+</table>
+
+<h3>When TC Takes Action in the TC Queue</h3>
+<table>
+  <thead><tr><th>Event</th><th>Agent Notified</th><th>Staff Notified</th></tr></thead>
+  <tbody>
+    <tr><td>TC changes intake status (In Review, Approved, Rejected)</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>TC completes a checklist task</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>TC rejects an intake</td><td>Yes — with rejection reason</td><td>Yes</td></tr>
+  </tbody>
+</table>
+
+<h3>When Staff Takes Action in the Staff Queue</h3>
+<table>
+  <thead><tr><th>Event</th><th>Agent Notified</th><th>TC Notified</th></tr></thead>
+  <tbody>
+    <tr><td>Staff starts review</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Staff completes review</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Staff dismisses item</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Staff saves or updates transaction fields</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Staff completes a checklist task</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Staff logs an activity note</td><td>Yes</td><td>Yes</td></tr>
+  </tbody>
+</table>
+
+<h2>What &ldquo;TC-Managed&rdquo; Means</h2>
+<p>A transaction is considered TC-managed — and the TC will receive notifications for it — when either of the following is true:</p>
+<ul>
+  <li>The agent checked <strong>&ldquo;Working with TC&rdquo;</strong> when submitting the transaction, or</li>
+  <li>A TC coordinator has already <strong>approved a TC intake</strong> linked to that transaction</li>
+</ul>
+<p>This means that even if an agent forgot to check the TC box at submission, once the TC has approved the file, they will automatically receive all future notifications for that transaction — status changes, document uploads, and field edits — without any manual re-linking required.</p>
+
+<h2>How the Notification Bell Works</h2>
+<ul>
+  <li>The bell badge count updates automatically every <strong>60 seconds</strong> in the background</li>
+  <li>When you open the bell dropdown, it always fetches fresh data (if more than 30 seconds have passed since the last fetch)</li>
+  <li>Clicking a notification marks it as read and navigates you directly to the relevant queue or transaction</li>
+  <li>TC notifications link to the <strong>TC Queue</strong></li>
+  <li>Staff notifications link to the <strong>Staff Queue</strong></li>
+  <li>Agent notifications link to their <strong>Transaction Ledger</strong></li>
+</ul>
+
+<h2>Deduplication</h2>
+<p>If a staff member also holds a TC role (e.g., <code>tc_admin</code>), they will receive only <strong>one</strong> notification per event — not two. The system automatically excludes TC UIDs that are already covered by the staff notification to prevent duplicate delivery.</p>
+
+<h2>Troubleshooting: Not Seeing Notifications</h2>
+<table>
+  <thead><tr><th>Symptom</th><th>Likely Cause</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Bell shows zero / &ldquo;You&rsquo;re all caught up&rdquo;</td><td>Browser has cached old JavaScript</td><td>Hard refresh: Mac Cmd+Shift+R &mdash; Windows Ctrl+Shift+R</td></tr>
+    <tr><td>Bell count not updating</td><td>Polling hasn&rsquo;t fired yet</td><td>Wait up to 60 seconds, or open and close the bell to force a fresh fetch</td></tr>
+    <tr><td>TC not notified on a specific transaction</td><td>No TC intake approved and &ldquo;Working with TC&rdquo; was not checked</td><td>Agent should resubmit to TC, or check the &ldquo;Working with TC&rdquo; box on the transaction</td></tr>
+    <tr><td>Notification link goes to wrong page</td><td>Old cached notification from before a system update</td><td>Mark old notifications as read; new ones will have correct links</td></tr>
+  </tbody>
+</table>
+
+<h2>Quick Reference: Who Gets Notified for What</h2>
+<table>
+  <thead><tr><th>Action</th><th>Agent</th><th>Staff</th><th>TC</th></tr></thead>
+  <tbody>
+    <tr><td>New listing submitted</td><td>&mdash;</td><td>&#10003;</td><td>&#10003; if TC flag</td></tr>
+    <tr><td>Status change</td><td>&#10003;</td><td>&#10003;</td><td>&#10003; if TC-managed</td></tr>
+    <tr><td>Document uploaded</td><td>&mdash;</td><td>&#10003;</td><td>&#10003; if TC-managed</td></tr>
+    <tr><td>Field updated</td><td>&mdash;</td><td>&#10003;</td><td>&#10003; if TC-managed</td></tr>
+    <tr><td>TC updates intake status</td><td>&#10003;</td><td>&#10003;</td><td>&mdash;</td></tr>
+    <tr><td>TC completes checklist</td><td>&#10003;</td><td>&#10003;</td><td>&mdash;</td></tr>
+    <tr><td>Staff completes review</td><td>&#10003;</td><td>&mdash;</td><td>&#10003;</td></tr>
+    <tr><td>Staff updates checklist</td><td>&#10003;</td><td>&mdash;</td><td>&#10003;</td></tr>
+    <tr><td>Staff saves field changes</td><td>&#10003;</td><td>&mdash;</td><td>&#10003;</td></tr>
+  </tbody>
+</table>
+    `,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
