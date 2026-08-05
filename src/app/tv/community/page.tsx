@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Clock, Users, Home, MapPin, Phone, Bed, Bath, Square,
   DollarSign, Droplets, Zap, Building2, Calendar, ChevronLeft, ChevronRight,
-  BarChart2, Trophy, Crown, Rocket,
+  BarChart2, Trophy, Crown, Rocket, Pause, Play,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -123,6 +123,13 @@ function useAutoScroll(items: any[], active: boolean) {
   const innerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number | null>(null);
   const posRef = useRef(0);
+  const pausedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+
+  const togglePause = useCallback(() => {
+    pausedRef.current = !pausedRef.current;
+    setPaused(pausedRef.current);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -131,6 +138,8 @@ function useAutoScroll(items: any[], active: boolean) {
 
     posRef.current = 0;
     container.scrollTop = 0;
+    pausedRef.current = false;
+    setPaused(false);
 
     const SPEED = 28;
     let lastTime: number | null = null;
@@ -141,6 +150,13 @@ function useAutoScroll(items: any[], active: boolean) {
       if (lastTime === null) lastTime = ts;
       const dt = (ts - lastTime) / 1000;
       lastTime = ts;
+
+      // Manual pause — freeze position, keep loop alive
+      if (pausedRef.current) {
+        lastTime = ts;
+        animRef.current = requestAnimationFrame(step);
+        return;
+      }
 
       const contentH = inner.scrollHeight / 2;
       const containerH = container.clientHeight;
@@ -172,7 +188,7 @@ function useAutoScroll(items: any[], active: boolean) {
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [items, active]);
 
-  return { containerRef, innerRef };
+  return { containerRef, innerRef, paused, togglePause };
 }
 
 // ─── Activity Column Card (standalone so refs are stable) ────────────────────
@@ -397,7 +413,7 @@ function LeaderboardSection({ active }: { active: boolean }) {
   const [rows, setRows] = useState<LeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [cfg, setCfg] = useState<LBConfig>(LB_DEFAULTS);
-  const { containerRef, innerRef } = useAutoScroll(rows, active);
+  const { containerRef, innerRef, paused, togglePause } = useAutoScroll(rows, active);
 
   useEffect(() => {
     // First fetch the admin config, then use it to fetch the right leaderboard data
@@ -463,6 +479,20 @@ function LeaderboardSection({ active }: { active: boolean }) {
           <p className="text-gray-400 text-sm">{cfg.subtitle || periodLabel}</p>
         </div>
         <div className="ml-auto flex items-center gap-6">
+          {/* Pause / Play button */}
+          <button
+            onClick={togglePause}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-colors ${
+              paused
+                ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                : 'border-white/20 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+            title={paused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
+          >
+            {paused
+              ? <><Play className="h-4 w-4" /> Resume</>
+              : <><Pause className="h-4 w-4" /> Pause</>}
+          </button>
           {cfg.showSales && (
             <div className="text-center">
               <div className="text-2xl font-black text-white">{totalClosed}</div>
@@ -496,8 +526,22 @@ function LeaderboardSection({ active }: { active: boolean }) {
         </div>
       </div>
 
-      {/* Scrolling rows */}
-      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-4" style={{ scrollBehavior: 'auto' }}>
+      {/* Paused indicator banner */}
+      {paused && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-400 text-sm font-semibold">
+          <Pause className="h-3.5 w-3.5" />
+          Scrolling paused — click anywhere on the list or press Resume to continue
+        </div>
+      )}
+
+      {/* Scrolling rows — click anywhere to pause/resume */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden px-8 py-4 cursor-pointer select-none"
+        style={{ scrollBehavior: 'auto' }}
+        onClick={togglePause}
+        title={paused ? 'Click to resume scrolling' : 'Click to pause scrolling'}
+      >
         {loading ? (
           <div className="flex items-center justify-center h-full text-gray-400 text-2xl animate-pulse">Loading…</div>
         ) : rows.length === 0 ? (
