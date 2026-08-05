@@ -200,11 +200,18 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, [period, year, quarter, month]);
 
-  // Apply showTopN limit from config
-  const visibleRows = useMemo(
-    () => rows.slice(0, displayConfig.showTopN),
-    [rows, displayConfig.showTopN]
-  );
+  // Sort by volume first, number of sales as tiebreaker, then apply showTopN
+  const visibleRows = useMemo(() => {
+    const sorted = [...rows].sort((a, b) => {
+      // Primary: total closed dollar volume (highest first)
+      if (b.closedVolume !== a.closedVolume) return b.closedVolume - a.closedVolume;
+      // Tiebreaker 1: number of closed sales
+      if (b.closed !== a.closed) return b.closed - a.closed;
+      // Tiebreaker 2: alphabetical
+      return (a.displayName || '').localeCompare(b.displayName || '');
+    });
+    return sorted.slice(0, displayConfig.showTopN);
+  }, [rows, displayConfig.showTopN]);
 
   const leaderScore = visibleRows.length > 0 ? visibleRows[0].closed : 0;
 

@@ -11,6 +11,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+function fmtVolume(v: number): string {
+  if (!v) return "$0";
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+  return `$${v.toLocaleString()}`;
+}
+
 export default function TopAgents2025({ year = 2025 }: { year?: number }) {
   const [rows, setRows] = useState<EffectiveRollup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +35,7 @@ export default function TopAgents2025({ year = 2025 }: { year?: number }) {
         const json = await res.json();
         if (!res.ok || !json?.ok) throw new Error(json?.error || 'Failed to load top agents');
         const data = json.rows ?? [];
-if (!cancelled) setRows(data);
+        if (!cancelled) setRows(data);
       } catch (e: any) {
         console.error("Failed to fetch top agents data:", e);
         if (!cancelled) setError(e?.message || String(e));
@@ -43,18 +50,29 @@ if (!cancelled) setRows(data);
   }, [year]);
 
   const sorted = useMemo(() => {
-    return [...rows].sort((a, b) => (b?.totals?.all || 0) - (a?.totals?.all || 0));
+    return [...rows].sort((a, b) => {
+      // Primary: total closed dollar volume (highest first)
+      const aVol = Number(a?.closedVolume || 0);
+      const bVol = Number(b?.closedVolume || 0);
+      if (bVol !== aVol) return bVol - aVol;
+      // Tiebreaker 1: number of closed sales
+      const aClosed = Number(a?.closed || 0);
+      const bClosed = Number(b?.closed || 0);
+      if (bClosed !== aClosed) return bClosed - aClosed;
+      // Tiebreaker 2: alphabetical by display name
+      return (String(a?.displayName || a?.agentId || '')).localeCompare(String(b?.displayName || b?.agentId || ''));
+    });
   }, [rows]);
 
   const totals = useMemo(() => {
     return sorted.reduce(
       (acc, r) => {
-        acc.closed += r.closed || 0;
-        acc.pending += r.pending || 0;
-        acc.total += r?.totals?.all || 0;
+        acc.closed += Number(r.closed || 0);
+        acc.pending += Number(r.pending || 0);
+        acc.volume += Number(r.closedVolume || 0);
         return acc;
       },
-      { closed: 0, pending: 0, total: 0 }
+      { closed: 0, pending: 0, volume: 0 }
     );
   }, [sorted]);
 
@@ -86,77 +104,78 @@ if (!cancelled) setRows(data);
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <CardTitle>Top Agents ({year})</CardTitle>
+            <CardDescription>
+              {year < 2025 ? `Historical data for ${year} with corrections.` : `Live data for ${year}.`}
+              {' '}Ranked by closed dollar volume.
+            </CardDescription>
+          </div>
+          <div className="flex gap-4 text-right">
             <div>
-                <CardTitle>Top Agents ({year})</CardTitle>
-                <CardDescription>
-                    {year < 2025 ? `Historical data for ${year} with corrections.` : `Live data for ${year}.`}
-                </CardDescription>
+              <div className="text-xs text-muted-foreground">Total Volume</div>
+              <div className="text-lg font-bold">{fmtVolume(totals.volume)}</div>
             </div>
-            <div className="flex gap-4 text-right">
-                <div>
-                    <div className="text-xs text-muted-foreground">Total Closed</div>
-                    <div className="text-lg font-bold">{totals.closed}</div>
-                </div>
-                <div>
-                    <div className="text-xs text-muted-foreground">Total Pending</div>
-                    <div className="text-lg font-bold">{totals.pending}</div>
-                </div>
-                <div>
-                    <div className="text-xs text-muted-foreground">Total All</div>
-                    <div className="text-lg font-bold">{totals.total}</div>
-                </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Total Closed</div>
+              <div className="text-lg font-bold">{totals.closed}</div>
             </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Total Pending</div>
+              <div className="text-lg font-bold">{totals.pending}</div>
+            </div>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         <Table>
-            <TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[50px]">Rank</TableHead>
+              <TableHead>Agent</TableHead>
+              <TableHead className="text-right">Volume</TableHead>
+              <TableHead className="text-right">Closed</TableHead>
+              <TableHead className="text-right">Pending</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.length === 0 ? (
               <TableRow>
-                <TableHead className="w-[50px]">Rank</TableHead>
-                <TableHead>Agent ID</TableHead>
-                <TableHead className="text-right">Closed</TableHead>
-                <TableHead className="text-right">Pending</TableHead>
-                <TableHead className="text-right">Total Units</TableHead>
+                <TableCell colSpan={5} className="h-24 text-center">
+                  No agent rollup data found for {year}.
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
-                    No agent rollup data found for {year}.
+            ) : (
+              sorted.slice(0, 10).map((r, idx) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium">{idx + 1}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{String(r.displayName || r.agentId || '—')}</span>
+                      {r.isCorrected && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Badge variant="outline">Corrected</Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">{r.correctionReason}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                   </TableCell>
+                  <TableCell className="text-right font-bold">{fmtVolume(Number(r.closedVolume || 0))}</TableCell>
+                  <TableCell className="text-right">{Number(r.closed || 0)}</TableCell>
+                  <TableCell className="text-right">{Number(r.pending || 0)}</TableCell>
                 </TableRow>
-              ) : (
-                sorted.slice(0, 10).map((r, idx) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{idx + 1}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code>{r.agentId}</code>
-                        {r.isCorrected && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Badge variant="outline">Corrected</Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">{r.correctionReason}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">{r.closed || 0}</TableCell>
-                    <TableCell className="text-right">{r.pending || 0}</TableCell>
-                    <TableCell className="text-right font-bold">{r?.totals?.all || 0}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
+              ))
+            )}
+          </TableBody>
         </Table>
         <p className="text-xs text-muted-foreground mt-4">
-            Showing top {Math.min(10, sorted.length)} of {sorted.length} agents for {year}.
+          Showing top {Math.min(10, sorted.length)} of {sorted.length} agents for {year}.
         </p>
       </CardContent>
     </Card>
