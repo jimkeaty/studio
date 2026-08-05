@@ -84,9 +84,9 @@ export async function GET(req: NextRequest) {
 
 // ── Yearly (from rollups) ──────────────────────────────────────────────────
 async function handleYearly(db: any, year: number, includeInactive: boolean) {
-  const [rollups, demoSnap, activitySnap] = await Promise.all([
+  const [rollups, profileSnap, activitySnap] = await Promise.all([
     getEffectiveRollups(db, year),
-    db.collection('agentProfiles').where('isDemoAccount', '==', true).get(),
+    db.collection('agentProfiles').get(),
     db.collection('daily_activity')
       .where('date', '>=', `${year}-01-01`)
       .where('date', '<=', `${year}-12-31`)
@@ -106,9 +106,15 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
     agg.appointmentsSet += num(a.appointmentsSetCount);
     agg.appointmentsHeld += num(a.appointmentsHeldCount);
   }
-  const demoAgentIds = new Set<string>(
-    demoSnap.docs.map((d: any) => String(d.data().agentId || d.id || '').trim()).filter(Boolean)
-  );
+  // Build a live profile map keyed by agentId for real-time status checks
+  const liveProfileMap = new Map<string, any>();
+  const demoAgentIds = new Set<string>();
+  for (const doc of (profileSnap as any).docs) {
+    const d = doc.data() as any;
+    const aid = String(d.agentId || doc.id || '').trim();
+    if (aid) liveProfileMap.set(aid, d);
+    if (d.isDemoAccount === true && aid) demoAgentIds.add(aid);
+  }
 
   // Also fetch recent pendings and recent sold from transactions
   const recentSnap = await db
@@ -149,12 +155,18 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
 
   const rows = (rollups || [])
     .filter((r: any) => {
-      // Exclude demo accounts from leaderboard
       const aid = String(r.agentId || '').trim();
+      // Exclude demo accounts
       if (demoAgentIds.size > 0 && demoAgentIds.has(aid)) return false;
       if (includeInactive) return true;
-      const status = String(r.agentStatus || "active");
-      return status === "active" || status === "grace_period" || status === "";
+      // Use LIVE agentProfiles status — not the potentially stale rollup agentStatus.
+      // This ensures agents marked inactive/out after their rollup was built are excluded.
+      const liveProfile = liveProfileMap.get(aid);
+      const liveStatus = String(liveProfile?.status || '').toLowerCase();
+      // If no live profile found, fall back to rollup status
+      const rollupStatus = String(r.agentStatus || '').toLowerCase();
+      const effectiveStatus = liveProfile ? liveStatus : rollupStatus;
+      return effectiveStatus === 'active' || effectiveStatus === 'grace_period';
     })
     .map((r: any) => ({
       agentId: String(r.agentId || "").trim(),
@@ -344,8 +356,9 @@ async function handlePeriod(
       if (demoAgentIds.size > 0 && demoAgentIds.has(agentId)) return false;
       if (includeInactive) return true;
       const profile = profileMap.get(agentId);
-      const status = String(profile?.status || "active");
-      return status === "active" || status === "grace_period" || status === "";
+      // Only show active and grace_period agents — no empty-string fallback
+      const status = String(profile?.status || '').toLowerCase();
+      return status === 'active' || status === 'grace_period';
     })
     .map(([agentId, agg]) => {
       const profile = profileMap.get(agentId);
