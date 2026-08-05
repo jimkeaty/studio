@@ -81,11 +81,12 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
     if (prefs.in_app ?? DEFAULT_PREFS.in_app) {
       try {
         await adminDb.collection('notifications').add({
-          userId: doc.id,
+          recipientUid: doc.id,
           title,
           body,
           type: `tv_new_${info.postType}`,
           read: false,
+          url: fullUrl,
           actionUrl: fullUrl,
           createdAt: FieldValue.serverTimestamp(),
         });

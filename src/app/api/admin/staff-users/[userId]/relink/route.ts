@@ -58,13 +58,35 @@ export async function POST(
       console.log(`[relink] Overwriting existing UID ${data.firebaseUid} → ${firebaseUid} for staffUsers/${userId}`);
     }
 
-    // Write the UID
+    // Write the UID and ensure status is active
     await docRef.update({
       firebaseUid,
+      status: 'active',
       updatedAt: new Date(),
     });
-
     console.log(`[relink] Linked staffUsers/${userId} (${email}) → firebaseUid=${firebaseUid}`);
+
+    // Ensure users/{uid} doc exists with notification prefs so bell notifications work
+    const userRef = adminDb.collection('users').doc(firebaseUid);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) {
+      await userRef.set({
+        uid: firebaseUid,
+        email,
+        displayName: firebaseUser.displayName || data.displayName || '',
+        role: data.role || 'staff',
+        notificationPrefs: { in_app: true, email: true, sms: false, push: true },
+        createdAt: new Date().toISOString(),
+      });
+      console.log(`[relink] Created users/${firebaseUid} doc for ${email}`);
+    } else {
+      const existingUser = userSnap.data() as any;
+      if (!existingUser.notificationPrefs) {
+        await userRef.update({ notificationPrefs: { in_app: true, email: true, sms: false, push: true } });
+        console.log(`[relink] Added notificationPrefs to existing users/${firebaseUid} doc`);
+      }
+    }
+
     return NextResponse.json({ ok: true, linked: true, firebaseUid });
   } catch (err: any) {
     console.error('[POST /api/admin/staff-users/[userId]/relink]', err);

@@ -54,11 +54,12 @@ function sectionSlug(colName: string): string {
 async function sendInAppNotification(agentProfileId: string, title: string, body: string) {
   try {
     await adminDb.collection('notifications').add({
-      userId: agentProfileId,
+      recipientUid: agentProfileId,
       title,
       body,
       type: 'tv_staleness',
       read: false,
+      url: '/dashboard',
       createdAt: FieldValue.serverTimestamp(),
     });
   } catch (e) {

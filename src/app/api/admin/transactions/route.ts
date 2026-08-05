@@ -9,7 +9,7 @@ import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-import { getTcUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
+import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -456,6 +456,52 @@ export async function PATCH(req: NextRequest) {
       console.warn('[api/admin/transactions PATCH] Rollup rebuild failed (non-fatal):', rollupErr?.message);
     }
 
+    // ── Staff Queue dispatch on status change (admin-side) ─────────────────
+    // Mirror the same logic as the agent PATCH route so staff/TC are always
+    // notified regardless of which route triggers the status change.
+    try {
+      const txDataForQueue = updatedSnap.data() as any;
+      const newStatusForQueue = updates.status;
+      const previousStatusForQueue = existingData?.status;
+      if (newStatusForQueue && newStatusForQueue !== previousStatusForQueue) {
+        const LISTING_CLOSING_TYPES = new Set(['listing', 'dual', 'listing_only', 'seller']);
+        const LISTING_STATUS_TRIGGERS = new Set(['active', 'pending', 'coming_soon', 'temp_off_market', 'canceled', 'expired', 'closed', 'back_on_market']);
+        const BUYER_STATUS_TRIGGERS = new Set(['closed']);
+        const txClosingTypeQ = String(txDataForQueue?.closingType || txDataForQueue?.transactionType || '');
+        const isListingTxQ = LISTING_CLOSING_TYPES.has(txClosingTypeQ);
+        const triggerSetQ = isListingTxQ ? LISTING_STATUS_TRIGGERS : BUYER_STATUS_TRIGGERS;
+        if (triggerSetQ.has(newStatusForQueue)) {
+          const agentProfileQ = await adminDb.collection('agentProfiles').doc(txDataForQueue?.agentId || '').get().catch(() => null);
+          const agentNameQ = agentProfileQ?.data()?.displayName || txDataForQueue?.agentDisplayName || 'Unknown Agent';
+          const staffQueueItem: Record<string, any> = {
+            transactionId: id,
+            tcIntakeId: null,
+            agentId: txDataForQueue?.agentId || '',
+            agentName: agentNameQ,
+            submittedBy: decoded.uid,
+            submittedByName: agentNameQ,
+            actionType: newStatusForQueue === 'closed' && !isListingTxQ ? 'closed_buyer' : 'status_change',
+            closingType: txClosingTypeQ || null,
+            previousStatus: previousStatusForQueue,
+            newStatus: newStatusForQueue,
+            notes: txDataForQueue?.notes || null,
+            tcWorking: !!txDataForQueue?.workingWithTc,
+            status: 'pending_review',
+            reviewedBy: null,
+            reviewedByName: null,
+            reviewedAt: null,
+            staffNotes: null,
+            address: txDataForQueue?.propertyAddress || txDataForQueue?.address || null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          await adminDb.collection('staffQueue').add(staffQueueItem);
+        }
+      }
+    } catch (queueErr: any) {
+      console.warn('[api/admin/transactions PATCH] Staff queue dispatch failed (non-fatal):', queueErr?.message);
+    }
+
     // ── Notifications: status changes and edits ──────────────────────────
     try {
       const txData = updatedSnap.data() as any;
@@ -463,6 +509,48 @@ export async function PATCH(req: NextRequest) {
       const address = String(txData?.address || txData?.propertyAddress || 'your transaction').trim();
       const newStatus = updates.status;
       const statusChanged = newStatus && existingData?.status !== newStatus;
+
+      // ── Staff & TC notifications on status change (admin-side) ───────────
+      if (statusChanged) {
+        const STATUS_LABELS: Record<string, string> = {
+          active: 'Active', pending: 'Pending', closed: 'Closed', canceled: 'Canceled',
+          coming_soon: 'Coming Soon', temp_off_market: 'Temporarily Off Market',
+          back_on_market: 'Back on Market', expired: 'Expired',
+        };
+        const prevLabel = STATUS_LABELS[existingData?.status ?? ''] ?? existingData?.status ?? 'Unknown';
+        const newLabel = STATUS_LABELS[newStatus] ?? newStatus;
+        const agentNameForNotif = txData?.agentDisplayName || agentIdSlug || 'Agent';
+        const staffBody = `${agentNameForNotif} — ${address} changed from ${prevLabel} to ${newLabel}.`;
+        // Notify all staff
+        const allStaffUids = await getAllStaffUids(adminDb);
+        if (allStaffUids.length > 0) {
+          await sendNotification(adminDb, {
+            type: 'staff_queue_new',
+            recipientUids: allStaffUids,
+            title: 'Transaction Status Updated',
+            body: staffBody,
+            url: '/dashboard/admin/staff-queue',
+            data: { transactionId: id },
+          });
+        }
+        // Notify TC if transaction is TC-managed
+        const isTcManagedAdmin = !!(txData?.workingWithTc || txData?.tcIntakeId);
+        if (isTcManagedAdmin) {
+          const tcUidsAdmin = await getTcUids(adminDb);
+          const staffSet = new Set(allStaffUids);
+          const tcOnlyAdmin = tcUidsAdmin.filter(u => !staffSet.has(u));
+          if (tcOnlyAdmin.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'tx_status_change',
+              recipientUids: tcOnlyAdmin,
+              title: 'Transaction Status Updated',
+              body: staffBody,
+              url: '/dashboard/admin/tc',
+              data: { transactionId: id },
+            });
+          }
+        }
+      }
       // Resolve the agent's Firebase UID from the agentId slug
       const agentUid = agentIdSlug ? (await getAgentUid(adminDb, agentIdSlug)) : null;
       // Determine who made this edit (TC/staff vs agent)
