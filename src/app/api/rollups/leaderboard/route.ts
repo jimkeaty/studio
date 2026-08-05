@@ -178,9 +178,13 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
     }));
 
   rows.sort((a: any, b: any) => {
-    if (b.closed !== a.closed) return b.closed - a.closed;
+    // Primary: total closed dollar volume (highest first)
     if (b.closedVolume !== a.closedVolume) return b.closedVolume - a.closedVolume;
+    // Tiebreaker 1: number of closed sales
+    if (b.closed !== a.closed) return b.closed - a.closed;
+    // Tiebreaker 2: pending count
     if (b.pending !== a.pending) return b.pending - a.pending;
+    // Tiebreaker 3: alphabetical
     return (a.displayName || "").localeCompare(b.displayName || "");
   });
 
@@ -364,8 +368,11 @@ async function handlePeriod(
     });
 
   rows.sort((a, b) => {
-    if (b.closed !== a.closed) return b.closed - a.closed;
+    // Primary: total closed dollar volume (highest first)
     if (b.closedVolume !== a.closedVolume) return b.closedVolume - a.closedVolume;
+    // Tiebreaker 1: number of closed sales
+    if (b.closed !== a.closed) return b.closed - a.closed;
+    // Tiebreaker 2: alphabetical
     return (a.displayName || "").localeCompare(b.displayName || "");
   });
 

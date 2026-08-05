@@ -423,9 +423,12 @@ function LeaderboardSection({ active }: { active: boolean }) {
           .then(d => {
             if (d.ok) {
               const sorted = (d.rows || []).sort((a: LeaderRow, b: LeaderRow) => {
-                const aVal = getMetricValue(a, c.primaryMetricKey);
-                const bVal = getMetricValue(b, c.primaryMetricKey);
-                return bVal - aVal;
+                // Primary: total closed dollar volume (highest first)
+                if (b.closedVolume !== a.closedVolume) return b.closedVolume - a.closedVolume;
+                // Tiebreaker 1: number of closed sales
+                if (b.closed !== a.closed) return b.closed - a.closed;
+                // Tiebreaker 2: alphabetical
+                return (a.displayName || '').localeCompare(b.displayName || '');
               });
               setRows(sorted.slice(0, c.showTopN));
             }
