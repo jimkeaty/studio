@@ -558,23 +558,41 @@ export default function StaffUsersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* Force re-link button — shown for active unlinked users */}
-                          {u.status === 'active' && !isLinked && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700"
-                              title="Fix login access — link Firebase account"
-                              onClick={() => handleForceRelink(u)}
-                              disabled={relinkingId === u.id}
-                            >
-                              {relinkingId === u.id ? (
-                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Link2 className="h-3.5 w-3.5" />
-                              )}
-                            </Button>
-                          )}
+          {/* Force re-link button — shown for active unlinked users */}
+          {u.status === 'active' && !isLinked && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700"
+              title="Fix login access — link Firebase account"
+              onClick={() => handleForceRelink(u)}
+              disabled={relinkingId === u.id}
+            >
+              {relinkingId === u.id ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Link2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
+          {/* Fix Notifications button — shown for all active users (linked or not)
+               Ensures users/{uid} doc exists with notificationPrefs so bell works */}
+          {u.status === 'active' && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700"
+              title="Fix notifications — ensure bell and email notifications work"
+              onClick={() => handleForceRelink(u)}
+              disabled={relinkingId === u.id}
+            >
+              {relinkingId === u.id ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Bell className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
                           <Button size="sm" variant="ghost" onClick={() => openEdit(u)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
