@@ -762,37 +762,17 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
 
       {/* ── Financial Details ─────────────────────────────────────────────── */}
       <SectionCard title="Financial Details" icon={<DollarSign className="h-4 w-4" />} defaultCollapsed={!f.earnestMoney}>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <EInput label="Earnest Money" name="earnestMoney" value={f.earnestMoney} onChange={setField} type="number" />
-            <ESelect label="Deposit Holder" name="depositHolder" value={f.depositHolder} onChange={setField} options={[
-              { value: 'listing_brokerage', label: 'Listing Brokerage' },
-              { value: 'title_company', label: 'Title Company' },
-              { value: 'other', label: 'Other' },
-            ]} />
-            {f.depositHolder === 'other' && (
-              <EInput label="Deposit Holder (Other)" name="depositHolderOther" value={f.depositHolderOther} onChange={setField} />
-            )}
-            <EInput label="Buyer Closing Costs Paid by Seller" name="buyerClosingCostTotal" value={f.buyerClosingCostTotal} onChange={setField} type="number" />
-            <EInput label="Buyer Bring to Closing" name="buyerBringToClosing" value={f.buyerBringToClosing || ''} onChange={setField} type="number" />
-          </div>
-          {isListing && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <EInput label="% Seller Paying Listing Agent" name="sellerPayingListingAgent" value={f.sellerPayingListingAgent || ''} onChange={setField} type="number" />
-              <EInput label="% Seller Paying Buyer's Agent" name="sellerPayingBuyerAgent" value={f.sellerPayingBuyerAgent || ''} onChange={setField} type="number" />
-              <div className="flex items-center gap-2 pt-6">
-                <Checkbox id="sellerPayingListingAgentUnknown" checked={Boolean(f.sellerPayingListingAgentUnknown)} onCheckedChange={v => setField('sellerPayingListingAgentUnknown', v)} />
-                <label htmlFor="sellerPayingListingAgentUnknown" className="text-sm cursor-pointer">Commission % Unknown</label>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <EInput label="Earnest Money" name="earnestMoney" value={f.earnestMoney} onChange={setField} type="number" />
+          <ESelect label="Deposit Holder" name="depositHolder" value={f.depositHolder} onChange={setField} options={[
+            { value: 'listing_brokerage', label: 'Listing Brokerage' },
+            { value: 'title_company', label: 'Title Company' },
+            { value: 'other', label: 'Other' },
+          ]} />
+          {f.depositHolder === 'other' && (
+            <EInput label="Deposit Holder (Other)" name="depositHolderOther" value={f.depositHolderOther} onChange={setField} />
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <EInput label="Commission Base Price ($)" name="commissionBasePrice" value={f.commissionBasePrice || ''} onChange={setField} type="number" />
-            <ESelect label="Commission Mode" name="commissionMode" value={f.commissionMode || ''} onChange={setField} options={[
-              { value: 'percent', label: 'Percent of Sale' },
-              { value: 'flat', label: 'Flat Dollar' },
-            ]} />
-          </div>
+          <EInput label="Buyer Closing Costs Paid by Seller" name="buyerClosingCostTotal" value={f.buyerClosingCostTotal} onChange={setField} type="number" />
         </div>
       </SectionCard>
 
