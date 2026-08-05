@@ -282,7 +282,7 @@ export default function LeaderboardAdminPage() {
                     name="primaryMetricKey"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Primary Metric (for Ranking)</FormLabel>
+                        <FormLabel>Primary Display Metric</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
@@ -297,6 +297,9 @@ export default function LeaderboardAdminPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Controls the large number shown on each agent card. <strong>Ranking is always by dollar volume</strong> (highest volume = #1), with number of sales as the tiebreaker.
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}

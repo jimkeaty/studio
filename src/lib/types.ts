@@ -390,12 +390,15 @@ export interface AgentDashboardData {
   availableComparisonYears?: number[];
 }
 
-export type LeaderboardMetricKey = 'closed' | 'pending' | 'total';
+export type LeaderboardMetricKey = 'closed' | 'pending' | 'total' | 'volume' | 'gci' | 'agentNet';
 
 export const leaderboardMetrics: { key: LeaderboardMetricKey; label: string }[] = [
+  { key: 'volume', label: 'Dollar Volume (Recommended)' },
   { key: 'closed', label: 'Closed Units' },
   { key: 'pending', label: 'Pending Units' },
   { key: 'total', label: 'Total Units (Closed + Pending)' },
+  { key: 'gci', label: 'Gross Commission Income (GCI)' },
+  { key: 'agentNet', label: 'Agent Net Commission' },
 ];
 
 export type LeaderboardPeriod = 'yearly' | 'quarterly' | 'monthly';
