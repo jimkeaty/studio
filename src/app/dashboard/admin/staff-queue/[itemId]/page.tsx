@@ -194,6 +194,8 @@ const schema = z.object({
   // Sign order
   signOrderRequested: z.boolean().optional(),
   signServiceType: z.string().optional(),
+  signInstallDate: z.string().optional().or(z.literal('')),
+  signRider: z.array(z.string()).optional(),
   signAdditionalOptions: z.array(z.string()).optional(),
   signRiderExt: z.string().optional(),
   signRequestedDate: z.string().optional().or(z.literal('')),
@@ -217,6 +219,7 @@ const schema = z.object({
   showingAccessType: z.string().optional(),
   showingAccessNotes: z.string().optional(),
   showingAccessDoor: z.string().optional(),
+  showingAlarmCode: z.string().optional(),
   showingDisarmCode: z.string().optional(),
   showingArmCode: z.string().optional(),
   showingPasscode: z.string().optional(),
@@ -231,15 +234,15 @@ const schema = z.object({
   showingCallOrder2AltPhone: z.string().optional(),
   showingCallOrder2Email: z.string().optional(),
   showingCallOrder2Type: z.string().optional(),
-  showingCallOrder2Confirm: z.boolean().optional(),
-  showingCallOrder2Notify: z.boolean().optional(),
+  showingCallOrder2Confirm: z.array(z.string()).optional(),
+  showingCallOrder2Notify: z.array(z.string()).optional(),
   showingCallOrder3Name: z.string().optional(),
   showingCallOrder3Mobile: z.string().optional(),
   showingCallOrder3AltPhone: z.string().optional(),
   showingCallOrder3Email: z.string().optional(),
   showingCallOrder3Type: z.string().optional(),
-  showingCallOrder3Confirm: z.boolean().optional(),
-  showingCallOrder3Notify: z.boolean().optional(),
+  showingCallOrder3Confirm: z.array(z.string()).optional(),
+  showingCallOrder3Notify: z.array(z.string()).optional(),
 
   // Warranty / occupancy / shortage
   warrantyAtClosing: z.string().optional(),
@@ -516,6 +519,8 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           // Sign order — infer from signServiceType presence if flag is false
           signOrderRequested: src.signOrderRequested === true || src.signOrderRequested === 'yes' || !!(src.signServiceType),
           signServiceType: src.signServiceType || '',
+          signInstallDate: src.signInstallDate?.split('T')[0] || '',
+          signRider: Array.isArray(src.signRider) ? src.signRider : (src.signRider ? [src.signRider] : []),
           signAdditionalOptions: src.signAdditionalOptions || [],
           signRiderExt: src.signRiderExt || '',
           signRequestedDate: src.signRequestedDate?.split('T')[0] || '',
@@ -539,6 +544,7 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           showingAccessType: src.showingAccessType || '',
           showingAccessNotes: src.showingAccessNotes || '',
           showingAccessDoor: src.showingAccessDoor || '',
+          showingAlarmCode: src.showingAlarmCode || '',
           showingDisarmCode: src.showingDisarmCode || '',
           showingArmCode: src.showingArmCode || '',
           showingPasscode: src.showingPasscode || '',
@@ -553,15 +559,15 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           showingCallOrder2AltPhone: src.showingCallOrder2AltPhone || '',
           showingCallOrder2Email: src.showingCallOrder2Email || '',
           showingCallOrder2Type: src.showingCallOrder2Type || '',
-          showingCallOrder2Confirm: !!src.showingCallOrder2Confirm,
-          showingCallOrder2Notify: !!src.showingCallOrder2Notify,
+          showingCallOrder2Confirm: Array.isArray(src.showingCallOrder2Confirm) ? src.showingCallOrder2Confirm : (src.showingCallOrder2Confirm ? ['yes'] : []),
+          showingCallOrder2Notify: Array.isArray(src.showingCallOrder2Notify) ? src.showingCallOrder2Notify : (src.showingCallOrder2Notify ? ['yes'] : []),
           showingCallOrder3Name: src.showingCallOrder3Name || '',
           showingCallOrder3Mobile: src.showingCallOrder3Mobile || '',
           showingCallOrder3AltPhone: src.showingCallOrder3AltPhone || '',
           showingCallOrder3Email: src.showingCallOrder3Email || '',
           showingCallOrder3Type: src.showingCallOrder3Type || '',
-          showingCallOrder3Confirm: !!src.showingCallOrder3Confirm,
-          showingCallOrder3Notify: !!src.showingCallOrder3Notify,
+          showingCallOrder3Confirm: Array.isArray(src.showingCallOrder3Confirm) ? src.showingCallOrder3Confirm : (src.showingCallOrder3Confirm ? ['yes'] : []),
+          showingCallOrder3Notify: Array.isArray(src.showingCallOrder3Notify) ? src.showingCallOrder3Notify : (src.showingCallOrder3Notify ? ['yes'] : []),
           // Warranty / occupancy / shortage
           warrantyAtClosing: src.warrantyAtClosing || '',
           warrantyAmount: src.warrantyAmount ?? '',
@@ -2080,23 +2086,78 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <FormLabel className="font-normal">Sign order requested</FormLabel>
               </FormItem>
             )} />
-            <Grid3>
-              <FormField control={form.control} name="signServiceType" render={({ field }) => (
-                <FormItem><FormLabel>Service Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="signRiderExt" render={({ field }) => (
-                <FormItem><FormLabel>Rider / Extension</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
-                <FormItem><FormLabel>Requested Install Date</FormLabel><FormControl><Input {...field} type="date" disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="signOwnerName" render={({ field }) => (
-                <FormItem><FormLabel>Owner Name (for sign)</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-            </Grid3>
-            <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
-              <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
-            )} />
+            {form.watch('signOrderRequested') && (
+              <>
+                <Grid2>
+                  <FormField control={form.control} name="signServiceType" render={({ field }) => (
+                    <FormItem><FormLabel>Sign Service Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="Install Sign Post">Install Sign Post</SelectItem>
+                          <SelectItem value="Install Sign Post & Directional">Install Sign Post &amp; Directional</SelectItem>
+                          <SelectItem value="Remove Sign Post">Remove Sign Post</SelectItem>
+                          <SelectItem value="Change Rider">Change Rider</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="signInstallDate" render={({ field }) => (
+                    <FormItem><FormLabel>Install Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
+                    <FormItem><FormLabel>Requested Date of Service</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="signOwnerName" render={({ field }) => (
+                    <FormItem><FormLabel>Owner / Occupant Name</FormLabel><FormControl><Input placeholder="Name on sign" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                </Grid2>
+                <div>
+                  <p className="text-sm font-medium mb-2">Sign Riders</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Open House', 'For Sale', 'Sold', 'Under Contract', 'Price Reduced'].map((opt) => (
+                      <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={(form.watch('signRider') || []).includes(opt)}
+                          onCheckedChange={(checked) => {
+                            const current = form.getValues('signRider') || [];
+                            form.setValue('signRider', checked ? [...current, opt] : current.filter((o: string) => o !== opt));
+                          }}
+                          disabled={isReadOnly}
+                        />
+                        {opt}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-2">Additional Options</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Directional Sign (+$2.00)', 'Attach Personalized Name Rider', 'Text2 Rider', 'Phone# Rider EXT'].map((opt) => (
+                      <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={(form.watch('signAdditionalOptions') || []).includes(opt)}
+                          onCheckedChange={(checked) => {
+                            const current = form.getValues('signAdditionalOptions') || [];
+                            form.setValue('signAdditionalOptions', checked ? [...current, opt] : current.filter((o: string) => o !== opt));
+                          }}
+                          disabled={isReadOnly}
+                        />
+                        {opt}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {((form.watch('signAdditionalOptions') || []).includes('Text2 Rider') || (form.watch('signAdditionalOptions') || []).includes('Phone# Rider EXT')) && (
+                  <FormField control={form.control} name="signRiderExt" render={({ field }) => (
+                    <FormItem><FormLabel>Phone# Rider EXT</FormLabel><FormControl><Input placeholder="Extension number..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                )}
+                <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
+                  <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea rows={2} placeholder="Any special instructions..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+              </>
+            )}
           </SectionCard>
 
           {/* ── ShowingTime Setup ─────────────────────────────────────────── */}
@@ -2107,74 +2168,206 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <FormLabel className="font-normal">ShowingTime setup requested</FormLabel>
               </FormItem>
             )} />
-            <Grid3>
-              <FormField control={form.control} name="showingNewOrChange" render={({ field }) => (
-                <FormItem><FormLabel>New or Change</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingApptHandling" render={({ field }) => (
-                <FormItem><FormLabel>Appointment Handling</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingApptType" render={({ field }) => (
-                <FormItem><FormLabel>Appointment Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingLockboxType" render={({ field }) => (
-                <FormItem><FormLabel>Lockbox Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingLockboxLocation" render={({ field }) => (
-                <FormItem><FormLabel>Lockbox Location</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingAccessType" render={({ field }) => (
-                <FormItem><FormLabel>Access Type</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingDisarmCode" render={({ field }) => (
-                <FormItem><FormLabel>Alarm Disarm Code</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingArmCode" render={({ field }) => (
-                <FormItem><FormLabel>Alarm Arm Code</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="showingLeadTimeRequired" render={({ field }) => (
-                <FormItem><FormLabel>Lead Time Required</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-              )} />
-            </Grid3>
-            <FormField control={form.control} name="showingAccessNotes" render={({ field }) => (
-              <FormItem><FormLabel>Access Notes</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
-            )} />
-            <FormField control={form.control} name="showingNotesToAgent" render={({ field }) => (
-              <FormItem><FormLabel>Notes to Showing Agent</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
-            )} />
-            <FormField control={form.control} name="showingNotesToStaff" render={({ field }) => (
-              <FormItem><FormLabel>Notes to Staff</FormLabel><FormControl><Textarea {...field} rows={2} disabled={isReadOnly} /></FormControl></FormItem>
-            )} />
-            {/* Call Order 2 */}
-            <div className="border rounded-md p-4 space-y-3">
-              <p className="text-sm font-medium text-muted-foreground">Call Order Contact #2</p>
-              <Grid3>
-                <FormField control={form.control} name="showingCallOrder2Name" render={({ field }) => (
-                  <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+            {form.watch('showingTimeRequested') && (
+              <>
+                <Grid3>
+                  <FormField control={form.control} name="showingNewOrChange" render={({ field }) => (
+                    <FormItem><FormLabel>New Setup or Change?</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="New">New Setup</SelectItem>
+                          <SelectItem value="Change">Change Existing</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingApptHandling" render={({ field }) => (
+                    <FormItem><FormLabel>Appointment Handling</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="Appointment Required">Appointment Required</SelectItem>
+                          <SelectItem value="Go & Show">Go &amp; Show</SelectItem>
+                          <SelectItem value="Vacant">Vacant</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingApptType" render={({ field }) => (
+                    <FormItem><FormLabel>Appointment Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="Appointment Required">Appointment Required</SelectItem>
+                          <SelectItem value="Go & Show">Go &amp; Show</SelectItem>
+                          <SelectItem value="Vacant">Vacant</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingLeadTimeRequired" render={({ field }) => (
+                    <FormItem><FormLabel>Lead Time Required</FormLabel><FormControl><Input placeholder="e.g. 2 hours" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingLeadTimeSuggested" render={({ field }) => (
+                    <FormItem><FormLabel>Lead Time Suggested</FormLabel><FormControl><Input placeholder="e.g. 1 hour" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingMaxApptLength" render={({ field }) => (
+                    <FormItem><FormLabel>Max Appt Length</FormLabel><FormControl><Input placeholder="e.g. 1 hour" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingVirtualPreference" render={({ field }) => (
+                    <FormItem><FormLabel>Virtual Showing Preference</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes — Allow Virtual</SelectItem>
+                          <SelectItem value="No">No — In-Person Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </Grid3>
+                <Grid3>
+                  <FormField control={form.control} name="showingNoSameDayAppts" render={({ field }) => (
+                    <FormItem className="flex items-center gap-3 pt-5">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                      <FormLabel className="!mt-0">No Same-Day Appointments</FormLabel>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingApptOverlaps" render={({ field }) => (
+                    <FormItem className="flex items-center gap-3 pt-5">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                      <FormLabel className="!mt-0">Allow Appointment Overlaps</FormLabel>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingShareAgentInfo" render={({ field }) => (
+                    <FormItem className="flex items-center gap-3 pt-5">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                      <FormLabel className="!mt-0">Share Agent Info with Showing Agents</FormLabel>
+                    </FormItem>
+                  )} />
+                </Grid3>
+                <Grid3>
+                  <FormField control={form.control} name="showingLockboxType" render={({ field }) => (
+                    <FormItem><FormLabel>Lockbox Type</FormLabel><FormControl><Input placeholder="e.g. Supra, Combo" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingLockboxLocation" render={({ field }) => (
+                    <FormItem><FormLabel>Lockbox Location</FormLabel><FormControl><Input placeholder="e.g. Front door" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingAccessType" render={({ field }) => (
+                    <FormItem><FormLabel>Access Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="Lockbox">Lockbox</SelectItem>
+                          <SelectItem value="Combo Lockbox">Combo Lockbox</SelectItem>
+                          <SelectItem value="Electronic Lockbox">Electronic Lockbox</SelectItem>
+                          <SelectItem value="Call First">Call First</SelectItem>
+                          <SelectItem value="Vacant">Vacant</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingAccessDoor" render={({ field }) => (
+                    <FormItem><FormLabel>Access Door</FormLabel><FormControl><Input placeholder="e.g. Front door, Garage" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingPasscode" render={({ field }) => (
+                    <FormItem><FormLabel>Passcode / Gate Code</FormLabel><FormControl><Input placeholder="Passcode" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingAlarmCode" render={({ field }) => (
+                    <FormItem><FormLabel>Alarm Code</FormLabel><FormControl><Input placeholder="Alarm code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingDisarmCode" render={({ field }) => (
+                    <FormItem><FormLabel>Disarm Code</FormLabel><FormControl><Input placeholder="Disarm code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingArmCode" render={({ field }) => (
+                    <FormItem><FormLabel>Arm Code</FormLabel><FormControl><Input placeholder="Arm code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+                <FormField control={form.control} name="showingAlarmNotes" render={({ field }) => (
+                  <FormItem><FormLabel>Alarm Notes</FormLabel><FormControl><Textarea rows={2} placeholder="Any special alarm instructions..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
                 )} />
-                <FormField control={form.control} name="showingCallOrder2Mobile" render={({ field }) => (
-                  <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                <FormField control={form.control} name="showingAccessNotes" render={({ field }) => (
+                  <FormItem><FormLabel>Access Notes</FormLabel><FormControl><Textarea rows={2} placeholder="Any special access instructions..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
                 )} />
-                <FormField control={form.control} name="showingCallOrder2Email" render={({ field }) => (
-                  <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                {/* Call Order 2 */}
+                <div className="border rounded-md p-4 space-y-3">
+                  <p className="text-sm font-medium text-muted-foreground">Call Order Contact #2</p>
+                  <Grid3>
+                    <FormField control={form.control} name="showingCallOrder2Name" render={({ field }) => (
+                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2Mobile" render={({ field }) => (
+                      <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2AltPhone" render={({ field }) => (
+                      <FormItem><FormLabel>Alt Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2Email" render={({ field }) => (
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2Type" render={({ field }) => (
+                      <FormItem><FormLabel>Type</FormLabel><FormControl><Input placeholder="e.g. Owner, Agent" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                  <div className="flex gap-6">
+                    <FormField control={form.control} name="showingCallOrder2Confirm" render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                        <FormLabel className="font-normal">Confirm Appointments</FormLabel>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder2Notify" render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                        <FormLabel className="font-normal">Notify of Appointments</FormLabel>
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+                {/* Call Order 3 */}
+                <div className="border rounded-md p-4 space-y-3">
+                  <p className="text-sm font-medium text-muted-foreground">Call Order Contact #3</p>
+                  <Grid3>
+                    <FormField control={form.control} name="showingCallOrder3Name" render={({ field }) => (
+                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3Mobile" render={({ field }) => (
+                      <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3AltPhone" render={({ field }) => (
+                      <FormItem><FormLabel>Alt Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3Email" render={({ field }) => (
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3Type" render={({ field }) => (
+                      <FormItem><FormLabel>Type</FormLabel><FormControl><Input placeholder="e.g. Owner, Agent" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                  <div className="flex gap-6">
+                    <FormField control={form.control} name="showingCallOrder3Confirm" render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                        <FormLabel className="font-normal">Confirm Appointments</FormLabel>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="showingCallOrder3Notify" render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                        <FormLabel className="font-normal">Notify of Appointments</FormLabel>
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+                <FormField control={form.control} name="showingNotesToAgent" render={({ field }) => (
+                  <FormItem><FormLabel>Notes to Showing Agent</FormLabel><FormControl><Textarea rows={2} placeholder="Notes visible to showing agents..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
                 )} />
-              </Grid3>
-            </div>
-            {/* Call Order 3 */}
-            <div className="border rounded-md p-4 space-y-3">
-              <p className="text-sm font-medium text-muted-foreground">Call Order Contact #3</p>
-              <Grid3>
-                <FormField control={form.control} name="showingCallOrder3Name" render={({ field }) => (
-                  <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                <FormField control={form.control} name="showingNotesToStaff" render={({ field }) => (
+                  <FormItem><FormLabel>Notes to Staff</FormLabel><FormControl><Textarea rows={2} placeholder="Internal notes for staff..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
                 )} />
-                <FormField control={form.control} name="showingCallOrder3Mobile" render={({ field }) => (
-                  <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-                )} />
-                <FormField control={form.control} name="showingCallOrder3Email" render={({ field }) => (
-                  <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
-                )} />
-              </Grid3>
-            </div>
+              </>
+            )}
           </SectionCard>
 
           {/* ── Warranty / Occupancy / Shortage ───────────────────────────── */}

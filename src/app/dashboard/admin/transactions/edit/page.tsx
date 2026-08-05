@@ -243,33 +243,56 @@ const schema = z.object({
   signOrderRequested: z.boolean().optional(),
   signServiceType: z.string().optional(),
   signInstallDate: z.string().optional().or(z.literal('')),
-  signRider: z.string().optional(),
+  signRider: z.array(z.string()).optional(),
   signAdditionalOptions: z.array(z.string()).optional(),
+  signRiderExt: z.string().optional(),
   signOwnerName: z.string().optional(),
+  signRequestedDate: z.string().optional().or(z.literal('')),
   signSpecialRequests: z.string().optional(),
   // ShowingTime
   showingTimeRequested: z.boolean().optional(),
   showingNewOrChange: z.string().optional(),
-  showingApptHandling: z.array(z.string()).optional(),
+  showingApptHandling: z.string().optional(),
   showingApptType: z.string().optional(),
-  showingApptOverlaps: z.string().optional(),
   showingAccessType: z.string().optional(),
   showingLockboxCode: z.string().optional(),
   showingAlarmCode: z.string().optional(),
   showingDisarmCode: z.string().optional(),
-  showingLeadTime: z.coerce.number().optional().or(z.literal('')),
-  showingMaxApptLength: z.coerce.number().optional().or(z.literal('')),
+  showingLeadTimeRequired: z.string().optional(),
+  showingLeadTime: z.string().optional(),
+  showingLeadTimeSuggested: z.string().optional(),
+  showingMaxApptLength: z.string().optional(),
   showingNoSameDayAppts: z.boolean().optional(),
+  showingVirtualPreference: z.string().optional(),
   showingShareAgentInfo: z.string().optional(),
+  showingAccessDoor: z.string().optional(),
+  showingPasscode: z.string().optional(),
+  showingArmCode: z.string().optional(),
+  showingAlarmNotes: z.string().optional(),
+  showingAccessNotes: z.string().optional(),
+  showingApptOverlaps: z.boolean().optional(),
   showingNotesToAgent: z.array(z.string()).optional(),
+  showingNotesToAgentOther: z.string().optional(),
   showingNotesToStaff: z.string().optional(),
+  showingCallOrder1Name: z.string().optional(),
+  showingCallOrder1Mobile: z.string().optional(),
+  showingCallOrder1Email: z.string().optional(),
   showingCallOrder2Name: z.string().optional(),
   showingCallOrder2Mobile: z.string().optional(),
+  showingCallOrder2AltPhone: z.string().optional(),
   showingCallOrder2Email: z.string().optional(),
+  showingCallOrder2Type: z.string().optional(),
+  showingCallOrder2Confirm: z.array(z.string()).optional(),
+  showingCallOrder2Notify: z.array(z.string()).optional(),
   showingCallOrder3Name: z.string().optional(),
   showingCallOrder3Mobile: z.string().optional(),
+  showingCallOrder3AltPhone: z.string().optional(),
   showingCallOrder3Email: z.string().optional(),
+  showingCallOrder3Type: z.string().optional(),
+  showingCallOrder3Confirm: z.array(z.string()).optional(),
+  showingCallOrder3Notify: z.array(z.string()).optional(),
   // MLS / listing
+  mlsNumber: z.string().optional(),
   mlsDescription: z.string().optional(),
   listingExpirationDate: z.string().optional().or(z.literal('')),
 });
@@ -426,8 +449,9 @@ export default function EditTransactionPage() {
   const preListingTcScheduleInspections = form.watch('preListingTcScheduleInspections');
   const signOrderRequested = form.watch('signOrderRequested');
   const signAdditionalOptions = form.watch('signAdditionalOptions') || [];
+  const signRider = form.watch('signRider') || [];
   const showingTimeRequested = form.watch('showingTimeRequested');
-  const showingApptHandling = form.watch('showingApptHandling') || [];
+  const showingApptHandling = form.watch('showingApptHandling') || '';
   const showingNotesToAgent = form.watch('showingNotesToAgent') || [];
 
   // Reset CBP + commPct locks when deal type or closing type changes
@@ -821,33 +845,56 @@ export default function EditTransactionPage() {
           signOrderRequested: tx.signOrderRequested || false,
           signServiceType: tx.signServiceType || '',
           signInstallDate: d(tx.signInstallDate),
-          signRider: tx.signRider || '',
+          signRider: Array.isArray(tx.signRider) ? tx.signRider : (tx.signRider ? [tx.signRider] : []),
           signAdditionalOptions: Array.isArray(tx.signAdditionalOptions) ? tx.signAdditionalOptions : [],
+          signRiderExt: tx.signRiderExt || '',
           signOwnerName: tx.signOwnerName || '',
+          signRequestedDate: d(tx.signRequestedDate),
           signSpecialRequests: tx.signSpecialRequests || '',
           // ShowingTime
           showingTimeRequested: tx.showingTimeRequested || false,
           showingNewOrChange: tx.showingNewOrChange || '',
-          showingApptHandling: Array.isArray(tx.showingApptHandling) ? tx.showingApptHandling : [],
+          showingApptHandling: (Array.isArray(tx.showingApptHandling) ? tx.showingApptHandling[0] : tx.showingApptHandling) || '',
           showingApptType: tx.showingApptType || '',
-          showingApptOverlaps: tx.showingApptOverlaps || '',
+          showingApptOverlaps: Boolean(tx.showingApptOverlaps),
           showingAccessType: tx.showingAccessType || '',
+          showingAccessDoor: tx.showingAccessDoor || '',
           showingLockboxCode: tx.showingLockboxCode || '',
           showingAlarmCode: tx.showingAlarmCode || '',
+          showingArmCode: tx.showingArmCode || '',
           showingDisarmCode: tx.showingDisarmCode || '',
-          showingLeadTime: n(tx.showingLeadTime),
-          showingMaxApptLength: n(tx.showingMaxApptLength),
+          showingPasscode: tx.showingPasscode || '',
+          showingAlarmNotes: tx.showingAlarmNotes || '',
+          showingAccessNotes: tx.showingAccessNotes || '',
+          showingLeadTimeRequired: tx.showingLeadTimeRequired || tx.showingLeadTime || '',
+          showingLeadTime: tx.showingLeadTime || '',
+          showingLeadTimeSuggested: tx.showingLeadTimeSuggested || '',
+          showingMaxApptLength: tx.showingMaxApptLength || '',
           showingNoSameDayAppts: tx.showingNoSameDayAppts || false,
+          showingVirtualPreference: tx.showingVirtualPreference || '',
           showingShareAgentInfo: tx.showingShareAgentInfo || '',
           showingNotesToAgent: Array.isArray(tx.showingNotesToAgent) ? tx.showingNotesToAgent : [],
+          showingNotesToAgentOther: tx.showingNotesToAgentOther || '',
           showingNotesToStaff: tx.showingNotesToStaff || '',
+          showingCallOrder1Name: tx.showingCallOrder1Name || '',
+          showingCallOrder1Mobile: tx.showingCallOrder1Mobile || '',
+          showingCallOrder1Email: tx.showingCallOrder1Email || '',
           showingCallOrder2Name: tx.showingCallOrder2Name || '',
           showingCallOrder2Mobile: tx.showingCallOrder2Mobile || '',
+          showingCallOrder2AltPhone: tx.showingCallOrder2AltPhone || '',
           showingCallOrder2Email: tx.showingCallOrder2Email || '',
+          showingCallOrder2Type: tx.showingCallOrder2Type || '',
+          showingCallOrder2Confirm: Array.isArray(tx.showingCallOrder2Confirm) ? tx.showingCallOrder2Confirm : (tx.showingCallOrder2Confirm ? ['yes'] : []),
+          showingCallOrder2Notify: Array.isArray(tx.showingCallOrder2Notify) ? tx.showingCallOrder2Notify : (tx.showingCallOrder2Notify ? ['yes'] : []),
           showingCallOrder3Name: tx.showingCallOrder3Name || '',
           showingCallOrder3Mobile: tx.showingCallOrder3Mobile || '',
+          showingCallOrder3AltPhone: tx.showingCallOrder3AltPhone || '',
           showingCallOrder3Email: tx.showingCallOrder3Email || '',
+          showingCallOrder3Type: tx.showingCallOrder3Type || '',
+          showingCallOrder3Confirm: Array.isArray(tx.showingCallOrder3Confirm) ? tx.showingCallOrder3Confirm : (tx.showingCallOrder3Confirm ? ['yes'] : []),
+          showingCallOrder3Notify: Array.isArray(tx.showingCallOrder3Notify) ? tx.showingCallOrder3Notify : (tx.showingCallOrder3Notify ? ['yes'] : []),
           // MLS / listing
+          mlsNumber: tx.mlsNumber || '',
           mlsDescription: tx.mlsDescription || '',
           listingExpirationDate: d(tx.listingExpirationDate),
         });
@@ -2708,13 +2755,28 @@ export default function EditTransactionPage() {
                     <FormItem><FormLabel>Install Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
                   )} />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField control={form.control} name="signRider" render={({ field }) => (
-                    <FormItem><FormLabel>Rider</FormLabel><FormControl><Input placeholder="Rider text..." {...field} /></FormControl></FormItem>
-                  )} />
-                  <FormField control={form.control} name="signOwnerName" render={({ field }) => (
-                    <FormItem><FormLabel>Owner Name on Sign</FormLabel><FormControl><Input placeholder="Name for sign panel..." {...field} /></FormControl></FormItem>
-                  )} />
+                <div>
+                  <p className="text-sm font-medium mb-2">Sign Riders</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Open House', 'For Sale', 'Sold', 'Under Contract', 'Price Reduced'].map((opt) => (
+                      <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={signRider.includes(opt)}
+                          onChange={() => {
+                            const current = form.getValues('signRider') || [];
+                            if (current.includes(opt)) {
+                              form.setValue('signRider', current.filter((o: string) => o !== opt));
+                            } else {
+                              form.setValue('signRider', [...current, opt]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        {opt}
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <p className="text-sm font-medium mb-2">Additional Options</p>
@@ -2738,6 +2800,19 @@ export default function EditTransactionPage() {
                       </label>
                     ))}
                   </div>
+                </div>
+                {(signAdditionalOptions.includes('Text2 Rider') || signAdditionalOptions.includes('Phone# Rider EXT')) && (
+                  <FormField control={form.control} name="signRiderExt" render={({ field }) => (
+                    <FormItem><FormLabel>Phone# Rider EXT</FormLabel><FormControl><Input placeholder="Extension number..." {...field} /></FormControl></FormItem>
+                  )} />
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="signOwnerName" render={({ field }) => (
+                    <FormItem><FormLabel>Owner / Occupant Name</FormLabel><FormControl><Input placeholder="Name for sign panel..." {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
+                    <FormItem><FormLabel>Requested Date of Service</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
                 </div>
                 <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
                   <FormItem><FormLabel>Special Requests</FormLabel><FormControl>
@@ -2763,7 +2838,7 @@ export default function EditTransactionPage() {
             </label>
             {showingTimeRequested && (
               <div className="space-y-4 mt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <FormField control={form.control} name="showingApptType" render={({ field }) => (
                     <FormItem><FormLabel>Appointment Type</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
@@ -2776,61 +2851,219 @@ export default function EditTransactionPage() {
                       </Select>
                     </FormItem>
                   )} />
+                  <FormField control={form.control} name="showingNewOrChange" render={({ field }) => (
+                    <FormItem><FormLabel>New or Change</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="new">New Setup</SelectItem>
+                          <SelectItem value="change">Change Existing</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingApptHandling" render={({ field }) => (
+                    <FormItem><FormLabel>Appointment Handling</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value as string}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="auto_approve">Auto-Approve</SelectItem>
+                          <SelectItem value="call_to_confirm">Call to Confirm</SelectItem>
+                          <SelectItem value="text_to_confirm">Text to Confirm</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingLeadTimeRequired" render={({ field }) => (
+                    <FormItem><FormLabel>Lead Time Required</FormLabel><FormControl><Input placeholder="e.g. 1 hour" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingLeadTimeSuggested" render={({ field }) => (
+                    <FormItem><FormLabel>Lead Time Suggested</FormLabel><FormControl><Input placeholder="e.g. 2 hours" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingMaxApptLength" render={({ field }) => (
+                    <FormItem><FormLabel>Max Appointment Length</FormLabel><FormControl><Input placeholder="e.g. 60 min" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingVirtualPreference" render={({ field }) => (
+                    <FormItem><FormLabel>Virtual Preference</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes — allow virtual</SelectItem>
+                          <SelectItem value="no">No — in-person only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={form.watch('showingApptOverlaps') || false}
+                      onChange={e => form.setValue('showingApptOverlaps', e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300" />
+                    Allow Appointment Overlaps
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={form.watch('showingNoSameDayAppts') || false}
+                      onChange={e => form.setValue('showingNoSameDayAppts', e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300" />
+                    No same-day appointments
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={form.watch('showingShareAgentInfo') === 'yes'}
+                      onChange={e => form.setValue('showingShareAgentInfo', e.target.checked ? 'yes' : 'no')}
+                      className="h-4 w-4 rounded border-gray-300" />
+                    Share Agent Info with Showing Agents
+                  </label>
+                </div>
+                <Separator />
+                <p className="text-sm font-medium">Access Information</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <FormField control={form.control} name="showingAccessType" render={({ field }) => (
                     <FormItem><FormLabel>Access Type</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                         <SelectContent>
                           <SelectItem value="lockbox">Lockbox</SelectItem>
-                          <SelectItem value="call_listing_agent">Call Listing Agent</SelectItem>
+                          <SelectItem value="call_agent">Call Agent</SelectItem>
                           <SelectItem value="call_owner">Call Owner</SelectItem>
+                          <SelectItem value="key_at_office">Key at Office</SelectItem>
                           <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
                   )} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <FormField control={form.control} name="showingAccessDoor" render={({ field }) => (
+                    <FormItem><FormLabel>Access Door</FormLabel><FormControl><Input placeholder="Front, Back, Garage..." {...field} /></FormControl></FormItem>
+                  )} />
                   <FormField control={form.control} name="showingLockboxCode" render={({ field }) => (
                     <FormItem><FormLabel>Lockbox Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
                   )} />
                   <FormField control={form.control} name="showingAlarmCode" render={({ field }) => (
                     <FormItem><FormLabel>Alarm Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
                   )} />
+                  <FormField control={form.control} name="showingArmCode" render={({ field }) => (
+                    <FormItem><FormLabel>ARM Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
+                  )} />
                   <FormField control={form.control} name="showingDisarmCode" render={({ field }) => (
                     <FormItem><FormLabel>Disarm Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
                   )} />
+                  <FormField control={form.control} name="showingPasscode" render={({ field }) => (
+                    <FormItem><FormLabel>Passcode / Gate Code</FormLabel><FormControl><Input placeholder="Code" {...field} /></FormControl></FormItem>
+                  )} />
                 </div>
+                <FormField control={form.control} name="showingAlarmNotes" render={({ field }) => (
+                  <FormItem><FormLabel>Alarm Notes</FormLabel><FormControl>
+                    <Textarea placeholder="Alarm instructions..." className="min-h-[60px]" {...field} />
+                  </FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="showingAccessNotes" render={({ field }) => (
+                  <FormItem><FormLabel>Access Notes</FormLabel><FormControl>
+                    <Textarea placeholder="Access instructions..." className="min-h-[60px]" {...field} />
+                  </FormControl></FormItem>
+                )} />
+                <Separator />
+                <p className="text-sm font-medium">Call Order — Contact 1</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <FormField control={form.control} name="showingLeadTime" render={({ field }) => (
-                    <FormItem><FormLabel>Lead Time (min)</FormLabel><FormControl><Input type="number" min={0} placeholder="60" {...field} /></FormControl></FormItem>
+                  <FormField control={form.control} name="showingCallOrder1Name" render={({ field }) => (
+                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl></FormItem>
                   )} />
-                  <FormField control={form.control} name="showingMaxApptLength" render={({ field }) => (
-                    <FormItem><FormLabel>Max Appt Length (min)</FormLabel><FormControl><Input type="number" min={0} placeholder="60" {...field} /></FormControl></FormItem>
+                  <FormField control={form.control} name="showingCallOrder1Mobile" render={({ field }) => (
+                    <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
                   )} />
-                  <FormField control={form.control} name="showingShareAgentInfo" render={({ field }) => (
-                    <FormItem><FormLabel>Share Agent Info</FormLabel>
+                  <FormField control={form.control} name="showingCallOrder1Email" render={({ field }) => (
+                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Email" {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+                <p className="text-sm font-medium">Call Order — Contact 2</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <FormField control={form.control} name="showingCallOrder2Name" render={({ field }) => (
+                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder2Mobile" render={({ field }) => (
+                    <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder2AltPhone" render={({ field }) => (
+                    <FormItem><FormLabel>Alt Phone</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder2Email" render={({ field }) => (
+                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Email" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder2Type" render={({ field }) => (
+                    <FormItem><FormLabel>Type</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="yes">Yes</SelectItem>
-                          <SelectItem value="no">No</SelectItem>
+                          <SelectItem value="agent">Agent</SelectItem>
+                          <SelectItem value="owner">Owner</SelectItem>
+                          <SelectItem value="tenant">Tenant</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
                   )} />
                 </div>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.watch('showingNoSameDayAppts') || false}
-                    onChange={e => form.setValue('showingNoSameDayAppts', e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  No same-day appointments
-                </label>
+                <div className="flex flex-wrap gap-6">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox"
+                      checked={(form.watch('showingCallOrder2Confirm') || []).length > 0}
+                      onChange={e => form.setValue('showingCallOrder2Confirm', e.target.checked ? ['yes'] : [])}
+                      className="h-4 w-4 rounded border-gray-300" />
+                    Confirm Appointments
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox"
+                      checked={(form.watch('showingCallOrder2Notify') || []).length > 0}
+                      onChange={e => form.setValue('showingCallOrder2Notify', e.target.checked ? ['yes'] : [])}
+                      className="h-4 w-4 rounded border-gray-300" />
+                    Notify of Appointments
+                  </label>
+                </div>
+                <p className="text-sm font-medium">Call Order — Contact 3</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <FormField control={form.control} name="showingCallOrder3Name" render={({ field }) => (
+                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder3Mobile" render={({ field }) => (
+                    <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder3AltPhone" render={({ field }) => (
+                    <FormItem><FormLabel>Alt Phone</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder3Email" render={({ field }) => (
+                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Email" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="showingCallOrder3Type" render={({ field }) => (
+                    <FormItem><FormLabel>Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="agent">Agent</SelectItem>
+                          <SelectItem value="owner">Owner</SelectItem>
+                          <SelectItem value="tenant">Tenant</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox"
+                      checked={(form.watch('showingCallOrder3Confirm') || []).length > 0}
+                      onChange={e => form.setValue('showingCallOrder3Confirm', e.target.checked ? ['yes'] : [])}
+                      className="h-4 w-4 rounded border-gray-300" />
+                    Confirm Appointments
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox"
+                      checked={(form.watch('showingCallOrder3Notify') || []).length > 0}
+                      onChange={e => form.setValue('showingCallOrder3Notify', e.target.checked ? ['yes'] : [])}
+                      className="h-4 w-4 rounded border-gray-300" />
+                    Notify of Appointments
+                  </label>
+                </div>
                 <div>
-                  <p className="text-sm font-medium mb-2">Notes to Agent</p>
+                  <p className="text-sm font-medium mb-2">Notes to Showing Agent</p>
                   <div className="grid grid-cols-2 gap-2">
                     {SHOWING_NOTES_TO_AGENT_OPTIONS.map((note) => (
                       <label key={note} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -2852,39 +3085,18 @@ export default function EditTransactionPage() {
                     ))}
                   </div>
                 </div>
+                {showingNotesToAgent.includes('Other') && (
+                  <FormField control={form.control} name="showingNotesToAgentOther" render={({ field }) => (
+                    <FormItem><FormLabel>Other Notes to Showing Agent</FormLabel><FormControl>
+                      <Input placeholder="Describe..." {...field} />
+                    </FormControl></FormItem>
+                  )} />
+                )}
                 <FormField control={form.control} name="showingNotesToStaff" render={({ field }) => (
                   <FormItem><FormLabel>Notes to Staff</FormLabel><FormControl>
                     <Textarea placeholder="Internal notes for staff..." className="min-h-[80px]" {...field} />
                   </FormControl></FormItem>
                 )} />
-                <div>
-                  <p className="text-sm font-medium mb-2">Call Order — Contact 2</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <FormField control={form.control} name="showingCallOrder2Name" render={({ field }) => (
-                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl></FormItem>
-                    )} />
-                    <FormField control={form.control} name="showingCallOrder2Mobile" render={({ field }) => (
-                      <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
-                    )} />
-                    <FormField control={form.control} name="showingCallOrder2Email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Email" {...field} /></FormControl></FormItem>
-                    )} />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium mb-2">Call Order — Contact 3</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <FormField control={form.control} name="showingCallOrder3Name" render={({ field }) => (
-                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Name" {...field} /></FormControl></FormItem>
-                    )} />
-                    <FormField control={form.control} name="showingCallOrder3Mobile" render={({ field }) => (
-                      <FormItem><FormLabel>Mobile</FormLabel><FormControl><Input placeholder="Phone" {...field} /></FormControl></FormItem>
-                    )} />
-                    <FormField control={form.control} name="showingCallOrder3Email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Email" {...field} /></FormControl></FormItem>
-                    )} />
-                  </div>
-                </div>
               </div>
             )}
           </Section>

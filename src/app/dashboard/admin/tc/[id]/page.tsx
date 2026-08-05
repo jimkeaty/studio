@@ -169,6 +169,8 @@ const schema = z.object({
   // Sign order
   signOrderRequested: z.boolean().optional(),
   signServiceType: z.string().optional(),
+  signInstallDate: z.string().optional(),
+  signRider: z.array(z.string()).optional(),
   signAdditionalOptions: z.array(z.string()).optional(),
   signRiderExt: z.string().optional(),
   signRequestedDate: z.string().optional(),
@@ -234,15 +236,15 @@ const schema = z.object({
   showingCallOrder2AltPhone: z.string().optional(),
   showingCallOrder2Email: z.string().optional(),
   showingCallOrder2Type: z.string().optional(),
-  showingCallOrder2Confirm: z.boolean().optional(),
-  showingCallOrder2Notify: z.boolean().optional(),
+  showingCallOrder2Confirm: z.array(z.string()).optional(),
+  showingCallOrder2Notify: z.array(z.string()).optional(),
   showingCallOrder3Name: z.string().optional(),
   showingCallOrder3Mobile: z.string().optional(),
   showingCallOrder3AltPhone: z.string().optional(),
   showingCallOrder3Email: z.string().optional(),
   showingCallOrder3Type: z.string().optional(),
-  showingCallOrder3Confirm: z.boolean().optional(),
-  showingCallOrder3Notify: z.boolean().optional(),
+  showingCallOrder3Confirm: z.array(z.string()).optional(),
+  showingCallOrder3Notify: z.array(z.string()).optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -461,6 +463,8 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           // Sign order — infer from signServiceType presence if flag is false
           signOrderRequested: i.signOrderRequested === true || i.signOrderRequested === 'yes' || !!(i.signServiceType),
           signServiceType: i.signServiceType || '',
+          signInstallDate: i.signInstallDate || '',
+          signRider: Array.isArray(i.signRider) ? i.signRider : (i.signRider ? [i.signRider] : []),
           signAdditionalOptions: Array.isArray(i.signAdditionalOptions) ? i.signAdditionalOptions : [],
           signRiderExt: i.signRiderExt || '',
           signRequestedDate: i.signRequestedDate || '',
@@ -495,15 +499,15 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           showingCallOrder2AltPhone: i.showingCallOrder2AltPhone || '',
           showingCallOrder2Email: i.showingCallOrder2Email || '',
           showingCallOrder2Type: i.showingCallOrder2Type || '',
-          showingCallOrder2Confirm: Boolean(i.showingCallOrder2Confirm),
-          showingCallOrder2Notify: Boolean(i.showingCallOrder2Notify),
+          showingCallOrder2Confirm: Array.isArray(i.showingCallOrder2Confirm) ? i.showingCallOrder2Confirm : (i.showingCallOrder2Confirm ? ['yes'] : []),
+          showingCallOrder2Notify: Array.isArray(i.showingCallOrder2Notify) ? i.showingCallOrder2Notify : (i.showingCallOrder2Notify ? ['yes'] : []),
           showingCallOrder3Name: i.showingCallOrder3Name || '',
           showingCallOrder3Mobile: i.showingCallOrder3Mobile || '',
           showingCallOrder3AltPhone: i.showingCallOrder3AltPhone || '',
           showingCallOrder3Email: i.showingCallOrder3Email || '',
           showingCallOrder3Type: i.showingCallOrder3Type || '',
-          showingCallOrder3Confirm: Boolean(i.showingCallOrder3Confirm),
-          showingCallOrder3Notify: Boolean(i.showingCallOrder3Notify),
+          showingCallOrder3Confirm: Array.isArray(i.showingCallOrder3Confirm) ? i.showingCallOrder3Confirm : (i.showingCallOrder3Confirm ? ['yes'] : []),
+          showingCallOrder3Notify: Array.isArray(i.showingCallOrder3Notify) ? i.showingCallOrder3Notify : (i.showingCallOrder3Notify ? ['yes'] : []),
           // Buyer inspection
           inspectionOrdered: (i.inspectionOrdered === true || i.inspectionOrdered === 'yes') ? 'yes' : (i.inspectionOrdered === false || i.inspectionOrdered === 'no') ? 'no' : undefined,
           targetInspectionDate: i.targetInspectionDate || '',
@@ -1656,25 +1660,64 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                           <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="Install Sign Post">Install Sign Post</SelectItem>
-                            <SelectItem value="Install Sign Post & Directional">Install Sign Post & Directional</SelectItem>
+                            <SelectItem value="Install Sign Post & Directional">Install Sign Post &amp; Directional</SelectItem>
                             <SelectItem value="Remove Sign Post">Remove Sign Post</SelectItem>
                             <SelectItem value="Change Rider">Change Rider</SelectItem>
                           </SelectContent>
                         </Select>
                       </FormItem>
                     )} />
-                    <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
-                      <FormItem><FormLabel>Requested Install Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    <FormField control={form.control} name="signInstallDate" render={({ field }) => (
+                      <FormItem><FormLabel>Install Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
                     )} />
-                  </Grid2>
-                  <Grid2>
-                    <FormField control={form.control} name="signRiderExt" render={({ field }) => (
-                      <FormItem><FormLabel>Rider / Extension</FormLabel><FormControl><Input placeholder="e.g. Text2, QR Code" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    <FormField control={form.control} name="signRequestedDate" render={({ field }) => (
+                      <FormItem><FormLabel>Requested Date of Service</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="signOwnerName" render={({ field }) => (
-                      <FormItem><FormLabel>Owner Name (for sign)</FormLabel><FormControl><Input placeholder="Name on sign" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Owner / Occupant Name</FormLabel><FormControl><Input placeholder="Name on sign" {...field} disabled={isReadOnly} /></FormControl></FormItem>
                     )} />
                   </Grid2>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Sign Riders</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Open House', 'For Sale', 'Sold', 'Under Contract', 'Price Reduced'].map((opt) => (
+                        <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={(form.watch('signRider') || []).includes(opt)}
+                            onCheckedChange={(checked) => {
+                              const current = form.getValues('signRider') || [];
+                              form.setValue('signRider', checked ? [...current, opt] : current.filter((o: string) => o !== opt));
+                            }}
+                            disabled={isReadOnly}
+                          />
+                          {opt}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Additional Options</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Directional Sign (+$2.00)', 'Attach Personalized Name Rider', 'Text2 Rider', 'Phone# Rider EXT'].map((opt) => (
+                        <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={(form.watch('signAdditionalOptions') || []).includes(opt)}
+                            onCheckedChange={(checked) => {
+                              const current = form.getValues('signAdditionalOptions') || [];
+                              form.setValue('signAdditionalOptions', checked ? [...current, opt] : current.filter((o: string) => o !== opt));
+                            }}
+                            disabled={isReadOnly}
+                          />
+                          {opt}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {((form.watch('signAdditionalOptions') || []).includes('Text2 Rider') || (form.watch('signAdditionalOptions') || []).includes('Phone# Rider EXT')) && (
+                    <FormField control={form.control} name="signRiderExt" render={({ field }) => (
+                      <FormItem><FormLabel>Phone# Rider EXT</FormLabel><FormControl><Input placeholder="Extension number..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  )}
                   <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
                     <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea className="min-h-[60px]" placeholder="Any special instructions..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
                   )} />
@@ -1843,14 +1886,14 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                     <div className="flex gap-6">
                       <FormField control={form.control} name="showingCallOrder2Confirm" render={({ field }) => (
                         <FormItem className="flex items-center gap-2 space-y-0">
-                          <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
-                          <FormLabel className="font-normal">Confirm Appointment</FormLabel>
+                          <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                          <FormLabel className="font-normal">Confirm Appointments</FormLabel>
                         </FormItem>
                       )} />
                       <FormField control={form.control} name="showingCallOrder2Notify" render={({ field }) => (
                         <FormItem className="flex items-center gap-2 space-y-0">
-                          <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
-                          <FormLabel className="font-normal">Notify Only</FormLabel>
+                          <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                          <FormLabel className="font-normal">Notify of Appointments</FormLabel>
                         </FormItem>
                       )} />
                     </div>
@@ -1878,14 +1921,14 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                     <div className="flex gap-6">
                       <FormField control={form.control} name="showingCallOrder3Confirm" render={({ field }) => (
                         <FormItem className="flex items-center gap-2 space-y-0">
-                          <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
-                          <FormLabel className="font-normal">Confirm Appointment</FormLabel>
+                          <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                          <FormLabel className="font-normal">Confirm Appointments</FormLabel>
                         </FormItem>
                       )} />
                       <FormField control={form.control} name="showingCallOrder3Notify" render={({ field }) => (
                         <FormItem className="flex items-center gap-2 space-y-0">
-                          <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
-                          <FormLabel className="font-normal">Notify Only</FormLabel>
+                          <FormControl><Checkbox checked={(field.value || []).length > 0} onCheckedChange={(checked) => field.onChange(checked ? ['yes'] : [])} disabled={isReadOnly} /></FormControl>
+                          <FormLabel className="font-normal">Notify of Appointments</FormLabel>
                         </FormItem>
                       )} />
                     </div>
