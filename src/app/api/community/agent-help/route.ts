@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { sendNotification } from '@/lib/notifications/sendNotification';
+import { broadcastTvPost } from '@/lib/notifications/broadcastTvPost';
 
 const COL = 'agentHelpRequests';
 
@@ -19,28 +19,6 @@ async function verifyToken(req: NextRequest) {
   const tok = bearer(req);
   if (!tok) return null;
   try { return await adminAuth.verifyIdToken(tok); } catch { return null; }
-}
-
-/** Resolve all Firebase UIDs for active agents so we can broadcast to them. */
-async function getAllActiveAgentUids(db: typeof adminDb): Promise<string[]> {
-  const uids = new Set<string>();
-  try {
-    const snap = await db.collection('agentProfiles').where('status', '==', 'active').get();
-    for (const doc of snap.docs) {
-      const d = doc.data();
-      // Prefer firebaseUid field; fall back to doc ID (which may be the UID itself)
-      const uid = d.firebaseUid || d.uid || null;
-      if (uid) uids.add(uid as string);
-    }
-  } catch { /* non-fatal */ }
-  // Also pull from users collection to catch agents whose profiles may not have firebaseUid set
-  try {
-    const snap = await db.collection('users').where('role', '==', 'agent').get();
-    for (const doc of snap.docs) {
-      uids.add(doc.id);
-    }
-  } catch { /* non-fatal */ }
-  return Array.from(uids);
 }
 
 export async function GET(_req: NextRequest) {
@@ -122,35 +100,26 @@ export async function POST(req: NextRequest) {
 
     const ref = await adminDb.collection(COL).add(doc);
 
-    // ── Broadcast notification to ALL active agents ────────────────────────
-    // Fire-and-forget — do not block the response on notification delivery
-    void (async () => {
-      try {
-        const recipientUids = await getAllActiveAgentUids(adminDb);
-        if (recipientUids.length > 0) {
-          const helpTypeLabel: Record<string, string> = {
-            showing: 'Showing Help',
-            inspection: 'Inspection Help',
-            closing: 'Closing Help',
-            other: 'Agent Help',
-          };
-          const label = helpTypeLabel[helpType] || 'Agent Help';
-          const compText = compensation && Number(compensation) > 0
-            ? ` — $${Number(compensation)} compensation offered`
-            : '';
-          const dateText = needDate ? ` on ${needDate}` : '';
-          await sendNotification(adminDb, {
-            type: 'agent_help_request',
-            recipientUids,
-            title: `🤝 ${label} Needed — ${agentName}`,
-            body: `${agentName} needs help with a ${helpType}${dateText}${compText}. ${description.slice(0, 120)}`,
-            url: '/dashboard/tv-mode',
-            senderName: agentName,
-          });
-        }
-      } catch (notifErr: any) {
-        console.warn('[agent-help] Broadcast notification failed (non-fatal):', notifErr?.message);
-      }
+    // ── Broadcast to agents who opted in to Agent Help notifications (fire-and-forget)
+    void (() => {
+      const helpTypeLabel: Record<string, string> = {
+        showing: 'Showing Help',
+        inspection: 'Inspection Help',
+        closing: 'Closing Help',
+        other: 'Agent Help',
+      };
+      const label = helpTypeLabel[helpType] || 'Agent Help';
+      const compText = compensation && Number(compensation) > 0
+        ? ` · 💵 $${Number(compensation)} offered`
+        : '';
+      const dateText = needDate ? ` · 📅 ${needDate}${needTime ? ` at ${needTime}` : ''}` : '';
+      return broadcastTvPost(adminDb, {
+        postType: 'agentHelp',
+        postId: ref.id,
+        agentName,
+        excludeUid: auth.uid,
+        description: `${label}${dateText}${compText} · ${description.slice(0, 100)}`,
+      }).catch((e) => console.warn('[agent-help] broadcastTvPost error:', e));
     })();
 
     // ── Facebook Group post (non-fatal) ────────────────────────────────────────────────────
