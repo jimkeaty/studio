@@ -203,6 +203,13 @@ function ActivityColCard({
   const innerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number | null>(null);
   const posRef = useRef(0);
+  const pausedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+
+  const togglePause = useCallback(() => {
+    pausedRef.current = !pausedRef.current;
+    setPaused(pausedRef.current);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -211,6 +218,8 @@ function ActivityColCard({
 
     posRef.current = 0;
     container.scrollTop = 0;
+    pausedRef.current = false;
+    setPaused(false);
 
     const SPEED = 28;
     let lastTime: number | null = null;
@@ -221,6 +230,12 @@ function ActivityColCard({
       if (lastTime === null) lastTime = ts;
       const dt = (ts - lastTime) / 1000;
       lastTime = ts;
+
+      if (pausedRef.current) {
+        lastTime = ts;
+        animRef.current = requestAnimationFrame(step);
+        return;
+      }
 
       const contentH = inner.scrollHeight / 2;
       const containerH = container.clientHeight;
@@ -259,9 +274,23 @@ function ActivityColCard({
       <div className={`flex items-center gap-2 px-4 py-3 border-b border-white/10`}>
         <Icon className={`h-5 w-5 ${accentColor}`} />
         <span className="font-bold text-base text-white">{title}</span>
-        <span className="ml-auto text-sm text-gray-500">{items.length}</span>
+        <button
+          onClick={togglePause}
+          className={`ml-auto flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-semibold transition-colors ${
+            paused
+              ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400'
+              : 'border-white/10 bg-white/5 text-gray-500 hover:text-white'
+          }`}
+        >
+          {paused ? <><Play className="h-3 w-3" /> Play</> : <><Pause className="h-3 w-3" /> Pause</>}
+        </button>
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden" style={{ scrollBehavior: 'auto' }}>
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden cursor-pointer select-none"
+        style={{ scrollBehavior: 'auto' }}
+        onClick={togglePause}
+      >
         {items.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-600 text-lg">No activity yet</div>
         ) : (
@@ -626,7 +655,7 @@ function LeaderboardSection({ active }: { active: boolean }) {
 // ─── Coming Soon Section ──────────────────────────────────────────────────────
 
 function ComingSoonSection({ items, loading, active }: { items: ComingSoonListing[]; loading: boolean; active: boolean }) {
-  const { containerRef, innerRef } = useAutoScroll(items, active);
+  const { containerRef, innerRef, paused, togglePause } = useAutoScroll(items, active);
   const cards = [...items, ...items];
 
   return (
@@ -639,11 +668,26 @@ function ComingSoonSection({ items, loading, active }: { items: ComingSoonListin
           <h2 className="text-3xl font-extrabold text-white tracking-tight">Coming Soon</h2>
           <p className="text-gray-400 text-sm">Properties hitting the market soon — contact agent for details</p>
         </div>
-        <div className="ml-auto bg-purple-500/20 text-purple-300 text-sm font-bold px-3 py-1 rounded-full">
-          {items.length} listing{items.length !== 1 ? 's' : ''}
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={togglePause}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-semibold transition-colors ${
+              paused ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400' : 'border-white/20 bg-white/5 text-white/60 hover:text-white'
+            }`}
+          >
+            {paused ? <><Play className="h-3.5 w-3.5" /> Resume</> : <><Pause className="h-3.5 w-3.5" /> Pause</>}
+          </button>
+          <div className="bg-purple-500/20 text-purple-300 text-sm font-bold px-3 py-1 rounded-full">
+            {items.length} listing{items.length !== 1 ? 's' : ''}
+          </div>
         </div>
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6" style={{ scrollBehavior: 'auto' }}>
+      {paused && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-400 text-sm font-semibold">
+          <Pause className="h-3.5 w-3.5" /> Scrolling paused — click the list or press Resume
+        </div>
+      )}
+      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6 cursor-pointer select-none" style={{ scrollBehavior: 'auto' }} onClick={togglePause}>
         {loading ? (
           <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-2xl animate-pulse">Loading…</div></div>
         ) : items.length === 0 ? (
@@ -701,7 +745,7 @@ function ComingSoonSection({ items, loading, active }: { items: ComingSoonListin
 // ─── Buyer Needs Section ──────────────────────────────────────────────────────
 
 function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loading: boolean; active: boolean }) {
-  const { containerRef, innerRef } = useAutoScroll(items, active);
+  const { containerRef, innerRef, paused, togglePause } = useAutoScroll(items, active);
   const cards = [...items, ...items];
 
   const fmtRange = (min?: number | null, max?: number | null) => {
@@ -721,11 +765,26 @@ function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loa
           <h2 className="text-3xl font-extrabold text-white tracking-tight">Buyer Needs</h2>
           <p className="text-gray-400 text-sm">Active buyers looking for their perfect home</p>
         </div>
-        <div className="ml-auto bg-blue-500/20 text-blue-300 text-sm font-bold px-3 py-1 rounded-full">
-          {items.length} buyer{items.length !== 1 ? 's' : ''}
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={togglePause}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-semibold transition-colors ${
+              paused ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400' : 'border-white/20 bg-white/5 text-white/60 hover:text-white'
+            }`}
+          >
+            {paused ? <><Play className="h-3.5 w-3.5" /> Resume</> : <><Pause className="h-3.5 w-3.5" /> Pause</>}
+          </button>
+          <div className="bg-blue-500/20 text-blue-300 text-sm font-bold px-3 py-1 rounded-full">
+            {items.length} buyer{items.length !== 1 ? 's' : ''}
+          </div>
         </div>
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6" style={{ scrollBehavior: 'auto' }}>
+      {paused && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-400 text-sm font-semibold">
+          <Pause className="h-3.5 w-3.5" /> Scrolling paused — click the list or press Resume
+        </div>
+      )}
+      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6 cursor-pointer select-none" style={{ scrollBehavior: 'auto' }} onClick={togglePause}>
         {loading ? (
           <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-2xl animate-pulse">Loading…</div></div>
         ) : items.length === 0 ? (
@@ -783,7 +842,7 @@ function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loa
 // ─── Open Houses Section ──────────────────────────────────────────────────────
 
 function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing[]; loading: boolean; active: boolean }) {
-  const { containerRef, innerRef } = useAutoScroll(items, active);
+  const { containerRef, innerRef, paused, togglePause } = useAutoScroll(items, active);
   const cards = [...items, ...items];
 
   return (
@@ -796,11 +855,26 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
           <h2 className="text-3xl font-extrabold text-white tracking-tight">Open House Opportunities</h2>
           <p className="text-gray-400 text-sm">Open house opportunities available for agents to claim</p>
         </div>
-        <div className="ml-auto bg-orange-500/20 text-orange-300 text-sm font-bold px-3 py-1 rounded-full">
-          {items.length} opportunit{items.length !== 1 ? 'ies' : 'y'}
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={togglePause}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-semibold transition-colors ${
+              paused ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400' : 'border-white/20 bg-white/5 text-white/60 hover:text-white'
+            }`}
+          >
+            {paused ? <><Play className="h-3.5 w-3.5" /> Resume</> : <><Pause className="h-3.5 w-3.5" /> Pause</>}
+          </button>
+          <div className="bg-orange-500/20 text-orange-300 text-sm font-bold px-3 py-1 rounded-full">
+            {items.length} opportunit{items.length !== 1 ? 'ies' : 'y'}
+          </div>
         </div>
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6" style={{ scrollBehavior: 'auto' }}>
+      {paused && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-400 text-sm font-semibold">
+          <Pause className="h-3.5 w-3.5" /> Scrolling paused — click the list or press Resume
+        </div>
+      )}
+      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-6 cursor-pointer select-none" style={{ scrollBehavior: 'auto' }} onClick={togglePause}>
         {loading ? (
           <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-2xl animate-pulse">Loading…</div></div>
         ) : items.length === 0 ? (
@@ -899,6 +973,13 @@ function CompetitionSection({ competitionId, active }: { competitionId: string |
   const cInnerRef = useRef<HTMLDivElement>(null);
   const cAnimRef = useRef<number | null>(null);
   const cPosRef = useRef(0);
+  const cPausedRef = useRef(false);
+  const [cPaused, setCPaused] = useState(false);
+
+  const toggleCompPause = useCallback(() => {
+    cPausedRef.current = !cPausedRef.current;
+    setCPaused(cPausedRef.current);
+  }, [])
 
   const loadComp = useCallback(async () => {
     if (!competitionId) { setLoading(false); return; }
@@ -924,6 +1005,8 @@ function CompetitionSection({ competitionId, active }: { competitionId: string |
     if (!container || !inner || standings.length === 0 || !active) return;
     cPosRef.current = 0;
     container.scrollTop = 0;
+    cPausedRef.current = false;
+    setCPaused(false);
     const SPEED = 25;
     let lastTime: number | null = null;
     let pauseUntil = 0;
@@ -931,6 +1014,7 @@ function CompetitionSection({ competitionId, active }: { competitionId: string |
       if (!container || !inner) return;
       if (lastTime === null) lastTime = ts;
       const dt = (ts - lastTime) / 1000; lastTime = ts;
+      if (cPausedRef.current) { lastTime = ts; cAnimRef.current = requestAnimationFrame(step); return; }
       const contentH = inner.scrollHeight / 2;
       const containerH = container.clientHeight;
       if (contentH <= containerH) { cPosRef.current = 0; container.scrollTop = 0; cAnimRef.current = requestAnimationFrame(step); return; }
@@ -970,6 +1054,14 @@ function CompetitionSection({ competitionId, active }: { competitionId: string |
           <p className="text-gray-400 text-sm">{config?.metricLabel || config?.metric} · {standings.length} participants</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={toggleCompPause}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-semibold transition-colors ${
+              cPaused ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400' : 'border-white/20 bg-white/5 text-white/60 hover:text-white'
+            }`}
+          >
+            {cPaused ? <><Play className="h-3.5 w-3.5" /> Resume</> : <><Pause className="h-3.5 w-3.5" /> Pause</>}
+          </button>
           {standings.slice(0, 3).map((s, i) => (
             <div key={s.agentId} className={`text-center px-3 py-2 rounded-xl border ${
               i === 0 ? 'border-yellow-400/30 bg-yellow-500/10' : i === 1 ? 'border-slate-400/20 bg-white/5' : 'border-amber-700/20 bg-white/5'
@@ -981,7 +1073,12 @@ function CompetitionSection({ competitionId, active }: { competitionId: string |
           ))}
         </div>
       </div>
-      <div ref={cContainerRef} className="flex-1 overflow-hidden" style={{ scrollBehavior: 'auto' }}>
+      {cPaused && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-400 text-sm font-semibold">
+          <Pause className="h-3.5 w-3.5" /> Scrolling paused — click the list or press Resume
+        </div>
+      )}
+      <div ref={cContainerRef} className="flex-1 overflow-hidden cursor-pointer select-none" style={{ scrollBehavior: 'auto' }} onClick={toggleCompPause}>
         {loading ? (
           <div className="flex items-center justify-center h-full text-gray-400 text-2xl animate-pulse">Loading standings…</div>
         ) : standings.length === 0 ? (
@@ -1041,6 +1138,13 @@ function AgentHelpSection({ items, loading, active }: { items: AgentHelpItem[]; 
   const innerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number | null>(null);
   const posRef = useRef(0);
+  const pausedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+
+  const togglePause = useCallback(() => {
+    pausedRef.current = !pausedRef.current;
+    setPaused(pausedRef.current);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1048,6 +1152,8 @@ function AgentHelpSection({ items, loading, active }: { items: AgentHelpItem[]; 
     if (!container || !inner || items.length === 0 || !active) return;
     posRef.current = 0;
     container.scrollTop = 0;
+    pausedRef.current = false;
+    setPaused(false);
     const SPEED = 20;
     let lastTime: number | null = null;
     let pauseUntil = 0;
@@ -1055,6 +1161,7 @@ function AgentHelpSection({ items, loading, active }: { items: AgentHelpItem[]; 
       if (!container || !inner) return;
       if (lastTime === null) lastTime = ts;
       const dt = ts - lastTime; lastTime = ts;
+      if (pausedRef.current) { lastTime = ts; animRef.current = requestAnimationFrame(step); return; }
       if (ts < pauseUntil) { animRef.current = requestAnimationFrame(step); return; }
       const maxScroll = inner.scrollHeight - container.clientHeight;
       if (maxScroll <= 0) return;
@@ -1084,12 +1191,27 @@ function AgentHelpSection({ items, loading, active }: { items: AgentHelpItem[]; 
             <h2 className="text-white text-xl font-bold tracking-tight">Agent Help Needed</h2>
             <p className="text-gray-400 text-sm">Agents seeking help with showings, inspections &amp; more</p>
           </div>
-          <div className="ml-auto text-teal-400 text-sm font-semibold">{items.length} request{items.length !== 1 ? 's' : ''}</div>
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              onClick={togglePause}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-semibold transition-colors ${
+                paused ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400' : 'border-white/20 bg-white/5 text-white/60 hover:text-white'
+              }`}
+            >
+              {paused ? <><Play className="h-3.5 w-3.5" /> Resume</> : <><Pause className="h-3.5 w-3.5" /> Pause</>}
+            </button>
+            <span className="text-teal-400 text-sm font-semibold">{items.length} request{items.length !== 1 ? 's' : ''}</span>
+          </div>
         </div>
       </div>
+      {paused && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-400 text-sm font-semibold">
+          <Pause className="h-3.5 w-3.5" /> Scrolling paused — click the list or press Resume
+        </div>
+      )}
 
       {/* Content */}
-      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-4">
+      <div ref={containerRef} className="flex-1 overflow-hidden px-8 py-4 cursor-pointer select-none" onClick={togglePause}>
         {loading ? (
           <div className="flex items-center justify-center h-full"><div className="text-gray-400 text-lg">Loading...</div></div>
         ) : items.length === 0 ? (
