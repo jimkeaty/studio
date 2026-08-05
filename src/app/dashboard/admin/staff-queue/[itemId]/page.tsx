@@ -135,6 +135,12 @@ const schema = z.object({
   buyer2Name: z.string().optional(),
   buyer2Email: z.string().optional().or(z.literal('')),
   buyer2Phone: z.string().optional(),
+  buyer3Name: z.string().optional(),
+  buyer3Email: z.string().optional().or(z.literal('')),
+  buyer3Phone: z.string().optional(),
+  buyer4Name: z.string().optional(),
+  buyer4Email: z.string().optional().or(z.literal('')),
+  buyer4Phone: z.string().optional(),
 
   sellerName: z.string().optional(),
   sellerEmail: z.string().optional().or(z.literal('')),
@@ -142,6 +148,12 @@ const schema = z.object({
   seller2Name: z.string().optional(),
   seller2Email: z.string().optional().or(z.literal('')),
   seller2Phone: z.string().optional(),
+  seller3Name: z.string().optional(),
+  seller3Email: z.string().optional().or(z.literal('')),
+  seller3Phone: z.string().optional(),
+  seller4Name: z.string().optional(),
+  seller4Email: z.string().optional().or(z.literal('')),
+  seller4Phone: z.string().optional(),
 
   otherAgentName: z.string().optional(),
   otherAgentEmail: z.string().optional().or(z.literal('')),
@@ -266,11 +278,40 @@ const schema = z.object({
 
   // Seller commission fields
   sellerPayingListingAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  sellerPayingListingAgentUnknown: z.boolean().optional(),
   sellerPayingBuyerAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
 
   // Buyer closing costs
   buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostAgentCommission: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostHomeWarranty: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostOther: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostTxFee: z.coerce.number().min(0).optional().or(z.literal('')),
+
+  // Transaction metadata
+  status: z.string().optional(),
+  clientType: z.string().optional(),
+  tcWorking: z.string().optional(),
+  depositHolder: z.enum(['listing_broker', 'selling_broker', 'other']).optional(),
+  depositHolderOther: z.string().optional(),
+  hasCoAgent: z.boolean().optional(),
+  commissionBasePrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  commissionMode: z.enum(['percent', 'flat']).optional(),
+
+  // Commercial
+  commercialForSale: z.boolean().optional(),
+  commercialSalePrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialForLease: z.boolean().optional(),
+  commercialLeaseMonthly: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeasePricePerSqft: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseTerm: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseGci: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialTotalLeaseValue: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseCommissionMode: z.enum(['percent', 'flat']).optional(),
+  commercialLeaseCommissionPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
 
   staffNotes: z.string().optional(),
   notes: z.string().optional(),
@@ -470,12 +511,24 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           buyer2Name: src.buyer2Name || '',
           buyer2Email: src.buyer2Email || '',
           buyer2Phone: src.buyer2Phone || '',
+          buyer3Name: src.buyer3Name || '',
+          buyer3Email: src.buyer3Email || '',
+          buyer3Phone: src.buyer3Phone || '',
+          buyer4Name: src.buyer4Name || '',
+          buyer4Email: src.buyer4Email || '',
+          buyer4Phone: src.buyer4Phone || '',
           sellerName: src.sellerName || '',
           sellerEmail: src.sellerEmail || '',
           sellerPhone: src.sellerPhone || '',
           seller2Name: src.seller2Name || '',
           seller2Email: src.seller2Email || '',
           seller2Phone: src.seller2Phone || '',
+          seller3Name: src.seller3Name || '',
+          seller3Email: src.seller3Email || '',
+          seller3Phone: src.seller3Phone || '',
+          seller4Name: src.seller4Name || '',
+          seller4Email: src.seller4Email || '',
+          seller4Phone: src.seller4Phone || '',
           otherAgentName: src.otherAgentName || '',
           otherAgentEmail: src.otherAgentEmail || '',
           otherAgentPhone: src.otherAgentPhone || '',
@@ -588,10 +641,37 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           inboundReferralFeeDollar: src.inboundReferralFeeDollar ?? '',
           // Seller commission
           sellerPayingListingAgent: src.sellerPayingListingAgent ?? '',
+          sellerPayingListingAgentUnknown: !!src.sellerPayingListingAgentUnknown,
           sellerPayingBuyerAgent: src.sellerPayingBuyerAgent ?? '',
           // Buyer closing costs
           buyerClosingCostTotal: src.buyerClosingCostTotal ?? '',
           buyerBringToClosing: src.buyerBringToClosing ?? '',
+          buyerClosingCostAgentCommission: src.buyerClosingCostAgentCommission ?? '',
+          buyerClosingCostHomeWarranty: src.buyerClosingCostHomeWarranty ?? '',
+          buyerClosingCostOther: src.buyerClosingCostOther ?? '',
+          buyerClosingCostTxFee: src.buyerClosingCostTxFee ?? '',
+          // Transaction metadata
+          status: src.status || '',
+          clientType: src.clientType || '',
+          tcWorking: src.tcWorking || '',
+          depositHolder: src.depositHolder || undefined,
+          depositHolderOther: src.depositHolderOther || '',
+          hasCoAgent: !!src.hasCoAgent,
+          commissionBasePrice: src.commissionBasePrice ?? '',
+          commissionMode: src.commissionMode || undefined,
+          // Commercial
+          commercialForSale: !!src.commercialForSale,
+          commercialSalePrice: src.commercialSalePrice ?? '',
+          commercialForLease: !!src.commercialForLease,
+          commercialLeaseMonthly: src.commercialLeaseMonthly ?? '',
+          commercialLeasePricePerSqft: src.commercialLeasePricePerSqft ?? '',
+          commercialLeaseTerm: src.commercialLeaseTerm ?? '',
+          commercialLeaseGci: src.commercialLeaseGci ?? '',
+          commercialTotalLeaseValue: src.commercialTotalLeaseValue ?? '',
+          commercialLeaseCommissionMode: src.commercialLeaseCommissionMode || undefined,
+          commercialLeaseCommissionPct: src.commercialLeaseCommissionPct ?? '',
+          commercialLeaseCommissionFlat: src.commercialLeaseCommissionFlat ?? '',
+          commercialLeaseEffectivePct: src.commercialLeaseEffectivePct ?? '',
           staffNotes: data.item.staffNotes || '',
           notes: src.notes || '',
           additionalComments: src.additionalComments || '',
@@ -1755,7 +1835,137 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <FormItem><FormLabel>Earnest Money ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </div>
+            <Separator />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Basis</p>
+            <Grid3>
+              <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
+                <FormItem><FormLabel>Commission Base Price ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="commissionMode" render={({ field }) => (
+                <FormItem><FormLabel>Commission Mode</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="percent">Percent</SelectItem>
+                      <SelectItem value="flat">Flat Dollar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+            </Grid3>
+            <Separator />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Transaction Metadata</p>
+            <Grid3>
+              <FormField control={form.control} name="clientType" render={({ field }) => (
+                <FormItem><FormLabel>Client Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="buyer">Buyer</SelectItem>
+                      <SelectItem value="seller">Seller</SelectItem>
+                      <SelectItem value="both">Both</SelectItem>
+                      <SelectItem value="tenant">Tenant</SelectItem>
+                      <SelectItem value="landlord">Landlord</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="tcWorking" render={({ field }) => (
+                <FormItem><FormLabel>TC Working</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="depositHolder" render={({ field }) => (
+                <FormItem><FormLabel>Deposit Holder</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="listing_broker">Listing Broker</SelectItem>
+                      <SelectItem value="selling_broker">Selling Broker</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+            </Grid3>
+            {form.watch('depositHolder') === 'other' && (
+              <FormField control={form.control} name="depositHolderOther" render={({ field }) => (
+                <FormItem><FormLabel>Deposit Holder (Other)</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            )}
+            <FormField control={form.control} name="hasCoAgent" render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                <FormLabel>Has Co-Agent</FormLabel>
+              </FormItem>
+            )} />
           </SectionCard>
+
+          {/* Commercial Details */}
+          {(form.watch('dealType') === 'commercial_sale' || form.watch('dealType') === 'commercial_lease') && (
+            <SectionCard title="Commercial Details" icon={<Building2 className="h-4 w-4" />}>
+              {form.watch('dealType') === 'commercial_sale' && (
+                <Grid2>
+                  <FormField control={form.control} name="commercialForSale" render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                      <FormLabel>Commercial For Sale</FormLabel>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialSalePrice" render={({ field }) => (
+                    <FormItem><FormLabel>Commercial Sale Price ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                </Grid2>
+              )}
+              {form.watch('dealType') === 'commercial_lease' && (
+                <>
+                  <Grid3>
+                    <FormField control={form.control} name="commercialForLease" render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                        <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                        <FormLabel>Commercial For Lease</FormLabel>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseMonthly" render={({ field }) => (
+                      <FormItem><FormLabel>Monthly Rent ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeasePricePerSqft" render={({ field }) => (
+                      <FormItem><FormLabel>Price Per Sqft ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseTerm" render={({ field }) => (
+                      <FormItem><FormLabel>Lease Term (months)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialTotalLeaseValue" render={({ field }) => (
+                      <FormItem><FormLabel>Total Lease Value ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseGci" render={({ field }) => (
+                      <FormItem><FormLabel>Lease GCI ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                  <Grid3>
+                    <FormField control={form.control} name="commercialLeaseCommissionMode" render={({ field }) => (
+                      <FormItem><FormLabel>Commission Mode</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="percent">Percent</SelectItem>
+                            <SelectItem value="flat">Flat Dollar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseCommissionPct" render={({ field }) => (
+                      <FormItem><FormLabel>Commission (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseCommissionFlat" render={({ field }) => (
+                      <FormItem><FormLabel>Commission Flat ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseEffectivePct" render={({ field }) => (
+                      <FormItem><FormLabel>Effective Commission (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                </>
+              )}
+            </SectionCard>
+          )}
 
           {/* Buyer */}
           <SectionCard title="Buyer Information" icon={<User className="h-4 w-4" />}>
@@ -1777,6 +1987,24 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
               )} />
               <FormField control={form.control} name="buyer2Phone" render={({ field }) => (
                 <FormItem><FormLabel>Buyer 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer3Name" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 3 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer3Email" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 3 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer3Phone" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 3 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer4Name" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 4 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer4Email" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 4 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer4Phone" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 4 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </Grid3>
           </SectionCard>
@@ -1801,6 +2029,38 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
               )} />
               <FormField control={form.control} name="seller2Phone" render={({ field }) => (
                 <FormItem><FormLabel>Seller 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller3Name" render={({ field }) => (
+                <FormItem><FormLabel>Seller 3 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller3Email" render={({ field }) => (
+                <FormItem><FormLabel>Seller 3 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller3Phone" render={({ field }) => (
+                <FormItem><FormLabel>Seller 3 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller4Name" render={({ field }) => (
+                <FormItem><FormLabel>Seller 4 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller4Email" render={({ field }) => (
+                <FormItem><FormLabel>Seller 4 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller4Phone" render={({ field }) => (
+                <FormItem><FormLabel>Seller 4 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
+                <FormItem><FormLabel>Seller Paying Listing Agent (%)</FormLabel><FormControl><Input type="number" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
+                <FormItem><FormLabel>Seller Paying Buyer Agent (%)</FormLabel><FormControl><Input type="number" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="sellerPayingListingAgentUnknown" render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-6">
+                  <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel>Listing agent commission unknown</FormLabel>
+                </FormItem>
               )} />
             </Grid3>
           </SectionCard>
@@ -2399,6 +2659,18 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
               )} />
               <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
                 <FormItem><FormLabel>Buyer Bring to Closing ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
+                <FormItem><FormLabel>Closing Cost — Agent Commission ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostHomeWarranty" render={({ field }) => (
+                <FormItem><FormLabel>Closing Cost — Home Warranty ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
+                <FormItem><FormLabel>Closing Cost — Transaction Fee ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyerClosingCostOther" render={({ field }) => (
+                <FormItem><FormLabel>Closing Cost — Other ($)</FormLabel><FormControl><Input {...field} type="number" disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </Grid3>
           </SectionCard>

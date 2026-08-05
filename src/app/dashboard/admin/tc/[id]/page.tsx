@@ -103,6 +103,16 @@ const schema = z.object({
   titleDeadline: z.string().optional().or(z.literal('')),
   finalLoanCommitmentDeadline: z.string().optional().or(z.literal('')),
 
+  // Transaction metadata
+  status: z.string().optional(),
+  clientType: z.string().optional(),
+  tcWorking: z.string().optional(),
+  depositHolder: z.enum(['listing_broker', 'selling_broker', 'other']).optional(),
+  depositHolderOther: z.string().optional(),
+  hasCoAgent: z.boolean().optional(),
+  commissionBasePrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  commissionMode: z.enum(['percent', 'flat']).optional(),
+
   // Client contact
   clientEmail: z.string().optional().or(z.literal('')),
   clientPhone: z.string().optional(),
@@ -118,6 +128,12 @@ const schema = z.object({
   buyer2Name: z.string().optional(),
   buyer2Email: z.string().optional().or(z.literal('')),
   buyer2Phone: z.string().optional(),
+  buyer3Name: z.string().optional(),
+  buyer3Email: z.string().optional().or(z.literal('')),
+  buyer3Phone: z.string().optional(),
+  buyer4Name: z.string().optional(),
+  buyer4Email: z.string().optional().or(z.literal('')),
+  buyer4Phone: z.string().optional(),
 
   // Seller contact
   sellerName: z.string().optional(),
@@ -126,6 +142,15 @@ const schema = z.object({
   seller2Name: z.string().optional(),
   seller2Email: z.string().optional().or(z.literal('')),
   seller2Phone: z.string().optional(),
+  seller3Name: z.string().optional(),
+  seller3Email: z.string().optional().or(z.literal('')),
+  seller3Phone: z.string().optional(),
+  seller4Name: z.string().optional(),
+  seller4Email: z.string().optional().or(z.literal('')),
+  seller4Phone: z.string().optional(),
+  sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
+  sellerPayingListingAgentUnknown: z.boolean().optional(),
+  sellerPayingBuyerAgent: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // Other agent
   otherAgentName: z.string().optional(),
@@ -165,6 +190,7 @@ const schema = z.object({
   preListingTargetInspectionDate: z.string().optional(),
   preListingInspectionTypes: z.array(z.string()).optional(),
   preListingTcScheduleInspections: z.string().optional(),
+  preListingTcScheduleInspectionsOther: z.string().optional(),
   preListingInspectorName: z.string().optional(),
   // Sign order
   signOrderRequested: z.boolean().optional(),
@@ -193,7 +219,24 @@ const schema = z.object({
   shortageAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostAgentCommission: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostHomeWarranty: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostOther: z.coerce.number().min(0).optional().or(z.literal('')),
+  buyerClosingCostTxFee: z.coerce.number().min(0).optional().or(z.literal('')),
   priceCommissionBasedOn: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Commercial
+  commercialForSale: z.boolean().optional(),
+  commercialSalePrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialForLease: z.boolean().optional(),
+  commercialLeaseMonthly: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeasePricePerSqft: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseTerm: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseGci: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialTotalLeaseValue: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseCommissionMode: z.enum(['percent', 'flat']).optional(),
+  commercialLeaseCommissionPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
   // Referrals
   hasOutboundReferral: z.boolean().optional(),
   outboundReferralAgentName: z.string().optional(),
@@ -207,6 +250,8 @@ const schema = z.object({
   inboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
   // Media
   mediaTypes: z.array(z.string()).optional(),
+  mediaRequestedDate: z.string().optional().or(z.literal('')),
+  mediaNotes: z.string().optional(),
   // ShowingTime
   showingTimeRequested: z.boolean().optional(),
   showingNewOrChange: z.string().optional(),
@@ -230,6 +275,7 @@ const schema = z.object({
   showingPasscode: z.string().optional(),
   showingAlarmNotes: z.string().optional(),
   showingNotesToAgent: z.array(z.string()).optional(),
+  showingNotesToAgentOther: z.string().optional(),
   showingNotesToStaff: z.string().optional(),
   showingCallOrder2Name: z.string().optional(),
   showingCallOrder2Mobile: z.string().optional(),
@@ -424,12 +470,27 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           buyer2Name: i.buyer2Name || '',
           buyer2Email: i.buyer2Email || '',
           buyer2Phone: i.buyer2Phone || '',
+          buyer3Name: i.buyer3Name || '',
+          buyer3Email: i.buyer3Email || '',
+          buyer3Phone: i.buyer3Phone || '',
+          buyer4Name: i.buyer4Name || '',
+          buyer4Email: i.buyer4Email || '',
+          buyer4Phone: i.buyer4Phone || '',
           sellerName: i.sellerName || '',
           sellerEmail: i.sellerEmail || '',
           sellerPhone: i.sellerPhone || '',
           seller2Name: i.seller2Name || '',
           seller2Email: i.seller2Email || '',
           seller2Phone: i.seller2Phone || '',
+          seller3Name: i.seller3Name || '',
+          seller3Email: i.seller3Email || '',
+          seller3Phone: i.seller3Phone || '',
+          seller4Name: i.seller4Name || '',
+          seller4Email: i.seller4Email || '',
+          seller4Phone: i.seller4Phone || '',
+          sellerPayingListingAgent: i.sellerPayingListingAgent ?? '',
+          sellerPayingListingAgentUnknown: Boolean(i.sellerPayingListingAgentUnknown),
+          sellerPayingBuyerAgent: i.sellerPayingBuyerAgent ?? '',
           otherAgentName: i.otherAgentName || '',
           otherAgentEmail: i.otherAgentEmail || '',
           otherAgentPhone: i.otherAgentPhone || '',
@@ -525,7 +586,24 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           shortageAmount: i.shortageAmount ?? '',
           buyerBringToClosing: i.buyerBringToClosing ?? '',
           buyerClosingCostTotal: i.buyerClosingCostTotal ?? '',
+          buyerClosingCostAgentCommission: i.buyerClosingCostAgentCommission ?? '',
+          buyerClosingCostHomeWarranty: i.buyerClosingCostHomeWarranty ?? '',
+          buyerClosingCostOther: i.buyerClosingCostOther ?? '',
+          buyerClosingCostTxFee: i.buyerClosingCostTxFee ?? '',
           priceCommissionBasedOn: i.priceCommissionBasedOn ?? '',
+          // Commercial
+          commercialForSale: Boolean(i.commercialForSale),
+          commercialSalePrice: i.commercialSalePrice ?? '',
+          commercialForLease: Boolean(i.commercialForLease),
+          commercialLeaseMonthly: i.commercialLeaseMonthly ?? '',
+          commercialLeasePricePerSqft: i.commercialLeasePricePerSqft ?? '',
+          commercialLeaseTerm: i.commercialLeaseTerm ?? '',
+          commercialLeaseGci: i.commercialLeaseGci ?? '',
+          commercialTotalLeaseValue: i.commercialTotalLeaseValue ?? '',
+          commercialLeaseCommissionMode: (i.commercialLeaseCommissionMode as any) || undefined,
+          commercialLeaseCommissionPct: i.commercialLeaseCommissionPct ?? '',
+          commercialLeaseCommissionFlat: i.commercialLeaseCommissionFlat ?? '',
+          commercialLeaseEffectivePct: i.commercialLeaseEffectivePct ?? '',
           // Referrals
           hasOutboundReferral: Boolean(i.hasOutboundReferral),
           outboundReferralAgentName: i.outboundReferralAgentName || '',
@@ -539,6 +617,21 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           inboundReferralFeeDollar: i.inboundReferralFeeDollar ?? '',
           // Media
           mediaTypes: Array.isArray(i.mediaTypes) ? i.mediaTypes : [],
+          mediaRequestedDate: i.mediaRequestedDate?.split('T')[0] || '',
+          mediaNotes: i.mediaNotes || '',
+          // Transaction metadata
+          status: i.status || '',
+          clientType: i.clientType || '',
+          tcWorking: i.tcWorking || '',
+          depositHolder: (i.depositHolder as any) || undefined,
+          depositHolderOther: i.depositHolderOther || '',
+          hasCoAgent: Boolean(i.hasCoAgent),
+          commissionBasePrice: i.commissionBasePrice ?? '',
+          commissionMode: (i.commissionMode as any) || undefined,
+          // Pre-listing other
+          preListingTcScheduleInspectionsOther: i.preListingTcScheduleInspectionsOther || '',
+          // Showing notes other
+          showingNotesToAgentOther: i.showingNotesToAgentOther || '',
         });
 
         if (data.checklist) setChecklist(data.checklist);
@@ -1341,12 +1434,142 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 </FormItem>
               )} />
             </Grid2>
-            <div className="max-w-xs">
+                        <div className="max-w-xs">
               <FormField control={form.control} name="earnestMoney" render={({ field }) => (
                 <FormItem><FormLabel>Earnest Money ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </div>
+            <Separator />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Commission Basis</p>
+            <Grid3>
+              <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
+                <FormItem><FormLabel>Commission Base Price ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="commissionMode" render={({ field }) => (
+                <FormItem><FormLabel>Commission Mode</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="percent">Percent</SelectItem>
+                      <SelectItem value="flat">Flat Dollar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+            </Grid3>
+            <Separator />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Transaction Metadata</p>
+            <Grid3>
+              <FormField control={form.control} name="clientType" render={({ field }) => (
+                <FormItem><FormLabel>Client Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="buyer">Buyer</SelectItem>
+                      <SelectItem value="seller">Seller</SelectItem>
+                      <SelectItem value="both">Both</SelectItem>
+                      <SelectItem value="tenant">Tenant</SelectItem>
+                      <SelectItem value="landlord">Landlord</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="tcWorking" render={({ field }) => (
+                <FormItem><FormLabel>TC Working</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="depositHolder" render={({ field }) => (
+                <FormItem><FormLabel>Deposit Holder</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="listing_broker">Listing Broker</SelectItem>
+                      <SelectItem value="selling_broker">Selling Broker</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+            </Grid3>
+            {form.watch('depositHolder') === 'other' && (
+              <FormField control={form.control} name="depositHolderOther" render={({ field }) => (
+                <FormItem><FormLabel>Deposit Holder (Other)</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            )}
+            <FormField control={form.control} name="hasCoAgent" render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                <FormLabel>Has Co-Agent</FormLabel>
+              </FormItem>
+            )} />
           </SectionCard>
+
+          {/* Commercial Details — shown for commercial deal types */}
+          {(form.watch('dealType') === 'commercial_sale' || form.watch('dealType') === 'commercial_lease') && (
+            <SectionCard title="Commercial Details" icon={<Building2 className="h-4 w-4" />}>
+              {form.watch('dealType') === 'commercial_sale' && (
+                <Grid2>
+                  <FormField control={form.control} name="commercialForSale" render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                      <FormLabel>Commercial For Sale</FormLabel>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialSalePrice" render={({ field }) => (
+                    <FormItem><FormLabel>Commercial Sale Price ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                </Grid2>
+              )}
+              {form.watch('dealType') === 'commercial_lease' && (
+                <>
+                  <Grid3>
+                    <FormField control={form.control} name="commercialForLease" render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                        <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                        <FormLabel>Commercial For Lease</FormLabel>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseMonthly" render={({ field }) => (
+                      <FormItem><FormLabel>Monthly Rent ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeasePricePerSqft" render={({ field }) => (
+                      <FormItem><FormLabel>Price Per Sqft ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseTerm" render={({ field }) => (
+                      <FormItem><FormLabel>Lease Term (months)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialTotalLeaseValue" render={({ field }) => (
+                      <FormItem><FormLabel>Total Lease Value ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseGci" render={({ field }) => (
+                      <FormItem><FormLabel>Lease GCI ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                  <Grid3>
+                    <FormField control={form.control} name="commercialLeaseCommissionMode" render={({ field }) => (
+                      <FormItem><FormLabel>Commission Mode</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="percent">Percent</SelectItem>
+                            <SelectItem value="flat">Flat Dollar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseCommissionPct" render={({ field }) => (
+                      <FormItem><FormLabel>Commission (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseCommissionFlat" render={({ field }) => (
+                      <FormItem><FormLabel>Commission Flat ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="commercialLeaseEffectivePct" render={({ field }) => (
+                      <FormItem><FormLabel>Effective Commission (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  </Grid3>
+                </>
+              )}
+            </SectionCard>
+          )}
 
           {/* Section 4: Buyer Contact */}
           <SectionCard title="Buyer Contact" icon={<User className="h-4 w-4" />}>
@@ -1370,6 +1593,28 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               )} />
               <FormField control={form.control} name="buyer2Phone" render={({ field }) => (
                 <FormItem><FormLabel>Buyer 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="buyer3Name" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 3 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer3Email" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 3 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer3Phone" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 3 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="buyer4Name" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 4 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer4Email" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 4 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="buyer4Phone" render={({ field }) => (
+                <FormItem><FormLabel>Buyer 4 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
               )} />
             </Grid3>
           </SectionCard>
@@ -1396,6 +1641,42 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
               )} />
               <FormField control={form.control} name="seller2Phone" render={({ field }) => (
                 <FormItem><FormLabel>Seller 2 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="seller3Name" render={({ field }) => (
+                <FormItem><FormLabel>Seller 3 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller3Email" render={({ field }) => (
+                <FormItem><FormLabel>Seller 3 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller3Phone" render={({ field }) => (
+                <FormItem><FormLabel>Seller 3 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="seller4Name" render={({ field }) => (
+                <FormItem><FormLabel>Seller 4 Name</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller4Email" render={({ field }) => (
+                <FormItem><FormLabel>Seller 4 Email</FormLabel><FormControl><Input type="email" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="seller4Phone" render={({ field }) => (
+                <FormItem><FormLabel>Seller 4 Phone</FormLabel><FormControl><Input {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+            </Grid3>
+            <Grid3>
+              <FormField control={form.control} name="sellerPayingListingAgent" render={({ field }) => (
+                <FormItem><FormLabel>Seller Paying Listing Agent (%)</FormLabel><FormControl><Input type="number" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
+                <FormItem><FormLabel>Seller Paying Buyer Agent (%)</FormLabel><FormControl><Input type="number" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              )} />
+              <FormField control={form.control} name="sellerPayingListingAgentUnknown" render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-6">
+                  <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isReadOnly} /></FormControl>
+                  <FormLabel>Listing agent commission unknown</FormLabel>
+                </FormItem>
               )} />
             </Grid3>
           </SectionCard>
@@ -1637,6 +1918,11 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                       </Select>
                     </FormItem>
                   )} />
+                  {form.watch('preListingTcScheduleInspections') === 'other' && (
+                    <FormField control={form.control} name="preListingTcScheduleInspectionsOther" render={({ field }) => (
+                      <FormItem><FormLabel>Other / Notes</FormLabel><FormControl><Textarea rows={2} {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                    )} />
+                  )}
                 </>
               )}
             </SectionCard>
@@ -1936,6 +2222,9 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                   <FormField control={form.control} name="showingNotesToAgent" render={({ field }) => (
                     <FormItem><FormLabel>Notes to Showing Agent</FormLabel><FormControl><Textarea className="min-h-[60px]" placeholder="Notes visible to showing agents..." value={Array.isArray(field.value) ? field.value.join('\n') : (field.value || '')} onChange={(e) => field.onChange(e.target.value.split('\n'))} disabled={isReadOnly} /></FormControl></FormItem>
                   )} />
+                  <FormField control={form.control} name="showingNotesToAgentOther" render={({ field }) => (
+                    <FormItem><FormLabel>Notes to Showing Agent — Other</FormLabel><FormControl><Textarea rows={2} placeholder="Additional notes..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
                   <FormField control={form.control} name="showingNotesToStaff" render={({ field }) => (
                     <FormItem><FormLabel>Notes to Staff</FormLabel><FormControl><Textarea className="min-h-[60px]" placeholder="Internal notes for staff..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
                   )} />
@@ -2044,6 +2333,14 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                   ))}
                 </div>
               </div>
+              <Grid2>
+                <FormField control={form.control} name="mediaRequestedDate" render={({ field }) => (
+                  <FormItem><FormLabel>Requested Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="mediaNotes" render={({ field }) => (
+                  <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea rows={2} {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                )} />
+              </Grid2>
               <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4">
                 <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. <a href="https://mediaengagellc.com/order/" target="_blank" rel="noopener noreferrer" className="underline font-medium">Open order form ↗</a></p>
               </div>
@@ -2125,6 +2422,23 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                   <FormItem><FormLabel>Price Commission Is Based On ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
                 )} />
               </Grid2>
+              <div>
+                <p className="text-sm font-medium mb-2">Closing Cost Breakdown</p>
+                <Grid2>
+                  <FormField control={form.control} name="buyerClosingCostAgentCommission" render={({ field }) => (
+                    <FormItem><FormLabel>Agent Commission ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="buyerClosingCostHomeWarranty" render={({ field }) => (
+                    <FormItem><FormLabel>Home Warranty ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="buyerClosingCostTxFee" render={({ field }) => (
+                    <FormItem><FormLabel>Transaction Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="buyerClosingCostOther" render={({ field }) => (
+                    <FormItem><FormLabel>Other ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                  )} />
+                </Grid2>
+              </div>
             </SectionCard>
           )}
 

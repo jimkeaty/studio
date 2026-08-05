@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -61,6 +62,29 @@ const SIGN_ADDITIONAL_OPTIONS = [
   'Attach Personalized Name Rider',
   'Text2 Rider',
   'Phone# Rider EXT',
+];
+const MEDIA_TYPE_OPTIONS = [
+  'Photos',
+  'Twilight',
+  'Blue Sky',
+  'Stars',
+  'Full Production Video',
+  'Virtual Tour',
+  '3D Floor Plan',
+  'Virtual Staging',
+  'Floor Plan',
+  'Drone',
+  'Sun Dial (Time-Lapse Sunlight)',
+];
+const SIGN_RIDER_OPTIONS = [
+  'Open House',
+  'For Sale',
+  'Sold',
+  'Reduced',
+  'Under Contract',
+  'Coming Soon',
+  'New Listing',
+  'Custom',
 ];
 const SHOWING_NOTES_TO_AGENT_OPTIONS = [
   'Leave card',
@@ -295,6 +319,35 @@ const schema = z.object({
   mlsNumber: z.string().optional(),
   mlsDescription: z.string().optional(),
   listingExpirationDate: z.string().optional().or(z.literal('')),
+  // Commission mode
+  commissionMode: z.enum(['percent', 'flat']).optional(),
+  // Warranty amount
+  warrantyAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Co-agent
+  hasCoAgent: z.boolean().optional(),
+  // Inbound referral
+  hasInboundReferral: z.boolean().optional(),
+  inboundReferralAgentName: z.string().optional(),
+  inboundReferralBrokerage: z.string().optional(),
+  inboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  inboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Media order
+  mediaTypes: z.array(z.string()).optional(),
+  mediaRequestedDate: z.string().optional().or(z.literal('')),
+  mediaNotes: z.string().optional(),
+  // Commercial
+  commercialForSale: z.boolean().optional(),
+  commercialSalePrice: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialForLease: z.boolean().optional(),
+  commercialLeaseMonthly: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeasePricePerSqft: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseTerm: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseGci: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialTotalLeaseValue: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseCommissionMode: z.enum(['percent', 'flat']).optional(),
+  commercialLeaseCommissionPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
+  commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -897,6 +950,35 @@ export default function EditTransactionPage() {
           mlsNumber: tx.mlsNumber || '',
           mlsDescription: tx.mlsDescription || '',
           listingExpirationDate: d(tx.listingExpirationDate),
+          // Commission mode
+          commissionMode: tx.commissionMode || undefined,
+          // Warranty amount
+          warrantyAmount: n(tx.warrantyAmount),
+          // Co-agent flag
+          hasCoAgent: !!tx.hasCoAgent,
+          // Inbound referral
+          hasInboundReferral: !!tx.hasInboundReferral,
+          inboundReferralAgentName: tx.inboundReferralAgentName || '',
+          inboundReferralBrokerage: tx.inboundReferralBrokerage || '',
+          inboundReferralFeePercent: n(tx.inboundReferralFeePercent),
+          inboundReferralFeeDollar: n(tx.inboundReferralFeeDollar),
+          // Media order
+          mediaTypes: Array.isArray(tx.mediaTypes) ? tx.mediaTypes : [],
+          mediaRequestedDate: d(tx.mediaRequestedDate),
+          mediaNotes: tx.mediaNotes || '',
+          // Commercial
+          commercialForSale: !!tx.commercialForSale,
+          commercialSalePrice: n(tx.commercialSalePrice),
+          commercialForLease: !!tx.commercialForLease,
+          commercialLeaseMonthly: n(tx.commercialLeaseMonthly),
+          commercialLeasePricePerSqft: n(tx.commercialLeasePricePerSqft),
+          commercialLeaseTerm: n(tx.commercialLeaseTerm),
+          commercialLeaseGci: n(tx.commercialLeaseGci),
+          commercialTotalLeaseValue: n(tx.commercialTotalLeaseValue),
+          commercialLeaseCommissionMode: tx.commercialLeaseCommissionMode || undefined,
+          commercialLeaseCommissionPct: n(tx.commercialLeaseCommissionPct),
+          commercialLeaseCommissionFlat: n(tx.commercialLeaseCommissionFlat),
+          commercialLeaseEffectivePct: n(tx.commercialLeaseEffectivePct),
         });
         // Detect if the stored GCI differs from what CBP×pct would calculate.
         // If so, the GCI was manually set (or based on concessions) — lock it so the
@@ -1608,6 +1690,75 @@ export default function EditTransactionPage() {
               </div>
             )}
           </Section>
+
+          {/* ── Commercial Details ───────────────────────────────────────────────────── */}
+          {(form.watch('dealType') === 'commercial_sale' || form.watch('dealType') === 'commercial_lease') && (
+          <Section title="Commercial Details">
+            {form.watch('dealType') === 'commercial_sale' && (
+              <Grid2>
+                <FormField control={form.control} name="commercialForSale" render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <FormLabel>Commercial For Sale</FormLabel>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="commercialSalePrice" render={({ field }) => (
+                  <FormItem><FormLabel>Commercial Sale Price ($)</FormLabel><FormControl><Input type="number" step="1" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid2>
+            )}
+            {form.watch('dealType') === 'commercial_lease' && (
+              <>
+                <Grid3>
+                  <FormField control={form.control} name="commercialForLease" render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      <FormLabel>Commercial For Lease</FormLabel>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialLeaseMonthly" render={({ field }) => (
+                    <FormItem><FormLabel>Monthly Rent ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialLeasePricePerSqft" render={({ field }) => (
+                    <FormItem><FormLabel>Price Per Sqft ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialLeaseTerm" render={({ field }) => (
+                    <FormItem><FormLabel>Lease Term (months)</FormLabel><FormControl><Input type="number" step="1" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialTotalLeaseValue" render={({ field }) => (
+                    <FormItem><FormLabel>Total Lease Value ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialLeaseGci" render={({ field }) => (
+                    <FormItem><FormLabel>Lease GCI ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+                <Grid3>
+                  <FormField control={form.control} name="commercialLeaseCommissionMode" render={({ field }) => (
+                    <FormItem><FormLabel>Commission Mode</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="percent">Percent</SelectItem>
+                          <SelectItem value="flat">Flat Dollar</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialLeaseCommissionPct" render={({ field }) => (
+                    <FormItem><FormLabel>Commission (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialLeaseCommissionFlat" render={({ field }) => (
+                    <FormItem><FormLabel>Commission Flat ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="commercialLeaseEffectivePct" render={({ field }) => (
+                    <FormItem><FormLabel>Effective Commission (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+              </>
+            )}
+          </Section>
+          )}
+
           </div>{/* end Step 1 */}
 
           {/* ── Step 2: The People ──────────────────────────────────────── */}
@@ -2422,6 +2573,45 @@ export default function EditTransactionPage() {
               )}
             </div>
 
+            {/* ── Inbound Referral ─────────────────────────────────────────────── */}
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Inbound Referral</p>
+                  <p className="text-xs text-muted-foreground">This transaction was referred to you by another agent or company.</p>
+                </div>
+                <FormField control={form.control} name="hasInboundReferral" render={({ field }) => (
+                  <button
+                    type="button"
+                    onClick={() => field.onChange(!field.value)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                      field.value ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      field.value ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                )} />
+              </div>
+              {form.watch('hasInboundReferral') && (
+                <Grid3>
+                  <FormField control={form.control} name="inboundReferralAgentName" render={({ field }) => (
+                    <FormItem><FormLabel>Referring Agent Name</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="inboundReferralBrokerage" render={({ field }) => (
+                    <FormItem><FormLabel>Referring Brokerage</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="inboundReferralFeePercent" render={({ field }) => (
+                    <FormItem><FormLabel>Inbound Fee (%)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="inboundReferralFeeDollar" render={({ field }) => (
+                    <FormItem><FormLabel>Inbound Fee ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                  )} />
+                </Grid3>
+              )}
+            </div>
+
             {hasCoAgent && (
               <div className="border rounded-lg p-4 bg-blue-50/50 space-y-4">
                 <p className="text-sm font-semibold text-blue-800">Co-Agent Details</p>
@@ -2534,7 +2724,13 @@ export default function EditTransactionPage() {
               </FormItem>
             )} />
             {warrantyAtClosing === 'yes' && (
-              <div className="max-w-xs">
+              <Grid2>
+                <FormField control={form.control} name="warrantyAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Warranty Amount ($)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="0" {...field} /></FormControl>
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="warrantyPaidBy" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Who is paying?</FormLabel>
@@ -2548,7 +2744,7 @@ export default function EditTransactionPage() {
                     </Select>
                   </FormItem>
                 )} />
-              </div>
+              </Grid2>
             )}
             <Separator />
             {/* Transaction Compliance Fee */}
@@ -2657,6 +2853,43 @@ export default function EditTransactionPage() {
               <FormItem><FormLabel>MLS Description</FormLabel><FormControl>
                 <Textarea placeholder="Public MLS listing description..." className="min-h-[120px]" {...field} />
               </FormControl></FormItem>
+            )} />
+          </Section>
+          )}
+
+          {/* ── Media Order ─────────────────────────────────────────────────────── */}
+          {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+          <Section title="Media Order">
+            <div>
+              <p className="text-sm font-medium mb-2">Media Types Requested</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {MEDIA_TYPE_OPTIONS.map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={(form.watch('mediaTypes') || []).includes(type)}
+                      onChange={() => {
+                        const current = form.getValues('mediaTypes') || [];
+                        if (current.includes(type)) {
+                          form.setValue('mediaTypes', current.filter((t: string) => t !== type));
+                        } else {
+                          form.setValue('mediaTypes', [...current, type]);
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Grid2>
+              <FormField control={form.control} name="mediaRequestedDate" render={({ field }) => (
+                <FormItem><FormLabel>Requested Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+            </Grid2>
+            <FormField control={form.control} name="mediaNotes" render={({ field }) => (
+              <FormItem><FormLabel>Media Notes</FormLabel><FormControl><Textarea rows={3} placeholder="Any special instructions for the media team..." {...field} /></FormControl></FormItem>
             )} />
           </Section>
           )}

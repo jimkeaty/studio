@@ -93,6 +93,29 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'showingCallOrder2Email', 'showingCallOrder2Type', 'showingCallOrder2Confirm', 'showingCallOrder2Notify',
   'showingCallOrder3Name', 'showingCallOrder3Mobile', 'showingCallOrder3AltPhone',
   'showingCallOrder3Email', 'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
+  // Commission mode & seller paying unknown
+  'commissionMode', 'sellerPayingListingAgentUnknown',
+  // Inbound referral dollar (missing from whitelist)
+  'inboundReferralFeeDollar',
+  // Outbound referral fields (normalized names)
+  'outboundReferralBrokerName', 'outboundReferralContactName',
+  // MLS
+  'mlsNumber', 'mlsDescription',
+  // Seller 3/4 paying fields
+  'seller3PayingListingAgent', 'seller3PayingBuyerAgent',
+  'seller4PayingListingAgent', 'seller4PayingBuyerAgent',
+  // Buyer 3/4 contacts
+  // (already in whitelist above)
+  // Commercial fields
+  'commercialForSale', 'commercialSalePrice',
+  'commercialForLease', 'commercialLeaseMonthly', 'commercialLeasePricePerSqft',
+  'commercialLeaseTerm', 'commercialTotalLeaseValue', 'commercialLeaseGci',
+  'commercialLeaseCommissionMode', 'commercialLeaseCommissionPct',
+  'commercialLeaseCommissionFlat', 'commercialLeaseEffectivePct',
+  // ShowingTime missing fields
+  'showingNotesToAgentOther', 'showingArmCode', 'showingLeadTimeRequired',
+  // Sign order
+  'signRiderExt', 'signRequestedDate',
   // Deal source
   'dealSource',
   // Notes

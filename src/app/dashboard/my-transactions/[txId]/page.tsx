@@ -295,12 +295,15 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           signOwnerName: tx.signOwnerName || '',
           signRider: Array.isArray(tx.signRider) ? tx.signRider : [],
           signAdditionalOptions: Array.isArray(tx.signAdditionalOptions) ? tx.signAdditionalOptions : [],
+          signRiderExt: tx.signRiderExt || '',
+          signRequestedDate: tx.signRequestedDate || '',
           signSpecialRequests: tx.signSpecialRequests || '',
           // ShowingTime
           showingTimeRequested: tx.showingTimeRequested === true || tx.showingTimeRequested === 'yes',
           showingApptType: tx.showingApptType || '',
           showingNewOrChange: tx.showingNewOrChange || '',
           showingApptHandling: tx.showingApptHandling || '',
+          showingLeadTimeRequired: tx.showingLeadTimeRequired || tx.showingLeadTime || '',
           showingLeadTime: tx.showingLeadTime || '',
           showingLeadTimeSuggested: tx.showingLeadTimeSuggested || '',
           showingMaxApptLength: tx.showingMaxApptLength || '',
@@ -317,6 +320,8 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           showingAlarmNotes: tx.showingAlarmNotes || '',
           showingAccessNotes: tx.showingAccessNotes || '',
           showingNotesToAgent: Array.isArray(tx.showingNotesToAgent) ? tx.showingNotesToAgent : [],
+          showingNotesToAgentOther: tx.showingNotesToAgentOther || '',
+          showingArmCode: tx.showingArmCode || '',
           showingNotesToStaff: tx.showingNotesToStaff || '',
           showingCallOrder1Name: tx.showingCallOrder1Name || '',
           showingCallOrder1Mobile: tx.showingCallOrder1Mobile || '',
@@ -324,9 +329,17 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           showingCallOrder2Name: tx.showingCallOrder2Name || '',
           showingCallOrder2Mobile: tx.showingCallOrder2Mobile || '',
           showingCallOrder2Email: tx.showingCallOrder2Email || '',
+          showingCallOrder2AltPhone: tx.showingCallOrder2AltPhone || '',
+          showingCallOrder2Type: tx.showingCallOrder2Type || '',
+          showingCallOrder2Confirm: Array.isArray(tx.showingCallOrder2Confirm) ? tx.showingCallOrder2Confirm : (tx.showingCallOrder2Confirm ? [tx.showingCallOrder2Confirm] : []),
+          showingCallOrder2Notify: Array.isArray(tx.showingCallOrder2Notify) ? tx.showingCallOrder2Notify : (tx.showingCallOrder2Notify ? [tx.showingCallOrder2Notify] : []),
           showingCallOrder3Name: tx.showingCallOrder3Name || '',
           showingCallOrder3Mobile: tx.showingCallOrder3Mobile || '',
           showingCallOrder3Email: tx.showingCallOrder3Email || '',
+          showingCallOrder3AltPhone: tx.showingCallOrder3AltPhone || '',
+          showingCallOrder3Type: tx.showingCallOrder3Type || '',
+          showingCallOrder3Confirm: Array.isArray(tx.showingCallOrder3Confirm) ? tx.showingCallOrder3Confirm : (tx.showingCallOrder3Confirm ? [tx.showingCallOrder3Confirm] : []),
+          showingCallOrder3Notify: Array.isArray(tx.showingCallOrder3Notify) ? tx.showingCallOrder3Notify : (tx.showingCallOrder3Notify ? [tx.showingCallOrder3Notify] : []),
           // Notes
           notes: tx.notes || '',
           additionalComments: tx.additionalComments || '',
@@ -567,7 +580,7 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           <h1 className="text-xl font-bold">{address}</h1>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Badge className={cn('text-xs', STATUS_COLORS[status] || 'bg-gray-100 text-gray-700')}>
-              {status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              {status.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
             </Badge>
             {side && <Badge variant="outline" className="text-xs capitalize">{side}</Badge>}
           </div>
@@ -672,6 +685,16 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
               <EInput label="Seller 2 Email" name="seller2Email" value={f.seller2Email} onChange={setField} type="email" />
               <EInput label="Seller 2 Phone" name="seller2Phone" value={f.seller2Phone} onChange={setField} />
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Seller 3 Name" name="seller3Name" value={f.seller3Name || ''} onChange={setField} />
+              <EInput label="Seller 3 Email" name="seller3Email" value={f.seller3Email || ''} onChange={setField} type="email" />
+              <EInput label="Seller 3 Phone" name="seller3Phone" value={f.seller3Phone || ''} onChange={setField} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Seller 4 Name" name="seller4Name" value={f.seller4Name || ''} onChange={setField} />
+              <EInput label="Seller 4 Email" name="seller4Email" value={f.seller4Email || ''} onChange={setField} type="email" />
+              <EInput label="Seller 4 Phone" name="seller4Phone" value={f.seller4Phone || ''} onChange={setField} />
+            </div>
           </div>
         </SectionCard>
       )}
@@ -689,6 +712,16 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
               <EInput label="Buyer 2 Name" name="buyer2Name" value={f.buyer2Name} onChange={setField} />
               <EInput label="Buyer 2 Email" name="buyer2Email" value={f.buyer2Email} onChange={setField} type="email" />
               <EInput label="Buyer 2 Phone" name="buyer2Phone" value={f.buyer2Phone} onChange={setField} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Buyer 3 Name" name="buyer3Name" value={f.buyer3Name || ''} onChange={setField} />
+              <EInput label="Buyer 3 Email" name="buyer3Email" value={f.buyer3Email || ''} onChange={setField} type="email" />
+              <EInput label="Buyer 3 Phone" name="buyer3Phone" value={f.buyer3Phone || ''} onChange={setField} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="Buyer 4 Name" name="buyer4Name" value={f.buyer4Name || ''} onChange={setField} />
+              <EInput label="Buyer 4 Email" name="buyer4Email" value={f.buyer4Email || ''} onChange={setField} type="email" />
+              <EInput label="Buyer 4 Phone" name="buyer4Phone" value={f.buyer4Phone || ''} onChange={setField} />
             </div>
           </div>
         </SectionCard>
@@ -729,17 +762,120 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
 
       {/* ── Financial Details ─────────────────────────────────────────────── */}
       <SectionCard title="Financial Details" icon={<DollarSign className="h-4 w-4" />} defaultCollapsed={!f.earnestMoney}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <EInput label="Earnest Money" name="earnestMoney" value={f.earnestMoney} onChange={setField} type="number" />
-          <ESelect label="Deposit Holder" name="depositHolder" value={f.depositHolder} onChange={setField} options={[
-            { value: 'listing_brokerage', label: 'Listing Brokerage' },
-            { value: 'title_company', label: 'Title Company' },
-            { value: 'other', label: 'Other' },
-          ]} />
-          {f.depositHolder === 'other' && (
-            <EInput label="Deposit Holder (Other)" name="depositHolderOther" value={f.depositHolderOther} onChange={setField} />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <EInput label="Earnest Money" name="earnestMoney" value={f.earnestMoney} onChange={setField} type="number" />
+            <ESelect label="Deposit Holder" name="depositHolder" value={f.depositHolder} onChange={setField} options={[
+              { value: 'listing_brokerage', label: 'Listing Brokerage' },
+              { value: 'title_company', label: 'Title Company' },
+              { value: 'other', label: 'Other' },
+            ]} />
+            {f.depositHolder === 'other' && (
+              <EInput label="Deposit Holder (Other)" name="depositHolderOther" value={f.depositHolderOther} onChange={setField} />
+            )}
+            <EInput label="Buyer Closing Costs Paid by Seller" name="buyerClosingCostTotal" value={f.buyerClosingCostTotal} onChange={setField} type="number" />
+            <EInput label="Buyer Bring to Closing" name="buyerBringToClosing" value={f.buyerBringToClosing || ''} onChange={setField} type="number" />
+          </div>
+          {isListing && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <EInput label="% Seller Paying Listing Agent" name="sellerPayingListingAgent" value={f.sellerPayingListingAgent || ''} onChange={setField} type="number" />
+              <EInput label="% Seller Paying Buyer's Agent" name="sellerPayingBuyerAgent" value={f.sellerPayingBuyerAgent || ''} onChange={setField} type="number" />
+              <div className="flex items-center gap-2 pt-6">
+                <Checkbox id="sellerPayingListingAgentUnknown" checked={Boolean(f.sellerPayingListingAgentUnknown)} onCheckedChange={v => setField('sellerPayingListingAgentUnknown', v)} />
+                <label htmlFor="sellerPayingListingAgentUnknown" className="text-sm cursor-pointer">Commission % Unknown</label>
+              </div>
+            </div>
           )}
-          <EInput label="Buyer Closing Costs Paid by Seller" name="buyerClosingCostTotal" value={f.buyerClosingCostTotal} onChange={setField} type="number" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <EInput label="Commission Base Price ($)" name="commissionBasePrice" value={f.commissionBasePrice || ''} onChange={setField} type="number" />
+            <ESelect label="Commission Mode" name="commissionMode" value={f.commissionMode || ''} onChange={setField} options={[
+              { value: 'percent', label: 'Percent of Sale' },
+              { value: 'flat', label: 'Flat Dollar' },
+            ]} />
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* ── MLS Information ───────────────────────────────────────────────── */}
+      {isListing && (
+        <SectionCard title="MLS Information" icon={<Info className="h-4 w-4" />} defaultCollapsed={!f.mlsNumber}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <EInput label="MLS Number" name="mlsNumber" value={f.mlsNumber || ''} onChange={setField} />
+            </div>
+            <ETextarea label="MLS Description" name="mlsDescription" value={f.mlsDescription || ''} onChange={setField} placeholder="Public MLS listing description..." />
+          </div>
+        </SectionCard>
+      )}
+
+      {/* ── Commercial Details ─────────────────────────────────────────────── */}
+      {(f.dealType === 'commercial_sale' || f.dealType === 'commercial_lease') && (
+        <SectionCard title="Commercial Details" icon={<Building2 className="h-4 w-4" />}>
+          <div className="space-y-4">
+            {f.dealType === 'commercial_sale' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="commercialForSale" checked={Boolean(f.commercialForSale)} onCheckedChange={v => setField('commercialForSale', v)} />
+                  <label htmlFor="commercialForSale" className="text-sm cursor-pointer">Commercial For Sale</label>
+                </div>
+                <EInput label="Commercial Sale Price ($)" name="commercialSalePrice" value={f.commercialSalePrice || ''} onChange={setField} type="number" />
+              </div>
+            )}
+            {f.dealType === 'commercial_lease' && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox id="commercialForLease" checked={Boolean(f.commercialForLease)} onCheckedChange={v => setField('commercialForLease', v)} />
+                    <label htmlFor="commercialForLease" className="text-sm cursor-pointer">Commercial For Lease</label>
+                  </div>
+                  <EInput label="Monthly Rent ($)" name="commercialLeaseMonthly" value={f.commercialLeaseMonthly || ''} onChange={setField} type="number" />
+                  <EInput label="Price Per Sqft ($)" name="commercialLeasePricePerSqft" value={f.commercialLeasePricePerSqft || ''} onChange={setField} type="number" />
+                  <EInput label="Lease Term (months)" name="commercialLeaseTerm" value={f.commercialLeaseTerm || ''} onChange={setField} type="number" />
+                  <EInput label="Total Lease Value ($)" name="commercialTotalLeaseValue" value={f.commercialTotalLeaseValue || ''} onChange={setField} type="number" />
+                  <EInput label="Lease GCI ($)" name="commercialLeaseGci" value={f.commercialLeaseGci || ''} onChange={setField} type="number" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <ESelect label="Commission Mode" name="commercialLeaseCommissionMode" value={f.commercialLeaseCommissionMode || ''} onChange={setField} options={[
+                    { value: 'percent', label: 'Percent' },
+                    { value: 'flat', label: 'Flat Dollar' },
+                  ]} />
+                  <EInput label="Commission (%)" name="commercialLeaseCommissionPct" value={f.commercialLeaseCommissionPct || ''} onChange={setField} type="number" />
+                  <EInput label="Commission Flat ($)" name="commercialLeaseCommissionFlat" value={f.commercialLeaseCommissionFlat || ''} onChange={setField} type="number" />
+                  <EInput label="Effective Commission (%)" name="commercialLeaseEffectivePct" value={f.commercialLeaseEffectivePct || ''} onChange={setField} type="number" />
+                </div>
+              </>
+            )}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* ── Referrals ────────────────────────────────────────────────────────── */}
+      <SectionCard title="Referrals" icon={<Users className="h-4 w-4" />} defaultCollapsed={!f.hasOutboundReferral && !f.hasInboundReferral}>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Checkbox id="hasOutboundReferral" checked={Boolean(f.hasOutboundReferral)} onCheckedChange={v => setField('hasOutboundReferral', v)} />
+            <label htmlFor="hasOutboundReferral" className="text-sm cursor-pointer font-medium">Outbound Referral Fee</label>
+          </div>
+          {f.hasOutboundReferral && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-6">
+              <EInput label="Referral % (of GCI)" name="outboundReferralPercent" value={f.outboundReferralPercent || ''} onChange={setField} type="number" />
+              <EInput label="Referral Dollar Amount" name="outboundReferralDollar" value={f.outboundReferralDollar || ''} onChange={setField} type="number" />
+              <EInput label="Outside Broker / Company" name="outboundReferralBrokerName" value={f.outboundReferralBrokerName || ''} onChange={setField} />
+              <EInput label="Referring Agent / Contact" name="outboundReferralContactName" value={f.outboundReferralContactName || ''} onChange={setField} />
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Checkbox id="hasInboundReferral" checked={Boolean(f.hasInboundReferral)} onCheckedChange={v => setField('hasInboundReferral', v)} />
+            <label htmlFor="hasInboundReferral" className="text-sm cursor-pointer font-medium">Inbound Referral</label>
+          </div>
+          {f.hasInboundReferral && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-6">
+              <EInput label="Referring Agent Name" name="inboundReferralAgentName" value={f.inboundReferralAgentName || ''} onChange={setField} />
+              <EInput label="Referring Brokerage" name="inboundReferralBrokerage" value={f.inboundReferralBrokerage || ''} onChange={setField} />
+              <EInput label="Inbound Fee (%)" name="inboundReferralFeePercent" value={f.inboundReferralFeePercent || ''} onChange={setField} type="number" />
+              <EInput label="Inbound Fee ($)" name="inboundReferralFeeDollar" value={f.inboundReferralFeeDollar || ''} onChange={setField} type="number" />
+            </div>
+          )}
         </div>
       </SectionCard>
 
@@ -864,6 +1000,12 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                   options={['Open House', 'For Sale', 'Sold', 'Under Contract', 'Price Reduced']} value={f.signRider} onChange={setField} />
                 <ECheckboxGroup label="Additional Options" name="signAdditionalOptions"
                   options={SIGN_ADDITIONAL_OPTIONS} value={f.signAdditionalOptions} onChange={setField} />
+                {(f.signAdditionalOptions?.includes('Text2 Rider') || f.signAdditionalOptions?.includes('Phone# Rider EXT')) && (
+                  <EInput label="Phone# Rider EXT" name="signRiderExt" value={f.signRiderExt} onChange={setField} placeholder="Extension number..." />
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <EInput label="Requested Date of Service" name="signRequestedDate" value={f.signRequestedDate} onChange={setField} type="date" />
+                </div>
                 <ETextarea label="Special Requests" name="signSpecialRequests" value={f.signSpecialRequests} onChange={setField} />
               </>
             )}
@@ -893,7 +1035,7 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                     { value: 'call_to_confirm', label: 'Call to Confirm' },
                     { value: 'text_to_confirm', label: 'Text to Confirm' },
                   ]} />
-                  <EInput label="Lead Time (hours)" name="showingLeadTime" value={f.showingLeadTime} onChange={setField} />
+                  <EInput label="Lead Time Required" name="showingLeadTimeRequired" value={f.showingLeadTimeRequired} onChange={setField} />
                   <EInput label="Lead Time Suggested" name="showingLeadTimeSuggested" value={f.showingLeadTimeSuggested} onChange={setField} />
                   <EInput label="Max Appointment Length" name="showingMaxApptLength" value={f.showingMaxApptLength} onChange={setField} />
                   <ESelect label="Virtual Preference" name="showingVirtualPreference" value={f.showingVirtualPreference} onChange={setField} options={[
@@ -919,6 +1061,7 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                   <EInput label="Access Door" name="showingAccessDoor" value={f.showingAccessDoor} onChange={setField} placeholder="Front, Back, Garage..." />
                   <EInput label="Lockbox Code" name="showingLockboxCode" value={f.showingLockboxCode} onChange={setField} />
                   <EInput label="Alarm Code" name="showingAlarmCode" value={f.showingAlarmCode} onChange={setField} />
+                  <EInput label="ARM Code" name="showingArmCode" value={f.showingArmCode} onChange={setField} />
                   <EInput label="Disarm Code" name="showingDisarmCode" value={f.showingDisarmCode} onChange={setField} />
                   <EInput label="Passcode / Gate Code" name="showingPasscode" value={f.showingPasscode} onChange={setField} />
                 </div>
@@ -932,19 +1075,44 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
                   <EInput label="Email" name="showingCallOrder1Email" value={f.showingCallOrder1Email} onChange={setField} type="email" />
                 </div>
                 <p className="text-sm font-medium">Call Order — Contact 2</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <EInput label="Name" name="showingCallOrder2Name" value={f.showingCallOrder2Name} onChange={setField} />
                   <EInput label="Mobile" name="showingCallOrder2Mobile" value={f.showingCallOrder2Mobile} onChange={setField} />
+                  <EInput label="Alt Phone" name="showingCallOrder2AltPhone" value={f.showingCallOrder2AltPhone} onChange={setField} />
                   <EInput label="Email" name="showingCallOrder2Email" value={f.showingCallOrder2Email} onChange={setField} type="email" />
+                  <ESelect label="Type" name="showingCallOrder2Type" value={f.showingCallOrder2Type} onChange={setField} options={[
+                    { value: 'agent', label: 'Agent' },
+                    { value: 'owner', label: 'Owner' },
+                    { value: 'tenant', label: 'Tenant' },
+                    { value: 'other', label: 'Other' },
+                  ]} />
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  <ESwitch label="Confirm Appointments" name="showingCallOrder2Confirm" value={Boolean(f.showingCallOrder2Confirm?.length)} onChange={(n, v) => setField(n, v ? ['yes'] : [])} />
+                  <ESwitch label="Notify of Appointments" name="showingCallOrder2Notify" value={Boolean(f.showingCallOrder2Notify?.length)} onChange={(n, v) => setField(n, v ? ['yes'] : [])} />
                 </div>
                 <p className="text-sm font-medium">Call Order — Contact 3</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <EInput label="Name" name="showingCallOrder3Name" value={f.showingCallOrder3Name} onChange={setField} />
                   <EInput label="Mobile" name="showingCallOrder3Mobile" value={f.showingCallOrder3Mobile} onChange={setField} />
+                  <EInput label="Alt Phone" name="showingCallOrder3AltPhone" value={f.showingCallOrder3AltPhone} onChange={setField} />
                   <EInput label="Email" name="showingCallOrder3Email" value={f.showingCallOrder3Email} onChange={setField} type="email" />
+                  <ESelect label="Type" name="showingCallOrder3Type" value={f.showingCallOrder3Type} onChange={setField} options={[
+                    { value: 'agent', label: 'Agent' },
+                    { value: 'owner', label: 'Owner' },
+                    { value: 'tenant', label: 'Tenant' },
+                    { value: 'other', label: 'Other' },
+                  ]} />
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  <ESwitch label="Confirm Appointments" name="showingCallOrder3Confirm" value={Boolean(f.showingCallOrder3Confirm?.length)} onChange={(n, v) => setField(n, v ? ['yes'] : [])} />
+                  <ESwitch label="Notify of Appointments" name="showingCallOrder3Notify" value={Boolean(f.showingCallOrder3Notify?.length)} onChange={(n, v) => setField(n, v ? ['yes'] : [])} />
                 </div>
                 <ECheckboxGroup label="Notes to Showing Agent" name="showingNotesToAgent"
                   options={SHOWING_NOTES_TO_AGENT_OPTIONS} value={f.showingNotesToAgent} onChange={setField} />
+                {f.showingNotesToAgent?.includes('Other') && (
+                  <EInput label="Other Notes to Showing Agent" name="showingNotesToAgentOther" value={f.showingNotesToAgentOther} onChange={setField} placeholder="Describe..." />
+                )}
                 <ETextarea label="Notes to Staff" name="showingNotesToStaff" value={f.showingNotesToStaff} onChange={setField} />
               </>
             )}
