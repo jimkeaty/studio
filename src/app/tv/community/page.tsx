@@ -497,7 +497,22 @@ function LeaderboardSection({ active }: { active: boolean }) {
     : `${cfg.year} Monthly Rankings`;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
+      {/* Floating Pause / Resume button — always visible bottom-right */}
+      <button
+        onClick={togglePause}
+        className={`absolute bottom-6 right-6 z-20 flex items-center gap-2 px-5 py-3 rounded-2xl border text-base font-bold shadow-lg transition-colors ${
+          paused
+            ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
+            : 'border-white/30 bg-gray-800/90 text-white/80 hover:bg-gray-700/90 hover:text-white'
+        }`}
+        title={paused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
+      >
+        {paused
+          ? <><Play className="h-5 w-5" /> Resume</>
+          : <><Pause className="h-5 w-5" /> Pause</>}
+      </button>
+
       {/* Header */}
       <div className="flex-shrink-0 flex items-center gap-3 px-8 py-5 bg-gray-900 border-b border-white/10">
         <div className="w-12 h-12 rounded-2xl bg-yellow-500/20 flex items-center justify-center">
@@ -508,20 +523,6 @@ function LeaderboardSection({ active }: { active: boolean }) {
           <p className="text-gray-400 text-sm">{cfg.subtitle || periodLabel}</p>
         </div>
         <div className="ml-auto flex items-center gap-6">
-          {/* Pause / Play button */}
-          <button
-            onClick={togglePause}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-colors ${
-              paused
-                ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
-                : 'border-white/20 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-            }`}
-            title={paused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
-          >
-            {paused
-              ? <><Play className="h-4 w-4" /> Resume</>
-              : <><Pause className="h-4 w-4" /> Pause</>}
-          </button>
           {cfg.showSales && (
             <div className="text-center">
               <div className="text-2xl font-black text-white">{totalClosed}</div>
