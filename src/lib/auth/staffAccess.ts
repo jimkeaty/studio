@@ -1,7 +1,7 @@
 import 'server-only';
 import { adminDb } from '@/lib/firebase/admin';
 
-export type StaffRole = 'office_admin' | 'tc_admin' | 'tc';
+export type StaffRole = 'office_admin' | 'tc_admin' | 'tc' | 'staff';
 
 export interface StaffUser {
   id: string;
@@ -32,12 +32,23 @@ export async function getStaffRole(uid: string): Promise<StaffRole | null> {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.role;
 
   try {
-    const snap = await adminDb
+    // Primary: status=active filter
+    let snap = await adminDb
       .collection('staffUsers')
       .where('firebaseUid', '==', uid)
       .where('status', '==', 'active')
       .limit(1)
       .get();
+
+    // Fallback: legacy records without a status field
+    if (snap.empty) {
+      const allSnap = await adminDb
+        .collection('staffUsers')
+        .where('firebaseUid', '==', uid)
+        .limit(1)
+        .get();
+      if (!allSnap.empty) snap = allSnap as any;
+    }
 
     const role = snap.empty ? null : (snap.docs[0].data().role as StaffRole);
     cache.set(uid, { role, ts: Date.now() });

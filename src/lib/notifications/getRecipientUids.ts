@@ -16,17 +16,62 @@ export async function getTcUids(db: Firestore): Promise<string[]> {
     .collection('staffUsers')
     .where('role', 'in', ['tc', 'tc_admin'])
     .get();
-  return snap.docs
-    .map((d) => d.data().firebaseUid as string | undefined)
-    .filter((uid): uid is string => !!uid);
+  return resolveStaffUids(db, snap.docs);
 }
 
 /** Get UIDs of all staff users (role = 'office_admin', 'tc_admin', 'tc', or 'staff') */
 export async function getAllStaffUids(db: Firestore): Promise<string[]> {
   const snap = await db.collection('staffUsers').get();
-  return snap.docs
-    .map((d) => d.data().firebaseUid as string | undefined)
-    .filter((uid): uid is string => !!uid);
+  return resolveStaffUids(db, snap.docs);
+}
+
+/**
+ * Resolve Firebase UIDs from staffUsers docs.
+ * Primary: use firebaseUid field directly.
+ * Fallback: if firebaseUid is missing, look up the user by email in the `users` collection
+ * and backfill the firebaseUid on the staffUsers doc so future lookups are instant.
+ */
+async function resolveStaffUids(
+  db: Firestore,
+  docs: FirebaseFirestore.QueryDocumentSnapshot[],
+): Promise<string[]> {
+  const uids: string[] = [];
+  const backfillPromises: Promise<void>[] = [];
+
+  for (const doc of docs) {
+    const data = doc.data() as Record<string, any>;
+    if (data.firebaseUid) {
+      uids.push(data.firebaseUid as string);
+      continue;
+    }
+    // No firebaseUid — try to resolve by email
+    const email = data.email as string | undefined;
+    if (!email) continue;
+    try {
+      const userSnap = await db
+        .collection('users')
+        .where('email', '==', email.toLowerCase().trim())
+        .limit(1)
+        .get();
+      if (!userSnap.empty) {
+        const resolvedUid = userSnap.docs[0].id;
+        uids.push(resolvedUid);
+        // Backfill the firebaseUid so this lookup is not needed next time
+        backfillPromises.push(
+          doc.ref.update({ firebaseUid: resolvedUid }).then(() => undefined).catch(() => { /* non-fatal */ }),
+        );
+      }
+    } catch {
+      // Non-fatal — skip this staff member
+    }
+  }
+
+  // Fire backfills in background — do not await
+  if (backfillPromises.length > 0) {
+    Promise.allSettled(backfillPromises).catch(() => { /* non-fatal */ });
+  }
+
+  return [...new Set(uids)]; // deduplicate
 }
 
 /** Get UIDs of staff users assigned to a specific transaction/agent */

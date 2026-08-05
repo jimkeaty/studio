@@ -394,6 +394,13 @@ export async function PATCH(
       itemUpdates.reviewedByName = reviewerName;
       logAction = 'In Progress';
       logDetail = `Marked in progress by ${reviewerEmail}`;
+    } else if (action === 'approve') {
+      itemUpdates.status = 'approved';
+      itemUpdates.reviewedBy = decoded.uid;
+      itemUpdates.reviewedByName = reviewerName;
+      itemUpdates.reviewedAt = now;
+      logAction = 'Approved';
+      logDetail = `Approved by ${reviewerEmail}`;
     } else if (action === 'complete') {
       itemUpdates.status = 'completed';
       itemUpdates.reviewedBy = decoded.uid;
@@ -463,7 +470,10 @@ export async function PATCH(
       let notifTitle: string | null = null;
       let notifBody: string | null = null;
 
-      if (action === 'complete') {
+      if (action === 'approve') {
+        notifTitle = 'Transaction Approved ✅';
+        notifBody = `${reviewerName} has approved your transaction at ${txAddress}. Everything looks good!`;
+      } else if (action === 'complete') {
         notifTitle = 'Staff Review Complete ✅';
         notifBody = `Staff has completed the review for ${txAddress}. Check your transaction for any updates.`;
       } else if (action === 'dismiss') {
@@ -503,7 +513,10 @@ export async function PATCH(
         let tcTitle: string | null = null;
         let tcBody: string | null = null;
 
-        if (action === 'complete') {
+        if (action === 'approve') {
+          tcTitle = 'Transaction Approved by Staff';
+          tcBody = `${reviewerName} approved the transaction at ${txAddress}.`;
+        } else if (action === 'complete') {
           tcTitle = 'Staff Review Complete';
           tcBody = `Staff completed the review for ${txAddress}.`;
         } else if (action === 'dismiss') {

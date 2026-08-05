@@ -471,7 +471,13 @@ export async function PATCH(
     // existing txData value if the field was not included in this update.
     const effectiveWorkingWithTc =
       updates.workingWithTc !== undefined ? !!updates.workingWithTc : !!txData.workingWithTc;
-    const shouldResubmitToTc = !!resubmitToTc && effectiveWorkingWithTc;
+    // Auto-resubmit to TC queue when:
+    //   1. Agent explicitly sends resubmitToTc=true, OR
+    //   2. Status is changing to 'pending' (or 'under_contract') AND workingWithTc=true
+    //      (this handles the case where the agent changes status from the detail page
+    //       without explicitly clicking a "resubmit" button)
+    const isStatusChangeToPending = !!(newStatus && ['pending', 'under_contract'].includes(newStatus) && newStatus !== previousStatus);
+    const shouldResubmitToTc = effectiveWorkingWithTc && (!!resubmitToTc || isStatusChangeToPending);
     if (shouldResubmitToTc) {
       const mergedData = { ...txData, ...updates };
       const intake: Record<string, any> = {
@@ -819,6 +825,29 @@ export async function PATCH(
           'notes', 'additionalComments',
           'dealType', 'transactionType', 'closingType',
         ]);
+        // Human-readable labels for watched fields
+        const FIELD_LABELS: Record<string, string> = {
+          propertyAddress: 'Property Address', address: 'Property Address',
+          salePrice: 'Sale Price', listPrice: 'List Price',
+          commissionPercent: 'Commission %', commissionBasePrice: 'Commission Base Price',
+          gci: 'GCI', transactionFee: 'Transaction Fee',
+          sellerCommissionPct: 'Seller Commission %', buyerCommissionPct: 'Buyer Commission %',
+          closingDate: 'Closing Date', closedDate: 'Closed Date',
+          contractDate: 'Contract Date', listingDate: 'Listing Date',
+          optionExpiration: 'Option Expiration', inspectionDeadline: 'Inspection Deadline',
+          projectedCloseDate: 'Projected Close Date',
+          clientName: 'Client Name', clientEmail: 'Client Email', clientPhone: 'Client Phone',
+          sellerName: 'Seller Name', sellerEmail: 'Seller Email', sellerPhone: 'Seller Phone',
+          buyerName: 'Buyer Name', buyerEmail: 'Buyer Email', buyerPhone: 'Buyer Phone',
+          mortgageCompany: 'Mortgage Company', loanOfficer: 'Loan Officer',
+          loanOfficerEmail: 'Loan Officer Email', loanOfficerPhone: 'Loan Officer Phone',
+          titleCompany: 'Title Company', titleOfficer: 'Title Officer',
+          titleOfficerEmail: 'Title Officer Email', titleOfficerPhone: 'Title Officer Phone',
+          otherAgentName: 'Co-Agent Name', otherAgentEmail: 'Co-Agent Email',
+          otherAgentPhone: 'Co-Agent Phone', otherAgentBrokerage: 'Co-Agent Brokerage',
+          notes: 'Notes', additionalComments: 'Additional Comments',
+          dealType: 'Deal Type', transactionType: 'Transaction Type', closingType: 'Closing Type',
+        };
         const watchedFieldsChanged = Object.keys(updates).some(k => TC_WATCHED_FIELDS.has(k));
         // Only fire when no status change and no document change (those are handled above)
         if (
@@ -826,11 +855,13 @@ export async function PATCH(
           !isStatusChange &&
           updates.documents === undefined
         ) {
-          const changedFieldNames = Object.keys(updates)
-            .filter(k => TC_WATCHED_FIELDS.has(k))
-            .slice(0, 3)
+          const changedKeys = Object.keys(updates).filter(k => TC_WATCHED_FIELDS.has(k));
+          const changedLabels = changedKeys
+            .slice(0, 4)
+            .map(k => FIELD_LABELS[k] || k)
             .join(', ');
-          const fieldBody = `${agentName} updated ${txAddress} (${changedFieldNames}${Object.keys(updates).filter(k => TC_WATCHED_FIELDS.has(k)).length > 3 ? ' and more' : ''}).`;
+          const moreCount = changedKeys.length - 4;
+          const fieldBody = `${agentName} updated the following on ${txAddress}: ${changedLabels}${moreCount > 0 ? ` and ${moreCount} more field${moreCount > 1 ? 's' : ''}` : ''}.`;
           // Staff always notified on field changes
           const staffUids = await getAllStaffUids(adminDb);
           if (staffUids.length > 0) {

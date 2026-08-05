@@ -1012,6 +1012,30 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
     }
   };
 
+  const handleApprove = async (values: FormValues) => {
+    setSaving(true);
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch(`/api/admin/staff-queue/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'approve',
+          staffNotes: values.staffNotes,
+          txUpdates: buildTxUpdates(values),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Approve failed');
+      toast({ title: 'Transaction Approved ✅', description: 'Transaction has been approved and agent notified.' });
+      setItem((prev: any) => ({ ...prev, status: 'approved' }));
+    } catch (err: any) {
+      toast({ title: 'Approve Failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDismiss = async () => {
     try {
       await callAction('dismiss', { dismissReason });
@@ -1156,7 +1180,7 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
     );
   }
 
-  const isReadOnly = item.status === 'completed' || item.status === 'dismissed' || item.status === 'archived';
+  const isReadOnly = item.status === 'completed' || item.status === 'dismissed' || item.status === 'archived' || item.status === 'approved';
   const isActive = item.status === 'pending_review' || item.status === 'in_progress';
   const watchedTxComplianceFee = form.watch('txComplianceFee');
   const assignedStaff = staffProfiles.find((p) => p.id === item.assignedStaffId);
@@ -1555,6 +1579,15 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
               )}
               <Button
                 size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={form.handleSubmit(handleApprove)}
+                disabled={acting || saving}
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                {acting ? 'Processing...' : 'Approve'}
+              </Button>
+              <Button
+                size="sm"
                 className="bg-green-600 hover:bg-green-700 text-white"
                 onClick={form.handleSubmit(handleComplete)}
                 disabled={acting || saving}
@@ -1638,6 +1671,16 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           <AlertTitle className="text-green-700 dark:text-green-400">Completed</AlertTitle>
           <AlertDescription>
             Completed by {item.reviewedByName || item.reviewedBy || 'staff'}
+            {item.reviewedAt && ` on ${formatDateShort(item.reviewedAt)}`}.
+          </AlertDescription>
+        </Alert>
+      )}
+      {item.status === 'approved' && (
+        <Alert className="border-blue-500/50 bg-blue-50 dark:bg-blue-950/20">
+          <CheckCircle2 className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-700 dark:text-blue-400">Approved</AlertTitle>
+          <AlertDescription>
+            Approved by {item.reviewedByName || item.reviewedBy || 'staff'}
             {item.reviewedAt && ` on ${formatDateShort(item.reviewedAt)}`}.
           </AlertDescription>
         </Alert>
