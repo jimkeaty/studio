@@ -98,6 +98,31 @@ export default function StaffUsersPage() {
 
   const { isAdmin } = useIsAdminLike();
 
+  const [bulkFixStatus, setBulkFixStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [bulkFixMsg, setBulkFixMsg] = useState('');
+
+  async function handleBulkFixNotifications() {
+    if (!user) return;
+    setBulkFixStatus('loading');
+    setBulkFixMsg('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/fix-staff-notifications', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+      const created = (data.results as any[])?.filter((r) => r.action === 'created').length ?? 0;
+      const updated = (data.results as any[])?.filter((r) => (r.action as string)?.startsWith('updated')).length ?? 0;
+      setBulkFixStatus('done');
+      setBulkFixMsg(`Done — ${created} created, ${updated} updated, ${data.errors ?? 0} errors.`);
+    } catch (err: any) {
+      setBulkFixStatus('error');
+      setBulkFixMsg(err.message || 'Failed');
+    }
+  }
+
   const fetchUsers = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -272,6 +297,25 @@ export default function StaffUsersPage() {
               Add Staff User
             </Button>
           </DialogTrigger>
+          {/* Bulk fix: ensure users/{uid} docs exist so bell notifications work */}
+          <div className="flex flex-col items-end gap-1 mr-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkFixNotifications}
+              disabled={bulkFixStatus === 'loading'}
+              className="flex items-center gap-2"
+              title="Creates missing notification profile docs for all linked staff — fixes missing bell notifications"
+            >
+              <Bell className="h-4 w-4" />
+              {bulkFixStatus === 'loading' ? 'Fixing…' : 'Fix Bell Notifications'}
+            </Button>
+            {bulkFixMsg && (
+              <p className={`text-xs ${bulkFixStatus === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                {bulkFixMsg}
+              </p>
+            )}
+          </div>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? 'Edit Staff User' : 'Add Staff User'}</DialogTitle>

@@ -4,8 +4,9 @@
 // If the caller's email matches a staffUsers record that has firebaseUid=null,
 // this endpoint links their Firebase UID to that record so the role lookup works.
 //
-// This is needed when staff users are created manually (before they sign in),
-// or when they sign in via Google (which creates a new Firebase UID not yet linked).
+// CRITICAL: Also ensures users/{uid} doc exists with email + notificationPrefs.
+// Without this doc, sendNotification cannot resolve the user's email or prefs,
+// and in-app/bell notifications will never be written for staff/TC users.
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 
@@ -19,7 +20,46 @@ export async function POST(req: NextRequest) {
     const { uid, email } = decoded;
     if (!email) return NextResponse.json({ ok: false, error: 'No email on token' }, { status: 400 });
 
-    // Check if this UID is already linked (with status=active filter for new records)
+    // ── Helper: ensure users/{uid} doc exists with email + notificationPrefs ──
+    // sendNotification reads users/{uid} to resolve email and notificationPrefs.
+    // If this doc is missing, in-app notifications are never written for this user.
+    async function ensureUserDoc(staffData: Record<string, any>) {
+      try {
+        const userRef = adminDb.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+        if (!userDoc.exists) {
+          await userRef.set({
+            email: email!.toLowerCase(),
+            displayName: staffData.displayName || staffData.name || email,
+            phone: staffData.phone || null,
+            role: staffData.role || 'staff',
+            notificationPrefs: { in_app: true, email: true, sms: false, push: true },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          console.log(`[staff-self-link] Created users/${uid} doc for ${email}`);
+        } else {
+          const existing = userDoc.data() as Record<string, any>;
+          const updates: Record<string, any> = {};
+          if (!existing.email) updates.email = email!.toLowerCase();
+          if (!existing.notificationPrefs) {
+            updates.notificationPrefs = { in_app: true, email: true, sms: false, push: true };
+          }
+          if (Object.keys(updates).length > 0) {
+            updates.updatedAt = new Date();
+            await userRef.update(updates);
+            console.log(`[staff-self-link] Updated users/${uid} doc for ${email}:`, Object.keys(updates));
+          }
+        }
+      } catch (e) {
+        // Non-fatal — don't block login if this fails
+        console.warn(`[staff-self-link] Could not ensure users/${uid} doc:`, e);
+      }
+    }
+
+    // ── Check if this UID is already linked ───────────────────────────────────
+    // Even for already-linked users, we still call ensureUserDoc so the
+    // users/{uid} doc is created/updated on every login.
     const alreadyLinkedActive = await adminDb
       .collection('staffUsers')
       .where('firebaseUid', '==', uid)
@@ -27,22 +67,23 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .get();
     if (!alreadyLinkedActive.empty) {
+      await ensureUserDoc(alreadyLinkedActive.docs[0].data() as Record<string, any>);
       return NextResponse.json({ ok: true, linked: false, role: alreadyLinkedActive.docs[0].data().role });
     }
 
-    // Also check records without a status field (legacy records created before status was added).
-    // Anna Cain and other early staff users may have no status field at all, so the
-    // status=active filter above misses them entirely.
+    // Also check records without a status field (legacy records created before status was added)
     const alreadyLinkedAll = await adminDb
       .collection('staffUsers')
       .where('firebaseUid', '==', uid)
       .limit(1)
       .get();
     if (!alreadyLinkedAll.empty) {
+      await ensureUserDoc(alreadyLinkedAll.docs[0].data() as Record<string, any>);
       return NextResponse.json({ ok: true, linked: false, role: alreadyLinkedAll.docs[0].data().role });
     }
 
-    // Look for a staffUsers record matching this email (exact lowercase match first, with status filter)
+    // ── First-time link: find staffUsers record by email ──────────────────────
+    // Exact lowercase match first
     let matchSnap = await adminDb
       .collection('staffUsers')
       .where('email', '==', email.toLowerCase())
@@ -50,13 +91,9 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .get();
 
-    // Fallback 1: case-insensitive scan of active records — handles emails stored with mixed case
-    // e.g. staffUsers record has "Anna@keatyrealestate.com" but Firebase token has "anna@keatyrealestate.com"
+    // Fallback 1: case-insensitive scan of active records
     if (matchSnap.empty) {
-      const allActive = await adminDb
-        .collection('staffUsers')
-        .where('status', '==', 'active')
-        .get();
+      const allActive = await adminDb.collection('staffUsers').where('status', '==', 'active').get();
       const matchDoc = allActive.docs.find(
         (d) => (d.data().email || '').toLowerCase() === email.toLowerCase()
       );
@@ -66,9 +103,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fallback 2: scan ALL staffUsers records without any status filter.
-    // This catches legacy records (e.g. Anna Cain) that were created before the
-    // status field was introduced and therefore have no status field at all.
+    // Fallback 2: scan ALL staffUsers records (catches legacy records without status field)
     if (matchSnap.empty) {
       const allStaff = await adminDb.collection('staffUsers').get();
       const matchDoc = allStaff.docs.find(
@@ -77,7 +112,6 @@ export async function POST(req: NextRequest) {
       if (matchDoc) {
         matchSnap = { empty: false, docs: [matchDoc] } as any;
         console.log(`[staff-self-link] Legacy no-status match for uid=${uid} email=${email} → doc=${matchDoc.id}`);
-        // Backfill the status field so future status-filtered queries work correctly
         await matchDoc.ref.update({ status: 'active' }).catch(() => { /* non-fatal */ });
       }
     }
@@ -88,22 +122,22 @@ export async function POST(req: NextRequest) {
     }
 
     const doc = matchSnap.docs[0];
-    const data = doc.data();
+    const data = doc.data() as Record<string, any>;
 
     // Only link if firebaseUid is not yet set (or is null/empty)
     if (data.firebaseUid && data.firebaseUid !== uid) {
-      // Already linked to a different UID — don't overwrite
       console.log(`[staff-self-link] uid=${uid} email=${email} already linked to different uid=${data.firebaseUid}`);
+      await ensureUserDoc(data);
       return NextResponse.json({ ok: true, linked: false, role: data.role });
     }
 
     // Link this Firebase UID to the staff record
-    await doc.ref.update({
-      firebaseUid: uid,
-      updatedAt: new Date(),
-    });
-
+    await doc.ref.update({ firebaseUid: uid, updatedAt: new Date() });
     console.log(`[staff-self-link] Linked uid=${uid} email=${email} to staffUsers/${doc.id} role=${data.role}`);
+
+    // Ensure users/{uid} doc exists for this newly-linked staff member
+    await ensureUserDoc(data);
+
     return NextResponse.json({ ok: true, linked: true, role: data.role });
   } catch (err: any) {
     console.error('[POST /api/admin/staff-self-link]', err);
