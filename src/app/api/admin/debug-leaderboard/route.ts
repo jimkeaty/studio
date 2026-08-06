@@ -54,3 +54,44 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ year, query: name, results });
 }
+
+// POST /api/admin/debug-leaderboard
+// Body: { agentId: string, addresses?: string[] }
+// Directly sets isPassThrough=true on all matching transactions in Firestore.
+// Use when the UI save is not persisting the field correctly.
+export async function POST(req: NextRequest) {
+  const token = (req.headers.get('Authorization') || '').replace('Bearer ', '').trim();
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try { await adminAuth.verifyIdToken(token); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+
+  const body = await req.json().catch(() => ({}));
+  const agentId = String(body.agentId || '').trim();
+  const addresses: string[] = Array.isArray(body.addresses) ? body.addresses : [];
+  const setPassThrough: boolean = body.setPassThrough !== false; // default true
+
+  if (!agentId) return NextResponse.json({ error: 'agentId required' }, { status: 400 });
+
+  const firestoreDb = typeof (adminDb as any).collection === 'function' ? adminDb : (adminDb as any)();
+
+  // Fetch transactions for this agent
+  const snap = await firestoreDb.collection('transactions').where('agentId', '==', agentId).get();
+  const updated: string[] = [];
+  const skipped: string[] = [];
+
+  for (const doc of snap.docs) {
+    const t = doc.data() as any;
+    const addr = String(t.address || t.propertyAddress || '').toLowerCase();
+    const matches = addresses.length === 0 || addresses.some(a => addr.includes(a.toLowerCase()));
+    if (matches) {
+      await firestoreDb.collection('transactions').doc(doc.id).update({
+        isPassThrough: setPassThrough,
+        updatedAt: new Date().toISOString(),
+      });
+      updated.push(`${doc.id} — ${t.address || '(no address)'} — isPassThrough: ${setPassThrough}`);
+    } else {
+      skipped.push(`${doc.id} — ${t.address || '(no address)'}`);
+    }
+  }
+
+  return NextResponse.json({ ok: true, agentId, updated, skipped });
+}
