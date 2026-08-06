@@ -24,13 +24,38 @@ export default function TvHubPage() {
   });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [scrollPaused, setScrollPaused] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
-  const [showControls, setShowControls] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef = useRef(0);
   const startTimeRef = useRef(Date.now());
   const animRef = useRef<number | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Send scroll-pause toggle to the iframe via postMessage
+  const toggleScrollPause = useCallback(() => {
+    const next = !scrollPaused;
+    setScrollPaused(next);
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'TV_SCROLL_PAUSE', paused: next },
+        '*'
+      );
+    } catch {}
+  }, [scrollPaused]);
+
+  // Reset scroll pause when page changes
+  useEffect(() => {
+    setScrollPaused(false);
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'TV_SCROLL_PAUSE', paused: false },
+        '*'
+      );
+    } catch {}
+  }, [currentIndex]);
 
   // Load TV config
   useEffect(() => {
@@ -97,6 +122,7 @@ export default function TvHubPage() {
       {/* Full-screen iframe for current page */}
       {currentPage && (
         <iframe
+          ref={iframeRef}
           key={currentPage.id}
           src={currentPage.url}
           style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
@@ -139,6 +165,19 @@ export default function TvHubPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Scroll pause — freezes auto-scroll inside the current page */}
+            <button
+              onClick={toggleScrollPause}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-sm font-semibold transition-colors ${
+                scrollPaused
+                  ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-300'
+                  : 'border-white/20 bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
+              }`}
+              title={scrollPaused ? 'Resume scroll' : 'Pause scroll'}
+            >
+              {scrollPaused ? <><Play className="h-3.5 w-3.5" /> Scroll</> : <><Pause className="h-3.5 w-3.5" /> Scroll</>}
+            </button>
+            {/* Rotation pause */}
             <button
               onClick={() => setPaused((p) => !p)}
               className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"

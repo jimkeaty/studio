@@ -154,7 +154,19 @@ export default function LeaderboardPage() {
   const toggleScrollPause = useCallback(() => {
     scrollPausedRef.current = !scrollPausedRef.current;
     setScrollPaused(scrollPausedRef.current);
-  }, [])
+  }, []);
+
+  // Listen for TV_SCROLL_PAUSE messages from the parent TV frame
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'TV_SCROLL_PAUSE') {
+        scrollPausedRef.current = !!e.data.paused;
+        setScrollPaused(!!e.data.paused);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   // Load board config (display toggles) once on mount
   useEffect(() => {
