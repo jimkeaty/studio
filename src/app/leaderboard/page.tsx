@@ -408,9 +408,13 @@ export default function LeaderboardPage() {
         ) : (
           <div
             ref={scrollContainerRef}
-            className="overflow-hidden cursor-pointer select-none"
-            style={{ maxHeight: 'calc(100vh - 320px)', scrollBehavior: 'auto' }}
-            onClick={toggleScrollPause}
+            className="cursor-pointer select-none"
+            style={{
+              maxHeight: 'calc(100vh - 320px)',
+              scrollBehavior: 'auto',
+              overflowY: scrollPaused ? 'auto' : 'hidden',
+            }}
+            onClick={!scrollPaused ? toggleScrollPause : undefined}
           >
             <div ref={scrollInnerRef}>
             {/* Render rows twice for seamless loop */}

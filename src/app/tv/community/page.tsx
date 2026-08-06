@@ -567,9 +567,9 @@ function LeaderboardSection({ active }: { active: boolean }) {
       {/* Scrolling rows — click anywhere to pause/resume */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden px-8 py-4 cursor-pointer select-none"
-        style={{ scrollBehavior: 'auto' }}
-        onClick={togglePause}
+        className="flex-1 px-8 py-4 cursor-pointer select-none"
+        style={{ scrollBehavior: 'auto', overflowY: paused ? 'auto' : 'hidden' }}
+        onClick={!paused ? togglePause : undefined}
         title={paused ? 'Click to resume scrolling' : 'Click to pause scrolling'}
       >
         {loading ? (
