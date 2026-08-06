@@ -293,6 +293,8 @@ const UPDATABLE_FIELDS = new Set([
   'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
   // MLS number
   'mlsNumber',
+  // Pass-through: agent personal property — no broker split, no leaderboard/tier credit
+  'isPassThrough',
 ]);
 
 export async function PATCH(req: NextRequest) {

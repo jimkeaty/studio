@@ -416,6 +416,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'primaryAgentSplitPercent', 'coAgentSplitPercent',
         // Documents
         'documents',
+        // Pass-through
+        'isPassThrough',
       ];
       for (const field of editableFields) {
         if (field in body) {
@@ -483,10 +485,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralFee',
           'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
           'notes', 'additionalComments',
-          'hasCoAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
-          'primaryAgentSplitPercent', 'coAgentSplitPercent',
-          'documents',
-        ];
+        'hasCoAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
+        'primaryAgentSplitPercent', 'coAgentSplitPercent',
+        'documents',
+        'isPassThrough',
+      ];
         const txSyncUpdate: Record<string, any> = { updatedAt: now };
         for (const f of txSyncFields) {
           if (f in updates) {
@@ -944,6 +947,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
         notes: toOptStr(intake.notes),
         additionalComments: toOptStr(intake.additionalComments),
+
+        // Pass-through: agent personal property — no broker split, no leaderboard/tier credit
+        isPassThrough: !!intake.isPassThrough,
 
         // Uploaded documents — carry over from intake to transaction
         documents: Array.isArray(intake.documents) ? intake.documents : [],
