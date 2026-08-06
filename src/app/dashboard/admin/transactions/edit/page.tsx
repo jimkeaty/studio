@@ -349,7 +349,7 @@ const schema = z.object({
   commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
   commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
   // Pass-through: agent personal property — no broker split, no leaderboard/tier credit
-  isPassThrough: z.boolean().optional(),
+  isPassThrough: z.boolean().default(false),
 });
 type FormValues = z.infer<typeof schema>;
 
