@@ -1093,6 +1093,11 @@ export default function AdminTransactionLedgerPage() {
                               ⏳ Pending TC Review
                             </span>
                           )}
+                          {(t as any).isPassThrough && (
+                            <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-700 border border-amber-400/40 whitespace-nowrap dark:text-amber-400">
+                              🔄 Pass-Through
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="min-w-[140px] whitespace-nowrap">
                           <div className="flex flex-col gap-0.5">
