@@ -113,6 +113,12 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
     const d = doc.data() as any;
     const aid = String(d.agentId || doc.id || '').trim();
     if (aid) liveProfileMap.set(aid, d);
+    // Also index by doc.id directly so rollup agentId (which may differ from d.agentId)
+    // can still find the live profile. This prevents stale rollup agentStatus from
+    // being used when the profile doc.id doesn't match the stored d.agentId field.
+    if (doc.id && doc.id !== aid) liveProfileMap.set(doc.id, d);
+    // Also index by email so email-keyed rollups can find the profile
+    if (d.email) liveProfileMap.set(String(d.email).trim().toLowerCase(), d);
     if (d.isDemoAccount === true && aid) demoAgentIds.add(aid);
   }
 
@@ -162,10 +168,16 @@ async function handleYearly(db: any, year: number, includeInactive: boolean) {
       // Use LIVE agentProfiles status — not the potentially stale rollup agentStatus.
       // This ensures agents marked inactive/out after their rollup was built are excluded.
       const liveProfile = liveProfileMap.get(aid);
+      // Also try doc.id match and email match as fallbacks
+      const liveProfileFallback = liveProfile
+        || liveProfileMap.get(aid.toLowerCase())
+        || liveProfileMap.get(String(r.agentEmail || r.email || '').trim().toLowerCase());
       const liveStatus = String(liveProfile?.status || '').toLowerCase();
-      // If no live profile found, fall back to rollup status
+      // If no live profile found at all, fall back to rollup status but treat unknown as excluded
       const rollupStatus = String(r.agentStatus || '').toLowerCase();
-      const effectiveStatus = liveProfile ? liveStatus : rollupStatus;
+      const effectiveStatus = liveProfileFallback
+        ? String(liveProfileFallback.status || '').toLowerCase()
+        : rollupStatus;
       return effectiveStatus === 'active' || effectiveStatus === 'grace_period';
     })
     .map((r: any) => ({
