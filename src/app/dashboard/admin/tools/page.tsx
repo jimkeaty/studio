@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertTriangle, Loader2, Wrench, Database, Calendar, Users, ArrowRight, Trash2, BarChart2, ShieldCheck, KeyRound, Mail, ChevronDown, ChevronRight, Search, Download, GitMerge } from 'lucide-react';
+import Link from 'next/link';
 
 interface MigrationResult {
   ok: boolean;
@@ -1325,6 +1326,33 @@ export default function AdminToolsPage() {
       </Card>
 
       {/* Firestore Seed & Validate */}
+      {/* $0 Broker Commission Diagnostic */}
+      <Card className="border-amber-200">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <div>
+                <CardTitle className="text-base">$0 Broker Commission — Pass-Through Review</CardTitle>
+                <CardDescription className="mt-1">
+                  Lists all closed transactions where the broker retained $0. Referral closings and already-marked pass-throughs are excluded.
+                  Use this to identify transactions that should be marked as Pass-Through, then rebuild the agent&apos;s YTD rollup.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs border-amber-300 text-amber-700">Diagnostic</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Link href="/dashboard/admin/zero-broker-commission">
+            <button className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded text-sm font-medium hover:bg-amber-700 transition-colors">
+              <ArrowRight className="h-4 w-4" />
+              Open $0 Broker Commission Report
+            </button>
+          </Link>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
