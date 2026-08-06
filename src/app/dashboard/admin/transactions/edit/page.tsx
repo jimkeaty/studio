@@ -348,6 +348,8 @@ const schema = z.object({
   commercialLeaseCommissionPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
   commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Pass-through: agent personal property — no broker split, no leaderboard/tier credit
+  isPassThrough: z.boolean().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -471,6 +473,7 @@ export default function EditTransactionPage() {
       contractDate: '',
       inspectionTypes: [],
       sellerPayingListingAgentUnknown: false,
+      isPassThrough: false,
     },
   });
 
@@ -480,6 +483,7 @@ export default function EditTransactionPage() {
   const warrantyAtClosing = form.watch('warrantyAtClosing');
   const txComplianceFee = form.watch('txComplianceFee');
   const shortageInCommission = form.watch('shortageInCommission');
+  const isPassThrough = form.watch('isPassThrough');
   const tcScheduleInspections = form.watch('tcScheduleInspections');
   const occupancyAgreement = form.watch('occupancyAgreement');
   const inspectionTypes = form.watch('inspectionTypes') || [];
@@ -958,6 +962,8 @@ export default function EditTransactionPage() {
           hasCoAgent: !!tx.hasCoAgent,
           // Inbound referral
           hasInboundReferral: !!tx.hasInboundReferral,
+          // Pass-through
+          isPassThrough: !!tx.isPassThrough,
           inboundReferralAgentName: tx.inboundReferralAgentName || '',
           inboundReferralBrokerage: tx.inboundReferralBrokerage || '',
           inboundReferralFeePercent: n(tx.inboundReferralFeePercent),
@@ -2136,6 +2142,32 @@ export default function EditTransactionPage() {
 
           {/* ── Commission & Fees ────────────────────────────────── */}
           <Section title="Commission & Fees">
+            {/* ── Pass-Through Toggle (Admin / TC only) ── */}
+            <div className={`flex items-start gap-4 p-4 rounded-xl border-2 ${isPassThrough ? 'border-amber-500/60 bg-amber-500/5' : 'border-dashed border-muted-foreground/30'}`}>
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="isPassThrough"
+                    checked={!!isPassThrough}
+                    onChange={(e) => form.setValue('isPassThrough', e.target.checked)}
+                    className="h-5 w-5 rounded border-gray-300 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="isPassThrough" className="font-semibold text-base cursor-pointer select-none">
+                    Pass-Through Transaction
+                  </label>
+                </div>
+                <p className="mt-1.5 ml-8 text-sm text-muted-foreground">
+                  Agent is buying personal property. No broker commission. Volume and GCI will <strong>not</strong> count toward the leaderboard or tier progression. Closing count still appears on agent&apos;s personal charts.
+                </p>
+              </div>
+            </div>
+            {isPassThrough && (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm font-medium">
+                <span>⚠️</span>
+                <span>Pass-Through is active — broker commission will be $0. This transaction will not affect leaderboard rankings or tier progression.</span>
+              </div>
+            )}
             {/* Commission base price */}
             <FormField control={form.control} name="commissionBasePrice" render={({ field }) => (
               <FormItem>

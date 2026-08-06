@@ -237,6 +237,8 @@ const schema = z.object({
   commercialLeaseCommissionPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
   commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Pass-through: agent personal property — no broker split, no leaderboard/tier credit
+  isPassThrough: z.boolean().optional(),
   // Referrals
   hasOutboundReferral: z.boolean().optional(),
   outboundReferralAgentName: z.string().optional(),
@@ -632,6 +634,8 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           preListingTcScheduleInspectionsOther: i.preListingTcScheduleInspectionsOther || '',
           // Showing notes other
           showingNotesToAgentOther: i.showingNotesToAgentOther || '',
+          // Pass-through
+          isPassThrough: Boolean(i.isPassThrough),
         });
 
         if (data.checklist) setChecklist(data.checklist);
@@ -920,6 +924,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const isReadOnly = intake.status === 'approved' || intake.status === 'rejected' || intake.status === 'archived';
   const isActive = intake.status === 'submitted' || intake.status === 'in_review';
   const watchedTxComplianceFee = form.watch('txComplianceFee');
+  const isPassThrough = form.watch('isPassThrough');
   const assignedTc = tcProfiles.find((p) => p.id === intake.assignedTcProfileId);
   const checklistCompleted = checklist.filter((c) => c.completed).length;
   const checklistTotal = checklist.length;
@@ -1387,6 +1392,33 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
 
           {/* Section 3: Financial */}
           <SectionCard title="Financial Details">
+            {/* ── Pass-Through Toggle ── */}
+            <div className={`flex items-start gap-4 p-4 rounded-xl border-2 ${isPassThrough ? 'border-amber-500/60 bg-amber-500/5' : 'border-dashed border-muted-foreground/30'}`}>
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="isPassThrough"
+                    checked={!!isPassThrough}
+                    onChange={(e) => form.setValue('isPassThrough', e.target.checked)}
+                    disabled={isReadOnly}
+                    className="h-5 w-5 rounded border-gray-300 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="isPassThrough" className={`font-semibold text-base select-none ${isReadOnly ? 'opacity-60' : 'cursor-pointer'}`}>
+                    Pass-Through Transaction
+                  </label>
+                </div>
+                <p className="mt-1.5 ml-8 text-sm text-muted-foreground">
+                  Agent is buying personal property. No broker commission. Volume and GCI will <strong>not</strong> count toward the leaderboard or tier progression. Closing count still appears on agent&apos;s personal charts.
+                </p>
+              </div>
+            </div>
+            {isPassThrough && (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm font-medium">
+                <span>⚠️</span>
+                <span>Pass-Through is active — broker commission will be $0. This transaction will not affect leaderboard rankings or tier progression.</span>
+              </div>
+            )}
             <Grid2>
               <FormField control={form.control} name="listPrice" render={({ field }) => (
                 <FormItem><FormLabel>List Price ($)</FormLabel><FormControl><Input type="number" step="1" {...field} disabled={isReadOnly} /></FormControl></FormItem>

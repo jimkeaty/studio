@@ -206,10 +206,14 @@ export async function rebuildAgentRollup(
       // Closed transactions — calendar year
       if (status === 'closed') {
         closed += sideCredit;
-        closedVolume += volumeCredit;
-        totalGCI += num(activeSplitSnapshot?.grossCommission ?? t.commission);
-        agentNetCommission += num(activeSplitSnapshot?.agentNetCommission ?? t.commission);
-        companyDollar += num(activeSplitSnapshot?.companyRetained ?? 0);
+        // Pass-through: agent personal property — count the close but exclude
+        // volume, GCI, and broker commission from leaderboard and tier totals.
+        if (!t.isPassThrough) {
+          closedVolume += volumeCredit;
+          totalGCI += num(activeSplitSnapshot?.grossCommission ?? t.commission);
+          agentNetCommission += num(activeSplitSnapshot?.agentNetCommission ?? t.commission);
+          companyDollar += num(activeSplitSnapshot?.companyRetained ?? 0);
+        }
       }
 
       // Pending / under contract — calendar year
@@ -235,8 +239,11 @@ export async function rebuildAgentRollup(
       if (txDateUtc && isInCycle(txDateUtc, cycle)) {
         const personalGci = num(activeSplitSnapshot?.grossCommission ?? t.commission ?? 0);
         const personalCompanyDollar = num(activeSplitSnapshot?.companyRetained ?? 0);
-        tierProgressionGci += personalGci;
-        tierProgressionCompanyDollar += personalCompanyDollar;
+        // Pass-through transactions do not count toward tier progression
+        if (!t.isPassThrough) {
+          tierProgressionGci += personalGci;
+          tierProgressionCompanyDollar += personalCompanyDollar;
+        }
       }
     }
   }
@@ -270,10 +277,12 @@ export async function rebuildAgentRollup(
       if (txYear === year) {
         if (status === 'closed') {
           closed += coSideCredit;
-          closedVolume += coVolumeCredit;
-          totalGCI += num(coSplitSnapshot?.grossCommission ?? 0);
-          agentNetCommission += num(coSplitSnapshot?.agentNetCommission ?? 0);
-          companyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
+          if (!t.isPassThrough) {
+            closedVolume += coVolumeCredit;
+            totalGCI += num(coSplitSnapshot?.grossCommission ?? 0);
+            agentNetCommission += num(coSplitSnapshot?.agentNetCommission ?? 0);
+            companyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
+          }
         }
         if (status === 'pending' || status === 'under_contract') {
           pending += coSideCredit;
@@ -283,8 +292,10 @@ export async function rebuildAgentRollup(
       if (status === 'closed') {
         const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
         if (txDateUtc && isInCycle(txDateUtc, cycle)) {
-          tierProgressionGci += num(coSplitSnapshot?.grossCommission ?? 0);
-          tierProgressionCompanyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
+          if (!t.isPassThrough) {
+            tierProgressionGci += num(coSplitSnapshot?.grossCommission ?? 0);
+            tierProgressionCompanyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
+          }
         }
       }
     }
@@ -325,6 +336,8 @@ export async function rebuildAgentRollup(
         t.creditSnapshot?.progressionCompanyDollarCredit ??
         t.splitSnapshot?.companyRetained ?? 0
       );
+      // Pass-through: skip tier credit for personal property transactions
+      if (t.isPassThrough) continue;
       tierProgressionGci += gciCredit;
       tierProgressionCompanyDollar += companyCredit;
     }

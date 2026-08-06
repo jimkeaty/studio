@@ -340,9 +340,12 @@ async function handlePeriod(
       );
       if (!isReferralClosing) {
         agg.closed += sideCount;
-        agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
-        agg.totalGCI += num(t.commission);
-        agg.companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+        // Pass-through: count the close but exclude volume, GCI, and broker commission
+        if (!t.isPassThrough) {
+          agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
+          agg.totalGCI += num(t.commission);
+          agg.companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+        }
       }
     } else if (status === "pending" || status === "under_contract") {
       if (!isReferralClosing) agg.pending += sideCount;
