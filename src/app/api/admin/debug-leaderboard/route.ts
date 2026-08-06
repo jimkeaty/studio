@@ -13,16 +13,19 @@ export async function GET(req: NextRequest) {
   const name = (req.nextUrl.searchParams.get('name') || '').toLowerCase();
   const year = parseInt(req.nextUrl.searchParams.get('year') || String(new Date().getFullYear()));
 
-  const db = adminDb();
+
+  // adminDb may be a Firestore instance directly (not a factory function)
+  // Use it directly if it has .collection, otherwise call it
+  const firestoreDb = typeof (adminDb as any).collection === 'function' ? adminDb : (adminDb as any)();
 
   // Fetch all agent profiles
-  const profileSnap = await db.collection('agentProfiles').get();
+  const profileSnap = await firestoreDb.collection('agentProfiles').get();
   const profiles = profileSnap.docs
     .map((d: any) => ({ docId: d.id, ...(d.data() as any) }))
     .filter((p: any) => name ? (String(p.displayName || p.firstName || '')).toLowerCase().includes(name) : true);
 
   // Fetch matching rollups
-  const rollupSnap = await db.collection('agentYearRollups').where('year', '==', year).get();
+  const rollupSnap = await firestoreDb.collection('agentYearRollups').where('year', '==', year).get();
   const rollups = rollupSnap.docs.map((d: any) => ({ rollupDocId: d.id, ...(d.data() as any) }));
 
   const results = profiles.map((p: any) => {
