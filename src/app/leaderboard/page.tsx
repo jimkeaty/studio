@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { Crown, Rocket, Zap, AlertCircle, BarChart, CalendarDays, DollarSign, TrendingUp, Users, Clock } from 'lucide-react';
+import { Crown, Rocket, Zap, AlertCircle, BarChart, CalendarDays, DollarSign, TrendingUp, Users, Clock, Pause, Play } from 'lucide-react';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -148,6 +148,13 @@ export default function LeaderboardPage() {
   const scrollInnerRef = useRef<HTMLDivElement>(null);
   const scrollAnimRef = useRef<number | null>(null);
   const scrollPosRef = useRef(0);
+  const scrollPausedRef = useRef(false);
+  const [scrollPaused, setScrollPaused] = useState(false);
+
+  const toggleScrollPause = useCallback(() => {
+    scrollPausedRef.current = !scrollPausedRef.current;
+    setScrollPaused(scrollPausedRef.current);
+  }, [])
 
   // Load board config (display toggles) once on mount
   useEffect(() => {
@@ -221,6 +228,8 @@ export default function LeaderboardPage() {
     const inner = scrollInnerRef.current;
     if (!container || !inner || visibleRows.length === 0) return;
 
+    scrollPausedRef.current = false;
+    setScrollPaused(false);
     const SPEED = 30; // px per second
     let lastTime: number | null = null;
     let pauseUntil = 0;
@@ -230,6 +239,13 @@ export default function LeaderboardPage() {
       if (lastTime === null) lastTime = ts;
       const dt = (ts - lastTime) / 1000;
       lastTime = ts;
+
+      // Manual pause — freeze position, keep loop alive
+      if (scrollPausedRef.current) {
+        lastTime = ts;
+        scrollAnimRef.current = requestAnimationFrame(step);
+        return;
+      }
 
       const contentH = inner.scrollHeight / 2;
       const containerH = container.clientHeight;
@@ -341,7 +357,28 @@ export default function LeaderboardPage() {
       </Card>
 
       {/* ── Leaderboard Rows ────────────────────────────────────────── */}
-      <main className="max-w-7xl mx-auto">
+      <main className="max-w-7xl mx-auto relative">
+        {/* Floating Pause / Resume button — always visible bottom-right */}
+        {!loading && !error && rows.length > 0 && (
+          <button
+            onClick={toggleScrollPause}
+            className={`fixed bottom-8 right-8 z-50 flex items-center gap-2 px-5 py-3 rounded-2xl border text-base font-bold shadow-xl transition-colors ${
+              scrollPaused
+                ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
+                : 'border-white/30 bg-gray-800/90 text-white/80 hover:bg-gray-700/90 hover:text-white'
+            }`}
+            title={scrollPaused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
+          >
+            {scrollPaused
+              ? <><Play className="h-5 w-5" /> Resume</>
+              : <><Pause className="h-5 w-5" /> Pause</>}
+          </button>
+        )}
+        {scrollPaused && (
+          <div className="flex items-center justify-center gap-2 py-2 mb-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm font-semibold">
+            <Pause className="h-3.5 w-3.5" /> Scrolling paused — click the list or press Resume to continue
+          </div>
+        )}
         {loading ? (
           <LeaderboardSkeleton />
         ) : error ? (
@@ -359,8 +396,9 @@ export default function LeaderboardPage() {
         ) : (
           <div
             ref={scrollContainerRef}
-            className="overflow-hidden"
+            className="overflow-hidden cursor-pointer select-none"
             style={{ maxHeight: 'calc(100vh - 320px)', scrollBehavior: 'auto' }}
+            onClick={toggleScrollPause}
           >
             <div ref={scrollInnerRef}>
             {/* Render rows twice for seamless loop */}
