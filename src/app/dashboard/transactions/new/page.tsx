@@ -622,8 +622,6 @@ export default function AddTransactionPage() {
   const landPdfInputRef = useRef<HTMLInputElement>(null);
   const commercialPdfInputRef = useRef<HTMLInputElement>(null);
   const [pdfDocType, setPdfDocType] = useState<'residential' | 'land' | 'commercial' | null>(null);
-
-  const handlePdfUpload = async (file: File) => {
   // ── Document upload state — MUST be declared before PDF upload handlers ──────
   // These handlers call setUploadedDocs; if the state is declared after them,
   // the closures capture a stale/undefined reference and uploads are silently lost.
