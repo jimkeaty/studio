@@ -45,52 +45,48 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 50);
 
   try {
-    // ── Strategy: use the existing (recipientUid, read, createdAt) composite index ──
-    // Query 1: all unread notifications (no limit — we need the full unread count)
-    const unreadSnap = await adminDb
-      .collection('notifications')
-      .where('recipientUid', '==', uid)
-      .where('read', '==', false)
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
-
-    // Query 2: recent read notifications to fill the display list
-    const readSnap = await adminDb
-      .collection('notifications')
-      .where('recipientUid', '==', uid)
-      .where('read', '==', true)
-      .orderBy('createdAt', 'desc')
-      .limit(limit)
-      .get();
-
-    // Merge: unread first, then recent read, deduplicate, cap at limit
+    // ── Primary: composite index (recipientUid, read, createdAt) ──────────────
+    // Falls back to a simple single-field query if the composite index is missing.
+    let allDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    let usedFallback = false;
+    try {
+      const unreadSnap = await adminDb
+        .collection('notifications')
+        .where('recipientUid', '==', uid)
+        .where('read', '==', false)
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .get();
+      const readSnap = await adminDb
+        .collection('notifications')
+        .where('recipientUid', '==', uid)
+        .where('read', '==', true)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get();
+      allDocs = [...unreadSnap.docs, ...readSnap.docs];
+    } catch {
+      // Composite index missing — fall back to simple recipientUid-only query
+      usedFallback = true;
+      const fallbackSnap = await adminDb
+        .collection('notifications')
+        .where('recipientUid', '==', uid)
+        .limit(limit + 10)
+        .get();
+      allDocs = fallbackSnap.docs;
+    }
     const seen = new Set<string>();
     const merged: ReturnType<typeof serializeNotif>[] = [];
-
-    for (const d of unreadSnap.docs) {
-      if (!seen.has(d.id)) {
-        seen.add(d.id);
-        merged.push(serializeNotif(d));
-      }
+    for (const d of allDocs) {
+      if (!seen.has(d.id)) { seen.add(d.id); merged.push(serializeNotif(d)); }
     }
-    for (const d of readSnap.docs) {
-      if (!seen.has(d.id) && merged.length < limit) {
-        seen.add(d.id);
-        merged.push(serializeNotif(d));
-      }
-    }
-
-    // Sort merged list by createdAt descending
     merged.sort((a, b) => {
       const ta = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
       const tb = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
       return tb - ta;
     });
-
-    const unreadCount = unreadSnap.size;
-
-    return NextResponse.json({ ok: true, notifications: merged, unreadCount });
+    const unreadCount = merged.filter(n => !n.read).length;
+    return NextResponse.json({ ok: true, notifications: merged.slice(0, limit), unreadCount, usedFallback });
   } catch (err: any) {
     console.error('[api/notifications GET]', err?.message || err);
     return NextResponse.json({ ok: true, notifications: [], unreadCount: 0 });

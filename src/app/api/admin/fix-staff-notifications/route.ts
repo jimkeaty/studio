@@ -65,6 +65,12 @@ export async function POST(req: NextRequest) {
           results.push({ email, uid: firebaseUid, action: 'already_ok' });
         }
       }
+      // Always force in_app: true — this is the most common reason bell fails
+      // even when the doc exists (it may have been created with in_app: false)
+      await userRef.set(
+        { notificationPrefs: { in_app: true, email: true, sms: false, push: true }, updatedAt: new Date() },
+        { merge: true }
+      );
     } catch (err: any) {
       errors.push({ email, error: err.message || 'unknown error' });
     }
