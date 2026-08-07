@@ -93,8 +93,9 @@ type ActivityEntry = {
 // Form schema — full field set matching TC Queue
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
-  closingType: z.enum(['buyer', 'listing', 'referral', 'dual']).optional(),
-  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']).optional(),
+  // Accept legacy values ('lease', etc.) via .or(z.string()) so old transactions never fail
+  closingType: z.enum(['buyer', 'listing', 'referral', 'dual', 'lease']).or(z.string()).optional(),
+  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing', 'commercial_sale', 'commercial_lease']).or(z.string()).optional(),
   address: z.string().min(1, 'Address is required'),
   clientName: z.string().optional().or(z.literal('')),
   dealSource: z.string().optional(),

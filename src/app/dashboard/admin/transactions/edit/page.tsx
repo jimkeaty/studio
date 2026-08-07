@@ -146,10 +146,18 @@ function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | 
 const schema = z.object({
   agentId: z.string().optional().or(z.literal('')),
   agentDisplayName: z.string().optional().or(z.literal('')),
-  status: z.enum(['active', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'temp_off_market', 'coming_soon'], { required_error: 'Please select a status to continue' }),
-  closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
-  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing', 'commercial_sale', 'commercial_lease']),
-  address: z.string().min(5, 'Full property address is required'),
+  // Status: include legacy values ('sold', 'coming soon' with space) so old transactions
+  // never fail validation. Any unknown value falls through via .or(z.string()).
+  status: z.enum(['active', 'pending', 'closed', 'cancelled', 'canceled', 'expired',
+    'temp_off_market', 'coming_soon', 'sold', 'coming soon', 'temporary_off_market',
+    'temp off market']).or(z.string()).refine(v => !!v, 'Status is required'),
+  // closingType: include 'lease' (used in older records) and allow any string fallback
+  closingType: z.enum(['buyer', 'listing', 'referral', 'dual', 'lease']).or(z.string()).optional(),
+  // dealType: allow any string so old/unknown deal types never block a save
+  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing',
+    'commercial_sale', 'commercial_lease']).or(z.string()).optional(),
+  // Address: relaxed to min(1) — min(5) blocked saves on short addresses
+  address: z.string().min(1, 'Property address is required'),
   // clientName is optional for referral and listing types (client may not be known yet)
   clientName: z.string().optional().or(z.literal('')),
   dealSource: z.string().optional(),
@@ -788,8 +796,10 @@ export default function EditTransactionPage() {
         form.reset({
           agentId: tx.agentId || '',
           agentDisplayName: tx.agentDisplayName || '',
-          status: (['active','pending','closed','cancelled','canceled','expired','temp_off_market','coming_soon'].includes(tx.status) ? tx.status : 'active') as any,
-          closingType: (tx.closingType as any) || 'buyer',
+          // Pass the raw status value — schema now accepts all legacy values via .or(z.string())
+          status: (tx.status || 'active') as any,
+          // Pass the raw closingType — schema now accepts 'lease' and other legacy values
+          closingType: (tx.closingType as any) || undefined,
           dealType: (tx.dealType || tx.transactionType || 'residential_sale') as any,
           address: tx.address || '',
           clientName: tx.clientName || '',
