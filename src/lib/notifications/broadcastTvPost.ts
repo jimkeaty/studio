@@ -147,18 +147,32 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
       }
     }
 
-    // SMS notification
+    // SMS notification — send directly via Twilio (same as sendNotification)
     if (prefs.sms && agent.phone) {
       try {
-        await adminDb.collection('pendingSms').add({
-          to: agent.phone,
-          body: `Smart Broker: ${title}\n${body}\nView: ${fullUrl}`,
-          createdAt: FieldValue.serverTimestamp(),
-          type: `tv_new_${info.postType}`,
-        });
-        smsSent = true;
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken  = process.env.TWILIO_AUTH_TOKEN;
+        // Get from number from Firestore settings or env
+        let fromNumber: string | null = null;
+        try {
+          const settingsDoc = await adminDb.collection('settings').doc('twilio').get();
+          fromNumber = settingsDoc.exists ? (settingsDoc.data()?.fromNumber || null) : null;
+        } catch {}
+        if (!fromNumber) fromNumber = process.env.TWILIO_FROM_NUMBER || null;
+
+        if (accountSid && authToken && fromNumber) {
+          const twilio = (await import('twilio')).default;
+          const client = twilio(accountSid, authToken);
+          const message = `${title}\n${body}\nView: ${fullUrl}`;
+          await client.messages.create({
+            body: message.slice(0, 1600),
+            from: fromNumber,
+            to: agent.phone,
+          });
+          smsSent = true;
+        }
       } catch (e) {
-        console.error(`[broadcastTvPost] SMS queue failed for ${agent.phone}:`, e);
+        console.error(`[broadcastTvPost] SMS failed for ${agent.phone}:`, e);
       }
     }
 
