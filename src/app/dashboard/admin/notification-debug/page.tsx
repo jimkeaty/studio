@@ -4,7 +4,7 @@ import { useUser } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bug, RefreshCw, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Bug, RefreshCw, CheckCircle, XCircle, AlertTriangle, Radio } from 'lucide-react';
 
 interface StaffRow {
   email: string;
@@ -24,6 +24,33 @@ export default function NotificationDebugPage() {
   const [fixing, setFixing] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
   const [usedFallback, setUsedFallback] = useState(false);
+  const [tvTestType, setTvTestType] = useState<string>('openHouseOpps');
+  const [tvTesting, setTvTesting] = useState(false);
+  const [tvTestResult, setTvTestResult] = useState<string | null>(null);
+
+  const runTvTest = async () => {
+    if (!user) return;
+    setTvTesting(true);
+    setTvTestResult(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/test-tv-broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ postType: tvTestType }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTvTestResult(`✅ Test broadcast sent! Notified ${data.notified} agent(s) for post type: ${data.label}. Check bell icons and email/SMS inboxes.`);
+      } else {
+        setTvTestResult(`❌ Error: ${data.error}`);
+      }
+    } catch (e) {
+      setTvTestResult('❌ Failed: ' + String(e));
+    } finally {
+      setTvTesting(false);
+    }
+  };
 
   const runDiagnostic = async () => {
     if (!user) return;
@@ -93,6 +120,41 @@ export default function NotificationDebugPage() {
           {fixResult}
         </div>
       )}
+
+      {/* ── TV Board Test Broadcast ─────────────────────────────────────────── */}
+      <Card className="border-blue-200 bg-blue-50/30">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Radio className="h-4 w-4 text-blue-600" /> Test TV Board Broadcast
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Send a mock TV board post to all active agents to verify in-app bell, email, and SMS notifications are working end-to-end.
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              className="border rounded px-3 py-1.5 text-sm bg-white"
+              value={tvTestType}
+              onChange={(e) => setTvTestType(e.target.value)}
+            >
+              <option value="openHouseOpps">🏡 Open House Opportunity</option>
+              <option value="buyerNeeds">🏠 Buyer Need</option>
+              <option value="comingSoon">🏷️ Coming Soon</option>
+              <option value="agentHelp">🤝 Agent Help Needed</option>
+            </select>
+            <Button onClick={runTvTest} disabled={tvTesting} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              {tvTesting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
+              {tvTesting ? 'Sending…' : 'Send Test Broadcast'}
+            </Button>
+          </div>
+          {tvTestResult && (
+            <div className={`mt-3 rounded p-3 text-sm font-medium ${tvTestResult.startsWith('✅') ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+              {tvTestResult}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {usedFallback && (
         <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800">
