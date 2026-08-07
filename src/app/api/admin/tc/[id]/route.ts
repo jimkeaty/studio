@@ -990,7 +990,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           // If commission was manually set on the existing transaction, preserve it.
           // Only overwrite commission fields if the existing transaction has NOT been
           // manually overridden.
-          const updatePayload: Record<string, any> = sanitizeForFirestore({ ...txPayload, updatedAt: now });
+          // IMPORTANT: start with existingData as the base so that fields stored in
+          // the full transactions document (staging, inspection, sign order, showing
+          // time, MLS description, etc.) are NOT wiped out by the sparse tcIntakes
+          // wrapper which only carries ~15 denormalized display fields.
+          // txPayload then overlays only the fields the TC actually reviewed/edited.
+          const updatePayload: Record<string, any> = sanitizeForFirestore({
+            ...existingData,
+            ...txPayload,
+            updatedAt: now,
+          });
           if (existingData.commissionOverridden) {
             // Strip all commission-related fields from the update — keep what's saved
             const commissionFields = [
