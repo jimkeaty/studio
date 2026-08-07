@@ -67,6 +67,12 @@ export type AgentProfileFormValues = {
   notes: string;
   endDate: string;
   isDemoAccount: boolean;
+  tvNotificationPrefs: {
+    buyerNeeds:    { in_app: boolean; email: boolean; sms: boolean };
+    comingSoon:    { in_app: boolean; email: boolean; sms: boolean };
+    openHouseOpps: { in_app: boolean; email: boolean; sms: boolean };
+    agentHelp:     { in_app: boolean; email: boolean; sms: boolean };
+  };
 };
 
 type AgentProfileFormProps = {
@@ -186,6 +192,12 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   notes: '',
   isDemoAccount: false,
   endDate: '',
+  tvNotificationPrefs: {
+    buyerNeeds:    { in_app: true, email: false, sms: false },
+    comingSoon:    { in_app: true, email: false, sms: false },
+    openHouseOpps: { in_app: true, email: false, sms: false },
+    agentHelp:     { in_app: true, email: false, sms: false },
+  },
 };
 
 function cloneTiers(tiers: AgentTierFormValue[]) {
@@ -1118,6 +1130,12 @@ export default function AgentProfileForm({
         notes: values.notes || null,
         isDemoAccount: values.isDemoAccount ?? false,
         endDate: values.endDate || null,
+        tvNotificationPrefs: values.tvNotificationPrefs ?? {
+          buyerNeeds:    { in_app: true, email: false, sms: false },
+          comingSoon:    { in_app: true, email: false, sms: false },
+          openHouseOpps: { in_app: true, email: false, sms: false },
+          agentHelp:     { in_app: true, email: false, sms: false },
+        },
       };
 
       const isEditMode = Boolean(agentId);
@@ -2201,6 +2219,69 @@ export default function AgentProfileForm({
       </section>
 
       {(errorMessage || successMessage) && (
+      {/* ── TV Board Notification Preferences ─────────────────────────────── */}
+      <section className="rounded-lg border bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold">TV Board Notification Preferences</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Choose which channels this agent receives when a new post is added to the office TV board.
+          In-app = bell notification. Email and SMS require the agent&apos;s email/phone to be set.
+        </p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="pb-2 text-left font-medium text-gray-600 w-40">Post Type</th>
+                <th className="pb-2 text-center font-medium text-gray-600 w-24">🔔 In-App</th>
+                <th className="pb-2 text-center font-medium text-gray-600 w-24">📧 Email</th>
+                <th className="pb-2 text-center font-medium text-gray-600 w-24">📱 SMS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(
+                [
+                  { key: 'comingSoon',    label: '🏷️ Coming Soon' },
+                  { key: 'buyerNeeds',    label: '🏠 Buyer Needs' },
+                  { key: 'openHouseOpps', label: '🏡 Open House Opps' },
+                  { key: 'agentHelp',     label: '🤝 Agent Help Needed' },
+                ] as const
+              ).map(({ key, label }) => {
+                const prefs = (values.tvNotificationPrefs as any)?.[key] ?? { in_app: true, email: false, sms: false };
+                const update = (channel: 'in_app' | 'email' | 'sms', val: boolean) => {
+                  updateField('tvNotificationPrefs', {
+                    ...values.tvNotificationPrefs,
+                    [key]: { ...prefs, [channel]: val },
+                  } as AgentProfileFormValues['tvNotificationPrefs']);
+                };
+                return (
+                  <tr key={key} className="border-b last:border-0">
+                    <td className="py-3 font-medium text-gray-700">{label}</td>
+                    {(['in_app', 'email', 'sms'] as const).map((ch) => (
+                      <td key={ch} className="py-3 text-center">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300"
+                          checked={prefs[ch] ?? (ch === 'in_app')}
+                          onChange={(e) => update(ch, e.target.checked)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {/* ── Agent ID (read-only system info) ───────────────────────────────── */}
+      {agentId && (
+        <section className="rounded-lg border bg-gray-50 p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">System Info</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Agent ID:</span>
+            <span className="font-mono text-sm text-gray-800 select-all bg-white border rounded px-2 py-0.5">{agentId}</span>
+          </div>
+        </section>
+      )}
         <div
           className={`rounded-md border px-4 py-3 text-sm ${
             errorMessage
