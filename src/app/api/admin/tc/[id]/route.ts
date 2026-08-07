@@ -1074,9 +1074,32 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           // time, MLS description, etc.) are NOT wiped out by the sparse tcIntakes
           // wrapper which only carries ~15 denormalized display fields.
           // txPayload then overlays only the fields the TC actually reviewed/edited.
+          // Null-safe merge: txPayload fields that are null/undefined should NOT
+          // overwrite real values already in existingData. This prevents the sparse
+          // tcIntakes wrapper (which only stores ~15 fields) from nulling out all the
+          // rich data the agent filled in (lender, title, contacts, dates, etc.).
+          // Rule: txPayload wins only when it has an actual non-null value.
+          // Exception: a few TC-controlled fields always win (status, commission, agent).
+          const TC_ALWAYS_WIN = new Set([
+            'agentId', 'agentDisplayName', 'agentType', 'calculationModel',
+            'status', 'transactionType', 'closingType', 'dealType',
+            'splitSnapshot', 'creditSnapshot', 'year', 'source', 'intakeId',
+            'commissionOverride', 'commissionOverrideBy', 'commissionOverrideAt',
+            'isPassThrough', 'reviewStatus', 'updatedAt', 'createdAt',
+          ]);
+          const mergedPayload: Record<string, any> = { ...existingData };
+          for (const [k, v] of Object.entries(txPayload)) {
+            if (TC_ALWAYS_WIN.has(k)) {
+              // TC-controlled fields always win
+              mergedPayload[k] = v;
+            } else if (v !== null && v !== undefined && v !== '') {
+              // Only overwrite if txPayload has a real value
+              mergedPayload[k] = v;
+            }
+            // If txPayload has null/undefined/'', keep existingData value (do nothing)
+          }
           const updatePayload: Record<string, any> = sanitizeForFirestore({
-            ...existingData,
-            ...txPayload,
+            ...mergedPayload,
             updatedAt: now,
           });
           if (existingData.commissionOverridden) {
