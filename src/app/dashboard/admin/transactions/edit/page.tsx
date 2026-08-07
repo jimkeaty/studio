@@ -1166,7 +1166,9 @@ export default function EditTransactionPage() {
       const brokerPct = Number(values.brokerPct) || 0;
       const agentDollar = Number(values.agentDollar) || 0;
       const brokerGci = Number(values.brokerGci) || 0;
-      if (gci > 0 || agentDollar > 0 || brokerGci > 0) {
+      // Always build splitSnapshot when ANY split field has a value — including when
+      // only agentPct or brokerPct changed (e.g. on active listings with $0 GCI so far)
+      if (gci > 0 || agentDollar > 0 || brokerGci > 0 || agentPct > 0 || brokerPct > 0) {
         // Resolve team split values:
         // 1. If manually overridden, use the override value
         // 2. Otherwise, auto-compute from the team leader band percentages (same logic as the display card)

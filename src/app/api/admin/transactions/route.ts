@@ -384,13 +384,26 @@ export async function PATCH(req: NextRequest) {
     }
 
     // If splitSnapshot fields are provided individually, rebuild it
-    if (body.agentNetCommission !== undefined || body.companyRetained !== undefined) {
-      const existingDoc = await adminDb.collection('transactions').doc(id).get();
-      const existing = existingDoc.exists ? existingDoc.data() : {};
-      const currentSplit = existing?.splitSnapshot || {};
-
+    // Merge any split fields present in the payload into splitSnapshot so the display
+    // layer (which reads splitSnapshot) always reflects what was saved.
+    // This covers: direct split edits from admin edit page, legacy agentNetCommission/companyRetained,
+    // and the full splitSnapshot object sent by the admin edit form.
+    const SPLIT_MERGE_FIELDS = ['agentPct', 'agentDollar', 'brokerPct', 'brokerGci',
+      'agentNetCommission', 'companyRetained'];
+    const hasSplitChange = SPLIT_MERGE_FIELDS.some(f => body[f] !== undefined) ||
+      body.splitSnapshot !== undefined;
+    if (hasSplitChange && !updates.splitSnapshot) {
+      // Only do the merge if the form didn't already send a full splitSnapshot object
+      const existingDoc2 = await adminDb.collection('transactions').doc(id).get();
+      const existing2 = existingDoc2.exists ? existingDoc2.data() : {};
+      const currentSplit = (existing2 as any)?.splitSnapshot || {};
       updates.splitSnapshot = {
         ...currentSplit,
+        ...(body.agentPct !== undefined ? { agentSplitPercent: Number(body.agentPct) } : {}),
+        ...(body.agentDollar !== undefined ? { agentNetCommission: Number(body.agentDollar) } : {}),
+        ...(body.brokerPct !== undefined ? { companySplitPercent: Number(body.brokerPct) } : {}),
+        ...(body.brokerGci !== undefined ? { companyRetained: Number(body.brokerGci) } : {}),
+        // Legacy field names (kept for backward compat)
         ...(body.agentNetCommission !== undefined ? { agentNetCommission: Number(body.agentNetCommission) } : {}),
         ...(body.companyRetained !== undefined ? { companyRetained: Number(body.companyRetained) } : {}),
         ...(updates.commission !== undefined ? { grossCommission: Number(updates.commission) } : {}),
