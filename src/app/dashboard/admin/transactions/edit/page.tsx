@@ -144,8 +144,8 @@ function findActiveTier(tiers: CommissionTier[], gci: number): CommissionTier | 
 // Schema — identical to Add Transaction form
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
-  agentId: z.string().min(1, 'Agent is required'),
-  agentDisplayName: z.string().min(1),
+  agentId: z.string().optional().or(z.literal('')),
+  agentDisplayName: z.string().optional().or(z.literal('')),
   status: z.enum(['active', 'pending', 'closed', 'cancelled', 'canceled', 'expired', 'temp_off_market', 'coming_soon'], { required_error: 'Please select a status to continue' }),
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing', 'commercial_sale', 'commercial_lease']),
