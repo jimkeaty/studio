@@ -58,7 +58,6 @@ export default function MyTransactionsPage() {
     } catch { /* non-fatal */ } finally {
       setLoading(false);
     }
-  }, [user]);
   }, [user, isImpersonating, impersonatedAgent]);
 
   useEffect(() => {
