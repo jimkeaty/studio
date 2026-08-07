@@ -62,6 +62,11 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
     // Skip agents with no contact info
     if (!agent.agentId && !doc.id) continue;
 
+    // Resolve the Firebase Auth UID — this is what the bell queries by.
+    // agentProfiles doc.id is a slug (e.g. "abby-broussard"), NOT the Firebase UID.
+    // We must use agent.firebaseUid (set when agent logs in) for the bell to work.
+    const recipientUid: string | null = (agent.firebaseUid as string | undefined) || (agent.uid as string | undefined) || null;
+
     // Get this agent's TV notification preferences
     const tvPrefs: Record<TvPostType, ChannelPrefs> = agent.tvNotificationPrefs ?? {};
     const prefs: ChannelPrefs = tvPrefs[info.postType] ?? DEFAULT_PREFS;
@@ -79,9 +84,10 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
 
     // In-app notification
     if (prefs.in_app ?? DEFAULT_PREFS.in_app) {
+      if (recipientUid) {
       try {
         await adminDb.collection('notifications').add({
-          recipientUid: doc.id,
+          recipientUid,
           title,
           body,
           type: `tv_new_${info.postType}`,
@@ -91,7 +97,8 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
           createdAt: FieldValue.serverTimestamp(),
         });
       } catch (e) {
-        console.error(`[broadcastTvPost] in-app notification failed for ${doc.id}:`, e);
+        console.error(`[broadcastTvPost] in-app notification failed for ${recipientUid}:`, e);
+      }
       }
     }
 
