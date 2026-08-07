@@ -27,6 +27,7 @@ export default function NotificationDebugPage() {
   const [tvTestType, setTvTestType] = useState<string>('openHouseOpps');
   const [tvTesting, setTvTesting] = useState(false);
   const [tvTestResult, setTvTestResult] = useState<string | null>(null);
+  const [tvTestResults, setTvTestResults] = useState<any[]>([]);
 
   const runTvTest = async () => {
     if (!user) return;
@@ -40,11 +41,13 @@ export default function NotificationDebugPage() {
         body: JSON.stringify({ postType: tvTestType }),
       });
       const data = await res.json();
-      if (data.ok) {
-        setTvTestResult(`✅ Test broadcast sent! Notified ${data.notified} agent(s) for post type: ${data.label}. Check bell icons and email/SMS inboxes.`);
-      } else {
-        setTvTestResult(`❌ Error: ${data.error}`);
-      }
+        if (data.ok) {
+          setTvTestResult(`✅ Test broadcast sent! Notified ${data.notified} agent(s) for post type: ${data.label}. Check bell icons and email/SMS inboxes.`);
+          setTvTestResults(data.results || []);
+        } else {
+          setTvTestResult(`❌ Error: ${data.error}`);
+          setTvTestResults([]);
+        }
     } catch (e) {
       setTvTestResult('❌ Failed: ' + String(e));
     } finally {
@@ -151,6 +154,39 @@ export default function NotificationDebugPage() {
           {tvTestResult && (
             <div className={`mt-3 rounded p-3 text-sm font-medium ${tvTestResult.startsWith('✅') ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
               {tvTestResult}
+            </div>
+          )}
+          {tvTestResults.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Delivery Results by Agent:</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border rounded">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Agent</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Email</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600">🔔 In-App</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600">📧 Email</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600">📱 SMS</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tvTestResults.map((r: any, i: number) => (
+                      <tr key={i} className={`border-t ${r.skipped ? 'bg-gray-50 text-gray-400' : 'bg-white'}`}>
+                        <td className="px-3 py-2 font-medium">{r.agentName}</td>
+                        <td className="px-3 py-2 text-gray-500">{r.email || '—'}</td>
+                        <td className="px-3 py-2 text-center">{r.in_app ? '✅' : '—'}</td>
+                        <td className="px-3 py-2 text-center">{r.emailSent ? '✅' : '—'}</td>
+                        <td className="px-3 py-2 text-center">{r.smsSent ? '✅' : '—'}</td>
+                        <td className="px-3 py-2 text-gray-400 italic">
+                          {r.skipped ? r.skipReason : r.noFirebaseUid ? '⚠️ No Firebase UID — bell skipped' : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </CardContent>
