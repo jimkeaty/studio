@@ -232,10 +232,12 @@ const schema = z.object({
   seller4Name: z.string().optional(),
   seller4Email: z.string().email().optional().or(z.literal('')),
   seller4Phone: z.string().optional(),
-  inspectionOrdered: z.enum(['yes', 'no']).optional(),
+  // Accept boolean 'false'/'true' stored by older form versions
+  inspectionOrdered: z.enum(['yes', 'no']).or(z.string()).or(z.boolean()).optional(),
   targetInspectionDate: z.string().optional().or(z.literal('')),
   inspectionTypes: z.array(z.string()).optional(),
-  tcScheduleInspections: z.enum(['yes', 'no', 'other']).optional(),
+  // Accept 'already_scheduled' and boolean 'false' from older records
+  tcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).or(z.string()).or(z.boolean()).optional(),
   tcScheduleInspectionsOther: z.string().optional(),
   inspectorName: z.string().optional(),
   sellerPayingListingAgent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
@@ -265,10 +267,10 @@ const schema = z.object({
   outboundReferralBrokerName: z.string().optional(),
   outboundReferralContactName: z.string().optional(),
   // Pre-listing inspection
-  preListingInspectionOrdered: z.enum(['yes', 'no']).optional(),
+  preListingInspectionOrdered: z.enum(['yes', 'no']).or(z.string()).or(z.boolean()).optional(),
   preListingTargetInspectionDate: z.string().optional().or(z.literal('')),
   preListingInspectionTypes: z.array(z.string()).optional(),
-  preListingTcScheduleInspections: z.enum(['yes', 'no', 'other']).optional(),
+  preListingTcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).or(z.string()).or(z.boolean()).optional(),
   preListingTcScheduleInspectionsOther: z.string().optional(),
   preListingInspectorName: z.string().optional(),
   // Sign order

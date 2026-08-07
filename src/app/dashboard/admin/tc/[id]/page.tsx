@@ -71,8 +71,10 @@ type ActivityEntry = {
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
   // Core
-  closingType: z.enum(['buyer', 'listing', 'referral', 'dual']).optional().default('buyer'),
-  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_sale', 'commercial_lease']).optional().default('residential_sale'),
+  // Accept 'lease' and any legacy value via .or(z.string()) so old transactions never fail
+  closingType: z.enum(['buyer', 'listing', 'referral', 'dual', 'lease']).or(z.string()).optional().default('buyer'),
+  // Accept 'commercial_listing' and any legacy value
+  dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing', 'commercial_sale', 'commercial_lease']).or(z.string()).optional().default('residential_sale'),
   address: z.string().min(1).optional().or(z.literal('')),
   // clientName is optional for referral and listing types (client may not be known yet)
   clientName: z.string().optional().or(z.literal('')),
@@ -203,7 +205,8 @@ const schema = z.object({
   signOwnerName: z.string().optional(),
   signSpecialRequests: z.string().optional(),
   // Buyer inspection
-  inspectionOrdered: z.enum(['yes', 'no']).optional(),
+  // Accept boolean 'false'/'true' stored by older form versions
+  inspectionOrdered: z.enum(['yes', 'no']).or(z.string()).or(z.boolean()).optional(),
   targetInspectionDate: z.string().optional().or(z.literal('')),
   inspectionTypes: z.array(z.string()).optional(),
   tcScheduleInspections: z.string().optional(),
