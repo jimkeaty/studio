@@ -101,6 +101,32 @@ export default function StaffUsersPage() {
   const [bulkFixStatus, setBulkFixStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [bulkFixMsg, setBulkFixMsg] = useState('');
 
+  const [testNotifId, setTestNotifId] = useState<string | null>(null);
+  const [testNotifStatus, setTestNotifStatus] = useState<Record<string, 'loading' | 'sent' | 'error'>>({});
+
+  async function handleSendTestNotification(targetEmail: string) {
+    if (!user) return;
+    setTestNotifStatus(prev => ({ ...prev, [targetEmail]: 'loading' }));
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/test-notification', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      const data = await res.json();
+      const result = data.results?.[0];
+      if (!res.ok || result?.error) throw new Error(result?.error || data.error || 'Failed');
+      setTestNotifStatus(prev => ({ ...prev, [targetEmail]: 'sent' }));
+      setTestNotifId(result.notifId);
+      setTimeout(() => setTestNotifStatus(prev => ({ ...prev, [targetEmail]: undefined as any })), 5000);
+    } catch (err: any) {
+      setTestNotifStatus(prev => ({ ...prev, [targetEmail]: 'error' }));
+      alert(`Test notification failed for ${targetEmail}: ${err.message}`);
+      setTimeout(() => setTestNotifStatus(prev => ({ ...prev, [targetEmail]: undefined as any })), 5000);
+    }
+  }
+
   async function handleBulkFixNotifications() {
     if (!user) return;
     setBulkFixStatus('loading');
@@ -632,6 +658,31 @@ export default function StaffUsersPage() {
             >
               {relinkingId === u.id ? (
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Bell className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
+          {/* Send Test Notification button — writes a test bell notification directly to Firestore */}
+          {u.status === 'active' && (
+            <Button
+              size="sm"
+              variant="outline"
+              className={
+                testNotifStatus[u.email] === 'sent'
+                  ? 'text-green-600 border-green-300 hover:bg-green-50'
+                  : testNotifStatus[u.email] === 'error'
+                  ? 'text-red-600 border-red-300 hover:bg-red-50'
+                  : 'text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700'
+              }
+              title={`Send a test bell notification to ${u.email} to verify in-app delivery`}
+              onClick={() => handleSendTestNotification(u.email)}
+              disabled={testNotifStatus[u.email] === 'loading'}
+            >
+              {testNotifStatus[u.email] === 'loading' ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : testNotifStatus[u.email] === 'sent' ? (
+                <Bell className="h-3.5 w-3.5 fill-current" />
               ) : (
                 <Bell className="h-3.5 w-3.5" />
               )}
