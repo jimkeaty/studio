@@ -465,7 +465,7 @@ export function Header() {
               {!loading && notifications.length > 0 && (
                 <div className="border-t px-4 py-2.5 bg-muted/20">
                   <button
-                    onClick={() => { setNotifOpen(false); router.push('/dashboard'); }}
+                    onClick={() => { setNotifOpen(false); router.push('/dashboard/notifications'); }}
                     className="text-xs text-primary hover:underline font-medium w-full text-center"
                   >
                     View all notifications
