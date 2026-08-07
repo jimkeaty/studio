@@ -910,7 +910,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       };
       const transactionType = txTypeMap[dealType] || 'residential_sale';
 
+      // ── Build txPayload: start with ALL intake fields as the base so that any
+      // field the TC filled in (staging, showing, sign, media, inspection, MLS, etc.)
+      // is included even if it's not in the hardcoded list below.
+      // TC-only workflow fields are excluded from the transaction document.
+      const TC_ONLY_FIELDS = new Set([
+        'status', 'tcStatus', 'assignedTcProfileId', 'reviewedAt', 'reviewedBy',
+        'submittedAt', 'submittedByUid', 'submittedByEmail', 'listingStatus',
+        'id', 'createdAt', 'updatedAt',
+      ]);
+      const intakeBase: Record<string, any> = {};
+      for (const [k, v] of Object.entries(intake as Record<string, any>)) {
+        if (!TC_ONLY_FIELDS.has(k)) intakeBase[k] = v;
+      }
       const txPayload: Record<string, any> = {
+        // Spread all intake fields first so nothing is lost
+        ...intakeBase,
+        // Then overlay the explicitly-handled fields (these always win)
         agentId,
         agentDisplayName,
         agentType,
