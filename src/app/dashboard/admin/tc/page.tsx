@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, Eye, RefreshCw, ClipboardList,
-  Plus, Trash2, ListChecks,
+  Plus, Trash2, ListChecks, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -484,6 +484,14 @@ export default function TcQueuePage() {
                                   {intake.status === 'submitted' ? 'Review' : 'View'}
                                 </Button>
                               </Link>
+                              {intake.approvedTransactionId && (
+                                <Link href={`/dashboard/admin/transactions?txId=${intake.approvedTransactionId}`} className="ml-1">
+                                  <Button size="sm" variant="outline" title="View in Transaction Ledger">
+                                    <ExternalLink className="h-3 w-3 mr-1" />
+                                    Ledger
+                                  </Button>
+                                </Link>
+                              )}
                             </TableCell>
                           </TableRow>
                         );
