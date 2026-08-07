@@ -48,6 +48,7 @@ export type NotificationType =
   | 'commission_summary_prepare'      // 5 days before closing → TC/Staff to prepare summary
   | 'commission_summary_send'         // 3 days before closing → TC/Staff to send summary to agent
   | 'agent_task_reminder'             // weekly hug, post-closing check-in reminders → agent
+  | 'community_comment'               // someone commented on a TV board post → post author notified
   | 'system';                         // generic system notification
 
 export interface NotificationPayload {
@@ -323,6 +324,7 @@ function buildEmailHtml(
     commission_summary_prepare:     'Commission Summary',
     commission_summary_send:        'Commission Summary',
     agent_task_reminder:            'Task Reminder',
+    community_comment:              'New Comment',
     system:                         'System',
   };
   const badge = typeLabel[type] ?? 'Notification';

@@ -15,6 +15,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { sendNotification } from '@/lib/notifications/sendNotification';
+import { getAgentUid } from '@/lib/notifications/getRecipientUids';
 import { FieldValue } from 'firebase-admin/firestore';
 
 const ALLOWED_COLLECTIONS = new Set([
@@ -23,6 +25,14 @@ const ALLOWED_COLLECTIONS = new Set([
   'openHouseListings',
   'agentHelpRequests',
 ]);
+
+/** Human-readable label for each collection */
+const COLLECTION_LABELS: Record<string, string> = {
+  buyerNeeds: 'buyer need',
+  comingSoonListings: 'coming soon listing',
+  openHouseListings: 'open house opportunity',
+  agentHelpRequests: 'agent help request',
+};
 
 function bearer(req: NextRequest) {
   const h = req.headers.get('authorization') || '';
@@ -123,6 +133,33 @@ export async function POST(req: NextRequest) {
       createdByUid: auth.uid,
       createdAt: FieldValue.serverTimestamp(),
     });
+
+    // ── Notify the original post author ───────────────────────────────────
+    void (async () => {
+      try {
+        const postData = postSnap.data() as Record<string, any>;
+        const posterUid = await getAgentUid(
+          adminDb,
+          postData.agentProfileId || postData.createdByUid || '',
+          postData.createdByUid || null,
+        );
+        // Don't notify if the commenter IS the post author
+        if (posterUid && posterUid !== auth.uid) {
+          const label = COLLECTION_LABELS[collection] || 'post';
+          const preview = text.trim().length > 80 ? text.trim().slice(0, 77) + '…' : text.trim();
+          await sendNotification(adminDb, {
+            type: 'community_comment',
+            recipientUids: [posterUid],
+            title: `💬 New comment on your ${label}`,
+            body: `${agentName}: "${preview}"`,
+            url: '/dashboard/tv-mode',
+            senderName: agentName,
+          });
+        }
+      } catch (notifErr: any) {
+        console.warn('[comments/POST] Author notification failed (non-fatal):', notifErr?.message);
+      }
+    })();
 
     return NextResponse.json({ ok: true, id: commentRef.id, agentName });
   } catch (err: any) {
