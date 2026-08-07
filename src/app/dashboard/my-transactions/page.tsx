@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Plus, ChevronRight, Home, Users, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 const STATUS_COLORS: Record<string, string> = {
   active:          'bg-green-100 text-green-800',
@@ -33,6 +34,7 @@ function formatDate(d?: string) {
 export default function MyTransactionsPage() {
   const { user, loading: userLoading } = useUser();
   const router = useRouter();
+  const { isImpersonating, impersonatedAgent, impersonationReady } = useEffectiveUser();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +42,13 @@ export default function MyTransactionsPage() {
     if (!user) return;
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/agent/transactions', {
+      // When an admin is impersonating an agent, pass viewAs so the API
+      // returns that agent's transactions instead of the admin's (empty) list.
+      const viewAs = isImpersonating && impersonatedAgent ? impersonatedAgent.uid : null;
+      const url = viewAs
+        ? `/api/agent/transactions?viewAs=${encodeURIComponent(viewAs)}`
+        : '/api/agent/transactions';
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -51,11 +59,16 @@ export default function MyTransactionsPage() {
       setLoading(false);
     }
   }, [user]);
+  }, [user, isImpersonating, impersonatedAgent]);
 
   useEffect(() => {
     if (!userLoading && user) load();
     else if (!userLoading && !user) setLoading(false);
   }, [user, userLoading, load]);
+  // Re-fetch when impersonation state changes (admin switches agents)
+  useEffect(() => {
+    if (impersonationReady && user) load();
+  }, [impersonationReady, isImpersonating, impersonatedAgent?.uid]);
 
   if (userLoading || loading) {
     return (

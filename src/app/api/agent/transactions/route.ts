@@ -65,6 +65,21 @@ export async function GET(req: NextRequest) {
   try {
     // Resolve all identity IDs for this agent (Firebase UID, agentProfiles docId, agentId field)
     const agentIds = await resolveAgentIds(uid);
+    // ── viewAs: admin impersonating an agent ──────────────────────────────────
+    // When an admin views the portal as another agent, they pass ?viewAs=<agentUID>
+    // in the query string. We verify the caller is an admin before honoring it.
+    const url = new URL(req.url);
+    const viewAsParam = url.searchParams.get('viewAs');
+    if (viewAsParam) {
+      const { isAdminLike } = await import('@/lib/auth/staffAccess');
+      const callerIsAdmin = await isAdminLike(uid);
+      if (callerIsAdmin) {
+        // Replace the agent ID set with the impersonated agent's IDs
+        const viewAsIds = await resolveAgentIds(viewAsParam);
+        agentIds.clear();
+        for (const id of viewAsIds) agentIds.add(id);
+      }
+    }
     const idArray = Array.from(agentIds);
 
     // Firestore 'in' supports up to 30 values. Batch if needed (rare edge case).
