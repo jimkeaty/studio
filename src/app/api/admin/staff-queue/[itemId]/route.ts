@@ -107,6 +107,10 @@ const EDITABLE_TX_FIELDS = new Set([
 const COMMISSION_TRIGGER_FIELDS = new Set([
   'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice',
 ]);
+// Fields that directly set split values — when ONLY these change (no GCI change),
+// merge them straight into splitSnapshot instead of running a profile recalculation.
+// This preserves manual overrides set by staff without reverting to profile defaults.
+const DIRECT_SPLIT_FIELDS = new Set(['agentPct', 'agentDollar', 'brokerPct', 'brokerGci']);
 
 // Default checklist items seeded for new staff queue items (mirrors TC queue checklist)
 const DEFAULT_CHECKLIST = [
@@ -344,6 +348,33 @@ export async function PATCH(
           }
         }
 
+        // ── Direct split merge ─────────────────────────────────────────────
+        // When staff manually edits agentPct/agentDollar/brokerPct/brokerGci
+        // WITHOUT changing GCI, merge those values straight into splitSnapshot
+        // so displayed values update without reverting to profile-based defaults.
+        const hasDirectSplitChange = Object.keys(txUpdates).some(k => DIRECT_SPLIT_FIELDS.has(k));
+        if (hasDirectSplitChange && !hasCommissionChange) {
+          const existingSplit = currentTx.splitSnapshot || {};
+          const newAgentPct = allowed.agentPct != null ? Number(allowed.agentPct) : null;
+          const newAgentDollar = allowed.agentDollar != null ? Number(allowed.agentDollar) : null;
+          const newBrokerPct = allowed.brokerPct != null ? Number(allowed.brokerPct) : null;
+          const newBrokerGci = allowed.brokerGci != null ? Number(allowed.brokerGci) : null;
+          const _mergedForFee = { ...currentTx, ...allowed };
+          const _feeAmt = Number(_mergedForFee.txComplianceFeeAmount) || 0;
+          const _feePaidBy = String(_mergedForFee.txComplianceFeePaidBy || '').toLowerCase().trim();
+          const _agentPaysFee = _mergedForFee.txComplianceFee === 'yes' && _feeAmt > 0 && _feePaidBy === 'agent';
+          const netAgentDollar = newAgentDollar != null && _agentPaysFee
+            ? Number(Math.max(0, newAgentDollar - _feeAmt).toFixed(2))
+            : newAgentDollar;
+          allowed.splitSnapshot = {
+            ...existingSplit,
+            ...(newAgentPct != null ? { agentSplitPercent: newAgentPct } : {}),
+            ...(netAgentDollar != null ? { agentNetCommission: netAgentDollar } : {}),
+            ...(newBrokerPct != null ? { companySplitPercent: newBrokerPct } : {}),
+            ...(newBrokerGci != null ? { companyRetained: newBrokerGci } : {}),
+            ...(_agentPaysFee && newAgentDollar != null ? { agentFeeDeduction: _feeAmt } : {}),
+          };
+        }
         await txRef.update(allowed);
 
         // Rebuild agent rollup so leaderboard and tier progression stay in sync
