@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
       const tb = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
       return tb - ta;
     });
-    const unreadCount = merged.filter(n => !n.read).length;
+    const unreadCount = merged.filter(n => !(n as any).read).length;
     return NextResponse.json({ ok: true, notifications: merged.slice(0, limit), unreadCount, usedFallback });
   } catch (err: any) {
     console.error('[api/notifications GET]', err?.message || err);
