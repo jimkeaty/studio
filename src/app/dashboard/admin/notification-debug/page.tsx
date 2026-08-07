@@ -28,6 +28,28 @@ export default function NotificationDebugPage() {
   const [tvTesting, setTvTesting] = useState(false);
   const [tvTestResult, setTvTestResult] = useState<string | null>(null);
   const [tvTestResults, setTvTestResults] = useState<any[]>([]);
+  const [bulkTvStatus, setBulkTvStatus] = useState<string | null>(null);
+  const [bulkTvRunning, setBulkTvRunning] = useState(false);
+
+  async function enableAllTvNotifications() {
+    if (!user) return;
+    if (!confirm('This will enable In-App, Email, and SMS for all 4 TV board post types for every active agent. Agents can turn off channels in their own preferences. Continue?')) return;
+    setBulkTvRunning(true);
+    setBulkTvStatus(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/bulk-enable-tv-notifications', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setBulkTvStatus(data.ok ? `✅ ${data.message}` : `❌ Error: ${data.error}`);
+    } catch (err: any) {
+      setBulkTvStatus(`❌ ${err.message}`);
+    } finally {
+      setBulkTvRunning(false);
+    }
+  }
 
   const runTvTest = async () => {
     if (!user) return;
@@ -110,6 +132,10 @@ export default function NotificationDebugPage() {
           <Button onClick={runFix} disabled={fixing} variant="outline" className="gap-2">
             {fixing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4 text-green-600" />}
             {fixing ? 'Fixing…' : 'Force-Fix All Staff'}
+          </button>
+          <button onClick={enableAllTvNotifications} disabled={bulkTvRunning}
+            className="flex items-center gap-2 px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium disabled:opacity-50">
+            {bulkTvRunning ? '⏳ Enabling…' : '📡 Enable All TV Notifications'}
           </Button>
           <Button onClick={runDiagnostic} disabled={loading} className="gap-2">
             {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Bug className="h-4 w-4" />}
@@ -118,6 +144,11 @@ export default function NotificationDebugPage() {
         </div>
       </div>
 
+      {bulkTvStatus && (
+        <div className={`mb-4 rounded p-3 text-sm font-medium ${bulkTvStatus.startsWith('✅') ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+          {bulkTvStatus}
+        </div>
+      )}
       {fixResult && (
         <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800 font-mono break-all">
           {fixResult}
