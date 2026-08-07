@@ -2218,7 +2218,7 @@ export default function AgentProfileForm({
         </div>
       </section>
 
-      {(errorMessage || successMessage) && (
+
       {/* ── TV Board Notification Preferences ─────────────────────────────── */}
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">TV Board Notification Preferences</h2>
@@ -2282,6 +2282,7 @@ export default function AgentProfileForm({
           </div>
         </section>
       )}
+      {(errorMessage || successMessage) && (
         <div
           className={`rounded-md border px-4 py-3 text-sm ${
             errorMessage
