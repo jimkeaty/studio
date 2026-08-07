@@ -567,6 +567,12 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const isActiveTx = ['active', 'coming_soon', 'temp_off_market'].includes(txStatus);
   const commissionIsEstimated = isActiveTx && txSalePrice === 0 && txListPrice > 0;
 
+  // Extended commission display fields
+  const commissionBasePrice = Number(tx.priceCommissionBasedOn) || txSalePrice || (commissionIsEstimated ? txListPrice : 0);
+  const buyerCommPct = tx.sellerPayingBuyerAgent ?? null;
+  const displayPrice = commissionIsEstimated ? txListPrice : (txSalePrice || txListPrice);
+  const fmt$ = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
   const f = form; // shorthand
 
   return (
@@ -599,7 +605,7 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       )}
 
       {/* ── Commission (read-only) ─────────────────────────────────────────── */}
-      {(agentNet !== null || agentPct !== null || sellerCommPct !== null) && (
+      {(agentNet !== null || agentPct !== null || sellerCommPct !== null || displayPrice > 0) && (
         <Card className="border-green-200 bg-green-50/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -617,9 +623,28 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           </CardHeader>
           <CardContent>
             <Grid3>
-              {sellerCommPct !== null && <Dl label="Commission %" value={`${sellerCommPct}%`} />}
+              {/* Row 1: Price fields */}
+              {displayPrice > 0 && (
+                <Dl label={commissionIsEstimated ? 'List Price' : 'Sale Price'} value={fmt$(displayPrice)} />
+              )}
+              {commissionBasePrice > 0 && commissionBasePrice !== displayPrice && (
+                <Dl label="Commission Base Price" value={fmt$(commissionBasePrice)} />
+              )}
+              {/* Row 2: Commission % fields */}
+              {sellerCommPct !== null && (
+                <Dl label="Seller Paying (Listing Agent %)" value={`${sellerCommPct}%`} />
+              )}
+              {buyerCommPct !== null && (
+                <Dl label="Seller Paying (Buyer Agent %)" value={`${buyerCommPct}%`} />
+              )}
+              {/* Row 3: Agent split and net */}
               {agentPct !== null && <Dl label="My Split %" value={`${agentPct}%`} />}
-              {agentNet !== null && <Dl label={commissionIsEstimated ? 'Est. Net to Me' : 'Net to Me'} value={`$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />}
+              {agentNet !== null && (
+                <Dl
+                  label={commissionIsEstimated ? 'Est. Net to Me' : 'Net to Me'}
+                  value={`$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                />
+              )}
             </Grid3>
           </CardContent>
         </Card>

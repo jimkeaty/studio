@@ -99,6 +99,16 @@ export default function MyTransactionsPage() {
     const clientName = tx.clientName || tx.sellerName || tx.buyerName || '';
     const hasTasksAlert = tx.pendingTasksCount > 0;
 
+    // Commission fields — agent-visible only (no broker GCI $ or broker split %)
+    const salePrice = Number(tx.salePrice) || Number(tx.listPrice) || 0;
+    const isActive = status === 'active' || status === 'coming_soon';
+    const priceLabel = isActive ? 'List Price' : 'Sale Price';
+    const commPct = tx.sellerPayingListingAgent ?? tx.commissionPercent ?? null;
+    const agentSplitPct = tx.splitSnapshot?.agentSplitPercent ?? tx.agentPct ?? null;
+    const agentNet = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? null;
+    const hasCommission = commPct !== null || agentSplitPct !== null || agentNet !== null;
+    const fmt$ = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
     return (
       <Link href={`/dashboard/my-transactions/${tx.id}`}>
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
@@ -127,6 +137,25 @@ export default function MyTransactionsPage() {
                       <span className="text-xs text-muted-foreground">Close: {formatDate(closeDate)}</span>
                     )}
                   </div>
+                  {/* Commission summary row */}
+                  {(salePrice > 0 || hasCommission) && (
+                    <div className="flex items-center gap-3 mt-2 flex-wrap text-xs text-muted-foreground">
+                      {salePrice > 0 && (
+                        <span className="font-medium text-foreground">{priceLabel}: {fmt$(salePrice)}</span>
+                      )}
+                      {commPct !== null && (
+                        <span>Comm: {commPct}%</span>
+                      )}
+                      {agentSplitPct !== null && (
+                        <span>My Split: {agentSplitPct}%</span>
+                      )}
+                      {agentNet !== null && (
+                        <span className="font-semibold text-green-700 dark:text-green-400">
+                          {isActive ? 'Est. ' : ''}Net: {fmt$(Number(agentNet))}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
