@@ -17,6 +17,24 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 const COL = 'openHouseListings';
 
+/** Returns the Monday of the week containing dateStr (YYYY-MM-DD) */
+function getWeekOf(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d);
+  monday.setDate(diff);
+  return monday.toISOString().split('T')[0];
+}
+
+/** Get all staff/admin UIDs for notifications */
+async function getStaffUids(): Promise<string[]> {
+  const snap = await adminDb.collection('users')
+    .where('role', 'in', ['staff', 'admin', 'broker'])
+    .get();
+  return snap.docs.map(d => d.id);
+}
+
 function bearer(req: NextRequest) {
   const h = req.headers.get('authorization') || '';
   return h.startsWith('Bearer ') ? h.slice(7).trim() : null;
@@ -157,6 +175,75 @@ export async function POST(
       }
     } catch (notifyErr) {
       console.error('open-house-claim notify error:', notifyErr);
+    }
+
+
+    // Auto-create open house submission + staff queue entry when agent claims a TV board slot
+    try {
+      const submissionNow = new Date().toISOString();
+      const submission: Record<string, any> = {
+        agentId: auth.uid,
+        agentUid: auth.uid,
+        agentName: claimantName.trim(),
+        agentPhone: claimantPhone.trim() || null,
+        propertyAddress: data.address || null,
+        mlsNumber: data.mlsNumber || null,
+        openHouseDate: claimedDate,
+        startTime: claimedStartTime,
+        endTime: claimedEndTime,
+        specialNotes: data.compensation ? `Compensation offered: ${data.compensation}` : null,
+        status: 'pending',
+        checklist: { mls: false, boomtown: false, email: false },
+        emailSentAt: null,
+        emailSentBy: null,
+        staffNotes: null,
+        cancelReason: null,
+        changeHistory: [],
+        source: 'tv_board_claim',
+        openHouseListingId: params.id,
+        claimId,
+        createdAt: submissionNow,
+        updatedAt: submissionNow,
+        weekOf: getWeekOf(claimedDate),
+      };
+      const submissionRef = await adminDb.collection('openHouseSubmissions').add(submission);
+      await adminDb.collection('staffQueue').add({
+        actionType: 'open_house',
+        submissionId: submissionRef.id,
+        agentId: auth.uid,
+        agentName: claimantName.trim(),
+        submittedBy: auth.uid,
+        submittedByName: claimantName.trim(),
+        address: data.address || null,
+        openHouseDate: claimedDate,
+        startTime: claimedStartTime,
+        endTime: claimedEndTime,
+        specialNotes: data.compensation ? `Compensation offered: ${data.compensation}` : null,
+        status: 'pending_review',
+        source: 'tv_board_claim',
+        openHouseListingId: params.id,
+        claimId,
+        reviewedBy: null,
+        reviewedAt: null,
+        staffNotes: null,
+        createdAt: submissionNow,
+        updatedAt: submissionNow,
+      });
+      const staffUids = await getStaffUids();
+      if (staffUids.length > 0) {
+        const dateLabel = claimedDate
+          ? new Date(claimedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : claimedDate;
+        await sendNotification(adminDb, {
+          type: 'staff_queue_new',
+          recipientUids: staffUids,
+          title: '🏠 Open House Claimed (Auto-Submitted)',
+          body: `${claimantName.trim()} claimed an open house at ${data.address || 'a listing'} for ${dateLabel} (${claimedStartTime}–${claimedEndTime}). Auto-added to staff queue.`,
+          url: '/dashboard/admin/staff-queue',
+        });
+      }
+    } catch (autoSubmitErr) {
+      console.error('[open-house-claim] Auto-submission failed (non-fatal):', autoSubmitErr);
     }
 
     return NextResponse.json({ ok: true, claimId });
