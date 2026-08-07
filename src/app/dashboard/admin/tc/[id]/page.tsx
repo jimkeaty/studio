@@ -2273,7 +2273,7 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
             <SectionCard title="Buyer Inspections" icon={<Hammer className="h-4 w-4" />}>
               <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
                 <FormItem><FormLabel>Has Inspection Been Ordered?</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                  <Select onValueChange={field.onChange} value={field.value != null ? String(field.value) : undefined} disabled={isReadOnly}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value="yes">Yes</SelectItem>

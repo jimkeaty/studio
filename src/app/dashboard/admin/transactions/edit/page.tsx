@@ -2083,8 +2083,8 @@ export default function EditTransactionPage() {
           <Section title="Inspections">
             <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
               <FormItem>
-                <FormLabel>Has Inspection Been Ordered?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+              <FormLabel>Has Inspection Been Ordered?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value != null ? String(field.value) : undefined}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="yes">Yes</SelectItem>
@@ -2116,8 +2116,8 @@ export default function EditTransactionPage() {
             </div>
             <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
               <FormItem>
-                <FormLabel>Do you want TC to help schedule inspections?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+              <FormLabel>Do you want TC to help schedule inspections?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value != null ? String(field.value) : undefined}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="yes">Yes</SelectItem>
@@ -2944,7 +2944,7 @@ export default function EditTransactionPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField control={form.control} name="preListingInspectionOrdered" render={({ field }) => (
                 <FormItem><FormLabel>Pre-Listing Inspection Ordered?</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value != null ? String(field.value) : undefined}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value="yes">Yes</SelectItem>
@@ -2959,7 +2959,7 @@ export default function EditTransactionPage() {
             </div>
             <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
               <FormItem><FormLabel>TC to help schedule?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={field.onChange} value={field.value != null ? String(field.value) : undefined}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="yes">Yes</SelectItem>
