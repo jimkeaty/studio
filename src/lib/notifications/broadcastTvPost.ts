@@ -42,7 +42,18 @@ interface ChannelPrefs {
 
 const DEFAULT_PREFS: ChannelPrefs = { in_app: true, email: false, sms: false };
 
-export async function broadcastTvPost(info: PostInfo): Promise<{ notified: number }> {
+export interface BroadcastAgentResult {
+  agentName: string;
+  email: string;
+  in_app: boolean;
+  emailSent: boolean;
+  smsSent: boolean;
+  skipped: boolean;
+  skipReason?: string;
+  noFirebaseUid?: boolean;
+}
+
+export async function broadcastTvPost(info: PostInfo): Promise<{ notified: number; results: BroadcastAgentResult[] }> {
   const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app';
   const fullUrl = info.dashboardUrl.startsWith('http')
     ? info.dashboardUrl
@@ -55,12 +66,18 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
     .get();
 
   let notified = 0;
+  const results: BroadcastAgentResult[] = [];
 
   for (const doc of profilesSnap.docs) {
     const agent = doc.data();
+    const agentName = agent.displayName || agent.firstName || doc.id;
+    const agentEmail = agent.email || '';
 
     // Skip agents with no contact info
-    if (!agent.agentId && !doc.id) continue;
+    if (!agent.agentId && !doc.id) {
+      results.push({ agentName: doc.id, email: '', in_app: false, emailSent: false, smsSent: false, skipped: true, skipReason: 'No agentId' });
+      continue;
+    }
 
     // Resolve the Firebase Auth UID — this is what the bell queries by.
     // agentProfiles doc.id is a slug (e.g. "abby-broussard"), NOT the Firebase UID.
@@ -75,12 +92,18 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
     const wantsAny = (prefs.in_app ?? DEFAULT_PREFS.in_app)
       || (prefs.email ?? DEFAULT_PREFS.email)
       || (prefs.sms ?? DEFAULT_PREFS.sms);
-    if (!wantsAny) continue;
+    if (!wantsAny) {
+      results.push({ agentName, email: agentEmail, in_app: false, emailSent: false, smsSent: false, skipped: true, skipReason: 'All channels opted out' });
+      continue;
+    }
 
     const title = `${info.emoji} New ${info.label} from ${info.agentName}`;
     const body = info.description;
 
     notified++;
+    let inAppSent = false;
+    let emailSent = false;
+    let smsSent = false;
 
     // In-app notification
     if (prefs.in_app ?? DEFAULT_PREFS.in_app) {
@@ -96,6 +119,7 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
           actionUrl: fullUrl,
           createdAt: FieldValue.serverTimestamp(),
         });
+        inAppSent = true;
       } catch (e) {
         console.error(`[broadcastTvPost] in-app notification failed for ${recipientUid}:`, e);
       }
@@ -116,6 +140,7 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
             subject: title,
             html: buildBroadcastEmail(agent.displayName || agent.firstName || 'Agent', info, fullUrl),
           });
+          emailSent = true;
         }
       } catch (e) {
         console.error(`[broadcastTvPost] email failed for ${agent.email}:`, e);
@@ -131,13 +156,24 @@ export async function broadcastTvPost(info: PostInfo): Promise<{ notified: numbe
           createdAt: FieldValue.serverTimestamp(),
           type: `tv_new_${info.postType}`,
         });
+        smsSent = true;
       } catch (e) {
         console.error(`[broadcastTvPost] SMS queue failed for ${agent.phone}:`, e);
       }
     }
+
+    results.push({
+      agentName,
+      email: agentEmail,
+      in_app: inAppSent,
+      emailSent,
+      smsSent,
+      skipped: false,
+      noFirebaseUid: !recipientUid,
+    });
   }
 
-  return { notified };
+  return { notified, results };
 }
 
 function buildBroadcastEmail(

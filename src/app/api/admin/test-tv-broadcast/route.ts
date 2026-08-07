@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       dashboardUrl: '/dashboard/community',
     });
 
-    return NextResponse.json({ ok: true, notified: result.notified, postType, label });
+    return NextResponse.json({ ok: true, notified: result.notified, results: result.results, postType, label });
   } catch (err: any) {
     console.error('[test-tv-broadcast]', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
