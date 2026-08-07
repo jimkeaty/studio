@@ -132,11 +132,11 @@ export default function NotificationDebugPage() {
           <Button onClick={runFix} disabled={fixing} variant="outline" className="gap-2">
             {fixing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4 text-green-600" />}
             {fixing ? 'Fixing…' : 'Force-Fix All Staff'}
-          </button>
+          </Button>
           <button onClick={enableAllTvNotifications} disabled={bulkTvRunning}
             className="flex items-center gap-2 px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium disabled:opacity-50">
             {bulkTvRunning ? '⏳ Enabling…' : '📡 Enable All TV Notifications'}
-          </Button>
+          </button>
           <Button onClick={runDiagnostic} disabled={loading} className="gap-2">
             {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Bug className="h-4 w-4" />}
             {loading ? 'Running…' : 'Run Diagnostic'}
