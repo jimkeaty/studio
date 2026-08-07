@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase/admin';
+import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 import { broadcastTvPost, type TvPostType } from '@/lib/notifications/broadcastTvPost';
 
 export async function POST(req: NextRequest) {
@@ -9,9 +10,9 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const decoded = await adminAuth.verifyIdToken(token);
-    const claims = decoded as any;
-    const isAdmin = claims.role === 'admin' || claims.role === 'broker' || claims.isAdmin === true;
-    if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const callerUid = decoded.uid;
+    const adminCheck = await isAdminLike(callerUid);
+    if (!adminCheck) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
     const postType: TvPostType = body.postType || 'openHouseOpps';
