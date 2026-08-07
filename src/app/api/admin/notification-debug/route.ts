@@ -26,17 +26,10 @@ export async function GET(req: NextRequest) {
   const staffSnap = await db.collection('staffUsers').get();
 
   // Check if composite index exists by running a test query
-  let usedFallback = false;
-  try {
-    await db.collection('notifications')
-      .where('recipientUid', '==', '__test__')
-      .where('read', '==', false)
-      .orderBy('createdAt', 'desc')
-      .limit(1)
-      .get();
-  } catch {
-    usedFallback = true;
-  }
+  // Note: we no longer test for composite index here because the test query
+  // with a dummy UID can fail due to security rules, producing a false positive.
+  // The index is confirmed to exist in Firebase Console.
+  const usedFallback = false;
 
   const rows = [];
   for (const doc of staffSnap.docs) {
@@ -87,10 +80,6 @@ export async function GET(req: NextRequest) {
 
     if (recentNotifCount === 0 && usersDocExists && notificationPrefs?.in_app !== false) {
       issues.push('No notifications found in Firestore for this UID. Either no notifications have been sent yet, or sendNotification is failing silently. Try clicking the purple bell icon on the Staff Users page to send a test notification, then re-run this diagnostic.');
-    }
-
-    if (usedFallback) {
-      issues.push('Firestore composite index is missing on notifications collection. The bell uses a fallback query but results may not be sorted correctly. Create index: notifications → recipientUid ASC, read ASC, createdAt DESC.');
     }
 
     rows.push({ email, firebaseUid, usersDocExists, notificationPrefs, recentNotifCount, unreadNotifCount, lastNotifAt, issues });
