@@ -501,10 +501,73 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
         // Also sync address to propertyAddress
         if (updates.address) txSyncUpdate.propertyAddress = updates.address;
+        // ── Recalculate splitSnapshot when commission fields change ──────────
+        // The ledger and agent view display from splitSnapshot, NOT raw agentPct/agentDollar.
+        // Without this, commission edits appear to save but the displayed values don't update.
+        const COMMISSION_TRIGGER = new Set(['salePrice','commissionPercent','gci','commission','commissionBasePrice','agentPct','agentDollar','brokerPct','brokerGci']);
+        const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
+        if (hasCommissionChange) {
+          try {
+            const currentTxDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
+            const currentTx = currentTxDoc.exists ? (currentTxDoc.data() as any) : {};
+            const merged = { ...currentTx, ...txSyncUpdate };
+            const newGCI = resolveGCI({
+              gci: merged.gci,
+              salePrice: merged.salePrice,
+              commissionPercent: merged.commissionPercent,
+              commissionBasePrice: merged.commissionBasePrice,
+            });
+            const agentIdForCalc = String(currentTx.agentId || intake.agentId || '').trim();
+            if (newGCI > 0 && agentIdForCalc) {
+              const txDate = merged.closedDate || merged.contractDate || null;
+              const calculation = await resolveTransactionCalculation({
+                agentId: agentIdForCalc,
+                agentDisplayName: String(currentTx.agentDisplayName || intake.agentDisplayName || '').trim(),
+                commission: newGCI,
+                transactionDate: txDate,
+              });
+              txSyncUpdate.commission = newGCI;
+              txSyncUpdate.splitSnapshot = calculation.splitSnapshot;
+              txSyncUpdate.creditSnapshot = calculation.creditSnapshot;
+              txSyncUpdate.agentType = calculation.agentType;
+              txSyncUpdate.calculationModel = calculation.calculationModel;
+              // Apply agent-paid compliance fee deduction if applicable
+              const _feeAmt = Number(merged.txComplianceFeeAmount) || 0;
+              const _feePaidBy = String(merged.txComplianceFeePaidBy || '').toLowerCase().trim();
+              if (merged.txComplianceFee === 'yes' && _feeAmt > 0 && _feePaidBy === 'agent') {
+                const _rawNet = Number(txSyncUpdate.splitSnapshot.agentNetCommission) || 0;
+                txSyncUpdate.splitSnapshot = {
+                  ...txSyncUpdate.splitSnapshot,
+                  agentNetCommission: Number(Math.max(0, _rawNet - _feeAmt).toFixed(2)),
+                  agentFeeDeduction: _feeAmt,
+                };
+              }
+            }
+          } catch (calcErr: any) {
+            console.warn('[TC update] splitSnapshot recalculation failed (non-fatal):', calcErr?.message);
+          }
+        }
         try {
           await adminDb.collection('transactions').doc(linkedTxId).update(txSyncUpdate);
         } catch (syncErr: any) {
           console.warn('[TC update] Failed to sync to transactions doc:', syncErr.message);
+        }
+        // Rebuild agent rollup so leaderboard and tier stay in sync after commission change
+        if (hasCommissionChange) {
+          try {
+            const agentIdForRollup = String(intake.agentId || '').trim();
+            const currentTxDocForYear = await adminDb.collection('transactions').doc(linkedTxId).get();
+            const txYear = Number(
+              (currentTxDocForYear.exists ? (currentTxDocForYear.data() as any).year : null) ||
+              new Date().getFullYear()
+            );
+            if (agentIdForRollup && txYear) {
+              const { rebuildAgentRollup } = await import('@/lib/rollups/rebuildAgentRollup');
+              await rebuildAgentRollup(adminDb, agentIdForRollup, txYear);
+            }
+          } catch (rollupErr: any) {
+            console.warn('[TC update] Rollup rebuild failed (non-fatal):', rollupErr?.message);
+          }
         }
       }
 
