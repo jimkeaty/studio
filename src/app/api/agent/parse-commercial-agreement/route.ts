@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin';
+import { admin } from '@/lib/firebase/admin';
 import OpenAI from 'openai';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
@@ -325,7 +326,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AI returned invalid JSON. Please fill the form manually.' }, { status: 422 });
     }
 
-    return NextResponse.json({ success: true, data: extracted });
+    // This mirrors what parse-purchase-agreement and parse-land-agreement do.
+    // Without this, the document never appears in the transaction's documents array.
+    const BUCKET_NAME = 'smart-broker-usa.firebasestorage.app';
+    let savedDoc: { name: string; url: string; storagePath: string; uploadedAt: string } | null = null;
+    try {
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `transactions/documents/${uid}/${timestamp}-${safeName}`;
+      const bucket = admin.storage().bucket(BUCKET_NAME);
+      const blob = bucket.file(storagePath);
+      const downloadToken = crypto.randomUUID();
+      await blob.save(buffer, {
+        metadata: {
+          contentType: 'application/pdf',
+          metadata: { firebaseStorageDownloadTokens: downloadToken, uploadedBy: uid },
+        },
+      });
+      const encodedPath = encodeURIComponent(storagePath);
+      const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET_NAME}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+      const autoName = `Commercial Agreement — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      savedDoc = { name: autoName, url: downloadUrl, storagePath, uploadedAt: new Date().toISOString() };
+    } catch (storageErr) {
+      console.warn('[parse-commercial-agreement] Storage save failed (non-critical):', storageErr);
+    }
+
+    return NextResponse.json({ success: true, data: extracted, savedDoc });
 
   } catch (err) {
     console.error('parse-commercial-agreement error:', err);

@@ -624,6 +624,15 @@ export default function AddTransactionPage() {
   const [pdfDocType, setPdfDocType] = useState<'residential' | 'land' | 'commercial' | null>(null);
 
   const handlePdfUpload = async (file: File) => {
+  // ── Document upload state — MUST be declared before PDF upload handlers ──────
+  // These handlers call setUploadedDocs; if the state is declared after them,
+  // the closures capture a stale/undefined reference and uploads are silently lost.
+  type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string };
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const [docUploading, setDocUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePdfUpload = async (file: File) => {
     if (!user) return;
     setPdfStep('extracting');
     setPdfName(file.name);
@@ -1104,12 +1113,6 @@ export default function AddTransactionPage() {
       setPdfStep('form');
     }
   };
-
-  // ── Document upload state ──────────────────────────────────────────────────
-  type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string };
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
-  const [docUploading, setDocUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDocUpload = async (files: FileList | null) => {
     if (!files || !user) return;
