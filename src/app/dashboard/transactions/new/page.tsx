@@ -4834,8 +4834,6 @@ export default function AddTransactionPage() {
               )} />
             )}
 
-            {/* Per-type inspector rows */}
-            <div className="space-y-3">
               {/* Per-type inspector rows — checkbox to expand (same pattern as Pre-Listing Inspections) */}
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-foreground mb-2">Inspection Types</p>
