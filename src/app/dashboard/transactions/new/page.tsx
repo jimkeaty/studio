@@ -1930,6 +1930,33 @@ export default function AddTransactionPage() {
           ...values,
           clientName: resolvedClientName,
           documents: uploadedDocs,
+          // Inspection row data — per-type inspector details with resolved vendor names
+          inspectionRowData: Object.fromEntries(
+            INSP_TYPES.map(({ key, label }) => {
+              const row = inspRows[key];
+              if (!row) return [key, null];
+              const vendors = inspVendors[key] || [];
+              const generalVendors = inspVendors['inspector_general'] || [];
+              const effectiveVendorId = row.vendorId === 'USE_GENERAL'
+                ? (inspRows['inspector_general']?.vendorId || '')
+                : row.vendorId;
+              const vendorList = row.vendorId === 'USE_GENERAL' ? generalVendors : vendors;
+              const vendor = vendorList.find(v => v.id === effectiveVendorId) || null;
+              return [key, {
+                label,
+                vendorId: effectiveVendorId,
+                vendorName: vendor?.name || '',
+                vendorCompany: vendor?.company || '',
+                sendMode: row.sendMode,
+                preferredDate: row.preferredDate,
+                preferredTimeStart: row.preferredTimeStart,
+                preferredTimeEnd: row.preferredTimeEnd,
+                fallbackDateStart: row.fallbackDateStart,
+                fallbackDateEnd: row.fallbackDateEnd,
+                sent: row.sent,
+              }];
+            })
+          ),
           // Staging consult — include in main payload so it saves to the transaction document
           ...(stagingSent ? {
             stagingConsultRequested: true,

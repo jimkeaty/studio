@@ -1935,6 +1935,66 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                       ))}
                     </div>
                   </div>
+                  {/* Per-inspector details from agent submission */}
+                  {(() => {
+                    const rowData = intake?.inspectionRowData;
+                    const checkedTypes = form.watch('preListingInspectionTypes') || [];
+                    if (!rowData || checkedTypes.length === 0) return null;
+                    const INSP_KEYS = [
+                      { key: 'inspector_general', label: 'General Home Inspection' },
+                      { key: 'inspector_roof', label: 'Roof Inspection' },
+                      { key: 'inspector_termite', label: 'Termite Inspection' },
+                      { key: 'inspector_foundation', label: 'Foundation Inspection' },
+                      { key: 'inspector_sewer', label: 'Sewer Inspection' },
+                      { key: 'inspector_hvac', label: 'HVAC Inspection' },
+                      { key: 'inspector_pool', label: 'Pool Inspection' },
+                      { key: 'inspector_water_well', label: 'Water Well Inspection' },
+                      { key: 'inspector_survey', label: 'Survey' },
+                      { key: 'inspector_elevation', label: 'Elevation Certificate' },
+                      { key: 'inspector_stucco', label: 'Stucco Inspection' },
+                    ];
+                    const relevantRows = INSP_KEYS.filter(({ label }) => checkedTypes.includes(label));
+                    if (relevantRows.length === 0) return null;
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Inspector Details (from agent)</p>
+                        <div className="space-y-2">
+                          {relevantRows.map(({ key, label }) => {
+                            const row = rowData[key];
+                            if (!row) return null;
+                            const hasDetails = row.vendorName || row.preferredDate;
+                            if (!hasDetails) return null;
+                            return (
+                              <div key={key} className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm space-y-0.5">
+                                <p className="font-medium text-foreground">{label}</p>
+                                {row.vendorName && (
+                                  <p className="text-muted-foreground">
+                                    Inspector: <span className="text-foreground font-medium">{row.vendorName}{row.vendorCompany ? ` — ${row.vendorCompany}` : ''}</span>
+                                  </p>
+                                )}
+                                {row.preferredDate && (
+                                  <p className="text-muted-foreground">
+                                    Preferred date: <span className="text-foreground">{row.preferredDate}</span>
+                                    {row.preferredTimeStart && row.preferredTimeEnd && (
+                                      <span> · {row.preferredTimeStart}–{row.preferredTimeEnd}</span>
+                                    )}
+                                  </p>
+                                )}
+                                {(row.fallbackDateStart || row.fallbackDateEnd) && (
+                                  <p className="text-muted-foreground">
+                                    Available: <span className="text-foreground">{row.fallbackDateStart || '—'} to {row.fallbackDateEnd || '—'}</span>
+                                  </p>
+                                )}
+                                {row.sent && (
+                                  <p className="text-green-600 text-xs font-medium">✅ Request already sent by agent</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* Scheduling status badge */}
                   {form.watch('preListingTcScheduleInspections') && (
                     <div className="flex items-center gap-2">

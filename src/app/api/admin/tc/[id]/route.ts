@@ -375,7 +375,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'titleAttorney', 'titleOffice',
         // Pre-listing inspection
         'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
-        'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
+        'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName', 'inspectionRowData',
         // Buyer inspection
         'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
         'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
@@ -459,7 +459,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone', 'lenderOffice',
           'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone', 'titleAttorney', 'titleOffice',
           'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
-          'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
+          'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName', 'inspectionRowData',
           'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
           'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
           'mediaTypes', 'mediaRequestedDate', 'mediaNotes',

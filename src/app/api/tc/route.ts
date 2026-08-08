@@ -274,6 +274,7 @@ export async function POST(req: NextRequest) {
       inspectionOrdered: toStr(body.inspectionOrdered) || null,
       targetInspectionDate: toStr(body.targetInspectionDate) || null,
       inspectionTypes: toArr(body.inspectionTypes),
+      inspectionRowData: body.inspectionRowData && typeof body.inspectionRowData === 'object' ? body.inspectionRowData : null,
       tcScheduleInspections: toStr(body.tcScheduleInspections) || null,
       tcScheduleInspectionsOther: toStr(body.tcScheduleInspectionsOther) || null,
       inspectorName: toStr(body.inspectorName) || null,
