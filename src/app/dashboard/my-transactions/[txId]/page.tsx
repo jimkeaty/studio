@@ -541,7 +541,9 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
 
   const address = tx.propertyAddress || tx.address || 'Transaction';
   const status = tx.status || 'active';
-  const side = tx.side || tx.dealType || tx.closingType || '';
+  // closingType is the canonical field (buyer/listing/dual/referral).
+  // dealType is the property type (residential_sale, land, commercial, etc.) and must NOT be used to determine side.
+  const side = tx.closingType || tx.side || '';
   const isListing = side === 'listing' || side === 'dual';
   const isBuyer = side === 'buyer';
 
