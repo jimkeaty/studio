@@ -937,6 +937,22 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const isApproved = intake.status === 'approved';
   const watchedTxComplianceFee = form.watch('txComplianceFee');
   const isPassThrough = form.watch('isPassThrough');
+  const watchedCommissionPct = form.watch('commissionPercent');
+  const watchedSalePrice = form.watch('salePrice');
+  const watchedListPrice = form.watch('listPrice');
+  const watchedCommissionBasePrice = form.watch('commissionBasePrice');
+
+  // ── Live GCI recalculation ────────────────────────────────────────────────
+  // When commission % or price changes, auto-update the GCI display field so
+  // the TC can see the new GCI before saving. The server will recalculate on save.
+  useEffect(() => {
+    const pct = Number(watchedCommissionPct) || 0;
+    const base = Number(watchedCommissionBasePrice) || Number(watchedSalePrice) || Number(watchedListPrice) || 0;
+    if (pct > 0 && base > 0) {
+      const newGci = Math.round(base * (pct / 100) * 100) / 100;
+      form.setValue('gci', newGci as any, { shouldDirty: false });
+    }
+  }, [watchedCommissionPct, watchedSalePrice, watchedListPrice, watchedCommissionBasePrice]);
   const assignedTc = tcProfiles.find((p) => p.id === intake.assignedTcProfileId);
   const checklistCompleted = checklist.filter((c) => c.completed).length;
   const checklistTotal = checklist.length;

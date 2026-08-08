@@ -302,8 +302,13 @@ export async function PATCH(
           try {
             // Merge new values over current transaction to get the effective GCI
             const merged = { ...currentTx, ...allowed };
+            // If commissionPercent is being explicitly changed but gci is NOT,
+            // clear the stored gci so resolveGCI uses the new percentage.
+            const gciForCalc = ('commissionPercent' in allowed && !('gci' in allowed))
+              ? 0
+              : merged.gci;
             const newGCI = resolveGCI({
-              gci: merged.gci,
+              gci: gciForCalc,
               salePrice: merged.salePrice,
               commissionPercent: merged.commissionPercent,
               commissionBasePrice: merged.commissionBasePrice,

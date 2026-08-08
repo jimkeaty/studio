@@ -511,8 +511,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             const currentTxDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
             const currentTx = currentTxDoc.exists ? (currentTxDoc.data() as any) : {};
             const merged = { ...currentTx, ...txSyncUpdate };
+            // If commissionPercent is being explicitly changed but gci is NOT being
+            // explicitly set, clear the stored gci so resolveGCI uses the new percentage.
+            // Otherwise resolveGCI always returns the old stored gci (it takes precedence).
+            const gciForCalc = ('commissionPercent' in txSyncUpdate && !('gci' in txSyncUpdate))
+              ? 0
+              : merged.gci;
             const newGCI = resolveGCI({
-              gci: merged.gci,
+              gci: gciForCalc,
               salePrice: merged.salePrice,
               commissionPercent: merged.commissionPercent,
               commissionBasePrice: merged.commissionBasePrice,
