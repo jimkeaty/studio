@@ -1181,7 +1181,10 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
     );
   }
 
-  const isReadOnly = item.status === 'completed' || item.status === 'dismissed' || item.status === 'archived' || item.status === 'approved';
+  // Staff can always edit — approved items stay editable so staff can make corrections
+  // Only truly terminal states (completed, dismissed, archived) lock the form
+  const isReadOnly = item.status === 'completed' || item.status === 'dismissed' || item.status === 'archived';
+  const isApproved = item.status === 'approved';
   const isActive = item.status === 'pending_review' || item.status === 'in_progress';
   const watchedTxComplianceFee = form.watch('txComplianceFee');
   const assignedStaff = staffProfiles.find((p) => p.id === item.assignedStaffId);
@@ -2928,18 +2931,22 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? 'Saving...' : 'Save Changes'}
               </Button>
-              <Button
-                type="button"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={form.handleSubmit(handleComplete)}
-                disabled={acting || saving}
-              >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                {acting ? 'Processing...' : 'Save & Mark Complete'}
-              </Button>
-              <Button type="button" variant="destructive" onClick={() => setDismissOpen(true)} disabled={acting}>
-                <XCircle className="mr-2 h-4 w-4" /> Dismiss
-              </Button>
+              {!isApproved && (
+                <Button
+                  type="button"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={form.handleSubmit(handleComplete)}
+                  disabled={acting || saving}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  {acting ? 'Processing...' : 'Save & Mark Complete'}
+                </Button>
+              )}
+              {!isApproved && (
+                <Button type="button" variant="destructive" onClick={() => setDismissOpen(true)} disabled={acting}>
+                  <XCircle className="mr-2 h-4 w-4" /> Dismiss
+                </Button>
+              )}
             </div>
           )}
         </form>
