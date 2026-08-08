@@ -33,7 +33,7 @@ import {
   ArrowLeft, CheckCircle2, XCircle, Eye, Save, AlertTriangle, ExternalLink,
   ClipboardList, UserCheck, Clock, Activity, Archive, Trash2, DollarSign,
   Phone, Mail, Building2, User, Users, RefreshCw, Paperclip, FileText, UploadCloud, X,
-  Info, Hammer, MapPin, Calendar, Paintbrush,
+  Info, Hammer, MapPin, Calendar, Paintbrush, Send, Loader2, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CANONICAL_SOURCES } from '@/lib/normalizeDealSource';
@@ -416,6 +416,32 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const [tcDocuments, setTcDocuments] = useState<TcDoc[]>([]);
   const [tcDocUploading, setTcDocUploading] = useState(false);
   const [tcDocUploadError, setTcDocUploadError] = useState<string | null>(null);
+  // ── Inspection vendor state ──────────────────────────────────────────────
+  type InspVendorTC = { id: string; name: string; email: string | null; phone: string | null; company: string | null; };
+  type InspRowTC = { vendorId: string; sendMode: 'selected' | 'all'; preferredDate: string; preferredTimeStart: string; preferredTimeEnd: string; fallbackDateStart: string; fallbackDateEnd: string; sent: boolean; sending: boolean; };
+  const INSP_TYPES_TC = [
+    { key: 'inspector_general', label: 'General Home Inspection' },
+    { key: 'inspector_roof', label: 'Roof Inspection' },
+    { key: 'inspector_termite', label: 'Termite Inspection' },
+    { key: 'inspector_foundation', label: 'Foundation Inspection' },
+    { key: 'inspector_sewer', label: 'Sewer Inspection' },
+    { key: 'inspector_hvac', label: 'HVAC Inspection' },
+    { key: 'inspector_pool', label: 'Pool Inspection' },
+    { key: 'inspector_water_well', label: 'Water Well Inspection' },
+    { key: 'inspector_survey', label: 'Survey' },
+    { key: 'inspector_elevation', label: 'Elevation Certificate' },
+    { key: 'inspector_stucco', label: 'Stucco Inspection' },
+  ];
+  const makeDefaultInspRowTC = (): InspRowTC => {
+    const today = new Date().toISOString().split('T')[0];
+    const end = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return { vendorId: '', sendMode: 'selected', preferredDate: today, preferredTimeStart: '08:00', preferredTimeEnd: '17:00', fallbackDateStart: today, fallbackDateEnd: end, sent: false, sending: false };
+  };
+  const [tcInspVendors, setTcInspVendors] = useState<Record<string, InspVendorTC[]>>({});
+  const [tcInspRows, setTcInspRows] = useState<Record<string, InspRowTC>>({});
+  const updateTcInspRow = useCallback((key: string, patch: Partial<InspRowTC>) => {
+    setTcInspRows(prev => ({ ...prev, [key]: { ...(prev[key] || makeDefaultInspRowTC()), ...patch } }));
+  }, []);
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
 
@@ -434,8 +460,12 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
         setIntake(data.intake);
-
         const i = data.intake;
+
+        // Initialize inspection rows from stored data
+        if (i.inspectionRowData && typeof i.inspectionRowData === 'object') {
+          setTcInspRows(i.inspectionRowData);
+        }
         form.reset({
           closingType: i.closingType || 'buyer',
           dealType: i.dealType || 'residential_sale',
@@ -664,6 +694,28 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     if (!userLoading && user) load();
   }, [user, userLoading, id]);
 
+
+  // Load inspection vendors for TC queue
+  useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then((token: string) => {
+      fetch('/api/admin/vendors?category=inspector_all', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.vendors) {
+            const grouped: Record<string, InspVendorTC[]> = {};
+            for (const v of data.vendors) {
+              const cats: string[] = Array.isArray(v.categories) ? v.categories : [];
+              for (const cat of cats) {
+                if (!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(v);
+              }
+            }
+            setTcInspVendors(grouped);
+          }
+        }).catch(() => {});
+    });
+  }, [user]);
   // ── Load TC profiles ─────────────────────────────────────────────────────
   useEffect(() => {
     const loadProfiles = async () => {
@@ -1936,143 +1988,167 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
 
           {/* Section 12: Pre-Listing Inspection */}
           {(intake?.closingType === 'listing' || intake?.closingType === 'dual') && (
-            <SectionCard title="Pre-Listing Inspection">
-              <FormField control={form.control} name="preListingInspectionOrdered" render={({ field }) => (
-                <FormItem><FormLabel>Pre-Listing Inspection Ordered?</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="yes">Yes</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )} />
-              {form.watch('preListingInspectionOrdered') === 'yes' && (
-                <>
-                  <Grid2>
-                    <FormField control={form.control} name="preListingTargetInspectionDate" render={({ field }) => (
-                      <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+            <SectionCard title="Pre-Listing Inspections">
+              <div className="space-y-4">
+                <FormField control={form.control} name="preListingInspectionOrdered" render={({ field }) => (
+                  <FormItem><FormLabel>Pre-Listing Inspection Ordered?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+                {form.watch('preListingInspectionOrdered') === 'yes' && (
+                  <>
+                    <Grid2>
+                      <FormField control={form.control} name="preListingTargetInspectionDate" render={({ field }) => (
+                        <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                      )} />
+                    </Grid2>
+                    <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
+                      <FormItem><FormLabel>Pre-Listing Inspection Scheduling Status</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="already_scheduled">✅ Already Scheduled — Agent contacted inspector</SelectItem>
+                            <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
+                            <SelectItem value="other">📝 Other / Notes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
                     )} />
-                    <FormField control={form.control} name="preListingInspectorName" render={({ field }) => (
-                      <FormItem><FormLabel>Inspector Name</FormLabel><FormControl><Input placeholder="Inspector company/name" {...field} disabled={isReadOnly} /></FormControl></FormItem>
-                    )} />
-                  </Grid2>
-                  <div>
-                    <p className="text-sm font-medium mb-2">Inspection Types</p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {['General Home Inspection','Roof Inspection','Termite Inspection','Foundation Inspection','Sewer Inspection','HVAC Inspection','Pool Inspection','Water Well Inspection','Survey','Elevation Certificate','Stucco Inspection'].map((type) => (
-                        <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
-                          <Checkbox
-                            checked={(form.watch('preListingInspectionTypes') || []).includes(type)}
-                            onCheckedChange={(checked) => {
-                              const current = form.watch('preListingInspectionTypes') || [];
-                              form.setValue('preListingInspectionTypes', checked ? [...current, type] : current.filter((t: string) => t !== type));
-                            }}
-                            disabled={isReadOnly}
-                          />
-                          {type}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Per-inspector details from agent submission */}
-                  {(() => {
-                    const rowData = intake?.inspectionRowData;
-                    const checkedTypes = form.watch('preListingInspectionTypes') || [];
-                    if (!rowData || checkedTypes.length === 0) return null;
-                    const INSP_KEYS = [
-                      { key: 'inspector_general', label: 'General Home Inspection' },
-                      { key: 'inspector_roof', label: 'Roof Inspection' },
-                      { key: 'inspector_termite', label: 'Termite Inspection' },
-                      { key: 'inspector_foundation', label: 'Foundation Inspection' },
-                      { key: 'inspector_sewer', label: 'Sewer Inspection' },
-                      { key: 'inspector_hvac', label: 'HVAC Inspection' },
-                      { key: 'inspector_pool', label: 'Pool Inspection' },
-                      { key: 'inspector_water_well', label: 'Water Well Inspection' },
-                      { key: 'inspector_survey', label: 'Survey' },
-                      { key: 'inspector_elevation', label: 'Elevation Certificate' },
-                      { key: 'inspector_stucco', label: 'Stucco Inspection' },
-                    ];
-                    const relevantRows = INSP_KEYS.filter(({ label }) => checkedTypes.includes(label));
-                    if (relevantRows.length === 0) return null;
-                    return (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Inspector Details (from agent)</p>
-                        <div className="space-y-2">
-                          {relevantRows.map(({ key, label }) => {
-                            const row = rowData[key];
-                            if (!row) return null;
-                            const hasDetails = row.vendorName || row.preferredDate;
-                            if (!hasDetails) return null;
-                            return (
-                              <div key={key} className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm space-y-0.5">
-                                <p className="font-medium text-foreground">{label}</p>
-                                {row.vendorName && (
-                                  <p className="text-muted-foreground">
-                                    Inspector: <span className="text-foreground font-medium">{row.vendorName}{row.vendorCompany ? ` — ${row.vendorCompany}` : ''}</span>
-                                  </p>
-                                )}
-                                {row.preferredDate && (
-                                  <p className="text-muted-foreground">
-                                    Preferred date: <span className="text-foreground">{row.preferredDate}</span>
-                                    {row.preferredTimeStart && row.preferredTimeEnd && (
-                                      <span> · {row.preferredTimeStart}–{row.preferredTimeEnd}</span>
-                                    )}
-                                  </p>
-                                )}
-                                {(row.fallbackDateStart || row.fallbackDateEnd) && (
-                                  <p className="text-muted-foreground">
-                                    Available: <span className="text-foreground">{row.fallbackDateStart || '—'} to {row.fallbackDateEnd || '—'}</span>
-                                  </p>
-                                )}
-                                {row.sent && (
-                                  <p className="text-green-600 text-xs font-medium">✅ Request already sent by agent</p>
+                    {/* Per-type inspector rows */}
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground mb-2">Inspection Types</p>
+                      <p className="text-xs text-muted-foreground mb-3">Check each inspection needed. Each row expands to assign an inspector and send a request.</p>
+                      {INSP_TYPES_TC.map(({ key, label }) => {
+                        const isChecked = (form.watch('preListingInspectionTypes') || []).includes(label);
+                        const row = tcInspRows[`pre_${key}`] || makeDefaultInspRowTC();
+                        const vendors = tcInspVendors[key] || [];
+                        const generalVendorId = tcInspRows['pre_inspector_general']?.vendorId;
+                        const generalVendor = (tcInspVendors['inspector_general'] || []).find((v: InspVendorTC) => v.id === generalVendorId);
+                        return (
+                          <div key={key} className={`rounded-lg border transition-colors ${isChecked ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
+                            <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                              <input type="checkbox" checked={isChecked} disabled={isReadOnly}
+                                onChange={() => {
+                                  if (isReadOnly) return;
+                                  const current = form.watch('preListingInspectionTypes') || [];
+                                  form.setValue('preListingInspectionTypes', isChecked ? current.filter((t: string) => t !== label) : [...current, label]);
+                                  if (!isChecked && !tcInspRows[`pre_${key}`]) updateTcInspRow(`pre_${key}`, makeDefaultInspRowTC());
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                              />
+                              <span className="text-sm font-medium flex-1">{label}</span>
+                              {row.sent && <span className="text-xs text-green-600 font-semibold">✅ Sent</span>}
+                              {isChecked && !row.sent && <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            </label>
+                            {isChecked && (
+                              <div className="px-4 pb-4 space-y-3 border-t border-border/50 pt-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
+                                    <select value={row.vendorId} onChange={e => !isReadOnly && updateTcInspRow(`pre_${key}`, { vendorId: e.target.value })} disabled={isReadOnly}
+                                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50">
+                                      <option value="">— Select inspector —</option>
+                                      {key !== 'inspector_general' && (
+                                        <option value="USE_GENERAL">{generalVendor ? `Use General Inspector (${generalVendor.name})` : 'Use General Inspector'}</option>
+                                      )}
+                                      {vendors.map((v: InspVendorTC) => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
+                                      {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>
+                                    <select value={row.sendMode} onChange={e => !isReadOnly && updateTcInspRow(`pre_${key}`, { sendMode: e.target.value as 'selected' | 'all' })} disabled={isReadOnly}
+                                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50">
+                                      <option value="selected">Selected inspector only</option>
+                                      <option value="all">All {label} inspectors</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
+                                    <Input type="date" value={row.preferredDate} onChange={e => !isReadOnly && updateTcInspRow(`pre_${key}`, { preferredDate: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Time Start</label>
+                                    <Input type="time" value={row.preferredTimeStart} onChange={e => !isReadOnly && updateTcInspRow(`pre_${key}`, { preferredTimeStart: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Time End</label>
+                                    <Input type="time" value={row.preferredTimeEnd} onChange={e => !isReadOnly && updateTcInspRow(`pre_${key}`, { preferredTimeEnd: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
+                                    <Input type="date" value={row.fallbackDateStart} onChange={e => !isReadOnly && updateTcInspRow(`pre_${key}`, { fallbackDateStart: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Available Until</label>
+                                    <Input type="date" value={row.fallbackDateEnd} onChange={e => !isReadOnly && updateTcInspRow(`pre_${key}`, { fallbackDateEnd: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                </div>
+                                {!row.sent && !isReadOnly && user && (
+                                  <div className="flex justify-end">
+                                    <Button type="button" size="sm"
+                                      disabled={row.sending || (!row.vendorId && row.sendMode === 'selected')}
+                                      onClick={async () => {
+                                        updateTcInspRow(`pre_${key}`, { sending: true });
+                                        try {
+                                          const token = await user.getIdToken();
+                                          const effectiveVendorId = row.vendorId === 'USE_GENERAL' ? generalVendorId : row.vendorId;
+                                          const res = await fetch('/api/agent/inspection-request', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                            body: JSON.stringify({
+                                              transactionId: intake?.approvedTransactionId,
+                                              transactionType: 'listing',
+                                              inspectionCategory: key,
+                                              vendorId: effectiveVendorId || undefined,
+                                              sendMode: row.sendMode,
+                                              preferredDate: row.preferredDate,
+                                              preferredTimeStart: row.preferredTimeStart,
+                                              preferredTimeEnd: row.preferredTimeEnd,
+                                              fallbackDateStart: row.fallbackDateStart,
+                                              fallbackDateEnd: row.fallbackDateEnd,
+                                              propertyAddress: form.getValues('address') || '',
+                                            }),
+                                          });
+                                          const data = await res.json();
+                                          if (data.ok) {
+                                            updateTcInspRow(`pre_${key}`, { sent: true, sending: false });
+                                            toast({ title: 'Request sent!', description: `Inspection request sent.` });
+                                          } else {
+                                            updateTcInspRow(`pre_${key}`, { sending: false });
+                                            toast({ title: 'Error', description: data.error || 'Failed to send', variant: 'destructive' });
+                                          }
+                                        } catch (err: any) {
+                                          updateTcInspRow(`pre_${key}`, { sending: false });
+                                          toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                                        }
+                                      }}
+                                    >
+                                      {row.sending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sending...</> : <><Send className="h-3 w-3 mr-1" />Send Request</>}
+                                    </Button>
+                                  </div>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  {/* Scheduling status badge */}
-                  {form.watch('preListingTcScheduleInspections') && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground">Status:</span>
-                      {form.watch('preListingTcScheduleInspections') === 'already_scheduled' && (
-                        <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
-                      )}
-                      {(form.watch('preListingTcScheduleInspections') === 'yes' || form.watch('preListingTcScheduleInspections') === 'no') && (
-                        <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
-                      )}
-                      {form.watch('preListingTcScheduleInspections') === 'other' && (
-                        <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
-                      )}
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                  <FormField control={form.control} name="preListingTcScheduleInspections" render={({ field }) => (
-                    <FormItem><FormLabel>Pre-Listing Inspection Scheduling Status</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="already_scheduled">✅ Already Scheduled — Agent contacted inspector</SelectItem>
-                          <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
-                          <SelectItem value="other">📝 Other / Notes</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )} />
-                  {form.watch('preListingTcScheduleInspections') === 'other' && (
-                    <FormField control={form.control} name="preListingTcScheduleInspectionsOther" render={({ field }) => (
-                      <FormItem><FormLabel>Other / Notes</FormLabel><FormControl><Textarea rows={2} {...field} disabled={isReadOnly} /></FormControl></FormItem>
-                    )} />
-                  )}
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </SectionCard>
           )}
-
           {/* Section 13: Sign Order */}
           {(intake?.closingType === 'listing' || intake?.closingType === 'dual') && (
             <SectionCard title="Sign Order">
@@ -2381,82 +2457,165 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           {/* Section 16: Buyer Inspection */}
           {(intake?.closingType === 'buyer' || intake?.closingType === 'dual') && (
             <SectionCard title="Buyer Inspections" icon={<Hammer className="h-4 w-4" />}>
-              <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
-                <FormItem><FormLabel>Has Inspection Been Ordered?</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value != null ? String(field.value) : undefined} disabled={isReadOnly}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="yes">Yes</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )} />
-              {form.watch('inspectionOrdered') === 'yes' && (
-                <>
-                  <Grid3>
-                    <FormField control={form.control} name="targetInspectionDate" render={({ field }) => (
-                      <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+              <div className="space-y-4">
+                <FormField control={form.control} name="inspectionOrdered" render={({ field }) => (
+                  <FormItem><FormLabel>Inspection Ordered?</FormLabel>
+                    <Select onValueChange={field.onChange} value={String(field.value ?? '')} disabled={isReadOnly}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                        <SelectItem value="waived">Waived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+                {form.watch('inspectionOrdered') === 'yes' && (
+                  <>
+                    <Grid2>
+                      <FormField control={form.control} name="targetInspectionDate" render={({ field }) => (
+                        <FormItem><FormLabel>Target Inspection Date</FormLabel><FormControl><Input type="date" {...field} disabled={isReadOnly} /></FormControl></FormItem>
+                      )} />
+                    </Grid2>
+                    <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
+                      <FormItem><FormLabel>Inspection Scheduling Status</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="already_scheduled">✅ Already Scheduled — Agent contacted inspector</SelectItem>
+                            <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
+                            <SelectItem value="other">📝 Other / Notes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
                     )} />
-                    <FormField control={form.control} name="inspectorName" render={({ field }) => (
-                      <FormItem><FormLabel>Inspector Name</FormLabel><FormControl><Input placeholder="Inspector company/name" {...field} disabled={isReadOnly} /></FormControl></FormItem>
-                    )} />
-                  </Grid3>
-                  <div>
-                    <p className="text-sm font-medium mb-2">Inspection Types</p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {['General Home Inspection','Roof Inspection','Termite Inspection','Foundation Inspection','Sewer Inspection','HVAC Inspection','Pool Inspection','Water Well Inspection','Survey','Elevation Certificate','Stucco Inspection'].map((type) => (
-                        <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
-                          <Checkbox
-                            checked={(form.watch('inspectionTypes') || []).includes(type)}
-                            onCheckedChange={(checked) => {
-                              const current = form.watch('inspectionTypes') || [];
-                              form.setValue('inspectionTypes', checked ? [...current, type] : current.filter((t: string) => t !== type));
-                            }}
-                            disabled={isReadOnly}
-                          />
-                          {type}
-                        </label>
-                      ))}
+                    {/* Per-type inspector rows */}
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground mb-2">Inspection Types</p>
+                      <p className="text-xs text-muted-foreground mb-3">Check each inspection needed. Each row expands to assign an inspector and send a request.</p>
+                      {INSP_TYPES_TC.map(({ key, label }) => {
+                        const isChecked = (form.watch('inspectionTypes') || []).includes(label);
+                        const row = tcInspRows[key] || makeDefaultInspRowTC();
+                        const vendors = tcInspVendors[key] || [];
+                        const generalVendorId = tcInspRows['inspector_general']?.vendorId;
+                        const generalVendor = (tcInspVendors['inspector_general'] || []).find((v: InspVendorTC) => v.id === generalVendorId);
+                        return (
+                          <div key={key} className={`rounded-lg border transition-colors ${isChecked ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
+                            <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                              <input type="checkbox" checked={isChecked} disabled={isReadOnly}
+                                onChange={() => {
+                                  if (isReadOnly) return;
+                                  const current = form.watch('inspectionTypes') || [];
+                                  form.setValue('inspectionTypes', isChecked ? current.filter((t: string) => t !== label) : [...current, label]);
+                                  if (!isChecked && !tcInspRows[key]) updateTcInspRow(key, makeDefaultInspRowTC());
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                              />
+                              <span className="text-sm font-medium flex-1">{label}</span>
+                              {row.sent && <span className="text-xs text-green-600 font-semibold">✅ Sent</span>}
+                              {isChecked && !row.sent && <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            </label>
+                            {isChecked && (
+                              <div className="px-4 pb-4 space-y-3 border-t border-border/50 pt-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
+                                    <select value={row.vendorId} onChange={e => !isReadOnly && updateTcInspRow(key, { vendorId: e.target.value })} disabled={isReadOnly}
+                                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50">
+                                      <option value="">— Select inspector —</option>
+                                      {key !== 'inspector_general' && (
+                                        <option value="USE_GENERAL">{generalVendor ? `Use General Inspector (${generalVendor.name})` : 'Use General Inspector'}</option>
+                                      )}
+                                      {vendors.map((v: InspVendorTC) => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
+                                      {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>
+                                    <select value={row.sendMode} onChange={e => !isReadOnly && updateTcInspRow(key, { sendMode: e.target.value as 'selected' | 'all' })} disabled={isReadOnly}
+                                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50">
+                                      <option value="selected">Selected inspector only</option>
+                                      <option value="all">All {label} inspectors</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
+                                    <Input type="date" value={row.preferredDate} onChange={e => !isReadOnly && updateTcInspRow(key, { preferredDate: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Time Start</label>
+                                    <Input type="time" value={row.preferredTimeStart} onChange={e => !isReadOnly && updateTcInspRow(key, { preferredTimeStart: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Time End</label>
+                                    <Input type="time" value={row.preferredTimeEnd} onChange={e => !isReadOnly && updateTcInspRow(key, { preferredTimeEnd: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
+                                    <Input type="date" value={row.fallbackDateStart} onChange={e => !isReadOnly && updateTcInspRow(key, { fallbackDateStart: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Available Until</label>
+                                    <Input type="date" value={row.fallbackDateEnd} onChange={e => !isReadOnly && updateTcInspRow(key, { fallbackDateEnd: e.target.value })} disabled={isReadOnly} />
+                                  </div>
+                                </div>
+                                {!row.sent && !isReadOnly && user && (
+                                  <div className="flex justify-end">
+                                    <Button type="button" size="sm"
+                                      disabled={row.sending || (!row.vendorId && row.sendMode === 'selected')}
+                                      onClick={async () => {
+                                        updateTcInspRow(key, { sending: true });
+                                        try {
+                                          const token = await user.getIdToken();
+                                          const effectiveVendorId = row.vendorId === 'USE_GENERAL' ? generalVendorId : row.vendorId;
+                                          const res = await fetch('/api/agent/send-inspection-request', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                            body: JSON.stringify({
+                                              vendorId: effectiveVendorId,
+                                              sendMode: row.sendMode,
+                                              inspectionType: label,
+                                              preferredDate: row.preferredDate,
+                                              preferredTimeStart: row.preferredTimeStart,
+                                              preferredTimeEnd: row.preferredTimeEnd,
+                                              fallbackDateStart: row.fallbackDateStart,
+                                              fallbackDateEnd: row.fallbackDateEnd,
+                                              propertyAddress: form.getValues('address') || '',
+                                            }),
+                                          });
+                                          const data = await res.json();
+                                          if (data.ok) {
+                                            updateTcInspRow(key, { sent: true, sending: false });
+                                            toast({ title: 'Request sent!', description: `Inspection request sent.` });
+                                          } else {
+                                            updateTcInspRow(key, { sending: false });
+                                            toast({ title: 'Error', description: data.error || 'Failed to send', variant: 'destructive' });
+                                          }
+                                        } catch (err: any) {
+                                          updateTcInspRow(key, { sending: false });
+                                          toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                                        }
+                                      }}
+                                    >
+                                      {row.sending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sending...</> : <><Send className="h-3 w-3 mr-1" />Send Request</>}
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                  {/* Scheduling status badge */}
-                  {form.watch('tcScheduleInspections') && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground">Status:</span>
-                      {form.watch('tcScheduleInspections') === 'already_scheduled' && (
-                        <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
-                      )}
-                      {(form.watch('tcScheduleInspections') === 'yes' || form.watch('tcScheduleInspections') === 'no') && (
-                        <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
-                      )}
-                      {form.watch('tcScheduleInspections') === 'other' && (
-                        <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
-                      )}
-                    </div>
-                  )}
-                  <FormField control={form.control} name="tcScheduleInspections" render={({ field }) => (
-                    <FormItem><FormLabel>Inspection Scheduling Status</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ''} disabled={isReadOnly}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="already_scheduled">✅ Already Scheduled — Agent contacted inspector</SelectItem>
-                          <SelectItem value="yes">📋 TC / Staff to Schedule</SelectItem>
-                          <SelectItem value="other">📝 Other / Notes</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )} />
-                  {form.watch('tcScheduleInspections') === 'other' && (
-                    <FormField control={form.control} name="tcScheduleInspectionsOther" render={({ field }) => (
-                      <FormItem><FormLabel>Please specify</FormLabel><FormControl><Input placeholder="Describe what you need..." {...field} disabled={isReadOnly} /></FormControl></FormItem>
-                    )} />
-                  )}
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </SectionCard>
           )}
-
           {/* Section 17: Media Order */}
           {(intake?.closingType === 'listing' || intake?.closingType === 'dual') && (
             <SectionCard title="Media Order" icon={<MapPin className="h-4 w-4" />}>
