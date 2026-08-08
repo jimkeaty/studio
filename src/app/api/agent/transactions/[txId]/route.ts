@@ -66,8 +66,9 @@ const AGENT_ALLOWED_FIELDS = new Set([
   // Referrals
   'hasOutboundReferral', 'outboundReferralRecipient', 'outboundReferralPercent',
   'outboundReferralFee', 'outboundReferralDollar',
-  'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralBrokerage',
-  'inboundReferralFeePercent',
+  'hasInboundReferral', 'inboundReferral', 'inboundReferralAgentName', 'inboundReferralBrokerage',
+  'inboundReferralFeePercent', 'inboundReferralFee', 'inboundReferralEmail', 'inboundReferralPhone',
+  'outboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
   // Buyer inspection
   'inspectionOrdered', 'targetInspectionDate', 'inspectorName',
   'inspectionTypes', 'tcScheduleInspections', 'tcScheduleInspectionsOther',

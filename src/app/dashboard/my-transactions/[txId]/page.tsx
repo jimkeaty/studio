@@ -21,7 +21,7 @@ import {
   ArrowLeft, CheckCircle2, ClipboardList, AlertTriangle,
   Home, Users, Calendar, ChevronDown, ChevronUp,
   Building2, User, Hammer, MapPin, Info, DollarSign, FileText, ExternalLink,
-  Save, Loader2, Camera, Eye, Wrench, Paintbrush,
+  Save, Loader2, Send, Camera, Eye, Wrench, Paintbrush,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -207,6 +207,33 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const [showArchived, setShowArchived] = useState(false);
   const docFileRef = useRef<HTMLInputElement>(null);
 
+  // ── Inspection vendor state ──────────────────────────────────────────────────
+  type InspVendorLocal = { id: string; name: string; email: string | null; phone: string | null; company: string | null; };
+  type InspRowLocal = { vendorId: string; sendMode: 'selected' | 'all'; preferredDate: string; preferredTimeStart: string; preferredTimeEnd: string; fallbackDateStart: string; fallbackDateEnd: string; sent: boolean; sending: boolean; };
+  const INSP_TYPES_LOCAL = [
+    { key: 'inspector_general', label: 'General Home Inspection' },
+    { key: 'inspector_roof', label: 'Roof Inspection' },
+    { key: 'inspector_termite', label: 'Termite Inspection' },
+    { key: 'inspector_foundation', label: 'Foundation Inspection' },
+    { key: 'inspector_sewer', label: 'Sewer Inspection' },
+    { key: 'inspector_hvac', label: 'HVAC Inspection' },
+    { key: 'inspector_pool', label: 'Pool Inspection' },
+    { key: 'inspector_water_well', label: 'Water Well Inspection' },
+    { key: 'inspector_survey', label: 'Survey' },
+    { key: 'inspector_elevation', label: 'Elevation Certificate' },
+    { key: 'inspector_stucco', label: 'Stucco Inspection' },
+  ];
+  const makeDefaultInspRowLocal = (): InspRowLocal => {
+    const today = new Date().toISOString().split('T')[0];
+    const end = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return { vendorId: '', sendMode: 'selected', preferredDate: today, preferredTimeStart: '08:00', preferredTimeEnd: '17:00', fallbackDateStart: today, fallbackDateEnd: end, sent: false, sending: false };
+  };
+  const [inspVendors, setInspVendors] = useState<Record<string, InspVendorLocal[]>>({});
+  const [inspRows, setInspRows] = useState<Record<string, InspRowLocal>>({});
+  const updateInspRow = useCallback((key: string, patch: Partial<InspRowLocal>) => {
+    setInspRows(prev => ({ ...prev, [key]: { ...(prev[key] || makeDefaultInspRowLocal()), ...patch } }));
+  }, []);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
@@ -259,6 +286,24 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           // Financial
           earnestMoney: tx.earnestMoney ? String(tx.earnestMoney) : '',
           depositHolder: tx.depositHolder || '', depositHolderOther: tx.depositHolderOther || '',
+          // Referral
+          inboundReferral: tx.inboundReferral || '',
+          inboundReferralAgentName: tx.inboundReferralAgentName || '',
+          inboundReferralBrokerage: tx.inboundReferralBrokerage || '',
+          inboundReferralFee: tx.inboundReferralFee ? String(tx.inboundReferralFee) : '',
+          inboundReferralEmail: tx.inboundReferralEmail || '',
+          inboundReferralPhone: tx.inboundReferralPhone || '',
+          outboundReferral: tx.outboundReferral || '',
+          outboundReferralAgentName: tx.outboundReferralAgentName || '',
+          outboundReferralBrokerage: tx.outboundReferralBrokerage || '',
+          outboundReferralFee: tx.outboundReferralFee ? String(tx.outboundReferralFee) : '',
+          // Commission editable fields
+          sellerCommissionPct: tx.sellerCommissionPct ? String(tx.sellerCommissionPct) : (tx.sellerCommission ? String(tx.sellerCommission) : ''),
+          buyerCommissionPct: tx.buyerCommissionPct ? String(tx.buyerCommissionPct) : (tx.buyerCommission ? String(tx.buyerCommission) : ''),
+          commissionBasePrice: tx.priceCommissionBasedOn ? String(tx.priceCommissionBasedOn) : '',
+          // Occupancy
+          occupancyDate: tx.occupancyDate || '',
+          occupancyNotes: tx.occupancyNotes || '',
           buyerClosingCostTotal: tx.buyerClosingCostTotal ? String(tx.buyerClosingCostTotal) : '',
           // Additional info
           warrantyAtClosing: tx.warrantyAtClosing || '',
@@ -347,6 +392,11 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           workingWithTc: Boolean(tx.workingWithTc),
         });
       }
+
+      // Initialize inspection rows from stored data
+      if (tx.inspectionRowData && typeof tx.inspectionRowData === 'object') {
+        setInspRows(tx.inspectionRowData);
+      }
       const taskRes = await fetch(`/api/agent/agent-tasks?transactionId=${txId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -359,6 +409,28 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
     if (!userLoading && user) loadData();
     else if (!userLoading && !user) setLoading(false);
   }, [user, userLoading, loadData]);
+
+  // Load inspection vendors
+  useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then((token: string) => {
+      fetch('/api/admin/vendors?category=inspector_all', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.vendors) {
+            const grouped: Record<string, InspVendorLocal[]> = {};
+            for (const v of data.vendors) {
+              const cats: string[] = Array.isArray(v.categories) ? v.categories : [];
+              for (const cat of cats) {
+                if (!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(v);
+              }
+            }
+            setInspVendors(grouped);
+          }
+        }).catch(() => {});
+    });
+  }, [user]);
 
   const setField = (name: string, value: any) => {
     setForm(prev => ({ ...prev, [name]: value }));
@@ -620,52 +692,33 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
         </Alert>
       )}
 
-      {/* ── Commission (read-only) ─────────────────────────────────────────── */}
-      {(agentNet !== null || agentPct !== null || sellerCommPct !== null || displayPrice > 0) && (
-        <Card className="border-green-200 bg-green-50/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-green-700" />
-              My Commission
-              {commissionIsEstimated && (
-                <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                  ⚠️ Estimated (based on list price)
-                </span>
-              )}
-            </CardTitle>
-            {commissionIsEstimated && (
-              <p className="text-xs text-amber-600 mt-1">Will recalculate from sale price once marked pending.</p>
-            )}
-          </CardHeader>
-          <CardContent>
-            <Grid3>
-              {/* Row 1: Price fields */}
-              {displayPrice > 0 && (
-                <Dl label={commissionIsEstimated ? 'List Price' : 'Sale Price'} value={fmt$(displayPrice)} />
-              )}
-              {commissionBasePrice > 0 && commissionBasePrice !== displayPrice && (
-                <Dl label="Commission Base Price" value={fmt$(commissionBasePrice)} />
-              )}
-              {/* Row 2: Commission % fields */}
-              {sellerCommPct !== null && (
-                <Dl label="Seller Paying (Listing Agent %)" value={`${sellerCommPct}%`} />
-              )}
-              {buyerCommPct !== null && (
-                <Dl label="Seller Paying (Buyer Agent %)" value={`${buyerCommPct}%`} />
-              )}
-              {/* Row 3: Agent split and net */}
-              {agentPct !== null && <Dl label="My Split %" value={`${agentPct}%`} />}
-              {agentNet !== null && (
-                <Dl
-                  label={commissionIsEstimated ? 'Est. Net to Me' : 'Net to Me'}
-                  value={`$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                />
-              )}
-            </Grid3>
-          </CardContent>
-        </Card>
-      )}
-
+      {/* ── Commission ────────────────────────────────────────────────────── */}
+      <SectionCard title="My Commission" icon={<DollarSign className="h-4 w-4" />} defaultCollapsed={false}>
+        <div className="space-y-4">
+          {commissionIsEstimated && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+              ⚠️ Estimated based on list price. Will recalculate from sale price once marked pending.
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <EInput label={commissionIsEstimated ? 'List Price' : 'Sale Price'} name={commissionIsEstimated ? 'listPrice' : 'salePrice'} value={commissionIsEstimated ? (f.listPrice || '') : (f.salePrice || '')} onChange={setField} type="number" />
+            <EInput label="Seller Commission %" name="sellerCommissionPct" value={f.sellerCommissionPct || ''} onChange={setField} type="number" />
+            <EInput label="Buyer Commission %" name="buyerCommissionPct" value={f.buyerCommissionPct || ''} onChange={setField} type="number" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <EInput label="Commission Base Price" name="commissionBasePrice" value={f.commissionBasePrice || ''} onChange={setField} type="number" />
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-muted-foreground">My Split %</span>
+              <span className="text-base font-semibold">{agentPct !== null ? `${agentPct}%` : '—'}</span>
+              <span className="text-xs text-muted-foreground">Set by your commission plan</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-muted-foreground">{commissionIsEstimated ? 'Est. Net to Me' : 'Net to Me'}</span>
+              <span className="text-base font-semibold text-green-700">{agentNet !== null ? `$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
       {/* ── Status & Transaction Type ──────────────────────────────────────── */}
       <SectionCard title="Transaction Status" icon={<Info className="h-4 w-4" />}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -778,6 +831,45 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
         </div>
       </SectionCard>
 
+      {/* ── Referral ──────────────────────────────────────────────────────── */}
+      <SectionCard title="Referrals" icon={<DollarSign className="h-4 w-4" />} defaultCollapsed={!f.inboundReferral && !f.outboundReferral}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <ESelect label="Inbound Referral?" name="inboundReferral" value={f.inboundReferral} onChange={setField} options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]} />
+            <ESelect label="Outbound Referral?" name="outboundReferral" value={f.outboundReferral} onChange={setField} options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]} />
+          </div>
+          {f.inboundReferral === 'yes' && (
+            <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+              <p className="text-sm font-semibold">Inbound Referral Details</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <EInput label="Referring Agent Name" name="inboundReferralAgentName" value={f.inboundReferralAgentName || ''} onChange={setField} />
+                <EInput label="Referring Brokerage" name="inboundReferralBrokerage" value={f.inboundReferralBrokerage || ''} onChange={setField} />
+                <EInput label="Referral Fee %" name="inboundReferralFee" value={f.inboundReferralFee || ''} onChange={setField} type="number" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <EInput label="Referring Agent Email" name="inboundReferralEmail" value={f.inboundReferralEmail || ''} onChange={setField} type="email" />
+                <EInput label="Referring Agent Phone" name="inboundReferralPhone" value={f.inboundReferralPhone || ''} onChange={setField} />
+              </div>
+            </div>
+          )}
+          {f.outboundReferral === 'yes' && (
+            <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+              <p className="text-sm font-semibold">Outbound Referral Details</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <EInput label="Referred Agent Name" name="outboundReferralAgentName" value={f.outboundReferralAgentName || ''} onChange={setField} />
+                <EInput label="Referred Brokerage" name="outboundReferralBrokerage" value={f.outboundReferralBrokerage || ''} onChange={setField} />
+                <EInput label="Referral Fee %" name="outboundReferralFee" value={f.outboundReferralFee || ''} onChange={setField} type="number" />
+              </div>
+            </div>
+          )}
+        </div>
+      </SectionCard>
       {/* ── Lender ────────────────────────────────────────────────────────── */}
       <SectionCard title="Lender / Mortgage" icon={<Building2 className="h-4 w-4" />} defaultCollapsed={!f.mortgageCompany}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -913,78 +1005,290 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <EInput label="Target Inspection Date" name="targetInspectionDate" value={f.targetInspectionDate} onChange={setField} type="date" />
-                  <EInput label="Inspector Name" name="inspectorName" value={f.inspectorName} onChange={setField} />
                 </div>
-                <ECheckboxGroup label="Inspection Types" name="inspectionTypes"
-                  options={INSPECTION_TYPE_OPTIONS} value={f.inspectionTypes} onChange={setField} />
-                {/* Scheduling status badge */}
-                {f.tcScheduleInspections && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">Status:</span>
-                    {f.tcScheduleInspections === 'already_scheduled' && (
-                      <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
-                    )}
-                    {(f.tcScheduleInspections === 'yes' || f.tcScheduleInspections === 'no') && (
-                      <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
-                    )}
-                    {f.tcScheduleInspections === 'other' && (
-                      <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
-                    )}
-                  </div>
-                )}
                 <ESelect label="Inspection Scheduling Status" name="tcScheduleInspections" value={f.tcScheduleInspections} onChange={setField} options={[
                   { value: 'already_scheduled', label: '✅ Already Scheduled — I contacted the inspector' },
                   { value: 'yes', label: '📋 TC / Staff to Schedule' },
                   { value: 'other', label: '📝 Other / Notes' },
                 ]} />
+                {/* Per-type inspector rows */}
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground mb-2">Inspection Types</p>
+                  <p className="text-xs text-muted-foreground mb-3">Check each inspection needed. Each row expands to assign an inspector and send a request.</p>
+                  {INSP_TYPES_LOCAL.map(({ key, label }) => {
+                    const isChecked = (f.inspectionTypes || []).includes(label);
+                    const row = inspRows[key] || makeDefaultInspRowLocal();
+                    const vendors = inspVendors[key] || [];
+                    const generalVendorId = inspRows['inspector_general']?.vendorId;
+                    const generalVendor = (inspVendors['inspector_general'] || []).find((v: InspVendorLocal) => v.id === generalVendorId);
+                    return (
+                      <div key={key} className={`rounded-lg border transition-colors ${isChecked ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
+                        <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                          <input type="checkbox" checked={isChecked}
+                            onChange={() => {
+                              const types: string[] = f.inspectionTypes || [];
+                              setField('inspectionTypes', isChecked ? types.filter((t: string) => t !== label) : [...types, label]);
+                              if (!isChecked && !inspRows[key]) updateInspRow(key, makeDefaultInspRowLocal());
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm font-medium flex-1">{label}</span>
+                          {row.sent && <span className="text-xs text-green-600 font-semibold">✅ Sent</span>}
+                          {isChecked && !row.sent && <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                        </label>
+                        {isChecked && (
+                          <div className="px-4 pb-4 space-y-3 border-t border-border/50 pt-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
+                                <select value={row.vendorId} onChange={e => updateInspRow(key, { vendorId: e.target.value })}
+                                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                                  <option value="">— Select inspector —</option>
+                                  {key !== 'inspector_general' && (
+                                    <option value="USE_GENERAL">{generalVendor ? `Use General Inspector (${generalVendor.name})` : 'Use General Inspector'}</option>
+                                  )}
+                                  {vendors.map((v: InspVendorLocal) => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
+                                  {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>
+                                <select value={row.sendMode} onChange={e => updateInspRow(key, { sendMode: e.target.value as 'selected' | 'all' })}
+                                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                                  <option value="selected">Selected inspector only</option>
+                                  <option value="all">All {label} inspectors</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
+                                <Input type="date" value={row.preferredDate} onChange={e => updateInspRow(key, { preferredDate: e.target.value })} />
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Time Start</label>
+                                <Input type="time" value={row.preferredTimeStart} onChange={e => updateInspRow(key, { preferredTimeStart: e.target.value })} />
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Time End</label>
+                                <Input type="time" value={row.preferredTimeEnd} onChange={e => updateInspRow(key, { preferredTimeEnd: e.target.value })} />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
+                                <Input type="date" value={row.fallbackDateStart} onChange={e => updateInspRow(key, { fallbackDateStart: e.target.value })} />
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Available Until</label>
+                                <Input type="date" value={row.fallbackDateEnd} onChange={e => updateInspRow(key, { fallbackDateEnd: e.target.value })} />
+                              </div>
+                            </div>
+                            {!row.sent && user && (
+                              <div className="flex justify-end">
+                                <Button type="button" size="sm"
+                                  disabled={row.sending || (!row.vendorId && row.sendMode === 'selected')}
+                                  onClick={async () => {
+                                    updateInspRow(key, { sending: true });
+                                    try {
+                                      const token = await user.getIdToken();
+                                      const effectiveVendorId = row.vendorId === 'USE_GENERAL' ? generalVendorId : row.vendorId;
+                                      const res = await fetch('/api/agent/send-inspection-request', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                        body: JSON.stringify({
+                                          vendorId: effectiveVendorId,
+                                          sendMode: row.sendMode,
+                                          inspectionType: label,
+                                          preferredDate: row.preferredDate,
+                                          preferredTimeStart: row.preferredTimeStart,
+                                          preferredTimeEnd: row.preferredTimeEnd,
+                                          fallbackDateStart: row.fallbackDateStart,
+                                          fallbackDateEnd: row.fallbackDateEnd,
+                                          propertyAddress: f.address || '',
+                                          clientName: f.buyerName || '',
+                                          clientPhone: f.buyerPhone || '',
+                                          clientEmail: f.buyerEmail || '',
+                                          agentName: f.agentDisplayName || '',
+                                          agentEmail: user.email || '',
+                                        }),
+                                      });
+                                      const data = await res.json();
+                                      if (data.ok) {
+                                        updateInspRow(key, { sent: true, sending: false });
+                                        toast({ title: 'Request sent!', description: `Inspection request sent.` });
+                                      } else {
+                                        updateInspRow(key, { sending: false });
+                                        toast({ title: 'Error', description: data.error || 'Failed to send', variant: 'destructive' });
+                                      }
+                                    } catch (err: any) {
+                                      updateInspRow(key, { sending: false });
+                                      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                                    }
+                                  }}
+                                >
+                                  {row.sending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sending...</> : <><Send className="h-3 w-3 mr-1" />Send Request</>}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
           </div>
         </SectionCard>
       )}
-
       {/* ── Pre-Listing Inspection ────────────────────────────────────────── */}
       {isListing && (
-        <SectionCard title="Pre-Listing Inspection" icon={<Wrench className="h-4 w-4" />} defaultCollapsed={!f.preListingInspectionOrdered || f.preListingInspectionOrdered === 'no'}>
+        <SectionCard title="Pre-Listing Inspections" icon={<Wrench className="h-4 w-4" />} defaultCollapsed={!f.preListingInspectionOrdered || f.preListingInspectionOrdered === 'no'}>
           <div className="space-y-4">
-            <ESelect label="Pre-Listing Inspection Ordered?" name="preListingInspectionOrdered" value={f.preListingInspectionOrdered} onChange={setField} options={[
-              { value: 'yes', label: 'Yes' },
-              { value: 'no', label: 'No' },
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ESelect label="Pre-Listing Inspection Ordered?" name="preListingInspectionOrdered" value={f.preListingInspectionOrdered} onChange={setField} options={[
+                { value: 'yes', label: 'Yes' },
+                { value: 'no', label: 'No' },
+              ]} />
+              <EInput label="Target Inspection Date" name="preListingTargetInspectionDate" value={f.preListingTargetInspectionDate} onChange={setField} type="date" />
+            </div>
+            <ESelect label="Pre-Listing Inspection Scheduling Status" name="preListingTcScheduleInspections" value={f.preListingTcScheduleInspections} onChange={setField} options={[
+              { value: 'already_scheduled', label: '✅ Already Scheduled — I contacted the inspector' },
+              { value: 'yes', label: '📋 TC / Staff to Schedule' },
+              { value: 'other', label: '📝 Other / Notes' },
             ]} />
-            {f.preListingInspectionOrdered === 'yes' && (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <EInput label="Target Inspection Date" name="preListingTargetInspectionDate" value={f.preListingTargetInspectionDate} onChange={setField} type="date" />
-                  <EInput label="Inspector Name" name="preListingInspectorName" value={f.preListingInspectorName} onChange={setField} />
-                </div>
-                <ECheckboxGroup label="Inspection Types" name="preListingInspectionTypes"
-                  options={INSPECTION_TYPE_OPTIONS} value={f.preListingInspectionTypes} onChange={setField} />
-                {/* Scheduling status badge */}
-                {f.preListingTcScheduleInspections && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">Status:</span>
-                    {f.preListingTcScheduleInspections === 'already_scheduled' && (
-                      <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5">✅ Already Scheduled</span>
-                    )}
-                    {(f.preListingTcScheduleInspections === 'yes' || f.preListingTcScheduleInspections === 'no') && (
-                      <span className="inline-flex items-center rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5">📋 TC / Staff to Schedule</span>
-                    )}
-                    {f.preListingTcScheduleInspections === 'other' && (
-                      <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5">📝 See Notes</span>
+            {/* Per-type inspector rows */}
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground mb-2">Inspection Types</p>
+              <p className="text-xs text-muted-foreground mb-3">Check each inspection needed. Each row expands to assign an inspector and send a request.</p>
+              {INSP_TYPES_LOCAL.map(({ key, label }) => {
+                const isChecked = (f.preListingInspectionTypes || []).includes(label);
+                const row = inspRows[`pre_${key}`] || makeDefaultInspRowLocal();
+                const vendors = inspVendors[key] || [];
+                const generalVendorId = inspRows['pre_inspector_general']?.vendorId;
+                const generalVendor = (inspVendors['inspector_general'] || []).find((v: InspVendorLocal) => v.id === generalVendorId);
+                return (
+                  <div key={key} className={`rounded-lg border transition-colors ${isChecked ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
+                    <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
+                      <input type="checkbox" checked={isChecked}
+                        onChange={() => {
+                          const types: string[] = f.preListingInspectionTypes || [];
+                          setField('preListingInspectionTypes', isChecked ? types.filter((t: string) => t !== label) : [...types, label]);
+                          if (!isChecked && !inspRows[`pre_${key}`]) updateInspRow(`pre_${key}`, makeDefaultInspRowLocal());
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm font-medium flex-1">{label}</span>
+                      {row.sent && <span className="text-xs text-green-600 font-semibold">✅ Sent</span>}
+                      {isChecked && !row.sent && <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    </label>
+                    {isChecked && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-border/50 pt-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
+                            <select value={row.vendorId} onChange={e => updateInspRow(`pre_${key}`, { vendorId: e.target.value })}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                              <option value="">— Select inspector —</option>
+                              {key !== 'inspector_general' && (
+                                <option value="USE_GENERAL">{generalVendor ? `Use General Inspector (${generalVendor.name})` : 'Use General Inspector'}</option>
+                              )}
+                              {vendors.map((v: InspVendorLocal) => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
+                              {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>
+                            <select value={row.sendMode} onChange={e => updateInspRow(`pre_${key}`, { sendMode: e.target.value as 'selected' | 'all' })}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                              <option value="selected">Selected inspector only</option>
+                              <option value="all">All {label} inspectors</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
+                            <Input type="date" value={row.preferredDate} onChange={e => updateInspRow(`pre_${key}`, { preferredDate: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">Time Start</label>
+                            <Input type="time" value={row.preferredTimeStart} onChange={e => updateInspRow(`pre_${key}`, { preferredTimeStart: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">Time End</label>
+                            <Input type="time" value={row.preferredTimeEnd} onChange={e => updateInspRow(`pre_${key}`, { preferredTimeEnd: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
+                            <Input type="date" value={row.fallbackDateStart} onChange={e => updateInspRow(`pre_${key}`, { fallbackDateStart: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">Available Until</label>
+                            <Input type="date" value={row.fallbackDateEnd} onChange={e => updateInspRow(`pre_${key}`, { fallbackDateEnd: e.target.value })} />
+                          </div>
+                        </div>
+                        {!row.sent && user && (
+                          <div className="flex justify-end">
+                            <Button type="button" size="sm"
+                              disabled={row.sending || (!row.vendorId && row.sendMode === 'selected')}
+                              onClick={async () => {
+                                updateInspRow(`pre_${key}`, { sending: true });
+                                try {
+                                  const token = await user.getIdToken();
+                                  const effectiveVendorId = row.vendorId === 'USE_GENERAL' ? generalVendorId : row.vendorId;
+                                  const res = await fetch('/api/agent/inspection-request', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                    body: JSON.stringify({
+                                      transactionId: txId,
+                                      transactionType: 'listing',
+                                      inspectionCategory: key,
+                                      vendorId: effectiveVendorId || undefined,
+                                      sendMode: row.sendMode,
+                                      preferredDate: row.preferredDate,
+                                      preferredTimeStart: row.preferredTimeStart,
+                                      preferredTimeEnd: row.preferredTimeEnd,
+                                      fallbackDateStart: row.fallbackDateStart,
+                                      fallbackDateEnd: row.fallbackDateEnd,
+                                      propertyAddress: f.address || '',
+                                      clientName: f.sellerName || '',
+                                      clientPhone: f.sellerPhone || '',
+                                      clientEmail: f.sellerEmail || '',
+                                      agentName: f.agentDisplayName || '',
+                                      agentEmail: user.email || '',
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.ok) {
+                                    updateInspRow(`pre_${key}`, { sent: true, sending: false });
+                                    toast({ title: 'Request sent!', description: `Inspection request sent.` });
+                                  } else {
+                                    updateInspRow(`pre_${key}`, { sending: false });
+                                    toast({ title: 'Error', description: data.error || 'Failed to send', variant: 'destructive' });
+                                  }
+                                } catch (err: any) {
+                                  updateInspRow(`pre_${key}`, { sending: false });
+                                  toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                                }
+                              }}
+                            >
+                              {row.sending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sending...</> : <><Send className="h-3 w-3 mr-1" />Send Request</>}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-                <ESelect label="Pre-Listing Inspection Scheduling Status" name="preListingTcScheduleInspections" value={f.preListingTcScheduleInspections} onChange={setField} options={[
-                  { value: 'already_scheduled', label: '✅ Already Scheduled — I contacted the inspector' },
-                  { value: 'yes', label: '📋 TC / Staff to Schedule' },
-                  { value: 'other', label: '📝 Other / Notes' },
-                ]} />
-              </>
-            )}
+                );
+              })}
+            </div>
           </div>
         </SectionCard>
       )}
-
       {/* ── Media Order ───────────────────────────────────────────────────── */}
       {isListing && (
         <SectionCard title="Media Order" icon={<Camera className="h-4 w-4" />} defaultCollapsed={!f.mediaRequested}>
@@ -1141,6 +1445,28 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
         </SectionCard>
       )}
 
+      {/* ── Financial Details ─────────────────────────────────────────────── */}
+      <SectionCard title="Financial Details" icon={<DollarSign className="h-4 w-4" />} defaultCollapsed={!f.earnestMoney && !f.depositHolder}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <EInput label="Earnest Money Amount" name="earnestMoney" value={f.earnestMoney || ''} onChange={setField} type="number" />
+            <EInput label="Deposit Holder" name="depositHolder" value={f.depositHolder || ''} onChange={setField} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <EInput label="Buyer Closing Costs Paid by Seller ($)" name="buyerClosingCostTotal" value={f.buyerClosingCostTotal || ''} onChange={setField} type="number" />
+            <ESelect label="Occupancy Agreement?" name="occupancyAgreement" value={f.occupancyAgreement} onChange={setField} options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]} />
+          </div>
+          {f.occupancyAgreement === 'yes' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <EInput label="Occupancy Date" name="occupancyDate" value={f.occupancyDate || ''} onChange={setField} type="date" />
+              <EInput label="Occupancy Notes" name="occupancyNotes" value={f.occupancyNotes || ''} onChange={setField} />
+            </div>
+          )}
+        </div>
+      </SectionCard>
       {/* ── Additional Transaction Info ────────────────────────────────────── */}
       <SectionCard title="Additional Transaction Info" icon={<Info className="h-4 w-4" />} defaultCollapsed={!f.warrantyAtClosing && !f.occupancyAgreement && !f.shortageInCommission && !f.txComplianceFee}>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
