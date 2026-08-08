@@ -780,6 +780,12 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   };
 
   const handleApprove = async () => {
+    // Auto-save current form values before approving so TC edits are never lost
+    const isValid = await form.trigger();
+    if (isValid) {
+      const currentValues = form.getValues();
+      await handleSave(currentValues);
+    }
     try {
       const result = await callAction('approve');
       toast({ title: 'Transaction Approved', description: `Transaction ID: ${result.transactionId}` });
@@ -924,8 +930,11 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     return <Alert><AlertTitle>Not Found</AlertTitle><AlertDescription>Intake not found.</AlertDescription></Alert>;
   }
 
-  const isReadOnly = intake.status === 'approved' || intake.status === 'rejected' || intake.status === 'archived';
+  // TC can always edit — approved transactions stay editable so TC can make corrections after approval
+  // Only truly terminal states (rejected, archived) lock the form
+  const isReadOnly = intake.status === 'rejected' || intake.status === 'archived';
   const isActive = intake.status === 'submitted' || intake.status === 'in_review';
+  const isApproved = intake.status === 'approved';
   const watchedTxComplianceFee = form.watch('txComplianceFee');
   const isPassThrough = form.watch('isPassThrough');
   const assignedTc = tcProfiles.find((p) => p.id === intake.assignedTcProfileId);
@@ -2650,18 +2659,33 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? 'Saving...' : 'Save Changes'}
               </Button>
-              <Button
-                type="button"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={handleApprove}
-                disabled={acting}
-              >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                {acting ? 'Approving...' : 'Approve → Create Transaction'}
-              </Button>
-              <Button type="button" variant="destructive" onClick={() => setRejectOpen(true)} disabled={acting}>
-                <XCircle className="mr-2 h-4 w-4" /> Reject
-              </Button>
+              {!isApproved && (
+                <Button
+                  type="button"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={handleApprove}
+                  disabled={acting}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  {acting ? 'Approving...' : 'Approve → Create Transaction'}
+                </Button>
+              )}
+              {isApproved && (
+                <Button
+                  type="button"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={handleApprove}
+                  disabled={acting}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  {acting ? 'Saving...' : 'Save & Sync to Transaction'}
+                </Button>
+              )}
+              {!isApproved && (
+                <Button type="button" variant="destructive" onClick={() => setRejectOpen(true)} disabled={acting}>
+                  <XCircle className="mr-2 h-4 w-4" /> Reject
+                </Button>
+              )}
             </div>
           )}
         </form>
