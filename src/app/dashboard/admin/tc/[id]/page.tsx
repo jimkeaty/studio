@@ -927,15 +927,40 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const watchedListPrice = form.watch('listPrice');
   const watchedCommissionBasePrice = form.watch('commissionBasePrice');
 
-  // Live GCI recalculation: when commission % or price changes, auto-update GCI field
+  // Live commission recalculation: when % or price changes, update GCI and split dollars
+  const watchedAgentPct = form.watch('agentPct');
+  const watchedBrokerPct = form.watch('brokerPct');
+  const watchedGci = form.watch('gci');
   useEffect(() => {
     const pct = Number(watchedCommissionPct) || 0;
     const base = Number(watchedCommissionBasePrice) || Number(watchedSalePrice) || Number(watchedListPrice) || 0;
     if (pct > 0 && base > 0) {
       const newGci = Math.round(base * (pct / 100) * 100) / 100;
       form.setValue('gci', newGci as any, { shouldDirty: false });
+      // Also update split dollar amounts if split percentages are set
+      const agentPct = Number(watchedAgentPct) || 0;
+      const brokerPct = Number(watchedBrokerPct) || 0;
+      if (agentPct > 0) {
+        form.setValue('agentDollar', Math.round(newGci * (agentPct / 100) * 100) / 100 as any, { shouldDirty: false });
+      }
+      if (brokerPct > 0) {
+        form.setValue('brokerGci', Math.round(newGci * (brokerPct / 100) * 100) / 100 as any, { shouldDirty: false });
+      }
     }
   }, [watchedCommissionPct, watchedSalePrice, watchedListPrice, watchedCommissionBasePrice]);
+
+  // When agent % changes, recalculate agent dollar and broker dollar from current GCI
+  useEffect(() => {
+    const gci = Number(watchedGci) || 0;
+    const agentPct = Number(watchedAgentPct) || 0;
+    const brokerPct = Number(watchedBrokerPct) || 0;
+    if (gci > 0 && agentPct > 0) {
+      form.setValue('agentDollar', Math.round(gci * (agentPct / 100) * 100) / 100 as any, { shouldDirty: false });
+    }
+    if (gci > 0 && brokerPct > 0) {
+      form.setValue('brokerGci', Math.round(gci * (brokerPct / 100) * 100) / 100 as any, { shouldDirty: false });
+    }
+  }, [watchedAgentPct, watchedBrokerPct, watchedGci]);
 
   // ── Guards ───────────────────────────────────────────────────────────────
   if (userLoading || adminLoading || loading) {
@@ -2750,11 +2775,11 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
                 <Button
                   type="button"
                   className="bg-green-600 hover:bg-green-700 text-white"
-                  onClick={handleApprove}
-                  disabled={acting}
+                  onClick={form.handleSubmit(handleSave)}
+                  disabled={acting || saving}
                 >
                   <RefreshCw className="mr-2 h-4 w-4" />
-                  {acting ? 'Saving...' : 'Save & Sync to Transaction'}
+                  {(acting || saving) ? 'Saving...' : 'Save & Sync to Transaction'}
                 </Button>
               )}
               {!isApproved && (
