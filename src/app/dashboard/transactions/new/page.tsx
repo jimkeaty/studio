@@ -1607,13 +1607,14 @@ export default function AddTransactionPage() {
       const currentFeeEnabled = form.getValues('txComplianceFee') === 'yes';
       const currentFeeAmt = Number(form.getValues('txComplianceFeeAmount')) || 0;
       const agentPaysThisFee = currentFeeEnabled && currentFeeAmt > 0 && currentFeePaidBy === 'agent';
-      const agentNet = agentPaysThisFee
-        ? Number(Math.max(0, agentGross - currentFeeAmt).toFixed(2))
-        : agentGross;
+      // Always store agentGross (before fee) in agentDollar.
+      // The fee deduction is shown in the "You Take Home" display card
+      // and applied to splitSnapshot.agentNetCommission at save time.
+      // Storing agentNet here caused a double-deduction.
 
       form.setValue('agentPct', agentPct as any);
       form.setValue('brokerPct', brokerPct as any);
-      form.setValue('agentDollar', agentNet as any);
+      form.setValue('agentDollar', agentGross as any);
       form.setValue('brokerGci', brokerGci as any);
     }
   }, [watchedGCI, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy]);

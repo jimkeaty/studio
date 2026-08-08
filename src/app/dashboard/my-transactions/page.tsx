@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, ChevronRight, Home, Users, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { useIsAdminLike } from '@/hooks/useIsAdminLike';
 
 const STATUS_COLORS: Record<string, string> = {
   active:          'bg-green-100 text-green-800',
@@ -35,6 +36,7 @@ export default function MyTransactionsPage() {
   const { user, loading: userLoading } = useUser();
   const router = useRouter();
   const { isImpersonating, impersonatedAgent, impersonationReady } = useEffectiveUser();
+  const { isAdmin, loading: adminLoading } = useIsAdminLike();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,7 +71,7 @@ export default function MyTransactionsPage() {
     if (impersonationReady && user) load();
   }, [impersonationReady, isImpersonating, impersonatedAgent?.uid]);
 
-  if (userLoading || loading) {
+  if (userLoading || loading || adminLoading) {
     return (
       <div className="max-w-4xl mx-auto space-y-4">
         <Skeleton className="h-10 w-1/3" />
@@ -189,10 +191,27 @@ export default function MyTransactionsPage() {
         </Button>
       </div>
 
-      {transactions.length === 0 && (
+      {transactions.length === 0 && isAdmin && !isImpersonating && (
+        <Card>
+          <CardContent className="py-8 text-center space-y-3">
+            <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto" />
+            <p className="font-semibold text-base">You&apos;re signed in as an Admin</p>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              Admins don&apos;t have personal transactions here. Use the Transaction Ledger to view all agent transactions,
+              or impersonate an agent from their profile to see their transactions on this page.
+            </p>
+            <div className="flex gap-3 justify-center pt-2">
+              <Button onClick={() => router.push('/dashboard/admin/transactions')}>
+                View Transaction Ledger
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {transactions.length === 0 && (!isAdmin || isImpersonating) && (
         <Card>
           <CardContent className="pt-8 pb-8 text-center">
-            <p className="text-muted-foreground">No transactions yet.</p>
+            <p className="text-muted-foreground">No transactions submitted yet.</p>
             <Button asChild className="mt-4">
               <Link href="/dashboard/transactions/new">
                 <Plus className="mr-2 h-4 w-4" /> Add Your First Transaction
