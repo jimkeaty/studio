@@ -159,10 +159,17 @@ export async function PATCH(
     if (!txSnap.exists) return jsonError(404, 'Transaction not found');
     const txData = txSnap.data() || {};
 
+    // Block agents from editing closed transactions (server-side enforcement)
+    // Admins and staff use a different route and are not subject to this restriction.
+    const isAdminCheck = await isAdminLike(uid);
+    if (!isAdminCheck && txData.status === 'closed') {
+      return jsonError(403, 'Closed transactions cannot be edited by agents. Contact your admin or staff if a correction is needed.');
+    }
+
     // Verify ownership — agent can only edit their own transactions
     // Team leaders can also edit any transaction belonging to their team.
     // Admins can edit any transaction.
-    const isAdmin = await isAdminLike(uid);
+    const isAdmin = isAdminCheck; // reuse the check done above
     if (!isAdmin) {
       // Resolve all possible agentId values for this user.
       // The transaction's agentId field may be stored as:

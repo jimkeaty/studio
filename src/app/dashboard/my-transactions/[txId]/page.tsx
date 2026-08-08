@@ -541,11 +541,18 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
 
   const address = tx.propertyAddress || tx.address || 'Transaction';
   const status = tx.status || 'active';
+  const isClosed = status === 'closed';
   // closingType is the canonical field (buyer/listing/dual/referral).
   // dealType is the property type (residential_sale, land, commercial, etc.) and must NOT be used to determine side.
   const side = tx.closingType || tx.side || '';
   const isListing = side === 'listing' || side === 'dual';
   const isBuyer = side === 'buyer';
+
+  // Closed transactions are read-only for agents — they cannot be edited after closing
+  const setFieldGuarded = (name: string, value: any) => {
+    if (isClosed) return; // silently ignore edits on closed transactions
+    setField(name, value);
+  };
 
   // Group tasks by phase
   const phases: Record<string, AgentTask[]> = {};
@@ -593,13 +600,20 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
             {side && <Badge variant="outline" className="text-xs capitalize">{side}</Badge>}
           </div>
         </div>
-        <Button onClick={handleSave} disabled={!dirty || saving} className="gap-2">
+        <Button onClick={handleSave} disabled={!dirty || saving || isClosed} className="gap-2">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? 'Saving…' : 'Save Changes'}
         </Button>
       </div>
 
-      {dirty && (
+      {isClosed && (
+        <Alert className="border-gray-300 bg-gray-50">
+          <CheckCircle2 className="h-4 w-4 text-gray-500" />
+          <AlertTitle className="text-gray-700 text-sm font-medium">Transaction Closed — Read Only</AlertTitle>
+          <AlertDescription className="text-gray-600 text-sm">This transaction is closed and cannot be edited. Contact your admin or staff if a correction is needed.</AlertDescription>
+        </Alert>
+      )}
+      {dirty && !isClosed && (
         <Alert className="border-yellow-300 bg-yellow-50">
           <AlertTriangle className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="text-yellow-800 text-sm">You have unsaved changes. Click Save Changes to update this transaction.</AlertDescription>
@@ -1362,7 +1376,7 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
       )}
 
       {/* ── Sticky Save Bar ───────────────────────────────────────────────── */}
-      {dirty && (
+      {dirty && !isClosed && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t px-4 py-3 flex items-center justify-between gap-4 shadow-lg">
           <p className="text-sm text-muted-foreground">You have unsaved changes</p>
           <Button onClick={handleSave} disabled={saving} className="gap-2">
