@@ -919,6 +919,24 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
     }
   };
 
+  // ── Hooks that must be called before any conditional returns ─────────────
+  const watchedTxComplianceFee = form.watch('txComplianceFee');
+  const isPassThrough = form.watch('isPassThrough');
+  const watchedCommissionPct = form.watch('commissionPercent');
+  const watchedSalePrice = form.watch('salePrice');
+  const watchedListPrice = form.watch('listPrice');
+  const watchedCommissionBasePrice = form.watch('commissionBasePrice');
+
+  // Live GCI recalculation: when commission % or price changes, auto-update GCI field
+  useEffect(() => {
+    const pct = Number(watchedCommissionPct) || 0;
+    const base = Number(watchedCommissionBasePrice) || Number(watchedSalePrice) || Number(watchedListPrice) || 0;
+    if (pct > 0 && base > 0) {
+      const newGci = Math.round(base * (pct / 100) * 100) / 100;
+      form.setValue('gci', newGci as any, { shouldDirty: false });
+    }
+  }, [watchedCommissionPct, watchedSalePrice, watchedListPrice, watchedCommissionBasePrice]);
+
   // ── Guards ───────────────────────────────────────────────────────────────
   if (userLoading || adminLoading || loading) {
     return <div className="space-y-4"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-96 w-full" /></div>;
@@ -935,24 +953,6 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
   const isReadOnly = intake.status === 'rejected' || intake.status === 'archived';
   const isActive = intake.status === 'submitted' || intake.status === 'in_review';
   const isApproved = intake.status === 'approved';
-  const watchedTxComplianceFee = form.watch('txComplianceFee');
-  const isPassThrough = form.watch('isPassThrough');
-  const watchedCommissionPct = form.watch('commissionPercent');
-  const watchedSalePrice = form.watch('salePrice');
-  const watchedListPrice = form.watch('listPrice');
-  const watchedCommissionBasePrice = form.watch('commissionBasePrice');
-
-  // ── Live GCI recalculation ────────────────────────────────────────────────
-  // When commission % or price changes, auto-update the GCI display field so
-  // the TC can see the new GCI before saving. The server will recalculate on save.
-  useEffect(() => {
-    const pct = Number(watchedCommissionPct) || 0;
-    const base = Number(watchedCommissionBasePrice) || Number(watchedSalePrice) || Number(watchedListPrice) || 0;
-    if (pct > 0 && base > 0) {
-      const newGci = Math.round(base * (pct / 100) * 100) / 100;
-      form.setValue('gci', newGci as any, { shouldDirty: false });
-    }
-  }, [watchedCommissionPct, watchedSalePrice, watchedListPrice, watchedCommissionBasePrice]);
   const assignedTc = tcProfiles.find((p) => p.id === intake.assignedTcProfileId);
   const checklistCompleted = checklist.filter((c) => c.completed).length;
   const checklistTotal = checklist.length;
