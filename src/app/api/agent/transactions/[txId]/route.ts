@@ -126,6 +126,14 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'dealType', 'transactionType',
   // TC flag — agents must be able to toggle "Working with TC" on/off when editing
   'workingWithTc',
+  // Inspection row data (per-inspector details from add-transaction form)
+  'inspectionRowData',
+  // Staging consult fields
+  'stagingConsultRequested', 'stagingServiceType', 'stagingConsultationDate',
+  'stagingConsultationTime', 'stagingStagerName', 'stagingStagerEmail',
+  'stagingStagerPhone', 'stagingNotes', 'stagingTcSchedule',
+  // ShowingTime lockbox/alarm fields missing from earlier whitelist
+  'showingLockboxType', 'showingLockboxLocation',
 ]);
 
 // Statuses an agent is allowed to set
