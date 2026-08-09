@@ -1441,7 +1441,10 @@ export default function AddTransactionPage() {
       const warrantyAdd = (form.getValues('warrantyAtClosing') === 'yes' && warrantyAddsToGCI)
         ? (Number(form.getValues('warrantyAmount')) || 0)
         : 0;
-      const calcGCI = baseGCI + shortageAdd + txFeeAdd + warrantyAdd;
+      // If agent absorbs warranty → deduct from GCI BEFORE split (reduces the base the split is calculated on)
+      const warrantyAgentAbsorbs = form.getValues('warrantyAtClosing') === 'yes' && form.getValues('warrantyPaidBy') === 'agent';
+      const warrantyDeductFromGCI = warrantyAgentAbsorbs ? (Number(form.getValues('warrantyAmount')) || 0) : 0;
+      const calcGCI = baseGCI + shortageAdd + txFeeAdd + warrantyAdd - warrantyDeductFromGCI;
       form.setValue('gci', calcGCI as any);
     }
   }, [watchedCBP, watchedCommPct, shortageInCommission, shortageAmount, shortageHandledBy, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy, warrantyAtClosing, warrantyAmount, warrantyPaidBy]);
@@ -5878,11 +5881,12 @@ export default function AddTransactionPage() {
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
                   const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
                   const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
-                  // Shortage absorbed by agent — deducted from take-home
-                  const shortageAbsorbed = shortageInCommission === 'yes' && shortageHandledBy === 'agent' ? shortageAmount : 0;
-                  // Warranty absorbed by agent — deducted from take-home
+                  // Shortage absorbed by agent = write-off, no deduction from agent net or GCI
+                  const shortageAbsorbed = 0; // no financial effect when agent absorbs
+                  // Warranty absorbed by agent = already deducted from GCI before split (in auto-calc useEffect)
+                  // so agentDollar already reflects the reduced GCI — no additional deduction here
                   const warrantyAbsorbed = warrantyAtClosing === 'yes' && warrantyPaidBy === 'agent' ? warrantyAmount : 0;
-                  const agentNet = agentDollar - feeDeduction - shortageAbsorbed - warrantyAbsorbed;
+                  const agentNet = agentDollar - feeDeduction; // only tx fee deducted after split
                   // Split % is relative to netGci (after referral), not gross GCI
                   const splitPct = previewNetGci > 0 ? Math.round((agentDollar / previewNetGci) * 100) : (activeTier?.agentSplitPercent ?? 0);
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
@@ -5931,16 +5935,16 @@ export default function AddTransactionPage() {
                           )}
                         </div>
                       )}
-                      {shortageAbsorbed > 0 && (
+                      {shortageInCommission === 'yes' && shortageHandledBy === 'agent' && shortageAmount > 0 && (
                         <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
                           <p className="text-xs text-muted-foreground">Shortage in Commission (Agent Absorbed)</p>
-                          <p className="text-sm font-bold text-red-600">-{fmt(shortageAbsorbed)} deducted from your commission</p>
+                          <p className="text-sm font-semibold text-amber-600">Write-off — not collected. No deduction from your net.</p>
                         </div>
                       )}
                       {warrantyAbsorbed > 0 && (
                         <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
-                          <p className="text-xs text-muted-foreground">Home Warranty (Agent Absorbed)</p>
-                          <p className="text-sm font-bold text-red-600">-{fmt(warrantyAbsorbed)} deducted from your commission</p>
+                          <p className="text-xs text-muted-foreground">Home Warranty (Agent Pays — deducted from GCI before split)</p>
+                          <p className="text-sm font-bold text-amber-600">-{fmt(warrantyAbsorbed)} taken off GCI before your split was calculated</p>
                         </div>
                       )}
                     </div>
