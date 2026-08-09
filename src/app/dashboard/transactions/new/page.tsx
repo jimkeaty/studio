@@ -1227,6 +1227,10 @@ export default function AddTransactionPage() {
   type InspVendor = { id: string; name: string; email: string | null; phone: string | null; company: string | null };
   const [inspVendors, setInspVendors] = useState<Record<string, InspVendor[]>>({});
   const [inspVendorsLoading, setInspVendorsLoading] = useState(false);
+  // Inline add-inspector form state
+  const [addInspectorFor, setAddInspectorFor] = useState<string | null>(null); // inspection key
+  const [newInspForm, setNewInspForm] = useState({ name: '', company: '', phone: '', email: '' });
+  const [addInspectorSaving, setAddInspectorSaving] = useState(false);
   type InspRowState = {
     vendorId: string;
     sendMode: 'selected' | 'all';
@@ -1513,6 +1517,46 @@ export default function AddTransactionPage() {
     };
     loadStagers();
   }, [user]);
+
+  // Add a new inspector inline from the inspection card
+  const addInspectorInline = async (inspKey: string) => {
+    if (!newInspForm.name.trim()) return;
+    if (!user) return;
+    setAddInspectorSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: newInspForm.name.trim(),
+          company: newInspForm.company.trim() || null,
+          phone: newInspForm.phone.trim() || null,
+          email: newInspForm.email.trim() || null,
+          category: inspKey, // e.g. 'inspector_pool', 'inspector_general', etc.
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: 'Could not add inspector', description: data.error, variant: 'destructive' });
+        return;
+      }
+      // Add to local vendor list and auto-select
+      const newVendor = { id: data.id, name: newInspForm.name.trim(), company: newInspForm.company.trim() || null };
+      setInspVendors(prev => ({
+        ...prev,
+        [inspKey]: [...(prev[inspKey] || []), newVendor].sort((a, b) => a.name.localeCompare(b.name)),
+      }));
+      updateInspRow(inspKey, { vendorId: data.id });
+      setAddInspectorFor(null);
+      setNewInspForm({ name: '', company: '', phone: '', email: '' });
+      toast({ title: 'Inspector added', description: `${newInspForm.name} added and selected.` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setAddInspectorSaving(false);
+    }
+  };
 
   // Load inspection vendors (all inspector categories at once)
   useEffect(() => {
@@ -4269,7 +4313,15 @@ export default function AddTransactionPage() {
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
                               <select
                                 value={row.vendorId}
-                                onChange={e => updateInspRow(key, { vendorId: e.target.value })}
+                                onChange={e => {
+                                  if (e.target.value === '__ADD_NEW__') {
+                                    setAddInspectorFor(key);
+                                    setNewInspForm({ name: '', company: '', phone: '', email: '' });
+                                  } else {
+                                    updateInspRow(key, { vendorId: e.target.value });
+                                    setAddInspectorFor(null);
+                                  }
+                                }}
                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                               >
                                 <option value="">— Select inspector —</option>
@@ -4279,8 +4331,37 @@ export default function AddTransactionPage() {
                                   </option>
                                 )}
                                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
-                                {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
+                                <option value="__ADD_NEW__">➕ Add new inspector...</option>
                               </select>
+                              {addInspectorFor === key && (
+                                <div className="mt-2 p-3 rounded-md border border-primary/30 bg-primary/5 space-y-2">
+                                  <p className="text-xs font-semibold text-primary">Add New Inspector</p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <input type="text" placeholder="Name *" value={newInspForm.name}
+                                      onChange={e => setNewInspForm(p => ({ ...p, name: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring col-span-2" />
+                                    <input type="text" placeholder="Company" value={newInspForm.company}
+                                      onChange={e => setNewInspForm(p => ({ ...p, company: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                                    <input type="tel" placeholder="Phone" value={newInspForm.phone}
+                                      onChange={e => setNewInspForm(p => ({ ...p, phone: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                                    <input type="email" placeholder="Email" value={newInspForm.email}
+                                      onChange={e => setNewInspForm(p => ({ ...p, email: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring col-span-2" />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button type="button" onClick={() => addInspectorInline(key)}
+                                      disabled={addInspectorSaving || !newInspForm.name.trim()}
+                                      className="flex-1 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium disabled:opacity-50">
+                                      {addInspectorSaving ? 'Saving...' : 'Save & Select'}
+                                    </button>
+                                    <button type="button"
+                                      onClick={() => { setAddInspectorFor(null); setNewInspForm({ name: '', company: '', phone: '', email: '' }); }}
+                                      className="rounded-md border border-input px-3 py-1.5 text-xs">Cancel</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                             <div>
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>
@@ -5429,7 +5510,15 @@ export default function AddTransactionPage() {
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Inspector</label>
                               <select
                                 value={row.vendorId}
-                                onChange={e => updateInspRow(key, { vendorId: e.target.value })}
+                                onChange={e => {
+                                  if (e.target.value === '__ADD_NEW__') {
+                                    setAddInspectorFor(key);
+                                    setNewInspForm({ name: '', company: '', phone: '', email: '' });
+                                  } else {
+                                    updateInspRow(key, { vendorId: e.target.value });
+                                    setAddInspectorFor(null);
+                                  }
+                                }}
                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                               >
                                 <option value="">— Select inspector —</option>
@@ -5439,8 +5528,37 @@ export default function AddTransactionPage() {
                                   </option>
                                 )}
                                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ''}</option>)}
-                                {vendors.length === 0 && <option disabled value="">No inspectors added yet</option>}
+                                <option value="__ADD_NEW__">➕ Add new inspector...</option>
                               </select>
+                              {addInspectorFor === key && (
+                                <div className="mt-2 p-3 rounded-md border border-primary/30 bg-primary/5 space-y-2">
+                                  <p className="text-xs font-semibold text-primary">Add New Inspector</p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <input type="text" placeholder="Name *" value={newInspForm.name}
+                                      onChange={e => setNewInspForm(p => ({ ...p, name: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring col-span-2" />
+                                    <input type="text" placeholder="Company" value={newInspForm.company}
+                                      onChange={e => setNewInspForm(p => ({ ...p, company: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                                    <input type="tel" placeholder="Phone" value={newInspForm.phone}
+                                      onChange={e => setNewInspForm(p => ({ ...p, phone: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                                    <input type="email" placeholder="Email" value={newInspForm.email}
+                                      onChange={e => setNewInspForm(p => ({ ...p, email: e.target.value }))}
+                                      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring col-span-2" />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button type="button" onClick={() => addInspectorInline(key)}
+                                      disabled={addInspectorSaving || !newInspForm.name.trim()}
+                                      className="flex-1 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium disabled:opacity-50">
+                                      {addInspectorSaving ? 'Saving...' : 'Save & Select'}
+                                    </button>
+                                    <button type="button"
+                                      onClick={() => { setAddInspectorFor(null); setNewInspForm({ name: '', company: '', phone: '', email: '' }); }}
+                                      className="rounded-md border border-input px-3 py-1.5 text-xs">Cancel</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                             <div>
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Send To</label>

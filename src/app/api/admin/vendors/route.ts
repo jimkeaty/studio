@@ -68,12 +68,17 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const uid = await getUid(req);
   if (!uid) return jsonError(401, 'Unauthorized');
-  if (!(await isAdminLike(uid))) return jsonError(403, 'Forbidden');
   try {
     const body = await req.json();
     const { name, email, phone, company, category, notes } = body;
     if (!name?.trim()) return jsonError(400, 'Name is required');
     if (!category?.trim()) return jsonError(400, 'Category is required');
+    // Inspector vendors can be added by any authenticated user (agents add from transaction form)
+    // All other vendor types require admin
+    const isInspectorCategory = String(category).startsWith('inspector_');
+    if (!isInspectorCategory && !(await isAdminLike(uid))) {
+      return jsonError(403, 'Forbidden — only admins can add non-inspector vendors');
+    }
     const doc = await adminDb.collection('vendors').add({
       name: name.trim(),
       email: email?.trim() || null,
