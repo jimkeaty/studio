@@ -600,9 +600,15 @@ export default function AddTransactionPage() {
   const urlDraftId = urlSearchParams?.get('draft') ?? null;
   const editTxId = urlSearchParams?.get('edit') ?? null;
   const editMode = Boolean(editTxId);
+  // TC/Staff queue mode — when intakeId is present the form shows an action bar
+  const intakeId = urlSearchParams?.get('intakeId') ?? null;
+  const queueRole = urlSearchParams?.get('role') ?? null; // 'tc' | 'staff' | null
+  const isTcQueueMode = Boolean(intakeId && (queueRole === 'tc' || queueRole === 'staff'));
   const [submitted, setSubmitted] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [intakeStatus, setIntakeStatus] = useState<string | null>(null);
+  const [intakeApproving, setIntakeApproving] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
 
@@ -1893,6 +1899,26 @@ export default function AddTransactionPage() {
     loadTx();
   }, [editTxId, user, editLoaded]);
 
+  // ── Load intake status when in TC/staff queue mode ────────────────────────
+  useEffect(() => {
+    if (!intakeId || !user || !isTcQueueMode) return;
+    const loadIntake = async () => {
+      try {
+        const token = await user.getIdToken();
+        const apiPath = queueRole === 'staff'
+          ? `/api/admin/staff-queue/${intakeId}`
+          : `/api/admin/tc/${intakeId}`;
+        const res = await fetch(apiPath, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (data.ok) {
+          const status = data.intake?.status || data.item?.status || null;
+          setIntakeStatus(status);
+        }
+      } catch { /* non-fatal */ }
+    };
+    loadIntake();
+  }, [intakeId, user, isTcQueueMode, queueRole]);
+
   // ── Auto-save draft to Firestore every 30 seconds ─────────────────────────
   useEffect(() => {
     if (submitted) return;
@@ -2634,6 +2660,98 @@ export default function AddTransactionPage() {
 
       {/* Form — only shown after PDF step */}
       {(pdfStep === 'form') && (<>
+
+      {/* ── TC / Staff Queue Action Bar ─────────────────────────────────────
+          Shown when opened from TC queue (?intakeId=...&role=tc) or
+          staff queue (?intakeId=...&role=staff). Provides Approve, Save & Sync,
+          and a back link — all using the same unified form below.
+      ──────────────────────────────────────────────────────────────────────── */}
+      {isTcQueueMode && intakeId && (
+        <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-primary/30 bg-background/95 backdrop-blur px-4 py-3 shadow-md mb-2">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (queueRole === 'staff') window.location.href = '/dashboard/admin/staff-queue';
+                else window.location.href = '/dashboard/admin/tc';
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            >
+              ← {queueRole === 'staff' ? 'Staff Queue' : 'TC Queue'}
+            </button>
+            <span className="text-xs text-muted-foreground">|</span>
+            <span className="text-xs font-semibold text-foreground">
+              {queueRole === 'staff' ? '📋 Staff Queue' : '📋 TC Queue'} — {queueRole === 'staff' ? 'Staff' : 'TC'} View
+            </span>
+            {intakeStatus && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                intakeStatus === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
+                intakeStatus === 'in_review' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                intakeStatus === 'rejected' ? 'bg-red-100 text-red-700' :
+                'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+              }`}>
+                {intakeStatus === 'approved' ? '✓ Approved' :
+                 intakeStatus === 'in_review' ? '👁 In Review' :
+                 intakeStatus === 'rejected' ? '✗ Rejected' :
+                 '⏳ Submitted'}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Save Changes — same as the bottom submit button but inline */}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => form.handleSubmit(onSubmit)()}
+              className="text-xs"
+            >
+              {submitting ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Saving...</> : '💾 Save Changes'}
+            </Button>
+            {/* Approve — saves first then calls the approve API */}
+            {intakeStatus !== 'approved' && (
+              <Button
+                type="button"
+                size="sm"
+                disabled={intakeApproving || submitting}
+                onClick={async () => {
+                  if (!user || !intakeId) return;
+                  setIntakeApproving(true);
+                  try {
+                    // Save form first
+                    await form.handleSubmit(onSubmit)();
+                    // Then approve
+                    const token = await user.getIdToken();
+                    const apiPath = queueRole === 'staff'
+                      ? `/api/admin/staff-queue/${intakeId}`
+                      : `/api/admin/tc/${intakeId}`;
+                    const res = await fetch(apiPath, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({ action: 'approve' }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.error || 'Approval failed');
+                    setIntakeStatus('approved');
+                    toast({ title: '✅ Transaction Approved', description: 'Saved and approved successfully.' });
+                  } catch (err: any) {
+                    toast({ title: 'Approval Failed', description: err.message, variant: 'destructive' });
+                  } finally {
+                    setIntakeApproving(false);
+                  }
+                }}
+                className="text-xs bg-green-600 hover:bg-green-700 text-white"
+              >
+                {intakeApproving ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Approving...</> : '✓ Approve'}
+              </Button>
+            )}
+            {intakeStatus === 'approved' && (
+              <span className="text-xs text-green-700 dark:text-green-400 font-semibold">✓ Already Approved</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Draft restore banner */}
       {hasDraft && !draftRestored && (
