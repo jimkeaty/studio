@@ -1851,7 +1851,7 @@ export default function AddTransactionPage() {
           signNotes: tx.signNotes || '',
           showingTimeRequested: tx.showingTimeRequested ?? false,
           showingApptType: tx.showingApptType || '',
-          showingApptHandling: tx.showingApptHandling || '',
+          showingApptHandling: Array.isArray(tx.showingApptHandling) ? tx.showingApptHandling : (tx.showingApptHandling ? [tx.showingApptHandling] : []),
           showingLockboxType: tx.showingLockboxType || '',
           showingLockboxLocation: tx.showingLockboxLocation || '',
           showingAlarmDisarm: tx.showingAlarmDisarm || '',
