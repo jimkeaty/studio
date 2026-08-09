@@ -1980,6 +1980,8 @@ export default function AddTransactionPage() {
   // ── Auto-save draft to Firestore every 30 seconds ─────────────────────────
   useEffect(() => {
     if (submitted) return;
+    // In edit mode, the transaction document is the source of truth — ignore any saved draft
+    if (editMode) return;
     // Also check localStorage for legacy drafts
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
@@ -2012,6 +2014,10 @@ export default function AddTransactionPage() {
     return () => clearInterval(interval);
   }, [submitted, user, activeDraftId]);
 
+  // Fields that must always be arrays in the form schema
+  const ARRAY_FORM_FIELDS = new Set(['preListingInspectionTypes', 'inspectionTypes', 'mediaTypes',
+    'signAdditionalOptions', 'showingApptHandling', 'showingCallOrder2Notify',
+    'showingCallOrder3Notify', 'showingNotesToAgent']);
   const restoreDraft = () => {
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
@@ -2019,7 +2025,12 @@ export default function AddTransactionPage() {
       const { values } = JSON.parse(saved);
       Object.entries(values).forEach(([key, val]) => {
         if (val !== undefined && val !== null && val !== '') {
-          form.setValue(key as any, val as any);
+          // Ensure array fields are always restored as arrays, never as strings
+          if (ARRAY_FORM_FIELDS.has(key)) {
+            form.setValue(key as any, Array.isArray(val) ? val : (val ? [val as string] : []) as any);
+          } else {
+            form.setValue(key as any, val as any);
+          }
         }
       });
       setHasDraft(false);
