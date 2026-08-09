@@ -597,6 +597,8 @@ export default function AddTransactionPage() {
   const { toast } = useToast();
   const urlSearchParams = useSearchParams();
   const urlDraftId = urlSearchParams?.get('draft') ?? null;
+  const editTxId = urlSearchParams?.get('edit') ?? null;
+  const editMode = Boolean(editTxId);
   const [submitted, setSubmitted] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -610,7 +612,7 @@ export default function AddTransactionPage() {
   // 'type' is the new first step — select Buyer / Listing / Dual / Referral
   // Skip 'type' step when closingType is pre-set from URL params (e.g. listing→pending flow)
   type PdfStep = 'type' | 'upload' | 'extracting' | 'review' | 'form';
-  const [pdfStep, setPdfStep] = useState<PdfStep>(typeParamEarly ? 'upload' : 'type');
+  const [pdfStep, setPdfStep] = useState<PdfStep>(editMode ? 'form' : (typeParamEarly ? 'upload' : 'type'));
   const [pdfName, setPdfName] = useState<string>('');
   const [pdfConfidence, setPdfConfidence] = useState<Record<string, number>>({});
   const [pdfHighlightFields, setPdfHighlightFields] = useState<Set<string>>(new Set());
@@ -1656,6 +1658,213 @@ export default function AddTransactionPage() {
     loadDraft();
   }, [urlDraftId, user]);
 
+  // ── Load existing transaction for edit mode (?edit=txId) ─────────────────────
+  const [editLoaded, setEditLoaded] = useState(false);
+  useEffect(() => {
+    if (!editTxId || !user || editLoaded) return;
+    const loadTx = async () => {
+      try {
+        const token = await user.getIdToken();
+        const viewAsParam = isImpersonating && effectiveUid ? `?viewAs=${effectiveUid}` : '';
+        const res = await fetch(`/api/agent/transactions/${editTxId}${viewAsParam}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!res.ok || !data.transaction) {
+          toast({ title: 'Transaction not found', description: 'Could not load the transaction for editing.', variant: 'destructive' });
+          return;
+        }
+        const tx = data.transaction;
+        // Pre-fill all form fields from the transaction document
+        const fieldMap: Record<string, unknown> = {
+          agentId: tx.agentId || effectiveUid || '',
+          agentDisplayName: tx.agentDisplayName || effectiveName || '',
+          status: tx.status || tx.listingStatus || 'active',
+          closingType: tx.closingType || tx.side || 'listing',
+          dealType: tx.dealType || 'residential_sale',
+          address: tx.address || '',
+          clientName: tx.clientName || '',
+          dealSource: tx.dealSource || '',
+          listPrice: tx.listPrice || '',
+          salePrice: tx.salePrice || '',
+          commissionPercent: tx.commissionPercent || '',
+          commissionBasePrice: tx.commissionBasePrice || '',
+          sellerCommissionPct: tx.sellerCommissionPct || tx.commissionPercent || '',
+          buyerCommissionPct: tx.buyerCommissionPct || '',
+          gci: tx.gci || tx.splitSnapshot?.grossCommission || '',
+          brokerPct: tx.brokerPct || tx.splitSnapshot?.companySplitPercent || '',
+          brokerGci: tx.brokerGci || tx.splitSnapshot?.companyRetained || '',
+          agentPct: tx.agentPct || tx.splitSnapshot?.agentSplitPercent || '',
+          agentDollar: tx.agentDollar || tx.splitSnapshot?.agentNetCommission || '',
+          mlsNumber: tx.mlsNumber || '',
+          listingDate: tx.listingDate || '',
+          listingExpirationDate: tx.listingExpirationDate || '',
+          contractDate: tx.contractDate || '',
+          optionExpiration: tx.optionExpiration || '',
+          inspectionDeadline: tx.inspectionDeadline || '',
+          surveyDeadline: tx.surveyDeadline || '',
+          appraisalDeadline: tx.appraisalDeadline || '',
+          titleDeadline: tx.titleDeadline || '',
+          loanApplicationDeadline: tx.loanApplicationDeadline || '',
+          finalLoanCommitment: tx.finalLoanCommitment || '',
+          projectedCloseDate: tx.projectedCloseDate || '',
+          closingDate: tx.closingDate || '',
+          actualCloseDate: tx.actualCloseDate || '',
+          workingWithTc: tx.workingWithTc ?? false,
+          isCoListing: tx.isCoListing ?? false,
+          coListingAgentName: tx.coListingAgentName || '',
+          coListingAgentEmail: tx.coListingAgentEmail || '',
+          coListingAgentBrokerage: tx.coListingAgentBrokerage || '',
+          coListingAgentPhone: tx.coListingAgentPhone || '',
+          coListingAgentSplit: tx.coListingAgentSplit || '',
+          outboundReferral: tx.outboundReferral || '',
+          outboundReferralAgentName: tx.outboundReferralAgentName || '',
+          outboundReferralBrokerage: tx.outboundReferralBrokerage || '',
+          outboundReferralFee: tx.outboundReferralFee || '',
+          outboundReferralEmail: tx.outboundReferralEmail || '',
+          outboundReferralPhone: tx.outboundReferralPhone || '',
+          inboundReferral: tx.inboundReferral || '',
+          inboundReferralAgentName: tx.inboundReferralAgentName || '',
+          inboundReferralBrokerage: tx.inboundReferralBrokerage || '',
+          inboundReferralFee: tx.inboundReferralFee || '',
+          inboundReferralEmail: tx.inboundReferralEmail || '',
+          inboundReferralPhone: tx.inboundReferralPhone || '',
+          clientEmail: tx.clientEmail || '',
+          clientPhone: tx.clientPhone || '',
+          client2Name: tx.client2Name || '',
+          client2Email: tx.client2Email || '',
+          client2Phone: tx.client2Phone || '',
+          buyerName: tx.buyerName || '',
+          buyerEmail: tx.buyerEmail || '',
+          buyerPhone: tx.buyerPhone || '',
+          buyer2Name: tx.buyer2Name || '',
+          buyer2Email: tx.buyer2Email || '',
+          buyer2Phone: tx.buyer2Phone || '',
+          buyer3Name: tx.buyer3Name || '',
+          buyer3Email: tx.buyer3Email || '',
+          buyer3Phone: tx.buyer3Phone || '',
+          buyer4Name: tx.buyer4Name || '',
+          buyer4Email: tx.buyer4Email || '',
+          buyer4Phone: tx.buyer4Phone || '',
+          sellerName: tx.sellerName || '',
+          sellerEmail: tx.sellerEmail || '',
+          sellerPhone: tx.sellerPhone || '',
+          seller2Name: tx.seller2Name || '',
+          seller2Email: tx.seller2Email || '',
+          seller2Phone: tx.seller2Phone || '',
+          seller3Name: tx.seller3Name || '',
+          seller3Email: tx.seller3Email || '',
+          seller3Phone: tx.seller3Phone || '',
+          seller4Name: tx.seller4Name || '',
+          seller4Email: tx.seller4Email || '',
+          seller4Phone: tx.seller4Phone || '',
+          otherAgentName: tx.otherAgentName || '',
+          otherAgentEmail: tx.otherAgentEmail || '',
+          otherAgentPhone: tx.otherAgentPhone || '',
+          otherBrokerage: tx.otherBrokerage || '',
+          mortgageCompany: tx.mortgageCompany || '',
+          lenderOffice: tx.lenderOffice || '',
+          loanOfficer: tx.loanOfficer || '',
+          loanOfficerEmail: tx.loanOfficerEmail || '',
+          loanOfficerPhone: tx.loanOfficerPhone || '',
+          loanOfficerStreet: tx.loanOfficerStreet || '',
+          loanOfficeNumber: tx.loanOfficeNumber || '',
+          titleCompany: tx.titleCompany || '',
+          titleOfficer: tx.titleOfficer || '',
+          titleOfficerEmail: tx.titleOfficerEmail || '',
+          titleOfficerPhone: tx.titleOfficerPhone || '',
+          titleAttorney: tx.titleAttorney || '',
+          titleOffice: tx.titleOffice || '',
+          titleOfficerStreet: tx.titleOfficerStreet || '',
+          earnestMoney: tx.earnestMoney || '',
+          depositHolder: tx.depositHolder || '',
+          depositHolderOther: tx.depositHolderOther || '',
+          buyerClosingCostTotal: tx.buyerClosingCostTotal || '',
+          warrantyAtClosing: tx.warrantyAtClosing || '',
+          warrantyAmount: tx.warrantyAmount || '',
+          warrantyPaidBy: tx.warrantyPaidBy || '',
+          txComplianceFee: tx.txComplianceFee || '',
+          txComplianceFeeAmount: tx.txComplianceFeeAmount || '',
+          txComplianceFeePaidBy: tx.txComplianceFeePaidBy || '',
+          occupancyAgreement: tx.occupancyAgreement || '',
+          occupancyDate: tx.occupancyDate || '',
+          occupancyNotes: tx.occupancyNotes || '',
+          shortageInCommission: tx.shortageInCommission || '',
+          shortageAmount: tx.shortageAmount || '',
+          shortageHandledBy: tx.shortageHandledBy || '',
+          inspectionOrdered: tx.inspectionOrdered || '',
+          targetInspectionDate: tx.targetInspectionDate || '',
+          tcScheduleInspections: tx.tcScheduleInspections || '',
+          inspectionTypes: tx.inspectionTypes || [],
+          preListingInspectionOrdered: tx.preListingInspectionOrdered || '',
+          preListingTargetInspectionDate: tx.preListingTargetInspectionDate || '',
+          preListingTcScheduleInspections: tx.preListingTcScheduleInspections || '',
+          preListingInspectionTypes: tx.preListingInspectionTypes || [],
+          preListingInspectorName: tx.preListingInspectorName || '',
+          signOrderRequested: tx.signOrderRequested ?? false,
+          signServiceType: tx.signServiceType || '',
+          signRiderExt: tx.signRiderExt || [],
+          signAdditionalOptions: tx.signAdditionalOptions || [],
+          signRequestedDate: tx.signRequestedDate || '',
+          signNotes: tx.signNotes || '',
+          showingTimeRequested: tx.showingTimeRequested ?? false,
+          showingApptType: tx.showingApptType || '',
+          showingApptHandling: tx.showingApptHandling || '',
+          showingLockboxType: tx.showingLockboxType || '',
+          showingLockboxLocation: tx.showingLockboxLocation || '',
+          showingAlarmDisarm: tx.showingAlarmDisarm || '',
+          showingAlarmArm: tx.showingAlarmArm || '',
+          showingNotesToAgentOther: tx.showingNotesToAgentOther || '',
+          showingCallOrder1Name: tx.showingCallOrder1Name || '',
+          showingCallOrder1Phone: tx.showingCallOrder1Phone || '',
+          showingCallOrder2Name: tx.showingCallOrder2Name || '',
+          showingCallOrder2Phone: tx.showingCallOrder2Phone || '',
+          showingCallOrder3Name: tx.showingCallOrder3Name || '',
+          showingCallOrder3Phone: tx.showingCallOrder3Phone || '',
+          mediaRequested: tx.mediaRequested ?? false,
+          mediaTypes: tx.mediaTypes || [],
+          mediaRequestedDate: tx.mediaRequestedDate || '',
+          mediaNotes: tx.mediaNotes || '',
+          mlsDescription: tx.mlsDescription || '',
+          additionalNotes: tx.additionalNotes || '',
+          additionalComments: tx.additionalComments || '',
+          isPassThrough: tx.isPassThrough ?? false,
+          isCommercial: tx.isCommercial ?? false,
+          showingTimeId: tx.showingTimeId || '',
+        };
+        Object.entries(fieldMap).forEach(([key, val]) => {
+          if (val !== undefined && val !== null && val !== '') {
+            form.setValue(key as any, val as any);
+          }
+        });
+        // Also restore inspection row data
+        if (tx.inspectionRowData) {
+          const newRows: Record<string, any> = {};
+          Object.entries(tx.inspectionRowData).forEach(([key, row]: [string, any]) => {
+            if (row) {
+              newRows[key] = {
+                vendorId: row.vendorId || '',
+                sendMode: row.sendMode || 'selected_only',
+                preferredDate: row.preferredDate || '',
+                preferredTimeStart: row.preferredTimeStart || '08:00',
+                preferredTimeEnd: row.preferredTimeEnd || '17:00',
+                fallbackDateStart: row.fallbackDateStart || '',
+                fallbackDateEnd: row.fallbackDateEnd || '',
+                sent: row.sent || false,
+              };
+            }
+          });
+          setInspRows(newRows);
+        }
+        setEditLoaded(true);
+        toast({ title: 'Transaction loaded', description: 'All fields have been pre-filled. Make your changes and save.' });
+      } catch (err: any) {
+        toast({ title: 'Error loading transaction', description: err.message, variant: 'destructive' });
+      }
+    };
+    loadTx();
+  }, [editTxId, user, editLoaded]);
+
   // ── Auto-save draft to Firestore every 30 seconds ─────────────────────────
   useEffect(() => {
     if (submitted) return;
@@ -1858,6 +2067,63 @@ export default function AddTransactionPage() {
 
   // ── Submit handler ─────────────────────────────────────────────────────────
   const onSubmit = async (values: FormValues) => {
+    // ── Edit mode: PATCH the existing transaction ─────────────────────────
+    if (editMode && editTxId) {
+      setSubmitting(true);
+      try {
+        const token = await user!.getIdToken();
+        const viewAsParam = isImpersonating && effectiveUid ? `?viewAs=${effectiveUid}` : '';
+        const res = await fetch(`/api/agent/transactions/${editTxId}${viewAsParam}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            ...values,
+            documents: uploadedDocs,
+            inspectionRowData: Object.fromEntries(
+              INSP_TYPES.map(({ key, label }) => {
+                const row = inspRows[key];
+                if (!row) return [key, null];
+                const vendors = inspVendors[key] || [];
+                const generalVendors = inspVendors['inspector_general'] || [];
+                const effectiveVendorId = row.vendorId === 'USE_GENERAL'
+                  ? (inspRows['inspector_general']?.vendorId || '')
+                  : row.vendorId;
+                const vendorList = row.vendorId === 'USE_GENERAL' ? generalVendors : vendors;
+                const vendor = vendorList.find(v => v.id === effectiveVendorId) || null;
+                return [key, {
+                  label,
+                  vendorId: effectiveVendorId,
+                  vendorName: vendor?.name || '',
+                  vendorCompany: vendor?.company || '',
+                  sendMode: row.sendMode,
+                  preferredDate: row.preferredDate,
+                  preferredTimeStart: row.preferredTimeStart,
+                  preferredTimeEnd: row.preferredTimeEnd,
+                  fallbackDateStart: row.fallbackDateStart,
+                  fallbackDateEnd: row.fallbackDateEnd,
+                  sent: row.sent,
+                }];
+              })
+            ),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast({ title: 'Save failed', description: data.error || 'Could not save changes.', variant: 'destructive' });
+          return;
+        }
+        toast({ title: 'Changes saved', description: 'Transaction updated successfully.' });
+        // Reset dirty state
+        setEditLoaded(false);
+        setTimeout(() => setEditLoaded(true), 100);
+      } catch (err: any) {
+        toast({ title: 'Error saving', description: err.message, variant: 'destructive' });
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    // ── Normal add mode: POST to /api/tc ─────────────────────────────────
     if (!user) return;
     setSubmitting(true);
     try {
@@ -5881,7 +6147,7 @@ export default function AddTransactionPage() {
               className="min-w-[200px]"
             >
               <Send className="mr-2 h-4 w-4" />
-              {submitting ? 'Submitting...' : 'Submit to TC Queue'}
+              {submitting ? (editMode ? 'Saving...' : 'Submitting...') : (editMode ? 'Save Changes' : 'Submit to TC Queue')}
             </Button>
           </div>
 
