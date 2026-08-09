@@ -611,6 +611,11 @@ export default function AddTransactionPage() {
   const [intakeApproving, setIntakeApproving] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  // ── Checklist drawer state ─────────────────────────────────────────────────
+  type ChecklistItem = { id: string; order: number; label: string; completed: boolean; completedBy: string | null; completedAt: string | null };
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [checklistSaving, setChecklistSaving] = useState<string | null>(null); // itemId being saved
 
   // ── URL params — must be read before any state that depends on them ────────
   const typeParamEarly = urlSearchParams?.get('type');
@@ -1918,6 +1923,54 @@ export default function AddTransactionPage() {
     };
     loadIntake();
   }, [intakeId, user, isTcQueueMode, queueRole]);
+
+  // ── Load checklist items when in TC/staff queue mode ──────────────────────
+  useEffect(() => {
+    if (!intakeId || !user || !isTcQueueMode) return;
+    const loadChecklist = async () => {
+      try {
+        const token = await user.getIdToken();
+        const apiPath = queueRole === 'staff'
+          ? `/api/admin/staff-queue/${intakeId}`
+          : `/api/admin/tc/${intakeId}`;
+        const res = await fetch(apiPath, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (data.ok) {
+          const items: ChecklistItem[] = (data.checklist || data.intake?.checklist || [])
+            .sort((a: ChecklistItem, b: ChecklistItem) => (a.order ?? 0) - (b.order ?? 0));
+          setChecklistItems(items);
+        }
+      } catch { /* non-fatal */ }
+    };
+    loadChecklist();
+  }, [intakeId, user, isTcQueueMode, queueRole]);
+
+  // ── Toggle a checklist item ────────────────────────────────────────────────
+  const handleChecklistToggle = async (itemId: string, currentCompleted: boolean) => {
+    if (!user || !intakeId) return;
+    const newCompleted = !currentCompleted;
+    // Optimistic update
+    setChecklistItems(prev => prev.map(i => i.id === itemId ? { ...i, completed: newCompleted } : i));
+    setChecklistSaving(itemId);
+    try {
+      const token = await user.getIdToken();
+      const apiPath = queueRole === 'staff'
+        ? `/api/admin/staff-queue/${intakeId}`
+        : `/api/admin/tc/${intakeId}`;
+      await fetch(apiPath, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          checklist: [{ itemId, completed: newCompleted }],
+        }),
+      });
+    } catch {
+      // Revert on error
+      setChecklistItems(prev => prev.map(i => i.id === itemId ? { ...i, completed: currentCompleted } : i));
+    } finally {
+      setChecklistSaving(null);
+    }
+  };
 
   // ── Auto-save draft to Firestore every 30 seconds ─────────────────────────
   useEffect(() => {
@@ -6414,6 +6467,120 @@ export default function AddTransactionPage() {
         </form>
       </Form>
       </>)}
+
+      {/* ── Floating Checklist Button + Slide-in Drawer ─────────────────────
+          Only shown when opened from TC queue or staff queue (?intakeId=...)
+          Fixed to bottom-right corner. Opens a slide-in panel from the right.
+      ──────────────────────────────────────────────────────────────────────── */}
+      {isTcQueueMode && checklistItems.length > 0 && (
+        <>
+          {/* Floating trigger button */}
+          <button
+            type="button"
+            onClick={() => setChecklistOpen(o => !o)}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-primary text-primary-foreground shadow-lg px-4 py-3 text-sm font-semibold hover:bg-primary/90 transition-all"
+            aria-label="Open checklist"
+          >
+            <ClipboardList className="h-4 w-4" />
+            {(() => {
+              const done = checklistItems.filter(i => i.completed).length;
+              const total = checklistItems.length;
+              return <span>{done}/{total} done</span>;
+            })()}
+          </button>
+
+          {/* Backdrop */}
+          {checklistOpen && (
+            <div
+              className="fixed inset-0 z-40 bg-black/20"
+              onClick={() => setChecklistOpen(false)}
+            />
+          )}
+
+          {/* Slide-in drawer */}
+          <div
+            className={`fixed top-0 right-0 z-50 h-full w-80 bg-background border-l shadow-2xl flex flex-col transition-transform duration-300 ${checklistOpen ? 'translate-x-0' : 'translate-x-full'}`}
+          >
+            {/* Drawer header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
+              <div>
+                <p className="text-sm font-bold">
+                  {queueRole === 'staff' ? '📋 Staff Checklist' : '📋 TC Checklist'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {checklistItems.filter(i => i.completed).length} of {checklistItems.length} completed
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChecklistOpen(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Progress bar */}
+            <div className="px-4 pt-3 pb-1">
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-green-500 rounded-full transition-all duration-300"
+                  style={{ width: `${checklistItems.length > 0 ? Math.round((checklistItems.filter(i => i.completed).length / checklistItems.length) * 100) : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Checklist items */}
+            <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+              {checklistItems.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={checklistSaving === item.id}
+                  onClick={() => handleChecklistToggle(item.id, item.completed)}
+                  className={`w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                    item.completed
+                      ? 'bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300'
+                      : 'hover:bg-muted/60 text-foreground'
+                  }`}
+                >
+                  <div className={`mt-0.5 flex-shrink-0 h-4 w-4 rounded border-2 flex items-center justify-center transition-colors ${
+                    item.completed ? 'bg-green-500 border-green-500' : 'border-muted-foreground'
+                  }`}>
+                    {item.completed && (
+                      <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                    {checklistSaving === item.id && (
+                      <Loader2 className="h-2.5 w-2.5 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-xs font-medium leading-snug ${item.completed ? 'line-through opacity-70' : ''}`}>
+                      {item.label}
+                    </p>
+                    {item.completed && item.completedBy && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        ✓ {item.completedBy.split('@')[0]}
+                        {item.completedAt ? ` · ${new Date(item.completedAt).toLocaleDateString()}` : ''}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Drawer footer */}
+            <div className="px-4 py-3 border-t bg-muted/30">
+              <p className="text-xs text-muted-foreground text-center">
+                Changes save instantly · Click any item to toggle
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+
     </div>
   );
 }
