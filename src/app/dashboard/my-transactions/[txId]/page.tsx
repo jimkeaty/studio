@@ -455,6 +455,8 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           warrantyAmount: form.warrantyAmount ? Number(form.warrantyAmount) : undefined,
           shortageAmount: form.shortageAmount ? Number(form.shortageAmount) : undefined,
           txComplianceFeeAmount: form.txComplianceFeeAmount ? Number(form.txComplianceFeeAmount) : undefined,
+          // Include inspection row data (vendor selections, dates, times) — separate state from form
+          inspectionRowData: inspRows,
         }),
       });
       const data = await res.json();
@@ -638,10 +640,22 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const totalCount = tasks.length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // Commission (read-only)
-  const agentNet = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? null;
+  const f = form; // shorthand
+  // ── Commission — live recalculation ─────────────────────────────────────────
+  // agentPct comes from the saved splitSnapshot (set by commission plan, not editable by agent)
   const agentPct = tx.splitSnapshot?.agentSplitPercent ?? tx.agentPct ?? null;
   const sellerCommPct = tx.sellerPayingListingAgent ?? tx.commissionPercent ?? null;
+  // Live GCI: recompute whenever the agent changes commission % or price fields
+  const liveSellerPct = Number(f.sellerCommissionPct) || 0;
+  const liveBuyerPct = Number(f.buyerCommissionPct) || 0;
+  const liveCommissionPct = liveSellerPct + liveBuyerPct;
+  const liveBase = Number(f.commissionBasePrice) || Number(f.salePrice) || Number(f.listPrice) || 0;
+  const liveGCI = liveBase > 0 && liveCommissionPct > 0 ? liveBase * (liveCommissionPct / 100) : null;
+  const liveAgentNet = liveGCI !== null && agentPct !== null ? liveGCI * (Number(agentPct) / 100) : null;
+  // Show live value when agent has changed commission fields; fall back to saved value
+  const savedAgentNet = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? null;
+  const agentNet = liveAgentNet ?? savedAgentNet;
+  const commissionLiveUpdated = liveAgentNet !== null && liveAgentNet !== savedAgentNet;
   const txSalePrice = Number(tx.salePrice) || 0;
   const txListPrice = Number(tx.listPrice) || 0;
   const txStatus = tx.status || '';
@@ -654,7 +668,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
   const displayPrice = commissionIsEstimated ? txListPrice : (txSalePrice || txListPrice);
   const fmt$ = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-  const f = form; // shorthand
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
@@ -713,8 +726,13 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
               <span className="text-xs text-muted-foreground">Set by your commission plan</span>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-muted-foreground">{commissionIsEstimated ? 'Est. Net to Me' : 'Net to Me'}</span>
-              <span className="text-base font-semibold text-green-700">{agentNet !== null ? `$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                {commissionLiveUpdated ? 'Est. Net to Me (live)' : commissionIsEstimated ? 'Est. Net to Me' : 'Net to Me'}
+              </span>
+              <span className={`text-base font-semibold ${commissionLiveUpdated ? 'text-amber-600' : 'text-green-700'}`}>
+                {agentNet !== null ? `$${Number(agentNet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+              </span>
+              {commissionLiveUpdated && <span className="text-xs text-amber-600">Save to confirm</span>}
             </div>
           </div>
         </div>
