@@ -2915,6 +2915,16 @@ export default function TcReviewPage({ params }: { params: Promise<{ id: string 
           {/* Save / action buttons (bottom) */}
           {!isReadOnly && (
             <div className="flex flex-wrap items-center gap-3 pb-8">
+              {intake.approvedTransactionId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push(`/dashboard/transactions/new?edit=${intake.approvedTransactionId}`)}
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Edit Full Form
+                </Button>
+              )}
               <Button type="submit" disabled={saving}>
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? 'Saving...' : 'Save Changes'}

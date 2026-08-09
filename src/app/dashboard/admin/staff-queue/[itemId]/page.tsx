@@ -3099,6 +3099,16 @@ export default function StaffQueueDetailPage({ params }: { params: Promise<{ ite
           {/* Bottom action buttons */}
           {!isReadOnly && (
             <div className="flex flex-wrap items-center gap-3">
+              {(item?.transactionId || itemId) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push(`/dashboard/transactions/new?edit=${item?.transactionId || itemId}`)}
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Edit Full Form
+                </Button>
+              )}
               <Button type="submit" disabled={saving}>
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? 'Saving...' : 'Save Changes'}
