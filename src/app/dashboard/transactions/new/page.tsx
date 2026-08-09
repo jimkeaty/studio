@@ -1721,10 +1721,15 @@ export default function AddTransactionPage() {
         const tx = data.transaction;
         // Pre-fill all form fields from the transaction document
         // Helper: if a Firestore value is an array (legacy data), take the first element
-        // This prevents z.enum() validation failures when old data has arrays
+        // This prevents z.enum() and z.string() validation failures when old data has arrays
         const safeEnum = (val: unknown, fallback = '') => {
           if (Array.isArray(val)) return val[0] ?? fallback;
           return val ?? fallback;
+        };
+        const safeStr = (val: unknown, fallback = '') => {
+          if (Array.isArray(val)) return val[0] ?? fallback;
+          if (val === null || val === undefined) return fallback;
+          return String(val);
         };
 
         const fieldMap: Record<string, unknown> = {
@@ -1854,7 +1859,7 @@ export default function AddTransactionPage() {
           preListingInspectorName: tx.preListingInspectorName || '',
           signOrderRequested: tx.signOrderRequested ?? false,
           signServiceType: tx.signServiceType || '',
-          signRiderExt: tx.signRiderExt || [],
+          signRiderExt: Array.isArray(tx.signRiderExt) ? (tx.signRiderExt[0] ?? '') : (tx.signRiderExt || ''),
           signAdditionalOptions: tx.signAdditionalOptions || [],
           signRequestedDate: tx.signRequestedDate || '',
           signNotes: tx.signNotes || '',
@@ -1883,9 +1888,26 @@ export default function AddTransactionPage() {
           isCommercial: tx.isCommercial ?? false,
           showingTimeId: tx.showingTimeId || '',
         };
+        // Global sanitization: for any string field that has an array value in Firestore
+        // (legacy data from old form versions), coerce it to the first element or empty string.
+        // This prevents z.string() validation failures across all 80+ string fields at once.
+        const KNOWN_ARRAY_FIELDS = new Set([
+          'preListingInspectionTypes', 'inspectionTypes', 'mediaTypes',
+          'signAdditionalOptions', 'showingApptHandling', 'showingCallOrder2Notify',
+          'showingCallOrder3Notify', 'showingNotesToAgent',
+        ]);
         Object.entries(fieldMap).forEach(([key, val]) => {
           if (val !== undefined && val !== null && val !== '') {
-            form.setValue(key as any, val as any);
+            if (KNOWN_ARRAY_FIELDS.has(key)) {
+              // These are legitimately array fields — keep as-is
+              form.setValue(key as any, val as any);
+            } else if (Array.isArray(val)) {
+              // String/enum field got an array from Firestore — take first element
+              const coerced = val[0] ?? '';
+              if (coerced !== '') form.setValue(key as any, coerced as any);
+            } else {
+              form.setValue(key as any, val as any);
+            }
           }
         });
         // Also restore inspection row data
