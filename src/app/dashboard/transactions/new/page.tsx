@@ -1720,6 +1720,13 @@ export default function AddTransactionPage() {
         }
         const tx = data.transaction;
         // Pre-fill all form fields from the transaction document
+        // Helper: if a Firestore value is an array (legacy data), take the first element
+        // This prevents z.enum() validation failures when old data has arrays
+        const safeEnum = (val: unknown, fallback = '') => {
+          if (Array.isArray(val)) return val[0] ?? fallback;
+          return val ?? fallback;
+        };
+
         const fieldMap: Record<string, unknown> = {
           agentId: tx.agentId || effectiveUid || '',
           agentDisplayName: tx.agentDisplayName || effectiveName || '',
@@ -1824,25 +1831,25 @@ export default function AddTransactionPage() {
           depositHolder: tx.depositHolder || '',
           depositHolderOther: tx.depositHolderOther || '',
           buyerClosingCostTotal: tx.buyerClosingCostTotal || '',
-          warrantyAtClosing: tx.warrantyAtClosing || '',
+          warrantyAtClosing: safeEnum(tx.warrantyAtClosing, ''),
           warrantyAmount: tx.warrantyAmount || '',
           warrantyPaidBy: tx.warrantyPaidBy || '',
-          txComplianceFee: tx.txComplianceFee || '',
+          txComplianceFee: safeEnum(tx.txComplianceFee, ''),
           txComplianceFeeAmount: tx.txComplianceFeeAmount || '',
           txComplianceFeePaidBy: tx.txComplianceFeePaidBy || '',
-          occupancyAgreement: tx.occupancyAgreement || '',
+          occupancyAgreement: safeEnum(tx.occupancyAgreement, ''),
           occupancyDate: tx.occupancyDate || '',
           occupancyNotes: tx.occupancyNotes || '',
-          shortageInCommission: tx.shortageInCommission || '',
+          shortageInCommission: safeEnum(tx.shortageInCommission, ''),
           shortageAmount: tx.shortageAmount || '',
           shortageHandledBy: tx.shortageHandledBy || '',
-          inspectionOrdered: tx.inspectionOrdered || '',
+          inspectionOrdered: safeEnum(tx.inspectionOrdered, ''),
           targetInspectionDate: tx.targetInspectionDate || '',
-          tcScheduleInspections: tx.tcScheduleInspections || '',
+          tcScheduleInspections: safeEnum(tx.tcScheduleInspections, ''),
           inspectionTypes: tx.inspectionTypes || [],
-          preListingInspectionOrdered: tx.preListingInspectionOrdered || '',
+          preListingInspectionOrdered: safeEnum(tx.preListingInspectionOrdered, ''),
           preListingTargetInspectionDate: tx.preListingTargetInspectionDate || '',
-          preListingTcScheduleInspections: tx.preListingTcScheduleInspections || '',
+          preListingTcScheduleInspections: safeEnum(tx.preListingTcScheduleInspections, ''),
           preListingInspectionTypes: tx.preListingInspectionTypes || [],
           preListingInspectorName: tx.preListingInspectorName || '',
           signOrderRequested: tx.signOrderRequested ?? false,
