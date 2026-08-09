@@ -311,7 +311,7 @@ function CurrencyInput({
 // ─────────────────────────────────────────────────────────────────────────────
 const schema = z.object({
   // Agent
-  agentId: z.string().min(1, 'Agent is required'),
+  agentId: z.string().optional(),
   agentDisplayName: z.string().optional(),
 
   // Status
@@ -1547,6 +1547,8 @@ export default function AddTransactionPage() {
   useEffect(() => {
     if (!user) return;
     if (adminLoading) return; // Wait until we know if this user is admin or not
+    // In edit mode, agentId is already loaded from the transaction document — don't overwrite it
+    if (editMode) return;
     if (isImpersonating && effectiveUid && effectiveName) {
       form.setValue('agentId', effectiveUid);
       form.setValue('agentDisplayName', effectiveName);
@@ -1555,8 +1557,8 @@ export default function AddTransactionPage() {
       form.setValue('agentId', user.uid);
       form.setValue('agentDisplayName', user.displayName || user.email || user.uid);
     }
-    // For admins: leave agentId empty — they must select from the agent picker
-  }, [user, isAdmin, adminLoading, isImpersonating, effectiveUid, effectiveName]);
+    // For admins adding a NEW transaction: leave agentId empty — they must select from the agent picker
+  }, [user, isAdmin, adminLoading, isImpersonating, effectiveUid, effectiveName, editMode]);
 
   // Fetch agent commission structure
   const watchedAgentId = form.watch('agentId');
