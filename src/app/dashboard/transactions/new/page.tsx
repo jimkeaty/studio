@@ -5617,44 +5617,10 @@ export default function AddTransactionPage() {
               )} />
             )}
 
-            <Separator />
-
-            {/* Shortage in Commission */}
-            <FormField control={form.control} name="shortageInCommission" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Shortage in Commission?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )} />
-            {shortageInCommission === 'yes' && (
-              <Grid2>
-                <FormField control={form.control} name="shortageAmount" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>How much? ($)</FormLabel>
-                    <FormControl>
-                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                    </FormControl>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="buyerBringToClosing" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Buyer will bring to closing ($)</FormLabel>
-                    <FormControl>
-                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
-                    </FormControl>
-                  </FormItem>
-                )} />
-              </Grid2>
-            )}
           </Section>}
           {/* NOTE: Shortage in Commission moved to Buyer Closing Cost section below */}
           {/* Shortage in Commission moved — now lives in Buyer Closing Cost section */}
+          {/* Shortage section removed from Additional Info — it now lives in Buyer Closing Cost section below */}
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 5 — COMMISSION & FEES (buyer/dual only)
