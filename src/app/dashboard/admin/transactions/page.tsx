@@ -345,7 +345,7 @@ export default function AdminTransactionLedgerPage() {
 
   const openEdit = (tx: Transaction) => {
     // Navigate to the full-edit page (mirrors Add Transaction form exactly)
-    router.push(`/dashboard/admin/transactions/edit?id=${tx.id}`);
+    router.push(`/dashboard/transactions/new?edit=${tx.id}`);
   };
 
 
@@ -708,7 +708,7 @@ export default function AdminTransactionLedgerPage() {
                           <td className="px-3 py-1.5">{(tx as any).salePrice ? formatCurrency((tx as any).salePrice) : '—'}</td>
                           <td className="px-3 py-1.5">
                             <div className="flex items-center gap-1.5">
-                              <Link href={`/dashboard/admin/transactions/edit?id=${tx.id}`}>
+                              <Link href={`/dashboard/transactions/new?edit=${tx.id}`}>
                                 <button className="text-blue-600 hover:underline text-[11px]">Edit</button>
                               </Link>
                               <span className="text-muted-foreground">·</span>

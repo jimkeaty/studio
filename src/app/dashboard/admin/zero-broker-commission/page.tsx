@@ -187,7 +187,7 @@ export default function ZeroBrokerCommissionPage() {
                         </td>
                         <td className="px-4 py-2">
                           <Link
-                            href={`/dashboard/admin/transactions/edit?id=${tx.id}`}
+                            href={`/dashboard/transactions/new?edit=${tx.id}`}
                             className="text-blue-600 hover:underline text-[11px] font-medium"
                           >
                             Edit →
