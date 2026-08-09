@@ -2856,7 +2856,8 @@ export default function AddTransactionPage() {
           ═══════════════════════════════════════════════════════════════════ */}
           <Section title="Property / Transaction Details">
             {/* Agent selector — admin only */}
-            {isAdmin && (
+            {/* Agent selector — admin only, and only for NEW transactions (not edit mode) */}
+            {isAdmin && !editMode && (
               <FormField control={form.control} name="agentId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Agent <span className="text-destructive">*</span></FormLabel>
@@ -2883,6 +2884,16 @@ export default function AddTransactionPage() {
                   <FormMessage />
                 </FormItem>
               )} />
+            )}
+            {/* In edit mode, show agent name as read-only — agent ownership cannot be changed */}
+            {isAdmin && editMode && form.watch('agentDisplayName') && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Agent</label>
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md text-sm font-medium">
+                  👤 {form.watch('agentDisplayName')}
+                  <span className="ml-auto text-xs text-muted-foreground">(read-only)</span>
+                </div>
+              </div>
             )}
 
             <Grid2>
