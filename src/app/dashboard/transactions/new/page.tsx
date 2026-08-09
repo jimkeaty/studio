@@ -1730,9 +1730,9 @@ export default function AddTransactionPage() {
         const fieldMap: Record<string, unknown> = {
           agentId: tx.agentId || effectiveUid || '',
           agentDisplayName: tx.agentDisplayName || effectiveName || '',
-          status: tx.status || tx.listingStatus || 'active',
-          closingType: tx.closingType || tx.side || 'listing',
-          dealType: tx.dealType || 'residential_sale',
+          status: safeEnum(tx.status || tx.listingStatus, 'active') as any,
+          closingType: safeEnum(tx.closingType || tx.side, 'listing') as any,
+          dealType: safeEnum(tx.dealType, 'residential_sale') as any,
           address: tx.address || '',
           clientName: tx.clientName || '',
           dealSource: tx.dealSource || '',
@@ -1828,7 +1828,7 @@ export default function AddTransactionPage() {
           titleOffice: tx.titleOffice || '',
           titleOfficerStreet: tx.titleOfficerStreet || '',
           earnestMoney: tx.earnestMoney || '',
-          depositHolder: tx.depositHolder || '',
+          depositHolder: safeEnum(tx.depositHolder, ''),
           depositHolderOther: tx.depositHolderOther || '',
           buyerClosingCostTotal: tx.buyerClosingCostTotal || '',
           warrantyAtClosing: safeEnum(tx.warrantyAtClosing, ''),
@@ -2851,9 +2851,11 @@ export default function AddTransactionPage() {
           // Surface the first validation error as a toast so the user knows what to fix
           const firstError = Object.values(errors)[0];
           const message = firstError?.message || 'Please fill in all required fields before submitting.';
-          toast({ title: 'Cannot save — required field missing', description: String(message), variant: 'destructive' });
-          // Scroll to the first field with an error
           const firstKey = Object.keys(errors)[0];
+          // Log all errors to console for debugging
+          console.error('[Form validation errors]', JSON.stringify(errors, null, 2));
+          toast({ title: 'Cannot save — required field missing', description: `Field: ${firstKey} — ${String(message)}`, variant: 'destructive' });
+          // Scroll to the first field with an error
           const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         })} className="space-y-6">
