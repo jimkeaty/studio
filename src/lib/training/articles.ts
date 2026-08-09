@@ -1259,6 +1259,140 @@ export const ARTICLES: Article[] = [
 </table>
     `,
   },
+  // ── COMMISSION CALCULATION RULES ─────────────────────────────────────────────
+  {
+    id: 'commission-calculation-rules',
+    title: 'Commission Calculation: Fees, Shortage & Closing Cost Pool',
+    description:
+      'How the transaction compliance fee, shortage in commission, and home warranty are calculated — including who pays, when it affects GCI, and how the seller-paid closing cost pool works.',
+    category: 'Team & Commission',
+    audience: 'both',
+    readingTimeMinutes: 8,
+    publishedAt: '2026-08-09',
+    content: `
+<h2>Overview</h2>
+<p>When entering a buyer transaction in Smart Broker USA, three items can affect the final commission split: the <strong>Shortage in Commission</strong>, the <strong>Transaction Compliance Fee ($395)</strong>, and the <strong>Home Warranty</strong>. The financial impact of each item depends entirely on <em>who is paying for it</em>. This guide explains the exact rules for each scenario.</p>
+
+<h2>Payment Options and Their Financial Effect</h2>
+<p>Each item has multiple payment options. The table below shows the exact effect on Gross Commission Income (GCI), the seller-paid closing cost pool, and the agent's take-home pay.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Who Pays?</th>
+      <th>Adds to GCI?</th>
+      <th>Subtracts from Closing Cost Pool?</th>
+      <th>Deducted from Agent Take-Home?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Agent Absorbed</strong></td><td>No*</td><td>No</td><td>Depends on item (see below)</td></tr>
+    <tr><td><strong>Buyer Pays Directly</strong></td><td>Yes</td><td>No</td><td>No</td></tr>
+    <tr><td><strong>Seller Pays Directly</strong> (Warranty only)</td><td>No</td><td>No</td><td>No</td></tr>
+    <tr><td><strong>Seller Pays from Closing Cost</strong></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+  </tbody>
+</table>
+
+<h2>The Three Items — Exact Rules When Agent Absorbs</h2>
+
+<h3>1. Shortage in Commission (Agent Absorbs)</h3>
+<p>When the agent absorbs the shortage, it is treated as a <strong>write-off</strong>. The commission is simply short and nobody pays the difference. There is no effect on the GCI and no deduction from the agent's take-home pay.</p>
+<blockquote>Example: GCI is $6,000. Agent absorbs a $300 shortage. GCI stays $6,000. Agent take-home is unchanged.</blockquote>
+
+<h3>2. Transaction Compliance Fee — $395 (Agent Pays)</h3>
+<p>When the agent pays the $395 fee, it is treated as a <strong>post-split deduction</strong>. The split is calculated on the full GCI first, and then the $395 is deducted from the agent's net at the end.</p>
+<blockquote>Example: GCI is $6,000. Agent split is 70% = $4,200. Then $395 is deducted. Agent take-home = $3,805.</blockquote>
+
+<h3>3. Home Warranty (Agent Pays)</h3>
+<p>When the agent pays the home warranty, it is treated as a <strong>pre-split reduction</strong>. The warranty cost is deducted from the GCI <em>before</em> the split is calculated. This means the agent's split percentage is applied to a lower base amount.</p>
+<blockquote>Example: GCI is $6,000. Agent pays $500 warranty. GCI is reduced to $5,500 before the split. Agent split is 70% of $5,500 = $3,850 (not $4,200).</blockquote>
+
+<h2>The Seller-Paid Closing Cost Pool</h2>
+<p>When the seller agrees to pay a lump sum toward the buyer's closing costs (e.g., $5,000), that amount forms a <strong>closing cost pool</strong>. Any of the three items above can be paid from this pool. The system automatically calculates what remains for the buyer's actual closing costs.</p>
+
+<h3>How the Pool Works</h3>
+<ul>
+  <li>Items paid from the pool are <strong>subtracted from the pool balance</strong> and <strong>added to the GCI</strong> before the split.</li>
+  <li>The remaining pool balance is displayed to all roles (Agent, TC, Staff, Admin) in the transaction form.</li>
+  <li>If the allocated items exceed the pool total, the system will display a warning.</li>
+</ul>
+
+<h3>Example Calculation</h3>
+<table>
+  <thead>
+    <tr><th>Item</th><th>Amount</th><th>Effect on Pool</th><th>Effect on GCI</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Total Seller-Paid Closing Cost</td><td>$5,000</td><td>—</td><td>—</td></tr>
+    <tr><td>Shortage in Commission (from pool)</td><td>$1,000</td><td>−$1,000</td><td>+$1,000</td></tr>
+    <tr><td>Transaction Compliance Fee (from pool)</td><td>$395</td><td>−$395</td><td>+$395</td></tr>
+    <tr><td>Home Warranty (from pool)</td><td>$700</td><td>−$700</td><td>+$700</td></tr>
+    <tr><td><strong>Remaining for Buyer Closing Costs</strong></td><td><strong>$2,905</strong></td><td>—</td><td>—</td></tr>
+    <tr><td><strong>Adjusted GCI (Base + Pool Items)</strong></td><td colspan="3"><strong>$9,000 + $2,095 = $11,095</strong> (on a $300K sale at 3%)</td></tr>
+  </tbody>
+</table>
+
+<h2>Three Simulation Scenarios</h2>
+
+<h3>Scenario 1: Agent Absorbs Shortage, Agent Pays Tx Fee, Buyer Pays Warranty</h3>
+<table>
+  <thead><tr><th>Step</th><th>Calculation</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Sale Price × Commission %</td><td>$200,000 × 3%</td><td>$6,000 Base GCI</td></tr>
+    <tr><td>Shortage (Agent Absorbs)</td><td>Write-off — no effect</td><td>$6,000 GCI</td></tr>
+    <tr><td>Warranty (Buyer Pays)</td><td>+$500 added to GCI</td><td>$6,500 Adjusted GCI</td></tr>
+    <tr><td>Agent Split (70%)</td><td>$6,500 × 70%</td><td>$4,550</td></tr>
+    <tr><td>Tx Fee (Agent Pays)</td><td>$4,550 − $395</td><td><strong>$4,155 Agent Take-Home</strong></td></tr>
+  </tbody>
+</table>
+
+<h3>Scenario 2: Agent Pays Warranty (Pre-Split Deduction), Buyer Pays Tx Fee</h3>
+<table>
+  <thead><tr><th>Step</th><th>Calculation</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Sale Price × Commission %</td><td>$200,000 × 3%</td><td>$6,000 Base GCI</td></tr>
+    <tr><td>Warranty (Agent Pays)</td><td>$6,000 − $500 (pre-split)</td><td>$5,500 GCI</td></tr>
+    <tr><td>Tx Fee (Buyer Pays)</td><td>+$395 added to GCI</td><td>$5,895 Adjusted GCI</td></tr>
+    <tr><td>Agent Split (70%)</td><td>$5,895 × 70%</td><td>$4,126.50</td></tr>
+    <tr><td>No post-split deductions</td><td>—</td><td><strong>$4,126.50 Agent Take-Home</strong></td></tr>
+  </tbody>
+</table>
+
+<h3>Scenario 3: All Items Paid from Seller Closing Cost Pool</h3>
+<table>
+  <thead><tr><th>Step</th><th>Calculation</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Sale Price × Commission %</td><td>$300,000 × 3%</td><td>$9,000 Base GCI</td></tr>
+    <tr><td>Shortage + Tx Fee + Warranty (from pool)</td><td>+$1,000 + $395 + $700</td><td>$11,095 Adjusted GCI</td></tr>
+    <tr><td>Agent Split (70%)</td><td>$11,095 × 70%</td><td>$7,766.50</td></tr>
+    <tr><td>No post-split deductions</td><td>—</td><td><strong>$7,766.50 Agent Take-Home</strong></td></tr>
+    <tr><td>Pool Remaining</td><td>$5,000 − $2,095</td><td><strong>$2,905 for Buyer Closing Costs</strong></td></tr>
+  </tbody>
+</table>
+
+<h2>What Each Role Sees</h2>
+<table>
+  <thead><tr><th>Information</th><th>Agent</th><th>TC / Admin / Staff</th></tr></thead>
+  <tbody>
+    <tr><td>Commission Percentage</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Agent Split %</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Agent Net Take-Home</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Gross Commission Income (GCI)</td><td>✗</td><td>✓</td></tr>
+    <tr><td>Broker Split % and Broker Net</td><td>✗</td><td>✓</td></tr>
+    <tr><td>Closing Cost Pool Breakdown</td><td>✓</td><td>✓</td></tr>
+    <tr><td>All Deductions and Overrides</td><td>✗</td><td>✓</td></tr>
+  </tbody>
+</table>
+
+<h2>Quick Reference</h2>
+<ul>
+  <li><strong>Shortage (Agent Absorbs):</strong> Write-off. No GCI effect. No deduction from agent net.</li>
+  <li><strong>Tx Fee (Agent Pays):</strong> Post-split deduction. Deducted from agent net after split is calculated.</li>
+  <li><strong>Warranty (Agent Pays):</strong> Pre-split reduction. Deducted from GCI before split is calculated.</li>
+  <li><strong>Any item (Buyer Pays Directly or from Closing Cost Pool):</strong> Adds to GCI before split. No deduction from agent net.</li>
+</ul>
+    `,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
