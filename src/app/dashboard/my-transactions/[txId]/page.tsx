@@ -911,21 +911,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
         </div>
       </SectionCard>
 
-      {/* ── Financial Details ─────────────────────────────────────────────── */}
-      <SectionCard title="Financial Details" icon={<DollarSign className="h-4 w-4" />} defaultCollapsed={!f.earnestMoney}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <EInput label="Earnest Money" name="earnestMoney" value={f.earnestMoney} onChange={setField} type="number" />
-          <ESelect label="Deposit Holder" name="depositHolder" value={f.depositHolder} onChange={setField} options={[
-            { value: 'listing_brokerage', label: 'Listing Brokerage' },
-            { value: 'title_company', label: 'Title Company' },
-            { value: 'other', label: 'Other' },
-          ]} />
-          {f.depositHolder === 'other' && (
-            <EInput label="Deposit Holder (Other)" name="depositHolderOther" value={f.depositHolderOther} onChange={setField} />
-          )}
-          <EInput label="Buyer Closing Costs Paid by Seller" name="buyerClosingCostTotal" value={f.buyerClosingCostTotal} onChange={setField} type="number" />
-        </div>
-      </SectionCard>
 
       {/* ── MLS Information ───────────────────────────────────────────────── */}
       {isListing && (
@@ -979,36 +964,6 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ tx
           </div>
         </SectionCard>
       )}
-
-      {/* ── Referrals ────────────────────────────────────────────────────────── */}
-      <SectionCard title="Referrals" icon={<Users className="h-4 w-4" />} defaultCollapsed={!f.hasOutboundReferral && !f.hasInboundReferral}>
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Checkbox id="hasOutboundReferral" checked={Boolean(f.hasOutboundReferral)} onCheckedChange={v => setField('hasOutboundReferral', v)} />
-            <label htmlFor="hasOutboundReferral" className="text-sm cursor-pointer font-medium">Outbound Referral Fee</label>
-          </div>
-          {f.hasOutboundReferral && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-6">
-              <EInput label="Referral % (of GCI)" name="outboundReferralPercent" value={f.outboundReferralPercent || ''} onChange={setField} type="number" />
-              <EInput label="Referral Dollar Amount" name="outboundReferralDollar" value={f.outboundReferralDollar || ''} onChange={setField} type="number" />
-              <EInput label="Outside Broker / Company" name="outboundReferralBrokerName" value={f.outboundReferralBrokerName || ''} onChange={setField} />
-              <EInput label="Referring Agent / Contact" name="outboundReferralContactName" value={f.outboundReferralContactName || ''} onChange={setField} />
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <Checkbox id="hasInboundReferral" checked={Boolean(f.hasInboundReferral)} onCheckedChange={v => setField('hasInboundReferral', v)} />
-            <label htmlFor="hasInboundReferral" className="text-sm cursor-pointer font-medium">Inbound Referral</label>
-          </div>
-          {f.hasInboundReferral && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-6">
-              <EInput label="Referring Agent Name" name="inboundReferralAgentName" value={f.inboundReferralAgentName || ''} onChange={setField} />
-              <EInput label="Referring Brokerage" name="inboundReferralBrokerage" value={f.inboundReferralBrokerage || ''} onChange={setField} />
-              <EInput label="Inbound Fee (%)" name="inboundReferralFeePercent" value={f.inboundReferralFeePercent || ''} onChange={setField} type="number" />
-              <EInput label="Inbound Fee ($)" name="inboundReferralFeeDollar" value={f.inboundReferralFeeDollar || ''} onChange={setField} type="number" />
-            </div>
-          )}
-        </div>
-      </SectionCard>
 
       {/* ── Buyer Inspection ──────────────────────────────────────────────── */}
       {isBuyer && (
