@@ -60,7 +60,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'sellerPayingListingAgent', 'sellerPayingBuyerAgent',
   // Additional transaction info
   'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
-  'shortageInCommission', 'shortageAmount',
+  'shortageInCommission', 'shortageAmount', 'shortageHandledBy',
   'occupancyAgreement', 'occupancyDates',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
   // Referrals

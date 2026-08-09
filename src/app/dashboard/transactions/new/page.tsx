@@ -527,6 +527,7 @@ const schema = z.object({
   shortageInCommission: z.enum(['yes', 'no']).optional(),
   shortageAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
+  shortageHandledBy: z.string().optional(),
 
   additionalComments: z.string().optional(),
   notes: z.string().optional(),
@@ -1312,6 +1313,10 @@ export default function AddTransactionPage() {
   const txComplianceFeeAmount = Number(form.watch('txComplianceFeeAmount')) || 0;
   const txComplianceFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
   const shortageInCommission = form.watch('shortageInCommission');
+  const shortageAmount = Number(form.watch('shortageAmount')) || 0;
+  const shortageHandledBy = form.watch('shortageHandledBy') || '';
+  const warrantyAmount = Number(form.watch('warrantyAmount')) || 0;
+  const warrantyPaidBy = form.watch('warrantyPaidBy') || '';
   const tcScheduleInspections = form.watch('tcScheduleInspections');
   const occupancyAgreement = form.watch('occupancyAgreement');
   const inspectionTypes = form.watch('inspectionTypes') || [];
@@ -1402,10 +1407,33 @@ export default function AddTransactionPage() {
     const cbp = Number(watchedCBP) || 0;
     const pct = Number(watchedCommPct) || 0;
     if (cbp > 0 && pct > 0) {
-      const calcGCI = resolveGCI({ commissionBasePrice: cbp, commissionPercent: pct });
+      // Base commission from seller (CBP × %)
+      const baseGCI = resolveGCI({ commissionBasePrice: cbp, commissionPercent: pct });
+      // Add shortage if buyer is paying directly or through seller closing cost
+      const shortageAddsToGCI = ['buyer', 'seller_closing_cost'].includes(
+        form.getValues('shortageHandledBy') || ''
+      );
+      const shortageAdd = (form.getValues('shortageInCommission') === 'yes' && shortageAddsToGCI)
+        ? (Number(form.getValues('shortageAmount')) || 0)
+        : 0;
+      // Add tx compliance fee if buyer is paying directly or through seller closing cost
+      const txFeeAddsToGCI = ['buyer', 'seller_closing_cost'].includes(
+        form.getValues('txComplianceFeePaidBy') || ''
+      );
+      const txFeeAdd = (form.getValues('txComplianceFee') === 'yes' && txFeeAddsToGCI)
+        ? (Number(form.getValues('txComplianceFeeAmount')) || 0)
+        : 0;
+      // Add warranty if buyer is paying directly or through seller closing cost
+      const warrantyAddsToGCI = ['buyer', 'seller_closing_cost'].includes(
+        form.getValues('warrantyPaidBy') || ''
+      );
+      const warrantyAdd = (form.getValues('warrantyAtClosing') === 'yes' && warrantyAddsToGCI)
+        ? (Number(form.getValues('warrantyAmount')) || 0)
+        : 0;
+      const calcGCI = baseGCI + shortageAdd + txFeeAdd + warrantyAdd;
       form.setValue('gci', calcGCI as any);
     }
-  }, [watchedCBP, watchedCommPct]);
+  }, [watchedCBP, watchedCommPct, shortageInCommission, shortageAmount, shortageHandledBy, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy, warrantyAtClosing, warrantyAmount, warrantyPaidBy]);
 
   // Commercial lease auto-calc: monthly × 12 × term = total lease value; then GCI
   useEffect(() => {
@@ -5328,7 +5356,8 @@ export default function AddTransactionPage() {
                         <SelectContent>
                           <SelectItem value="buyer">Buyer</SelectItem>
                           <SelectItem value="seller">Seller</SelectItem>
-                          <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
+                          <SelectItem value="agent">Agent Absorbed</SelectItem>
+                          <SelectItem value="seller_closing_cost">Seller — from Closing Cost Paid to Buyer</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
@@ -5453,6 +5482,8 @@ export default function AddTransactionPage() {
               </Grid2>
             )}
           </Section>}
+          {/* NOTE: Shortage in Commission moved to Buyer Closing Cost section below */}
+          {/* Shortage in Commission moved — now lives in Buyer Closing Cost section */}
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 5 — COMMISSION & FEES (buyer/dual only)
@@ -5596,6 +5627,101 @@ export default function AddTransactionPage() {
             </div>
 
             {/* Agent view: Estimated earnings bar — shows split % and take-home; hides GCI and broker details */}
+            {/* ── Shortage in Commission ──────────────────────────────────────── */}
+            <Separator />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Shortage in Commission</p>
+            <FormField control={form.control} name="shortageInCommission" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Is there a shortage in commission?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+            {shortageInCommission === 'yes' && (
+              <Grid2>
+                <FormField control={form.control} name="shortageAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Shortage Amount ($)</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" />
+                    </FormControl>
+                    <FormDescription>Dollar amount of the commission shortage</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="shortageHandledBy" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Who is covering the shortage?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="agent">Agent Absorbed (deducted from agent net)</SelectItem>
+                        <SelectItem value="buyer">Buyer Paying Directly (adds to GCI)</SelectItem>
+                        <SelectItem value="seller_closing_cost">Seller — from Closing Cost Paid to Buyer (adds to GCI)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {shortageHandledBy === 'agent' && 'Shortage is deducted from your take-home. GCI is unchanged.'}
+                      {shortageHandledBy === 'buyer' && 'Buyer brings this amount to closing. Added to GCI before split.'}
+                      {shortageHandledBy === 'seller_closing_cost' && 'Paid from seller\'s closing cost contribution. Added to GCI before split and subtracted from closing cost pool.'}
+                    </FormDescription>
+                  </FormItem>
+                )} />
+              </Grid2>
+            )}
+
+            {/* ── Closing Cost Pool Breakdown ──────────────────────────────────── */}
+            {(() => {
+              const pool = Number(form.watch('buyerClosingCostTotal')) || 0;
+              if (pool <= 0) return null;
+              const shortageFromPool = shortageInCommission === 'yes' && shortageHandledBy === 'seller_closing_cost' ? shortageAmount : 0;
+              const txFeeFromPool = txComplianceFee === 'yes' && txComplianceFeePaidBy === 'seller_closing_cost' ? txComplianceFeeAmount : 0;
+              const warrantyFromPool = warrantyAtClosing === 'yes' && warrantyPaidBy === 'seller_closing_cost' ? warrantyAmount : 0;
+              const totalAllocated = shortageFromPool + txFeeFromPool + warrantyFromPool;
+              const remaining = pool - totalAllocated;
+              const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+              return (
+                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-4 space-y-2">
+                  <p className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wide">📋 Seller-Paid Closing Cost Allocation</p>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Seller-Paid Closing Cost</span>
+                      <span className="font-semibold">{fmt(pool)}</span>
+                    </div>
+                    {shortageFromPool > 0 && (
+                      <div className="flex justify-between text-amber-700 dark:text-amber-400">
+                        <span>− Shortage in Commission</span>
+                        <span className="font-semibold">({fmt(shortageFromPool)})</span>
+                      </div>
+                    )}
+                    {txFeeFromPool > 0 && (
+                      <div className="flex justify-between text-amber-700 dark:text-amber-400">
+                        <span>− Transaction Compliance Fee</span>
+                        <span className="font-semibold">({fmt(txFeeFromPool)})</span>
+                      </div>
+                    )}
+                    {warrantyFromPool > 0 && (
+                      <div className="flex justify-between text-amber-700 dark:text-amber-400">
+                        <span>− Home Warranty</span>
+                        <span className="font-semibold">({fmt(warrantyFromPool)})</span>
+                      </div>
+                    )}
+                    <div className={`flex justify-between border-t pt-1 font-bold ${remaining < 0 ? 'text-red-600' : 'text-green-700 dark:text-green-400'}`}>
+                      <span>Remaining for Buyer Closing Costs</span>
+                      <span>{fmt(remaining)}</span>
+                    </div>
+                    {remaining < 0 && (
+                      <p className="text-xs text-red-600 font-semibold">⚠️ Allocations exceed the seller-paid closing cost total by {fmt(Math.abs(remaining))}.</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {!isAdminOrTC && (
               <>
                 <Separator />
@@ -5615,7 +5741,11 @@ export default function AddTransactionPage() {
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
                   const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
                   const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
-                  const agentNet = agentDollar - feeDeduction;
+                  // Shortage absorbed by agent — deducted from take-home
+                  const shortageAbsorbed = shortageInCommission === 'yes' && shortageHandledBy === 'agent' ? shortageAmount : 0;
+                  // Warranty absorbed by agent — deducted from take-home
+                  const warrantyAbsorbed = warrantyAtClosing === 'yes' && warrantyPaidBy === 'agent' ? warrantyAmount : 0;
+                  const agentNet = agentDollar - feeDeduction - shortageAbsorbed - warrantyAbsorbed;
                   // Split % is relative to netGci (after referral), not gross GCI
                   const splitPct = previewNetGci > 0 ? Math.round((agentDollar / previewNetGci) * 100) : (activeTier?.agentSplitPercent ?? 0);
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
@@ -5662,6 +5792,18 @@ export default function AddTransactionPage() {
                           ) : (
                             <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)} — not deducted from your commission</p>
                           )}
+                        </div>
+                      )}
+                      {shortageAbsorbed > 0 && (
+                        <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
+                          <p className="text-xs text-muted-foreground">Shortage in Commission (Agent Absorbed)</p>
+                          <p className="text-sm font-bold text-red-600">-{fmt(shortageAbsorbed)} deducted from your commission</p>
+                        </div>
+                      )}
+                      {warrantyAbsorbed > 0 && (
+                        <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
+                          <p className="text-xs text-muted-foreground">Home Warranty (Agent Absorbed)</p>
+                          <p className="text-sm font-bold text-red-600">-{fmt(warrantyAbsorbed)} deducted from your commission</p>
                         </div>
                       )}
                     </div>

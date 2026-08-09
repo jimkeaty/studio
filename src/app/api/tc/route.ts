@@ -261,6 +261,7 @@ export async function POST(req: NextRequest) {
       occupancyDates: toStr(body.occupancyDates) || null,
       shortageInCommission: toStr(body.shortageInCommission) || null,
       shortageAmount: toNum(body.shortageAmount) || null,
+      shortageHandledBy: toStr(body.shortageHandledBy) || null,
 
       // Pre-listing inspection
       preListingInspectionOrdered: toStr(body.preListingInspectionOrdered) || null,

@@ -404,7 +404,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
         'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
         'occupancyAgreement', 'occupancyDates',
-        'shortageInCommission', 'shortageAmount',
+        'shortageInCommission', 'shortageAmount', 'shortageHandledBy',
         // Referrals
         'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
         'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralFee',
@@ -480,7 +480,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther', 'buyerBringToClosing',
           'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
           'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
-          'occupancyAgreement', 'occupancyDates', 'shortageInCommission', 'shortageAmount',
+          'occupancyAgreement', 'occupancyDates', 'shortageInCommission', 'shortageAmount', 'shortageHandledBy',
           'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
           'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralFee',
           'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
