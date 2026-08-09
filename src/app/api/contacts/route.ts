@@ -2,6 +2,7 @@
 // POST /api/contacts                            — create or upsert a contact
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { admin } from '@/lib/firebase/admin';
 import { isStaff } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
@@ -155,10 +156,13 @@ export async function POST(req: NextRequest) {
     // Upsert: find existing by email or name+type
     if (upsert) {
       let existingId: string | null = null;
+      // Always scope upsert lookups to the same owner so each agent gets their
+      // own copy of a contact rather than silently updating another agent's record.
       if (contact.email) {
         const emailSnap = await adminDb.collection('contacts')
           .where('type', '==', type)
           .where('email', '==', contact.email)
+          .where('createdBy', '==', effectiveCreatedBy)
           .limit(1).get();
         if (!emailSnap.empty) existingId = emailSnap.docs[0].id;
       }
@@ -166,6 +170,7 @@ export async function POST(req: NextRequest) {
         const nameSnap = await adminDb.collection('contacts')
           .where('type', '==', type)
           .where('name', '==', contact.name)
+          .where('createdBy', '==', effectiveCreatedBy)
           .limit(1).get();
         if (!nameSnap.empty) existingId = nameSnap.docs[0].id;
       }
@@ -173,6 +178,7 @@ export async function POST(req: NextRequest) {
         const coSnap = await adminDb.collection('contacts')
           .where('type', '==', type)
           .where('companyName', '==', contact.companyName)
+          .where('createdBy', '==', effectiveCreatedBy)
           .limit(1).get();
         if (!coSnap.empty) existingId = coSnap.docs[0].id;
       }
@@ -180,9 +186,7 @@ export async function POST(req: NextRequest) {
       if (existingId) {
         await adminDb.collection('contacts').doc(existingId).update({
           ...contact,
-          usageCount: (adminDb as any).FieldValue
-            ? (adminDb as any).FieldValue.increment(1)
-            : ((await adminDb.collection('contacts').doc(existingId).get()).data()?.usageCount || 0) + 1,
+          usageCount: admin.firestore.FieldValue.increment(1),
         });
         return NextResponse.json({ ok: true, id: existingId, upserted: true });
       }
