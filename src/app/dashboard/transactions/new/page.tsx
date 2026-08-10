@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useRef, useState, useCallback, type ChangeEvent } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useIsAdminLike } from '@/hooks/useIsAdminLike';
@@ -312,6 +312,7 @@ function CurrencyInput({
 const schema = z.object({
   // Agent
   agentId: z.string().optional(),
+  isPassThrough: z.boolean().optional(),
   agentDisplayName: z.string().optional(),
 
   // Status
@@ -594,6 +595,7 @@ function Grid3({ children }: { children: React.ReactNode }) {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AddTransactionPage() {
   const { user, loading: userLoading } = useUser();
+  const router = useRouter();
   const { effectiveUid, effectiveName, isImpersonating } = useEffectiveUser();
   const { toast } = useToast();
   const urlSearchParams = useSearchParams();
@@ -608,6 +610,11 @@ export default function AddTransactionPage() {
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [intakeStatus, setIntakeStatus] = useState<string | null>(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [intakeApproving, setIntakeApproving] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -1542,7 +1549,7 @@ export default function AddTransactionPage() {
         return;
       }
       // Add to local vendor list and auto-select
-      const newVendor = { id: data.id, name: newInspForm.name.trim(), company: newInspForm.company.trim() || null };
+      const newVendor = { id: data.id, name: newInspForm.name.trim(), company: newInspForm.company.trim() || null } as InspVendor;
       setInspVendors(prev => ({
         ...prev,
         [inspKey]: [...(prev[inspKey] || []), newVendor].sort((a, b) => a.name.localeCompare(b.name)),
@@ -2473,9 +2480,13 @@ export default function AddTransactionPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Add Transaction</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {editMode ? 'Edit Transaction' : 'Add Transaction'}
+          </h1>
           <p className="text-muted-foreground mt-1">
-            {pdfStep === 'upload' ? 'Upload a purchase agreement to auto-fill the form, or skip to fill manually.' : pdfStep === 'extracting' ? 'Reading your purchase agreement...' : 'Review the auto-filled details below and submit to the TC Queue.'}
+            {editMode
+              ? 'Make changes below and click Save Changes when done.'
+              : pdfStep === 'upload' ? 'Upload a purchase agreement to auto-fill the form, or skip to fill manually.' : pdfStep === 'extracting' ? 'Reading your purchase agreement...' : 'Review the auto-filled details below and submit to the TC Queue.'}
           </p>
         </div>
         <Badge variant="outline" className="mt-1">
@@ -2891,6 +2902,115 @@ export default function AddTransactionPage() {
             {intakeStatus === 'approved' && (
               <span className="text-xs text-green-700 dark:text-green-400 font-semibold">✓ Already Approved</span>
             )}
+            {/* Archive, Reject, Delete — TC queue only */}
+            {queueRole === 'tc' && (
+              <>
+                <Button
+                  type="button" size="sm" variant="outline"
+                  disabled={archiveSubmitting}
+                  onClick={async () => {
+                    if (!user || !intakeId) return;
+                    if (!confirm('Archive this intake? It will be removed from the active TC queue but can be restored.')) return;
+                    setArchiveSubmitting(true);
+                    try {
+                      const token = await user.getIdToken();
+                      const res = await fetch(`/api/admin/tc/${intakeId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ action: 'archive' }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok || !data.ok) throw new Error(data.error || 'Archive failed');
+                      toast({ title: '📦 Archived', description: 'Intake moved to archive.' });
+                      router.push('/dashboard/admin/tc');
+                    } catch (err: any) {
+                      toast({ title: 'Archive Failed', description: err.message, variant: 'destructive' });
+                    } finally { setArchiveSubmitting(false); }
+                  }}
+                  className="text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+                >
+                  {archiveSubmitting ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Archiving...</> : '📦 Archive'}
+                </Button>
+                <Button
+                  type="button" size="sm" variant="outline"
+                  onClick={() => { setRejectReason(''); setRejectDialogOpen(true); }}
+                  className="text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                >
+                  ✗ Reject
+                </Button>
+                <Button
+                  type="button" size="sm" variant="outline"
+                  disabled={deleteSubmitting}
+                  onClick={async () => {
+                    if (!user || !intakeId) return;
+                    if (!confirm('⚠️ PERMANENTLY DELETE this intake and its transaction? This cannot be undone. Use only for test/mock files.')) return;
+                    setDeleteSubmitting(true);
+                    try {
+                      const token = await user.getIdToken();
+                      const res = await fetch(`/api/admin/tc/${intakeId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ action: 'remove' }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok || !data.ok) throw new Error(data.error || 'Delete failed');
+                      toast({ title: '🗑 Deleted', description: 'Intake and transaction permanently deleted.' });
+                      router.push('/dashboard/admin/tc');
+                    } catch (err: any) {
+                      toast({ title: 'Delete Failed', description: err.message, variant: 'destructive' });
+                    } finally { setDeleteSubmitting(false); }
+                  }}
+                  className="text-xs border-red-300 text-red-700 hover:bg-red-50"
+                >
+                  {deleteSubmitting ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Deleting...</> : '🗑 Delete'}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Reject Dialog */}
+      {rejectDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-xl border shadow-xl p-6 max-w-md w-full mx-4 space-y-4">
+            <h3 className="text-lg font-bold">Reject Intake</h3>
+            <p className="text-sm text-muted-foreground">Provide a reason for rejection. This will be sent to the agent as a notification.</p>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              placeholder="Reason for rejection (required)..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring min-h-[100px]"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+              <Button
+                size="sm"
+                disabled={rejectSubmitting || !rejectReason.trim()}
+                onClick={async () => {
+                  if (!user || !intakeId || !rejectReason.trim()) return;
+                  setRejectSubmitting(true);
+                  try {
+                    const token = await user.getIdToken();
+                    const res = await fetch(`/api/admin/tc/${intakeId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({ action: 'reject', rejectionReason: rejectReason.trim() }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.error || 'Reject failed');
+                    setIntakeStatus('rejected');
+                    setRejectDialogOpen(false);
+                    toast({ title: '✗ Rejected', description: 'Intake rejected and agent notified.' });
+                  } catch (err: any) {
+                    toast({ title: 'Reject Failed', description: err.message, variant: 'destructive' });
+                  } finally { setRejectSubmitting(false); }
+                }}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {rejectSubmitting ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Rejecting...</> : 'Reject & Notify Agent'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -6492,6 +6612,31 @@ export default function AddTransactionPage() {
                     </div>
                   );
                 })()}
+              </>
+            )}
+
+            {/* Pass-Through Transaction Toggle — admin/TC/staff only */}
+            {isAdminOrTC && (
+              <>
+                <Separator />
+                <div className="flex items-start gap-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Pass-Through Transaction</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                      Agent is buying/selling personal property. No broker commission collected.
+                      This transaction will count as a closed unit but will NOT count toward leaderboard volume, tier advancement, or broker GCI.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={!!form.watch('isPassThrough')}
+                      onChange={e => form.setValue('isPassThrough', e.target.checked, { shouldDirty: true })}
+                      className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Mark as Pass-Through</span>
+                  </label>
+                </div>
               </>
             )}
           </Section>}
