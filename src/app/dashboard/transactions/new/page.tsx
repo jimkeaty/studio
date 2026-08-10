@@ -1488,6 +1488,29 @@ export default function AddTransactionPage() {
     }
   }, [watchedCommLeaseMonthly, watchedCommLeaseTerm, watchedCommLeasePct, watchedCommLeaseFlat, commLeaseMode]);
 
+  // Admin/TC: live recalculate agentDollar and brokerGci when percentages change manually
+  // This fires even when commissionManualOverride is true (intentional — admin is changing the split)
+  const watchedAgentPct = form.watch('agentPct');
+  const watchedBrokerPct = form.watch('brokerPct');
+  const watchedGci = form.watch('gci');
+  useEffect(() => {
+    if (!isAdminOrTC) return;
+    const gci = Number(watchedGci) || 0;
+    if (gci <= 0) return;
+    const agentPctNum = Number(watchedAgentPct) || 0;
+    const brokerPctNum = Number(watchedBrokerPct) || 0;
+    // Only recalculate the dollar if the percent was explicitly changed (non-zero)
+    if (agentPctNum > 0) {
+      const agentDollar = Number((gci * (agentPctNum / 100)).toFixed(2));
+      form.setValue('agentDollar', agentDollar as any, { shouldDirty: false });
+    }
+    if (brokerPctNum > 0) {
+      const brokerGci = Number((gci * (brokerPctNum / 100)).toFixed(2));
+      form.setValue('brokerGci', brokerGci as any, { shouldDirty: false });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedAgentPct, watchedBrokerPct, watchedGci]);
+
   // Admin: load agent list
   useEffect(() => {
     if (!user) return;
@@ -2278,40 +2301,75 @@ export default function AddTransactionPage() {
       setSubmitting(true);
       try {
         const token = await user!.getIdToken();
-        const viewAsParam = isImpersonating && effectiveUid ? `?viewAs=${effectiveUid}` : '';
-        const res = await fetch(`/api/agent/transactions/${editTxId}${viewAsParam}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
+
+        // Build inspectionRowData — skip rows with no vendor selected (avoids validation errors)
+        const inspectionRowData = Object.fromEntries(
+          INSP_TYPES.map(({ key, label }) => {
+            const row = inspRows[key];
+            if (!row) return [key, null];
+            const vendors = inspVendors[key] || [];
+            const generalVendors = inspVendors['inspector_general'] || [];
+            const effectiveVendorId = row.vendorId === 'USE_GENERAL'
+              ? (inspRows['inspector_general']?.vendorId || '')
+              : row.vendorId;
+            // Skip rows with no vendor and no dates — they're empty placeholders
+            if (!effectiveVendorId && !row.preferredDate && !row.sent) return [key, null];
+            const vendorList = row.vendorId === 'USE_GENERAL' ? generalVendors : vendors;
+            const vendor = vendorList.find(v => v.id === effectiveVendorId) || null;
+            return [key, {
+              label,
+              vendorId: effectiveVendorId,
+              vendorName: vendor?.name || '',
+              vendorCompany: vendor?.company || '',
+              sendMode: row.sendMode,
+              preferredDate: row.preferredDate,
+              preferredTimeStart: row.preferredTimeStart,
+              preferredTimeEnd: row.preferredTimeEnd,
+              fallbackDateStart: row.fallbackDateStart,
+              fallbackDateEnd: row.fallbackDateEnd,
+              sent: row.sent,
+            }];
+          })
+        );
+
+        // Route to the correct API based on role:
+        // - Admin/TC/Staff → admin transactions route (full field access, commission overrides)
+        // - Agent (or impersonating as agent) → agent route
+        const isAdminEdit = isAdminOrTC && !isImpersonating;
+        let apiUrl: string;
+        let apiBody: Record<string, any>;
+
+        if (isAdminEdit) {
+          // Admin/TC/staff edit: use admin transactions PATCH which accepts all fields
+          // including agentPct, brokerPct, agentDollar, brokerGci, splitSnapshot
+          apiUrl = `/api/admin/transactions`;
+          apiBody = {
+            id: editTxId,
             ...values,
             documents: uploadedDocs,
-            inspectionRowData: Object.fromEntries(
-              INSP_TYPES.map(({ key, label }) => {
-                const row = inspRows[key];
-                if (!row) return [key, null];
-                const vendors = inspVendors[key] || [];
-                const generalVendors = inspVendors['inspector_general'] || [];
-                const effectiveVendorId = row.vendorId === 'USE_GENERAL'
-                  ? (inspRows['inspector_general']?.vendorId || '')
-                  : row.vendorId;
-                const vendorList = row.vendorId === 'USE_GENERAL' ? generalVendors : vendors;
-                const vendor = vendorList.find(v => v.id === effectiveVendorId) || null;
-                return [key, {
-                  label,
-                  vendorId: effectiveVendorId,
-                  vendorName: vendor?.name || '',
-                  vendorCompany: vendor?.company || '',
-                  sendMode: row.sendMode,
-                  preferredDate: row.preferredDate,
-                  preferredTimeStart: row.preferredTimeStart,
-                  preferredTimeEnd: row.preferredTimeEnd,
-                  fallbackDateStart: row.fallbackDateStart,
-                  fallbackDateEnd: row.fallbackDateEnd,
-                  sent: row.sent,
-                }];
-              })
-            ),
-          }),
+            inspectionRowData,
+            // Mark that commission was manually overridden if split fields changed
+            ...(values.agentPct || values.brokerPct ? {
+              commissionOverridden: true,
+              commissionOverriddenBy: user!.uid,
+              commissionOverriddenAt: new Date().toISOString(),
+            } : {}),
+          };
+        } else {
+          // Agent edit (or admin impersonating an agent)
+          const viewAsParam = isImpersonating && effectiveUid ? `?viewAs=${effectiveUid}` : '';
+          apiUrl = `/api/agent/transactions/${editTxId}${viewAsParam}`;
+          apiBody = {
+            ...values,
+            documents: uploadedDocs,
+            inspectionRowData,
+          };
+        }
+
+        const res = await fetch(apiUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(apiBody),
         });
         const data = await res.json();
         if (!res.ok) {
