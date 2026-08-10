@@ -725,7 +725,7 @@ function ComingSoonSection({ items, loading, active }: { items: ComingSoonListin
                     {item.generator && <span className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full text-xs font-semibold"><Zap className="h-3 w-3" />Generator</span>}
                   </div>
                   {item.otherAmenities && <p className="text-gray-400 text-sm">Amenities: {item.otherAmenities}</p>}
-                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed line-clamp-2 border-l-2 border-purple-500/50 pl-3 bg-purple-500/5 rounded-r py-1">{item.notes}</p>}
+                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed border-l-2 border-purple-500/50 pl-3 bg-purple-500/5 rounded-r py-1">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-base">{item.agentName.charAt(0)}</div>
                     <div>
@@ -822,7 +822,7 @@ function BuyerNeedsSection({ items, loading, active }: { items: BuyerNeed[]; loa
                     {item.generator && <span className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full text-xs font-semibold"><Zap className="h-3 w-3" />Generator</span>}
                   </div>
                   {item.otherAmenities && <p className="text-gray-400 text-sm">Needs: {item.otherAmenities}</p>}
-                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed line-clamp-2 border-l-2 border-blue-500/50 pl-3 bg-blue-500/5 rounded-r py-1">{item.notes}</p>}
+                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed border-l-2 border-blue-500/50 pl-3 bg-blue-500/5 rounded-r py-1">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-base">{item.agentName.charAt(0)}</div>
                     <div>
@@ -914,7 +914,7 @@ function OpenHousesSection({ items, loading, active }: { items: OpenHouseListing
                     {item.baths && <span className="flex items-center gap-1"><Bath className="h-4 w-4 text-gray-500" />{item.baths} ba</span>}
                     {item.sqft && <span className="flex items-center gap-1"><Square className="h-4 w-4 text-gray-500" />{item.sqft.toLocaleString()} sqft</span>}
                   </div>
-                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed line-clamp-2 border-l-2 border-orange-500/50 pl-3 bg-orange-500/5 rounded-r py-1">{item.notes}</p>}
+                  {item.notes && <p className="text-gray-200 text-sm leading-relaxed border-l-2 border-orange-500/50 pl-3 bg-orange-500/5 rounded-r py-1">{item.notes}</p>}
                   <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                     <div className="w-9 h-9 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-base">{item.agentName.charAt(0)}</div>
                     <div className="flex-1">
@@ -1245,7 +1245,7 @@ function AgentHelpSection({ items, loading, active }: { items: AgentHelpItem[]; 
 
                 {/* Description */}
                 {item.description && (
-                  <p className="text-gray-200 text-sm leading-relaxed line-clamp-3 border-l-2 border-teal-500/50 pl-3 bg-teal-500/5 rounded-r py-1">{item.description}</p>
+                  <p className="text-gray-200 text-sm leading-relaxed border-l-2 border-teal-500/50 pl-3 bg-teal-500/5 rounded-r py-1">{item.description}</p>
                 )}
 
                 {/* Compensation */}
