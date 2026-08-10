@@ -1345,6 +1345,9 @@ export default function AddTransactionPage() {
   const watchedStatus = form.watch('status');
   const watchedDealType = form.watch('dealType');
   const isActiveListing = watchedStatus === 'active' && (watchedClosingType === 'listing' || watchedClosingType === 'dual');
+  // When a listing goes pending/under_contract, reveal all buyer/contract fields on the same form
+  const PENDING_STATUSES = ['pending', 'under_contract', 'closed'];
+  const isPendingListing = watchedClosingType === 'listing' && PENDING_STATUSES.includes(watchedStatus as string);
   const isCommercialListing = watchedDealType === 'commercial_listing';
 
   // Commercial lease state
@@ -3199,7 +3202,7 @@ export default function AddTransactionPage() {
                 )} />
               )}
               {/* Sale Price — buyer and dual only (listing shows this when going pending) */}
-              {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+              {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && (
                 <FormField control={form.control} name="salePrice" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Sale / Contract Price ($)</FormLabel>
@@ -3814,7 +3817,7 @@ export default function AddTransactionPage() {
               </Grid3>
             )}
             {/* Contract / closing dates — shown for buyer and dual only */}
-            {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+            {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && (
               <>
                 <Grid3>
                   <FormField control={form.control} name="contractDate" render={({ field }) => (
@@ -3879,11 +3882,23 @@ export default function AddTransactionPage() {
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 3 — BUYER / SELLER INFORMATION
           ═══════════════════════════════════════════════════════════════════ */}
+          {/* Pending listing banner — shows when a listing goes pending */}
+          {isPendingListing && (
+            <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-3">
+              <span className="text-xl flex-shrink-0">🏠→📋</span>
+              <div>
+                <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Listing is now Pending — Contract fields unlocked</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                  Fill in the buyer contact, lender, title company, and contract dates below. All listing details above are preserved.
+                </p>
+              </div>
+            </div>
+          )}
           {/* Buyer/Seller section — hidden for outbound referral */}
           {watchedClosingType !== 'referral' && <Section title="Buyer / Seller Information">
 
             {/* Buyer section */}
-            {(clientType === 'buyer' || clientType === 'dual') && (
+            {(clientType === 'buyer' || clientType === 'dual' || isPendingListing) && (
               <>
                 <Separator className="my-2" />
                 <p className="text-sm font-semibold text-primary">Buyer Information</p>
@@ -4042,7 +4057,7 @@ export default function AddTransactionPage() {
           </Section>}
 
           {/* ── Cooperating Agent (buyer/dual only — not needed until under contract for listings) */}
-          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && (
             <Section title="Cooperating Agent">
               <Grid2>
                 <FormField control={form.control} name="otherAgentName" render={({ field }) => (
@@ -4128,7 +4143,7 @@ export default function AddTransactionPage() {
           )}
 
           {/* ── Mortgage / Lender (buyer/dual only) ────────────────────── */}
-          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Mortgage / Lender">
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && <Section title="Mortgage / Lender">
             <Grid2>
               <FormField control={form.control} name="mortgageCompany" render={({ field }) => (
                 <FormItem><FormLabel>Mortgage Company</FormLabel><FormControl>
@@ -4165,7 +4180,7 @@ export default function AddTransactionPage() {
           </Section>}
 
           {/* ── Title Company (buyer/dual only) ───────────────────────────── */}
-          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Title Company">
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && <Section title="Title Company">
             <Grid2>
               <FormField control={form.control} name="titleCompany" render={({ field }) => (
                 <FormItem><FormLabel>Title Company</FormLabel><FormControl>
@@ -4264,7 +4279,7 @@ export default function AddTransactionPage() {
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 4 — FINANCIAL DETAILS (buyer/dual only — listing fills these at pending)
           ═══════════════════════════════════════════════════════════════════ */}
-          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Financial Details">
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && <Section title="Financial Details">
             <Grid2>
               {/* List price — dual only (listing is hidden at this level) */}
               {((watchedClosingType as string) === 'listing' || watchedClosingType === 'dual') && (
@@ -4283,7 +4298,7 @@ export default function AddTransactionPage() {
                 )} />
               )}
               {/* Sale price — buyer and dual only */}
-              {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+              {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && (
                 <FormField control={form.control} name="salePrice" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Sale Price ($)</FormLabel>
@@ -5921,7 +5936,7 @@ export default function AddTransactionPage() {
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 5 — COMMISSION & FEES (buyer/dual only)
           ═══════════════════════════════════════════════════════════════════ */}
-          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && <Section title="Buyer Closing Cost Paid by Seller">
+          {(watchedClosingType === 'buyer' || watchedClosingType === 'dual' || isPendingListing) && <Section title="Buyer Closing Cost Paid by Seller">
             {/* Buyer closing cost paid by seller */}
             {/* Buyer closing cost breakdown header */}
             <div className="max-w-xs">
