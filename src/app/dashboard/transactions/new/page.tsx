@@ -6484,7 +6484,7 @@ export default function AddTransactionPage() {
               <>
                 <Separator />
                 {(() => {
-                  const agentDollar = Number(form.watch('agentDollar')) || 0;
+                  const primaryAgentDollar = Number(form.watch('agentDollar')) || 0;
                   const gci = Number(form.watch('gci')) || 0;
                   // Compute netGci after referral deduction for correct split % display
                   const previewRefPct = Number(form.watch('outboundReferralFeePercent') || 0);
@@ -6497,19 +6497,35 @@ export default function AddTransactionPage() {
                   const watchedTxCompFee = form.watch('txComplianceFee');
                   const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
-                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
-                  const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
+                  // The transaction GET route only includes this object for an authorized
+                  // co-agent. Use it directly so the agent-facing card cannot fall back to
+                  // the primary agent's tier or fee responsibility.
+                  const participantAllocation = viewerParticipantAllocation;
+                  const hasParticipantAllocation = Boolean(participantAllocation);
+                  const participantFeeShare = hasParticipantAllocation
+                    ? Number(participantAllocation?.transactionFeeDeduction || 0)
+                    : watchedTxCompFeeAmt;
+                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent' && participantFeeShare > 0;
+                  const feeDeduction = agentPaysFee ? participantFeeShare : 0;
                   // Shortage absorbed by agent = write-off, no deduction from agent net or GCI
                   const shortageAbsorbed = 0; // no financial effect when agent absorbs
                   // Warranty absorbed by agent = already deducted from GCI before split (in auto-calc useEffect)
                   // so agentDollar already reflects the reduced GCI — no additional deduction here
                   const warrantyAbsorbed = warrantyAtClosing === 'yes' && warrantyPaidBy === 'agent' ? warrantyAmount : 0;
-                  const agentNet = agentDollar - feeDeduction; // only tx fee deducted after split
+                  const agentDollar = hasParticipantAllocation
+                    ? Number(participantAllocation?.netCommission || 0) + participantFeeShare
+                    : primaryAgentDollar;
+                  const agentNet = hasParticipantAllocation
+                    ? Number(participantAllocation?.netCommission || 0)
+                    : agentDollar - feeDeduction; // only tx fee deducted after split
                   // Split % is relative to netGci (after referral), not gross GCI
-                  const splitPct = previewNetGci > 0 ? Math.round((agentDollar / previewNetGci) * 100) : (activeTier?.agentSplitPercent ?? 0);
+                  const splitBase = hasParticipantAllocation
+                    ? Number(participantAllocation?.grossCommission || 0)
+                    : previewNetGci;
+                  const splitPct = splitBase > 0 ? Math.round((agentDollar / splitBase) * 100) : (activeTier?.agentSplitPercent ?? 0);
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-                  if (agentDollar <= 0 && !activeTier) return (
+                  if (agentDollar <= 0 && !activeTier && !hasParticipantAllocation) return (
                     <div className="max-w-xs">
                       <FormField control={form.control} name="agentDollar" render={({ field }) => (
                         <FormItem>
@@ -6547,7 +6563,9 @@ export default function AddTransactionPage() {
                         <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
                           <p className="text-xs text-muted-foreground">Transaction Fee</p>
                           {agentPaysFee ? (
-                            <p className="text-sm font-bold text-red-600">-{fmt(watchedTxCompFeeAmt)} deducted from your commission</p>
+                            <p className="text-sm font-bold text-red-600">-{fmt(feeDeduction)} deducted from your commission</p>
+                          ) : hasParticipantAllocation ? (
+                            <p className="text-sm font-semibold text-blue-600">Primary agent pays — $0 deducted from your commission</p>
                           ) : (
                             <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)} — not deducted from your commission</p>
                           )}
