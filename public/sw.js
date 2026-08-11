@@ -11,10 +11,10 @@
  *   2. Takes over all clients immediately (skipWaiting + clientsClaim)
  *   3. Does NOT cache the login page '/' — always fetches from network
  *   4. Does NOT intercept or modify any redirect responses
- *   5. Caches static assets and dashboard pages with safe strategies
+ *   5. Caches only static assets; dashboard navigation always uses the server
  */
 
-const CACHE_VERSION = 'sb-v3';
+const CACHE_VERSION = 'sb-v4';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DASHBOARD_CACHE = `${CACHE_VERSION}-dashboard`;
 
@@ -32,7 +32,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Fetch handler — never intercept the login page or auth routes
+// Fetch handler — never intercept the login page, auth routes, or dashboard navigation
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -69,22 +69,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Dashboard pages: network-first with cache fallback
+  // Dashboard pages must always reach the live server. Deep transaction-edit
+  // links carry query IDs and cannot safely fall back to an older navigation
+  // response after a deployment or a login-state change.
   if (url.pathname.startsWith('/dashboard/')) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            caches.open(DASHBOARD_CACHE).then((cache) =>
-              cache.put(event.request, response.clone())
-            );
-          }
-          return response;
-        })
-        .catch(() =>
-          caches.match(event.request).then((cached) => cached || fetch(event.request))
-        )
-    );
     return;
   }
 
