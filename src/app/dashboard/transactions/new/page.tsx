@@ -1285,9 +1285,12 @@ export default function AddTransactionPage() {
   const { isAdmin: isAdminUser, loading: adminLoading } = useIsAdminLike();
   const isAdmin = isAdminUser && !isImpersonating;
   // TC users (role === 'tc') get the same full commission view as admins
-  const { role: staffRole } = useIsStaff();
+  const { isStaff: isStaffUser, role: staffRole } = useIsStaff();
   const isTC = !isAdmin && staffRole === 'tc';
-  const isAdminOrTC = isAdmin || isTC;
+  // All staff roles, TCs, and admins have the same transaction-edit authority.
+  // They must use the authoritative transaction save route rather than the
+  // agent-only route, which intentionally filters operational fields.
+  const isAdminOrTC = isAdmin || isStaffUser || isTC;
 
   const typeParam = urlSearchParams?.get('type');
   const initialClosingType = typeParam === 'listing' ? 'listing' : 'buyer';

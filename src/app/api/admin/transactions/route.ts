@@ -295,6 +295,31 @@ const UPDATABLE_FIELDS = new Set([
   'mlsNumber',
   // Pass-through: agent personal property — no broker split, no leaderboard/tier credit
   'isPassThrough',
+  // Unified-form fields previously omitted from this authoritative save route.
+  // Keep the Admin Ledger, Staff Queue, TC Queue, and agent edit form aligned
+  // with one transaction document and prevent silent field drops on save.
+  'actualCloseDate', 'closingDate', 'finalLoanCommitment',
+  'additionalNotes',
+  'buyerCommissionPct', 'sellerCommissionPct',
+  'isCoListing', 'coListingAgentName', 'coListingAgentBrokerage',
+  'coListingAgentEmail', 'coListingAgentPhone', 'coListingAgentSplit',
+  'isCommercial',
+  'loanOfficeNumber', 'loanOfficerStreet',
+  'mediaTypes', 'mediaRequested', 'mediaRequestedDate', 'mediaNotes',
+  'occupancyDate', 'occupancyNotes',
+  'outboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
+  'outboundReferralEmail', 'outboundReferralPhone',
+  'inboundReferral', 'inboundReferralBrokerage', 'inboundReferralEmail',
+  'inboundReferralFee', 'inboundReferralPhone',
+  'shortageHandledBy',
+  'showingAlarmArm', 'showingAlarmDisarm',
+  'showingCallOrder1Name', 'showingCallOrder1Phone',
+  'showingCallOrder2Phone', 'showingCallOrder3Phone',
+  'showingLockboxLocation', 'showingLockboxType',
+  'showingNotesToAgentOther', 'showingTimeId',
+  'signNotes', 'signRequestedDate', 'signRiderExt',
+  'titleOfficerStreet', 'warrantyAmount', 'workingWithTc',
+  'inspectionRowData',
 ]);
 
 export async function PATCH(req: NextRequest) {
