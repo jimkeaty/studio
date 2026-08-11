@@ -322,6 +322,9 @@ export async function GET(req: NextRequest) {
                   // but the transaction is NOT read-only — either agent may edit it.
                   const tx = sanitizeForAgent({ id: d.id, ...serializeFirestore(d.data() || {}) });
                   tx._isCoAgentView = true;
+                  // Canonical flag shared with /api/agent/transactions.
+                  // Retain _isCoAgentView for compatibility with older UI code.
+                  tx.viewerIsCoAgent = true;
                   allTxMap.set(d.id, tx);
                 }
               });

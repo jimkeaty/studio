@@ -102,13 +102,18 @@ export default function MyTransactionsPage() {
     const hasTasksAlert = tx.pendingTasksCount > 0;
 
     // Commission fields — agent-visible only (no broker GCI $ or broker split %)
+    const isCoAgentViewer = Boolean(tx.viewerIsCoAgent || tx._isCoAgentView);
+    const participantAllocation = isCoAgentViewer
+      ? tx.participantAllocations?.coAgent
+      : tx.participantAllocations?.primary;
     const salePrice = Number(tx.salePrice) || Number(tx.listPrice) || 0;
+    const viewerVolume = Number(participantAllocation?.volumeCredit) || salePrice;
     const isActive = status === 'active' || status === 'coming_soon';
-    const priceLabel = isActive ? 'List Price' : 'Sale Price';
+    const priceLabel = participantAllocation ? 'My Volume' : (isActive ? 'List Price' : 'Sale Price');
     const commPct = tx.sellerPayingListingAgent ?? tx.commissionPercent ?? null;
-    const viewerSplit = tx.viewerIsCoAgent ? tx.coAgent?.splitSnapshot : tx.splitSnapshot;
-    const agentSplitPct = viewerSplit?.agentSplitPercent ?? (tx.viewerIsCoAgent ? tx.coAgent?.splitPercent : tx.agentPct) ?? null;
-    const agentNet = viewerSplit?.agentNetCommission ?? tx.agentDollar ?? null;
+    const viewerSplit = isCoAgentViewer ? tx.coAgent?.splitSnapshot : tx.splitSnapshot;
+    const agentSplitPct = viewerSplit?.agentSplitPercent ?? (isCoAgentViewer ? tx.coAgent?.splitPercent : tx.agentPct) ?? null;
+    const agentNet = participantAllocation?.netCommission ?? viewerSplit?.agentNetCommission ?? tx.agentDollar ?? null;
     const hasCommission = commPct !== null || agentSplitPct !== null || agentNet !== null;
     const fmt$ = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -131,7 +136,7 @@ export default function MyTransactionsPage() {
                     <Badge className={cn('text-xs', STATUS_COLORS[status] || 'bg-muted text-foreground')}>
                       {status.replace(/_/g, ' ')}
                     </Badge>
-                    {tx.viewerIsCoAgent && (
+                    {isCoAgentViewer && (
                       <Badge variant="secondary" className="text-xs">Co-agent share</Badge>
                     )}
                     {side && (
@@ -144,10 +149,10 @@ export default function MyTransactionsPage() {
                     )}
                   </div>
                   {/* Commission summary row */}
-                  {(salePrice > 0 || hasCommission) && (
+                  {(viewerVolume > 0 || hasCommission) && (
                     <div className="flex items-center gap-3 mt-2 flex-wrap text-xs text-muted-foreground">
-                      {salePrice > 0 && (
-                        <span className="font-medium text-foreground">{priceLabel}: {fmt$(salePrice)}</span>
+                      {viewerVolume > 0 && (
+                        <span className="font-medium text-foreground">{priceLabel}: {fmt$(viewerVolume)}</span>
                       )}
                       {commPct !== null && (
                         <span>Comm: {commPct}%</span>

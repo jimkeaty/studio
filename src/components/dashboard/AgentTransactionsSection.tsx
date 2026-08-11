@@ -87,11 +87,23 @@ type AgentTx = {
   year?: number;
   source?: string;
   workingWithTc?: boolean;
+  // Both names are supported while the pipeline and transaction endpoints
+  // converge on viewerIsCoAgent for the shared one-file allocation model.
   _isCoAgentView?: boolean;
+  viewerIsCoAgent?: boolean;
   hasCoAgent?: boolean;
-  coAgent?: { agentId?: string; agentDisplayName?: string; splitPercent?: number };
+  coAgent?: {
+    agentId?: string;
+    agentDisplayName?: string;
+    splitPercent?: number;
+    splitSnapshot?: { agentNetCommission?: number; agentSplitPercent?: number } | null;
+  };
   primaryAgentSplitPercent?: number;
   primaryAgentDisplayName?: string;
+  participantAllocations?: {
+    primary?: { percentage?: number; volumeCredit?: number; netCommission?: number };
+    coAgent?: { percentage?: number; volumeCredit?: number; netCommission?: number };
+  };
 };
 
 /* ─── Constants ──────────────────────────────────────────────────────────── */
@@ -138,6 +150,49 @@ const YEARS = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear(
 type SortKey = 'status' | 'address' | 'closingType' | 'dealType' | 'contractDate' | 'closedDate' | 'dealValue' | 'netToMe';
 type SortDir = 'asc' | 'desc';
 
+/**
+ * A shared co-agent transaction is one document, but its financial display is
+ * viewer-specific. Always prefer the canonical participant allocation written
+ * by syncCoAgentAllocations, then fall back to the compatible nested snapshot.
+ */
+function isCoAgentViewer(tx: AgentTx): boolean {
+  return Boolean(tx.viewerIsCoAgent || tx._isCoAgentView);
+}
+
+function getViewerAllocation(tx: AgentTx) {
+  return isCoAgentViewer(tx)
+    ? tx.participantAllocations?.coAgent
+    : tx.participantAllocations?.primary;
+}
+
+function getViewerNet(tx: AgentTx): number {
+  const allocation = getViewerAllocation(tx);
+  if (allocation?.netCommission !== undefined && allocation?.netCommission !== null) {
+    return Number(allocation.netCommission) || 0;
+  }
+  if (isCoAgentViewer(tx)) {
+    return Number(tx.coAgent?.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0) || 0;
+  }
+  return Number(tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0) || 0;
+}
+
+function getViewerVolume(tx: AgentTx): number {
+  const allocation = getViewerAllocation(tx);
+  if (allocation?.volumeCredit !== undefined && allocation?.volumeCredit !== null) {
+    return Number(allocation.volumeCredit) || 0;
+  }
+
+  const transactionVolume = Number(tx.salePrice ?? tx.listPrice ?? 0) || 0;
+  if (!tx.hasCoAgent) return transactionVolume;
+
+  const percentage = isCoAgentViewer(tx)
+    ? Number(tx.coAgent?.splitPercent)
+    : Number(tx.primaryAgentSplitPercent);
+  return Number.isFinite(percentage) && percentage >= 0
+    ? transactionVolume * (percentage / 100)
+    : transactionVolume;
+}
+
 function getSortValue(tx: AgentTx, key: SortKey): string | number {
   switch (key) {
     case 'status': return tx.status || '';
@@ -146,8 +201,8 @@ function getSortValue(tx: AgentTx, key: SortKey): string | number {
     case 'dealType': return tx.transactionType || '';
     case 'contractDate': return tx.contractDate || '';
     case 'closedDate': return tx.closedDate || tx.closingDate || '';
-    case 'dealValue': return tx.salePrice || tx.listPrice || 0;
-    case 'netToMe': return tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0;
+    case 'dealValue': return getViewerVolume(tx);
+    case 'netToMe': return getViewerNet(tx);
     default: return '';
   }
 }
@@ -965,10 +1020,10 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
   const activeCount = transactions.filter(t => t.status === 'active' || t.status === 'temp_off_market').length;
   const pendingCount = transactions.filter(t => t.status === 'pending').length;
   const closedCount = transactions.filter(t => t.status === 'closed').length;
-  const netPending = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
-  const pendingVolume = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + (t.salePrice || t.listPrice || 0), 0);
-  const netClosed = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0), 0);
-  const closedVolume = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + (t.salePrice || t.listPrice || 0), 0);
+  const netPending = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + getViewerNet(t), 0);
+  const pendingVolume = transactions.filter(t => t.status === 'pending').reduce((s, t) => s + getViewerVolume(t), 0);
+  const netClosed = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + getViewerNet(t), 0);
+  const closedVolume = transactions.filter(t => t.status === 'closed').reduce((s, t) => s + getViewerVolume(t), 0);
 
   /* ─── Render ─────────────────────────────────────────────────────────── */
 
@@ -1158,9 +1213,10 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                   'Closed Date': t.closedDate || t.closingDate || '',
                   'Listing Date': t.listingDate || '',
                   'List Price': t.listPrice ?? '',
-                  'Sale Price': t.salePrice ?? t.listPrice ?? '',
+                  'Transaction Sale Price': t.salePrice ?? t.listPrice ?? '',
+                  'My Volume': getViewerVolume(t),
                   'Gross Commission': t.splitSnapshot?.grossCommission ?? t.commission ?? '',
-                  'Net to Me': t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? '',
+                  'Net to Me': getViewerNet(t),
                   Source: t.source || '',
                   'Other Agent': t.otherAgentName || '',
                   'Other Agent Brokerage': t.otherAgentBrokerage || '',
@@ -1196,11 +1252,12 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
               {/* Mobile cards */}
               <div className="flex flex-col gap-3 sm:hidden">
                 {filtered.map((t) => {
-                  const net = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
+                  const net = getViewerNet(t);
+                  const volume = getViewerVolume(t);
                   const sc = statusConfig[t.status] || statusConfig.pending;
                   const addr = t.address || t.propertyAddress || '—';
-                  const isCoAgentViewMobile = !!(t as any)._isCoAgentView;
-                  const canEditMobile = !isCoAgentViewMobile; // agents can edit any of their own transactions including closed ones
+                  const isCoAgentViewMobile = isCoAgentViewer(t);
+                  const canEditMobile = t.status !== 'closed';
                   return (
                     <div
                       key={t.id}
@@ -1228,8 +1285,8 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-center">
                         <div>
-                          <p className="text-xs text-muted-foreground">Sale Price</p>
-                          <p className="text-sm font-semibold">{(t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—'}</p>
+                          <p className="text-xs text-muted-foreground">My Volume</p>
+                          <p className="text-sm font-semibold">{volume ? formatCurrency(volume) : '—'}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Net to Me</p>
@@ -1288,7 +1345,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                         Inspection Deadline
                       </TableHead>
                       <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('dealValue')}>
-                        <span className="flex items-center justify-end">Sale Price<SortIcon col="dealValue" /></span>
+                        <span className="flex items-center justify-end">My Volume<SortIcon col="dealValue" /></span>
                       </TableHead>
                       <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('netToMe')}>
                         <span className="flex items-center justify-end">Net to Me<SortIcon col="netToMe" /></span>
@@ -1298,11 +1355,11 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                   </TableHeader>
                   <TableBody>
                     {filtered.map((t) => {
-                      const net = t.splitSnapshot?.agentNetCommission ?? t.netIncome ?? t.netCommission ?? 0;
+                      const net = getViewerNet(t);
                       const sc = statusConfig[t.status] || statusConfig.pending;
                       const addr = t.address || t.propertyAddress || '—';
-                      const isCoAgentView = !!(t as any)._isCoAgentView;
-                      const canEdit = !isCoAgentView; // co-agent views are always read-only; agents can edit any of their own transactions including closed ones
+                      const isCoAgentView = isCoAgentViewer(t);
+                      const canEdit = t.status !== 'closed';
                       const isActiveListing = t.status === 'active' && (t.closingType === 'listing' || t.closingType === 'dual');
                       const isActiveBuyer = t.status === 'active' && t.closingType === 'buyer';
                       const isPending = t.status === 'pending';
@@ -1413,7 +1470,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.projectedCloseDate) || '—'}</TableCell>
                           <TableCell className="min-w-[130px] whitespace-nowrap text-sm">{formatDate(t.inspectionDeadline) || '—'}</TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap text-sm">
-                            {(t.salePrice || t.listPrice) ? formatCurrency(t.salePrice || t.listPrice || 0) : '—'}
+                            {getViewerVolume(t) ? formatCurrency(getViewerVolume(t)) : '—'}
                           </TableCell>
                           <TableCell className="min-w-[110px] text-right whitespace-nowrap font-semibold text-primary text-sm">
                             {isActiveListing
