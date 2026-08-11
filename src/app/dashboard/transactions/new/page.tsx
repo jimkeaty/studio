@@ -338,7 +338,10 @@ const schema = z.object({
   brokerPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   brokerGci: z.coerce.number().min(0).optional().or(z.literal('')),
   agentPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
-  agentDollar: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Agent net can legitimately be negative on a fee-heavy file. Do not block a
+  // status save merely because the agent owes more in allocated fees than this
+  // transaction pays; staff can correct the underlying allocation afterward.
+  agentDollar: z.coerce.number().optional().or(z.literal('')),
 
   // MLS Number
   mlsNumber: z.string().optional(),
@@ -3868,8 +3871,8 @@ export default function AddTransactionPage() {
                         </div>
                       </div>
                       <p className="text-[10px] text-blue-600 italic">
-                        ✓ Sale price, volume, and GCI will be split automatically when the transaction is marked Closed.
-                        Each agent gets their own transaction with their individual commission tier applied to their share.
+                        ✓ This one shared transaction stays intact. Sale price, volume, GCI, closed-unit credit, and fees are allocated to each participant when the transaction is marked Closed.
+                        Each agent’s individual commission tier is applied to their allocated share.
                       </p>
                     </div>
                   );
