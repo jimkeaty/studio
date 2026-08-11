@@ -1803,6 +1803,9 @@ export default function AddTransactionPage() {
         // form values load so the profile-tier effect cannot replace it with 70/30.
         editCommissionOverride.current = Boolean(tx.commissionOverridden);
         commissionManualOverride.current = editCommissionOverride.current;
+        // A transaction-level override may include a manually entered GCI amount.
+        // Keep that saved amount authoritative instead of recomputing CBP × % on load.
+        gciManuallyEdited.current = editCommissionOverride.current;
         // Pre-fill all form fields from the transaction document
         // Helper: if a Firestore value is an array (legacy data), take the first element
         // This prevents z.enum() and z.string() validation failures when old data has arrays

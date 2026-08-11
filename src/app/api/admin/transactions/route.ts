@@ -406,6 +406,9 @@ export async function PATCH(req: NextRequest) {
         // Legacy field names (kept for backward compat)
         ...(body.agentNetCommission !== undefined ? { agentNetCommission: Number(body.agentNetCommission) } : {}),
         ...(body.companyRetained !== undefined ? { companyRetained: Number(body.companyRetained) } : {}),
+        // The unified edit form stores the gross amount in `gci`; legacy pages use
+        // `commission`. Keep the snapshot aligned with either source.
+        ...(updates.gci !== undefined ? { grossCommission: Number(updates.gci) } : {}),
         ...(updates.commission !== undefined ? { grossCommission: Number(updates.commission) } : {}),
       };
     }
