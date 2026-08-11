@@ -6789,7 +6789,10 @@ export default function AddTransactionPage() {
                   const calculatedCoAgentGross = coAgentTier
                     ? Number((coAgentGci * (coAgentTier.agentSplitPercent / 100)).toFixed(2))
                     : 0;
-                  const exactCoAgentAllocation = shouldUseCoAgentPreview && !form.formState.isDirty
+                  // Field-by-field hydration can mark the form dirty before a user changes
+                  // anything. A stored participant allocation remains authoritative for the
+                  // shared-file preview until the transaction is recalculated on save.
+                  const exactCoAgentAllocation = shouldUseCoAgentPreview
                     ? viewerParticipantAllocation
                     : null;
                   const displayedTier = shouldUseCoAgentPreview ? coAgentTier : activeTier;
@@ -6898,7 +6901,7 @@ export default function AddTransactionPage() {
                             <>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                                 <div className="text-center">
-                                  <p className="text-xs text-muted-foreground mb-0.5">Your Split ({memberDirectPct}%)</p>
+                                  <p className="text-xs text-muted-foreground mb-0.5">Your Split ({displayedSplitGci > 0 ? Math.round((displayedAgentDollar / displayedSplitGci) * 100) : memberDirectPct}%)</p>
                                   <p className="text-lg font-black text-foreground">{fmtExact(displayedAgentDollar)}</p>
                                 </div>
                                 <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
