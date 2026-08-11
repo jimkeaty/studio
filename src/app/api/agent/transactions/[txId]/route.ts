@@ -127,6 +127,12 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'dealType', 'transactionType',
   // TC flag — agents must be able to toggle "Working with TC" on/off when editing
   'workingWithTc',
+  // Co-agent compatibility — the unified form writes one canonical nested object
+  // plus these legacy aliases so status-only edits cannot lose older co-listing data.
+  'hasCoAgent', 'coAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
+  'primaryAgentSplitPercent', 'coAgentSplitPercent',
+  'isCoListing', 'coListingAgentName', 'coListingAgentBrokerage',
+  'coListingAgentEmail', 'coListingAgentPhone', 'coListingAgentSplit',
   // Inspection row data (per-inspector details from add-transaction form)
   'inspectionRowData',
   // Staging consult fields

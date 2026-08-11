@@ -1387,6 +1387,20 @@ export default function AddTransactionPage() {
   const watchedCoPct = Number(form.watch('coAgentSplitPercent') || 0);
   const splitTotal = watchedPrimaryPct + watchedCoPct;
 
+  // Some established transactions hold only a legacy co-listing name. Once the
+  // agent list is available, resolve that name to the current canonical ID so a
+  // later save preserves both the relationship and downstream split processing.
+  useEffect(() => {
+    if (!hasCoAgent || agentsLoading) return;
+    const existingId = String(form.getValues('coAgentId') || '');
+    const displayName = String(form.getValues('coAgentDisplayName') || '').trim();
+    if (existingId || !displayName) return;
+    const match = agents.find(
+      a => String(a.agentName || '').trim().toLowerCase() === displayName.toLowerCase()
+    );
+    if (match?.agentId) form.setValue('coAgentId', match.agentId, { shouldDirty: false });
+  }, [hasCoAgent, agents, agentsLoading, form]);
+
   // Outbound referral fee watched values
   const hasOutboundReferral = form.watch('hasOutboundReferral');
   const watchedReferralPct = Number(form.watch('outboundReferralFeePercent') || 0);
@@ -1823,6 +1837,34 @@ export default function AddTransactionPage() {
           return String(val);
         };
 
+        // Co-agent compatibility bridge -------------------------------------------------
+        // Older transaction documents stored an internal co-listing partner as
+        // isCoListing + coListingAgent*. The unified form stores the same business
+        // relationship as hasCoAgent + coAgent*. Resolve both shapes into the
+        // canonical form fields so a status-only edit never turns an existing
+        // co-agent relationship off or hides it from the editor.
+        const legacyCoAgent = tx.coAgent && typeof tx.coAgent === 'object' ? tx.coAgent : {};
+        const legacyCoAgentName = safeStr(
+          tx.coAgentDisplayName || legacyCoAgent.agentName || legacyCoAgent.displayName || tx.coListingAgentName || tx.coAgentName,
+          ''
+        );
+        const legacyCoAgentId = safeStr(tx.coAgentId || legacyCoAgent.agentId || '', '');
+        const matchedCoAgent = !legacyCoAgentId && legacyCoAgentName
+          ? agents.find(a => String(a.agentName || '').trim().toLowerCase() === legacyCoAgentName.trim().toLowerCase())
+          : undefined;
+        const resolvedCoAgentId = legacyCoAgentId || matchedCoAgent?.agentId || '';
+        const resolvedCoAgentPct = Number(
+          tx.coAgentSplitPercent ?? legacyCoAgent.splitPercent ?? tx.coListingAgentSplit ?? 50
+        ) || 50;
+        const resolvedPrimaryPct = Number(
+          tx.primaryAgentSplitPercent ?? legacyCoAgent.primarySplitPercent ?? (100 - resolvedCoAgentPct)
+        ) || 50;
+        // Use OR deliberately: a previous buggy unified-form save may have written
+        // hasCoAgent=false while leaving the still-authoritative legacy fields intact.
+        const resolvedHasCoAgent = Boolean(
+          tx.hasCoAgent || tx.isCoListing || resolvedCoAgentId || legacyCoAgentName
+        );
+
         const fieldMap: Record<string, unknown> = {
           agentId: tx.agentId || effectiveUid || '',
           agentDisplayName: tx.agentDisplayName || effectiveName || '',
@@ -1858,7 +1900,13 @@ export default function AddTransactionPage() {
           closingDate: tx.closingDate || '',
           actualCloseDate: tx.actualCloseDate || '',
           workingWithTc: tx.workingWithTc ?? false,
-          isCoListing: tx.isCoListing ?? false,
+          hasCoAgent: resolvedHasCoAgent,
+          coAgentId: resolvedCoAgentId,
+          coAgentDisplayName: legacyCoAgentName,
+          coAgentRole: safeEnum(tx.coAgentRole || legacyCoAgent.role, 'co_list') as any,
+          primaryAgentSplitPercent: resolvedPrimaryPct,
+          coAgentSplitPercent: resolvedCoAgentPct,
+          isCoListing: resolvedHasCoAgent,
           coListingAgentName: tx.coListingAgentName || '',
           coListingAgentEmail: tx.coListingAgentEmail || '',
           coListingAgentBrokerage: tx.coListingAgentBrokerage || '',
@@ -2351,6 +2399,32 @@ export default function AddTransactionPage() {
         // - Admin/TC/Staff → admin transactions route (full field access, commission overrides)
         // - Agent (or impersonating as agent) → agent route
         const isAdminEdit = isAdminOrTC && !isImpersonating;
+        // Persist one canonical co-agent object and legacy aliases together while
+        // older transactions are still in circulation. This prevents a status-only
+        // save from erasing or hiding a co-agent relationship created under the
+        // former coListingAgent* schema.
+        const coAgentCompatibility = values.hasCoAgent
+          ? {
+              hasCoAgent: true,
+              coAgent: {
+                agentId: values.coAgentId || '',
+                agentName: values.coAgentDisplayName || '',
+                displayName: values.coAgentDisplayName || '',
+                role: values.coAgentRole || 'co_list',
+                splitPercent: Number(values.coAgentSplitPercent || 50),
+                primarySplitPercent: Number(values.primaryAgentSplitPercent || 50),
+              },
+              isCoListing: true,
+              coListingAgentName: values.coAgentDisplayName || '',
+              coListingAgentSplit: Number(values.coAgentSplitPercent || 50),
+            }
+          : {
+              hasCoAgent: false,
+              coAgent: null,
+              isCoListing: false,
+              coListingAgentName: '',
+              coListingAgentSplit: '',
+            };
         let apiUrl: string;
         let apiBody: Record<string, any>;
 
@@ -2361,6 +2435,7 @@ export default function AddTransactionPage() {
           apiBody = {
             id: editTxId,
             ...values,
+            ...coAgentCompatibility,
             documents: uploadedDocs,
             inspectionRowData,
             // Mark that commission was manually overridden if split fields changed
@@ -2376,6 +2451,7 @@ export default function AddTransactionPage() {
           apiUrl = `/api/agent/transactions/${editTxId}${viewAsParam}`;
           apiBody = {
             ...values,
+            ...coAgentCompatibility,
             documents: uploadedDocs,
             inspectionRowData,
           };
