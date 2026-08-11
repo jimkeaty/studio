@@ -1065,10 +1065,22 @@ export async function GET(
   // An administrator may supply viewAs for a faithful agent-view preview; non-admin callers
   // can only resolve their own identity.
   const viewerIds = new Set<string>([viewerId]);
+  const viewerNames = new Set<string>();
+  const normalizeName = (value: unknown) => String(value || '').trim().toLowerCase();
+  const addViewerProfile = (profile: Record<string, any>, docId?: string) => {
+    if (docId) viewerIds.add(docId);
+    if (profile.agentId) viewerIds.add(String(profile.agentId));
+    if (profile.firebaseUid) viewerIds.add(String(profile.firebaseUid));
+    for (const name of [profile.displayName, profile.agentName, profile.name]) {
+      const normalized = normalizeName(name);
+      if (normalized) viewerNames.add(normalized);
+    }
+  };
   try {
     const byDocId = await adminDb.collection('agentProfiles').doc(viewerId).get();
     if (byDocId.exists) {
       const d = byDocId.data() || {};
+      addViewerProfile(d, byDocId.id);
       if (d.agentId) viewerIds.add(String(d.agentId));
       if (d.firebaseUid) viewerIds.add(String(d.firebaseUid));
       viewerIds.add(byDocId.id);
@@ -1076,6 +1088,7 @@ export async function GET(
     const byField = await adminDb.collection('agentProfiles').where('agentId', '==', viewerId).limit(1).get();
     if (!byField.empty) {
       const fd = byField.docs[0].data() || {};
+      addViewerProfile(fd, byField.docs[0].id);
       viewerIds.add(byField.docs[0].id);
       if (fd.agentId) viewerIds.add(String(fd.agentId));
       if (fd.firebaseUid) viewerIds.add(String(fd.firebaseUid));
@@ -1083,6 +1096,7 @@ export async function GET(
     const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', viewerId).limit(1).get();
     if (!byFbUid.empty) {
       const fd = byFbUid.docs[0].data() || {};
+      addViewerProfile(fd, byFbUid.docs[0].id);
       viewerIds.add(byFbUid.docs[0].id);
       if (fd.agentId) viewerIds.add(String(fd.agentId));
       if (fd.firebaseUid) viewerIds.add(String(fd.firebaseUid));
@@ -1096,16 +1110,43 @@ export async function GET(
     (data.coAgent2Id && viewerIds.has(String(data.coAgent2Id))) ||
     (data.coAgent3Id && viewerIds.has(String(data.coAgent3Id))) ||
     (data.coAgent?.agentId && viewerIds.has(String(data.coAgent.agentId))) ||
-    (data.coAgentId && viewerIds.has(String(data.coAgentId)));
+    (data.coAgentId && viewerIds.has(String(data.coAgentId))) ||
+    [
+      data.coAgent?.agentDisplayName,
+      data.coAgent?.agentName,
+      data.coAgentDisplayName,
+      data.coAgentName,
+      data.coListingAgentName,
+    ].some(name => viewerNames.has(normalizeName(name)));
 
   if (!isAdmin) {
     if (!viewerIsPrimary && !viewerIsCoAgent) return jsonError(403, 'Forbidden');
   }
 
   let viewerParticipantAllocation: Record<string, unknown> | null = null;
-  if (viewerIsCoAgent && data.hasCoAgent) {
+  if (viewerIsCoAgent) {
     try {
-      const allocationUpdate = await buildCoAgentAllocationUpdate(adminDb, data);
+      const coAgentName = String(
+        data.coAgent?.agentDisplayName ||
+        data.coAgent?.agentName ||
+        data.coAgentDisplayName ||
+        data.coAgentName ||
+        data.coListingAgentName ||
+        ''
+      ).trim();
+      const coAgentId = String(data.coAgent?.agentId || data.coAgentId || viewerId).trim();
+      const allocationUpdate = await buildCoAgentAllocationUpdate(adminDb, {
+        ...data,
+        hasCoAgent: true,
+        coAgentId,
+        coAgentDisplayName: coAgentName,
+        coAgent: {
+          ...(data.coAgent || {}),
+          agentId: coAgentId,
+          agentDisplayName: coAgentName,
+          agentName: coAgentName,
+        },
+      });
       viewerParticipantAllocation = allocationUpdate.participantAllocations?.coAgent ?? null;
     } catch (error) {
       console.warn('[api/agent/transactions/[txId]] Could not build co-agent preview', error);
