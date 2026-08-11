@@ -1298,6 +1298,10 @@ export default function AddTransactionPage() {
   // They must use the authoritative transaction save route rather than the
   // agent-only route, which intentionally filters operational fields.
   const isAdminOrTC = isAdmin || isStaffUser || isTC;
+  // An administrator impersonating an agent must receive the same fields,
+  // permissions, and safeguards as that agent—not the administrator's own
+  // staff/admin capabilities.
+  const hasOperationalEditAuthority = isAdminOrTC && !isImpersonating;
 
   const typeParam = urlSearchParams?.get('type');
   const initialClosingType = typeParam === 'listing' ? 'listing' : 'buyer';
@@ -1365,7 +1369,7 @@ export default function AddTransactionPage() {
   // Agents may review closed files, but only admin, staff, and TC users may
   // correct them. An impersonated admin is intentionally treated as an agent
   // here so the agent view cannot bypass the same permission rule.
-  const isClosedAgentView = editMode && watchedStatus === 'closed' && !isAdminOrTC;
+  const isClosedAgentView = editMode && watchedStatus === 'closed' && !hasOperationalEditAuthority;
   const isActiveListing = watchedStatus === 'active' && (watchedClosingType === 'listing' || watchedClosingType === 'dual');
   // When a listing goes pending/under_contract, reveal all buyer/contract fields on the same form
   const PENDING_STATUSES = ['pending', 'under_contract', 'closed'];
@@ -1546,7 +1550,7 @@ export default function AddTransactionPage() {
   const watchedBrokerPct = form.watch('brokerPct');
   const watchedGci = form.watch('gci');
   useEffect(() => {
-    if (!isAdminOrTC) return;
+    if (!hasOperationalEditAuthority) return;
     const gci = Number(watchedGci) || 0;
     if (gci <= 0) return;
     const agentPctNum = Number(watchedAgentPct) || 0;
@@ -1561,7 +1565,7 @@ export default function AddTransactionPage() {
       form.setValue('brokerGci', brokerGci as any, { shouldDirty: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedAgentPct, watchedBrokerPct, watchedGci]);
+  }, [watchedAgentPct, watchedBrokerPct, watchedGci, hasOperationalEditAuthority]);
 
   // Admin: load agent list
   useEffect(() => {
@@ -2441,7 +2445,7 @@ export default function AddTransactionPage() {
         // Route to the correct API based on role:
         // - Admin/TC/Staff → admin transactions route (full field access, commission overrides)
         // - Agent (or impersonating as agent) → agent route
-        const isAdminEdit = isAdminOrTC && !isImpersonating;
+        const isAdminEdit = hasOperationalEditAuthority;
         // Persist one canonical co-agent object and legacy aliases together while
         // older transactions are still in circulation. This prevents a status-only
         // save from erasing or hiding a co-agent relationship created under the
@@ -6418,7 +6422,7 @@ export default function AddTransactionPage() {
               );
             })()}
 
-            {!isAdminOrTC && (
+            {!hasOperationalEditAuthority && (
               <>
                 <Separator />
                 {(() => {
@@ -6510,7 +6514,7 @@ export default function AddTransactionPage() {
             )}
 
             {/* Admin + TC: GCI & Commission % */}
-            {isAdminOrTC && (
+            {hasOperationalEditAuthority && (
               <>
                 <Separator />
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gross Commission</p>
@@ -6553,7 +6557,7 @@ export default function AddTransactionPage() {
             )}
 
             {/* Commission Split (Admin + TC) */}
-            {isAdminOrTC && (
+            {hasOperationalEditAuthority && (
               <>
                 <Separator />
                 {agentCommission && (
@@ -6763,7 +6767,7 @@ export default function AddTransactionPage() {
                       {isTeamMemberWithLeader ? (
                         // ── Two-step team member breakdown ────────────────────────────────────
                         <>
-                          {isAdminOrTC ? (
+                          {hasOperationalEditAuthority ? (
                             // Admin/TC sees full breakdown: GCI, broker cut, leader split, agent net
                             <>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
@@ -6840,7 +6844,7 @@ export default function AddTransactionPage() {
                         <>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {/* Gross Commission — admin and TC only */}
-                            {isAdminOrTC && (
+                            {hasOperationalEditAuthority && (
                               <div className="text-center">
                                 <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
                                 <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
@@ -6880,7 +6884,7 @@ export default function AddTransactionPage() {
             )}
 
             {/* Pass-Through Transaction Toggle — admin/TC/staff only */}
-            {isAdminOrTC && (
+            {hasOperationalEditAuthority && (
               <>
                 <Separator />
                 <div className="flex items-start gap-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4">
