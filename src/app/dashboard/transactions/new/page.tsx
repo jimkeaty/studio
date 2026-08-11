@@ -1431,14 +1431,17 @@ export default function AddTransactionPage() {
   // while the read response is still resolving identity. During an admin's explicit
   // agent impersonation, the selected co-agent name is a safe display-only fallback.
   // It never changes the transaction's primary-agent fields or saved ownership.
+  const selectedCoAgentId = String(form.watch('coAgentId') || '').trim();
+  const resolvedViewerId = String(viewerAgentId || effectiveUid || '').trim();
   const normalizedViewerName = String(effectiveName || '').trim().toLowerCase();
   const normalizedCoAgentName = String(form.watch('coAgentDisplayName') || '').trim().toLowerCase();
   const isImpersonatedCoAgentView = Boolean(
     isImpersonating &&
     hasCoAgent &&
-    normalizedViewerName &&
-    normalizedCoAgentName &&
-    normalizedViewerName === normalizedCoAgentName
+    (
+      (resolvedViewerId && selectedCoAgentId && resolvedViewerId === selectedCoAgentId) ||
+      (normalizedViewerName && normalizedCoAgentName && normalizedViewerName === normalizedCoAgentName)
+    )
   );
   const shouldUseCoAgentPreview = viewerIsCoAgent || isImpersonatedCoAgentView;
 
