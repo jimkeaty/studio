@@ -1185,6 +1185,9 @@ export default function AddTransactionPage() {
   const [agentCommission, setAgentCommission] = useState<AgentCommissionData | null>(null);
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [activeTier, setActiveTier] = useState<CommissionTier | null>(null);
+  const [viewerIsCoAgent, setViewerIsCoAgent] = useState(false);
+  const [viewerParticipantAllocation, setViewerParticipantAllocation] = useState<Record<string, any> | null>(null);
+  const [coAgentViewerCommission, setCoAgentViewerCommission] = useState<AgentCommissionData | null>(null);
   const commissionManualOverride = useRef(false);
   // Saved transaction-specific overrides must survive the profile lookup in edit mode.
   const editCommissionOverride = useRef(false);
@@ -1422,6 +1425,31 @@ export default function AddTransactionPage() {
     if (txComplianceFeeAgentAllocation === 'custom') return Math.round((txComplianceFeeAmount - primaryAgentFeeShare) * 100) / 100;
     return 0;
   })();
+
+  // A shared file always keeps the primary agent's transaction fields intact. When the
+  // current viewer is the co-agent, load that viewer's own profile separately for a
+  // display-only preview; never overwrite the primary agent's saved split fields.
+  useEffect(() => {
+    if (!viewerIsCoAgent || !user || !effectiveUid) {
+      setCoAgentViewerCommission(null);
+      return;
+    }
+    let cancelled = false;
+    const loadViewerCommission = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/admin/agent-profiles/${effectiveUid}/commission`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!cancelled && data.ok) setCoAgentViewerCommission(data);
+      } catch {
+        if (!cancelled) setCoAgentViewerCommission(null);
+      }
+    };
+    loadViewerCommission();
+    return () => { cancelled = true; };
+  }, [viewerIsCoAgent, user, effectiveUid]);
 
   // Some established transactions hold only a legacy co-listing name. Once the
   // agent list is available, resolve that name to the current canonical ID so a
@@ -1853,6 +1881,8 @@ export default function AddTransactionPage() {
           return;
         }
         const tx = data.transaction;
+        setViewerIsCoAgent(Boolean(tx.viewerIsCoAgent));
+        setViewerParticipantAllocation(tx.viewerParticipantAllocation ?? null);
         // This override is authoritative for this transaction only. Set it before
         // form values load so the profile-tier effect cannot replace it with 70/30.
         editCommissionOverride.current = Boolean(tx.commissionOverridden);
@@ -6721,11 +6751,33 @@ export default function AddTransactionPage() {
                   const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
                   if (gci <= 0) return null;
-                  // When a co-agent exists, reduce only the primary agent's net
-                  // by that participant's approved allocation—not the full fee.
-                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent' && primaryAgentFeeShare > 0;
-                  const feeDeduction = agentPaysFee ? primaryAgentFeeShare : 0;
-                  const agentNet = agentDollar - feeDeduction;
+                  const coAgentGci = Number((gci * (watchedCoPct / 100)).toFixed(2));
+                  const coAgentYtd = coAgentViewerCommission?.ytdTierProgressionGci
+                    ?? coAgentViewerCommission?.ytdTierProgressionCompanyDollar
+                    ?? 0;
+                  const coAgentTier = coAgentViewerCommission
+                    ? findActiveTier(coAgentViewerCommission.tiers, coAgentYtd > 0 ? coAgentYtd : coAgentGci)
+                    : null;
+                  const calculatedCoAgentGross = coAgentTier
+                    ? Number((coAgentGci * (coAgentTier.agentSplitPercent / 100)).toFixed(2))
+                    : 0;
+                  const exactCoAgentAllocation = viewerIsCoAgent && !form.formState.isDirty
+                    ? viewerParticipantAllocation
+                    : null;
+                  const displayedTier = viewerIsCoAgent ? coAgentTier : activeTier;
+                  const displayedSplitGci = viewerIsCoAgent ? coAgentGci : adminNetGci;
+                  const displayedAgentDollar = viewerIsCoAgent
+                    ? (exactCoAgentAllocation
+                        ? Number(exactCoAgentAllocation.netCommission || 0) + coAgentFeeShare
+                        : calculatedCoAgentGross)
+                    : agentDollar;
+                  // In a shared file, deduct only the fee assigned to the participant viewing it.
+                  const viewerFeeShare = viewerIsCoAgent ? coAgentFeeShare : primaryAgentFeeShare;
+                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent' && viewerFeeShare > 0;
+                  const feeDeduction = agentPaysFee ? viewerFeeShare : 0;
+                  const agentNet = viewerIsCoAgent && exactCoAgentAllocation
+                    ? Number(exactCoAgentAllocation.netCommission || 0)
+                    : displayedAgentDollar - feeDeduction;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
                   const feeLabel: Record<string, string> = {
@@ -6737,19 +6789,19 @@ export default function AddTransactionPage() {
                   // Detect team-member-with-leader scenario from the active tier.
                   // leaderStructurePercent = leader's side % (used only to compute broker cut)
                   // agentSplitPercent (= memberPercentOfLeaderSide) = member's direct % of full GCI
-                  const isTeamMemberWithLeader = !!(activeTier?.leaderStructurePercent && activeTier?.memberPercentOfLeaderSide);
-                  const leaderStructurePct = activeTier?.leaderStructurePercent ?? 0;   // e.g. 75%
-                  const memberDirectPct = activeTier?.agentSplitPercent ?? 0;           // e.g. 70%
-                  const companyPct = activeTier?.companySplitPercent ?? 0;              // e.g. 25%
+                  const isTeamMemberWithLeader = !!(displayedTier?.leaderStructurePercent && displayedTier?.memberPercentOfLeaderSide);
+                  const leaderStructurePct = displayedTier?.leaderStructurePercent ?? 0;   // e.g. 75%
+                  const memberDirectPct = displayedTier?.agentSplitPercent ?? 0;           // e.g. 70%
+                  const companyPct = displayedTier?.companySplitPercent ?? 0;              // e.g. 25%
                   // leaderStructureGross = netGci × leaderPercent (the leader's side before member payout)
                   // All split math uses adminNetGci (after referral deduction)
-                  const leaderStructureGross = isTeamMemberWithLeader ? Number((adminNetGci * (leaderStructurePct / 100)).toFixed(2)) : 0;
+                  const leaderStructureGross = isTeamMemberWithLeader ? Number((displayedSplitGci * (leaderStructurePct / 100)).toFixed(2)) : 0;
                   const companyRetained = isTeamMemberWithLeader
-                    ? Number((adminNetGci * (companyPct / 100)).toFixed(2))
-                    : Number((adminNetGci - agentDollar).toFixed(2));
+                    ? Number((displayedSplitGci * (companyPct / 100)).toFixed(2))
+                    : Number((displayedSplitGci - displayedAgentDollar).toFixed(2));
                   // Leader retains the spread: leaderStructureGross - memberPaid
                   const leaderRetained = isTeamMemberWithLeader
-                    ? Number((leaderStructureGross - agentDollar).toFixed(2))
+                    ? Number((leaderStructureGross - displayedAgentDollar).toFixed(2))
                     : 0;
 
                   const currentSalePrice = Number(form.watch('salePrice')) || 0;
@@ -6781,7 +6833,7 @@ export default function AddTransactionPage() {
                                 </div>
                                 <div className="text-center">
                                   <p className="text-xs text-muted-foreground mb-0.5">Your Split ({memberDirectPct}%)</p>
-                                  <p className="text-lg font-black text-foreground">{fmtExact(agentDollar)}</p>
+                                  <p className="text-lg font-black text-foreground">{fmtExact(displayedAgentDollar)}</p>
                                 </div>
                                 <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
                                   <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
@@ -6819,7 +6871,7 @@ export default function AddTransactionPage() {
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                                 <div className="text-center">
                                   <p className="text-xs text-muted-foreground mb-0.5">Your Split ({memberDirectPct}%)</p>
-                                  <p className="text-lg font-black text-foreground">{fmtExact(agentDollar)}</p>
+                                  <p className="text-lg font-black text-foreground">{fmtExact(displayedAgentDollar)}</p>
                                 </div>
                                 <div className="text-center bg-green-100 dark:bg-green-900/40 rounded-lg p-2">
                                   <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-0.5">You Take Home</p>
@@ -6851,8 +6903,8 @@ export default function AddTransactionPage() {
                               </div>
                             )}
                             <div className="text-center">
-                              <p className="text-xs text-muted-foreground mb-0.5">Your Split ({adminNetGci > 0 ? Math.round((agentDollar / adminNetGci) * 100) : 0}%)</p>
-                              <p className="text-lg font-black text-foreground">{fmt(agentDollar)}</p>
+                              <p className="text-xs text-muted-foreground mb-0.5">Your Split ({displayedSplitGci > 0 ? Math.round((displayedAgentDollar / displayedSplitGci) * 100) : 0}%)</p>
+                              <p className="text-lg font-black text-foreground">{fmt(displayedAgentDollar)}</p>
                             </div>
                             {watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && (
                               <div className="text-center">

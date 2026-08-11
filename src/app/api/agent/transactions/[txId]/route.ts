@@ -1058,45 +1058,67 @@ export async function GET(
 
   const data = snap.data()!;
   const isAdmin = await isAdminLike(uid);
+  const requestedViewerId = isAdmin ? String(req.nextUrl.searchParams.get('viewAs') || '').trim() : '';
+  const viewerId = requestedViewerId || uid;
+
+  // Build the viewer's full identity set (Firebase UID + agentProfiles doc ID + agentId field).
+  // An administrator may supply viewAs for a faithful agent-view preview; non-admin callers
+  // can only resolve their own identity.
+  const viewerIds = new Set<string>([viewerId]);
+  try {
+    const byDocId = await adminDb.collection('agentProfiles').doc(viewerId).get();
+    if (byDocId.exists) {
+      const d = byDocId.data() || {};
+      if (d.agentId) viewerIds.add(String(d.agentId));
+      if (d.firebaseUid) viewerIds.add(String(d.firebaseUid));
+      viewerIds.add(byDocId.id);
+    }
+    const byField = await adminDb.collection('agentProfiles').where('agentId', '==', viewerId).limit(1).get();
+    if (!byField.empty) {
+      const fd = byField.docs[0].data() || {};
+      viewerIds.add(byField.docs[0].id);
+      if (fd.agentId) viewerIds.add(String(fd.agentId));
+      if (fd.firebaseUid) viewerIds.add(String(fd.firebaseUid));
+    }
+    const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', viewerId).limit(1).get();
+    if (!byFbUid.empty) {
+      const fd = byFbUid.docs[0].data() || {};
+      viewerIds.add(byFbUid.docs[0].id);
+      if (fd.agentId) viewerIds.add(String(fd.agentId));
+      if (fd.firebaseUid) viewerIds.add(String(fd.firebaseUid));
+    }
+  } catch (_) {}
+
+  // Check primary and co-agent participation against the resolved viewer identity.
+  const viewerIsPrimary = viewerIds.has(String(data.agentId || ''));
+  const viewerIsCoAgent =
+    (data.coAgent1Id && viewerIds.has(String(data.coAgent1Id))) ||
+    (data.coAgent2Id && viewerIds.has(String(data.coAgent2Id))) ||
+    (data.coAgent3Id && viewerIds.has(String(data.coAgent3Id))) ||
+    (data.coAgent?.agentId && viewerIds.has(String(data.coAgent.agentId))) ||
+    (data.coAgentId && viewerIds.has(String(data.coAgentId)));
+
   if (!isAdmin) {
-    // Build the caller's full identity set (Firebase UID + agentProfiles doc ID + agentId field)
-    const getIds = new Set<string>([uid]);
-    try {
-      const byDocId = await adminDb.collection('agentProfiles').doc(uid).get();
-      if (byDocId.exists) {
-        const d = byDocId.data() || {};
-        if (d.agentId) getIds.add(String(d.agentId));
-        if (d.firebaseUid) getIds.add(String(d.firebaseUid));
-        getIds.add(byDocId.id);
-      }
-      const byField = await adminDb.collection('agentProfiles').where('agentId', '==', uid).limit(1).get();
-      if (!byField.empty) {
-        const fd = byField.docs[0].data() || {};
-        getIds.add(byField.docs[0].id);
-        if (fd.agentId) getIds.add(String(fd.agentId));
-        if (fd.firebaseUid) getIds.add(String(fd.firebaseUid));
-      }
-      const byFbUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get();
-      if (!byFbUid.empty) {
-        const fd = byFbUid.docs[0].data() || {};
-        getIds.add(byFbUid.docs[0].id);
-        if (fd.agentId) getIds.add(String(fd.agentId));
-        if (fd.firebaseUid) getIds.add(String(fd.firebaseUid));
-      }
-    } catch (_) {}
-
-    // Check primary agent ownership
-    const isOwner = getIds.has(String(data.agentId || ''));
-    // Check flat co-agent fields (coAgent1Id, coAgent2Id, coAgent3Id)
-    const isCoAgent =
-      (data.coAgent1Id && getIds.has(String(data.coAgent1Id))) ||
-      (data.coAgent2Id && getIds.has(String(data.coAgent2Id))) ||
-      (data.coAgent3Id && getIds.has(String(data.coAgent3Id))) ||
-      // Legacy nested co-agent schema: coAgent.agentId
-      (data.coAgent?.agentId && getIds.has(String(data.coAgent.agentId)));
-
-    if (!isOwner && !isCoAgent) return jsonError(403, 'Forbidden');
+    if (!viewerIsPrimary && !viewerIsCoAgent) return jsonError(403, 'Forbidden');
   }
 
-  return NextResponse.json({ ok: true, transaction: { id: snap.id, ...data } });
+  let viewerParticipantAllocation: Record<string, unknown> | null = null;
+  if (viewerIsCoAgent && data.hasCoAgent) {
+    try {
+      const allocationUpdate = await buildCoAgentAllocationUpdate(adminDb, data);
+      viewerParticipantAllocation = allocationUpdate.participantAllocations?.coAgent ?? null;
+    } catch (error) {
+      console.warn('[api/agent/transactions/[txId]] Could not build co-agent preview', error);
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    transaction: {
+      id: snap.id,
+      ...data,
+      viewerIsCoAgent: Boolean(viewerIsCoAgent && !viewerIsPrimary),
+      viewerParticipantAllocation,
+    },
+  });
 }
