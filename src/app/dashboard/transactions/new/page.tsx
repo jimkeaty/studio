@@ -1435,15 +1435,20 @@ export default function AddTransactionPage() {
   const resolvedViewerId = String(viewerAgentId || effectiveUid || '').trim();
   const normalizedViewerName = String(effectiveName || '').trim().toLowerCase();
   const normalizedCoAgentName = String(form.watch('coAgentDisplayName') || '').trim().toLowerCase();
-  const isImpersonatedCoAgentView = Boolean(
+  const isCanonicalCoAgentView = Boolean(
+    hasCoAgent &&
+    resolvedViewerId &&
+    selectedCoAgentId &&
+    resolvedViewerId === selectedCoAgentId
+  );
+  const isLegacyImpersonatedCoAgentView = Boolean(
     isImpersonating &&
     hasCoAgent &&
-    (
-      (resolvedViewerId && selectedCoAgentId && resolvedViewerId === selectedCoAgentId) ||
-      (normalizedViewerName && normalizedCoAgentName && normalizedViewerName === normalizedCoAgentName)
-    )
+    normalizedViewerName &&
+    normalizedCoAgentName &&
+    normalizedViewerName === normalizedCoAgentName
   );
-  const shouldUseCoAgentPreview = viewerIsCoAgent || isImpersonatedCoAgentView;
+  const shouldUseCoAgentPreview = viewerIsCoAgent || isCanonicalCoAgentView || isLegacyImpersonatedCoAgentView;
 
   // A shared file always keeps the primary agent's transaction fields intact. When the
   // current viewer is the co-agent, load that viewer's own profile separately for a
