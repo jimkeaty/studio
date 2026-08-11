@@ -1187,6 +1187,7 @@ export default function AddTransactionPage() {
   const [activeTier, setActiveTier] = useState<CommissionTier | null>(null);
   const [viewerIsCoAgent, setViewerIsCoAgent] = useState(false);
   const [viewerParticipantAllocation, setViewerParticipantAllocation] = useState<Record<string, any> | null>(null);
+  const [viewerAgentId, setViewerAgentId] = useState('');
   const [coAgentViewerCommission, setCoAgentViewerCommission] = useState<AgentCommissionData | null>(null);
   const commissionManualOverride = useRef(false);
   // Saved transaction-specific overrides must survive the profile lookup in edit mode.
@@ -1430,7 +1431,8 @@ export default function AddTransactionPage() {
   // current viewer is the co-agent, load that viewer's own profile separately for a
   // display-only preview; never overwrite the primary agent's saved split fields.
   useEffect(() => {
-    if (!viewerIsCoAgent || !user || !effectiveUid) {
+    const commissionProfileId = viewerAgentId || effectiveUid;
+    if (!viewerIsCoAgent || !user || !commissionProfileId) {
       setCoAgentViewerCommission(null);
       return;
     }
@@ -1438,7 +1440,7 @@ export default function AddTransactionPage() {
     const loadViewerCommission = async () => {
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/admin/agent-profiles/${effectiveUid}/commission`, {
+        const res = await fetch(`/api/admin/agent-profiles/${commissionProfileId}/commission`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -1449,7 +1451,7 @@ export default function AddTransactionPage() {
     };
     loadViewerCommission();
     return () => { cancelled = true; };
-  }, [viewerIsCoAgent, user, effectiveUid]);
+  }, [viewerIsCoAgent, viewerAgentId, user, effectiveUid]);
 
   // Some established transactions hold only a legacy co-listing name. Once the
   // agent list is available, resolve that name to the current canonical ID so a
@@ -1871,7 +1873,9 @@ export default function AddTransactionPage() {
     const loadTx = async () => {
       try {
         const token = await user.getIdToken();
-        const viewAsParam = isImpersonating && effectiveUid ? `?viewAs=${effectiveUid}` : '';
+        const viewAsParam = isImpersonating && effectiveUid
+          ? `?viewAs=${encodeURIComponent(effectiveUid)}${effectiveName ? `&viewAsName=${encodeURIComponent(effectiveName)}` : ''}`
+          : '';
         const res = await fetch(`/api/agent/transactions/${editTxId}${viewAsParam}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -1883,6 +1887,7 @@ export default function AddTransactionPage() {
         const tx = data.transaction;
         setViewerIsCoAgent(Boolean(tx.viewerIsCoAgent));
         setViewerParticipantAllocation(tx.viewerParticipantAllocation ?? null);
+        setViewerAgentId(String(tx.viewerAgentId || ''));
         // This override is authoritative for this transaction only. Set it before
         // form values load so the profile-tier effect cannot replace it with 70/30.
         editCommissionOverride.current = Boolean(tx.commissionOverridden);

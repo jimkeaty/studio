@@ -1059,6 +1059,7 @@ export async function GET(
   const data = snap.data()!;
   const isAdmin = await isAdminLike(uid);
   const requestedViewerId = isAdmin ? String(req.nextUrl.searchParams.get('viewAs') || '').trim() : '';
+  const requestedViewerName = isAdmin ? String(req.nextUrl.searchParams.get('viewAsName') || '').trim() : '';
   const viewerId = requestedViewerId || uid;
 
   // Build the viewer's full identity set (Firebase UID + agentProfiles doc ID + agentId field).
@@ -1067,10 +1068,13 @@ export async function GET(
   const viewerIds = new Set<string>([viewerId]);
   const viewerNames = new Set<string>();
   const normalizeName = (value: unknown) => String(value || '').trim().toLowerCase();
+  if (requestedViewerName) viewerNames.add(normalizeName(requestedViewerName));
+  let viewerCanonicalAgentId = '';
   const addViewerProfile = (profile: Record<string, any>, docId?: string) => {
     if (docId) viewerIds.add(docId);
     if (profile.agentId) viewerIds.add(String(profile.agentId));
     if (profile.firebaseUid) viewerIds.add(String(profile.firebaseUid));
+    if (!viewerCanonicalAgentId) viewerCanonicalAgentId = String(profile.agentId || docId || '');
     for (const name of [profile.displayName, profile.agentName, profile.name]) {
       const normalized = normalizeName(name);
       if (normalized) viewerNames.add(normalized);
@@ -1100,6 +1104,15 @@ export async function GET(
       viewerIds.add(byFbUid.docs[0].id);
       if (fd.agentId) viewerIds.add(String(fd.agentId));
       if (fd.firebaseUid) viewerIds.add(String(fd.firebaseUid));
+    }
+    // Admin impersonation may carry a dashboard slug rather than the agent profile ID.
+    // Resolve the profile by the already supplied display name for legacy shared files.
+    if (isAdmin && requestedViewerName) {
+      const byAgentName = await adminDb.collection('agentProfiles').where('agentName', '==', requestedViewerName).limit(1).get();
+      if (!byAgentName.empty) {
+        const fd = byAgentName.docs[0].data() || {};
+        addViewerProfile(fd, byAgentName.docs[0].id);
+      }
     }
   } catch (_) {}
 
@@ -1134,7 +1147,7 @@ export async function GET(
         data.coListingAgentName ||
         ''
       ).trim();
-      const coAgentId = String(data.coAgent?.agentId || data.coAgentId || viewerId).trim();
+      const coAgentId = String(data.coAgent?.agentId || data.coAgentId || viewerCanonicalAgentId || viewerId).trim();
       const allocationUpdate = await buildCoAgentAllocationUpdate(adminDb, {
         ...data,
         hasCoAgent: true,
@@ -1160,6 +1173,7 @@ export async function GET(
       ...data,
       viewerIsCoAgent: Boolean(viewerIsCoAgent && !viewerIsPrimary),
       viewerParticipantAllocation,
+      viewerAgentId: viewerCanonicalAgentId || viewerId,
     },
   });
 }
