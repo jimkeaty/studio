@@ -1179,6 +1179,8 @@ export default function AddTransactionPage() {
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [activeTier, setActiveTier] = useState<CommissionTier | null>(null);
   const commissionManualOverride = useRef(false);
+  // Saved transaction-specific overrides must survive the profile lookup in edit mode.
+  const editCommissionOverride = useRef(false);
 
   // Commission mode toggle: 'percent' = % of sale price, 'flat' = flat dollar amount
   const [commissionMode, setCommissionMode] = useState<'percent' | 'flat'>('percent');
@@ -1648,7 +1650,8 @@ export default function AddTransactionPage() {
     let cancelled = false;
     const fetchCommission = async () => {
       setCommissionLoading(true);
-      commissionManualOverride.current = false;
+      // Preserve a saved per-transaction split while this profile lookup finishes.
+      commissionManualOverride.current = editCommissionOverride.current;
       try {
         const token = await user.getIdToken();
         const res = await fetch(`/api/admin/agent-profiles/${watchedAgentId}/commission`, {
@@ -1657,7 +1660,7 @@ export default function AddTransactionPage() {
         const data = await res.json();
         if (!cancelled && data.ok) {
           setAgentCommission(data);
-          if (data.defaultTransactionFee != null && data.defaultTransactionFee > 0) {
+          if (!editCommissionOverride.current && data.defaultTransactionFee != null && data.defaultTransactionFee > 0) {
             form.setValue('txComplianceFee', 'yes');
             form.setValue('txComplianceFeeAmount', data.defaultTransactionFee as any);
             // Default to agent-pays so the math is conservative
@@ -1796,6 +1799,10 @@ export default function AddTransactionPage() {
           return;
         }
         const tx = data.transaction;
+        // This override is authoritative for this transaction only. Set it before
+        // form values load so the profile-tier effect cannot replace it with 70/30.
+        editCommissionOverride.current = Boolean(tx.commissionOverridden);
+        commissionManualOverride.current = editCommissionOverride.current;
         // Pre-fill all form fields from the transaction document
         // Helper: if a Firestore value is an array (legacy data), take the first element
         // This prevents z.enum() and z.string() validation failures when old data has arrays
