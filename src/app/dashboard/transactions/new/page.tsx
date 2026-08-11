@@ -1427,12 +1427,27 @@ export default function AddTransactionPage() {
     return 0;
   })();
 
+  // Legacy shared files may have a co-agent name that survived an older save path
+  // while the read response is still resolving identity. During an admin's explicit
+  // agent impersonation, the selected co-agent name is a safe display-only fallback.
+  // It never changes the transaction's primary-agent fields or saved ownership.
+  const normalizedViewerName = String(effectiveName || '').trim().toLowerCase();
+  const normalizedCoAgentName = String(form.watch('coAgentDisplayName') || '').trim().toLowerCase();
+  const isImpersonatedCoAgentView = Boolean(
+    isImpersonating &&
+    hasCoAgent &&
+    normalizedViewerName &&
+    normalizedCoAgentName &&
+    normalizedViewerName === normalizedCoAgentName
+  );
+  const shouldUseCoAgentPreview = viewerIsCoAgent || isImpersonatedCoAgentView;
+
   // A shared file always keeps the primary agent's transaction fields intact. When the
   // current viewer is the co-agent, load that viewer's own profile separately for a
   // display-only preview; never overwrite the primary agent's saved split fields.
   useEffect(() => {
     const commissionProfileId = viewerAgentId || effectiveUid;
-    if (!viewerIsCoAgent || !user || !commissionProfileId) {
+    if (!shouldUseCoAgentPreview || !user || !commissionProfileId) {
       setCoAgentViewerCommission(null);
       return;
     }
@@ -1451,7 +1466,7 @@ export default function AddTransactionPage() {
     };
     loadViewerCommission();
     return () => { cancelled = true; };
-  }, [viewerIsCoAgent, viewerAgentId, user, effectiveUid]);
+  }, [shouldUseCoAgentPreview, viewerAgentId, user, effectiveUid]);
 
   // Some established transactions hold only a legacy co-listing name. Once the
   // agent list is available, resolve that name to the current canonical ID so a
@@ -6766,21 +6781,21 @@ export default function AddTransactionPage() {
                   const calculatedCoAgentGross = coAgentTier
                     ? Number((coAgentGci * (coAgentTier.agentSplitPercent / 100)).toFixed(2))
                     : 0;
-                  const exactCoAgentAllocation = viewerIsCoAgent && !form.formState.isDirty
+                  const exactCoAgentAllocation = shouldUseCoAgentPreview && !form.formState.isDirty
                     ? viewerParticipantAllocation
                     : null;
-                  const displayedTier = viewerIsCoAgent ? coAgentTier : activeTier;
-                  const displayedSplitGci = viewerIsCoAgent ? coAgentGci : adminNetGci;
-                  const displayedAgentDollar = viewerIsCoAgent
+                  const displayedTier = shouldUseCoAgentPreview ? coAgentTier : activeTier;
+                  const displayedSplitGci = shouldUseCoAgentPreview ? coAgentGci : adminNetGci;
+                  const displayedAgentDollar = shouldUseCoAgentPreview
                     ? (exactCoAgentAllocation
                         ? Number(exactCoAgentAllocation.netCommission || 0) + coAgentFeeShare
                         : calculatedCoAgentGross)
                     : agentDollar;
                   // In a shared file, deduct only the fee assigned to the participant viewing it.
-                  const viewerFeeShare = viewerIsCoAgent ? coAgentFeeShare : primaryAgentFeeShare;
+                  const viewerFeeShare = shouldUseCoAgentPreview ? coAgentFeeShare : primaryAgentFeeShare;
                   const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent' && viewerFeeShare > 0;
                   const feeDeduction = agentPaysFee ? viewerFeeShare : 0;
-                  const agentNet = viewerIsCoAgent && exactCoAgentAllocation
+                  const agentNet = shouldUseCoAgentPreview && exactCoAgentAllocation
                     ? Number(exactCoAgentAllocation.netCommission || 0)
                     : displayedAgentDollar - feeDeduction;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
