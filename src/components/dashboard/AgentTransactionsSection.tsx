@@ -176,6 +176,19 @@ function getViewerNet(tx: AgentTx): number {
   return Number(tx.splitSnapshot?.agentNetCommission ?? tx.netIncome ?? tx.netCommission ?? 0) || 0;
 }
 
+function hasViewerNet(tx: AgentTx): boolean {
+  const allocation = getViewerAllocation(tx);
+  if (allocation?.netCommission !== undefined && allocation?.netCommission !== null) return true;
+  if (isCoAgentViewer(tx)) {
+    return tx.coAgent?.splitSnapshot?.agentNetCommission !== undefined
+      || tx.netIncome !== undefined
+      || tx.netCommission !== undefined;
+  }
+  return tx.splitSnapshot?.agentNetCommission !== undefined
+    || tx.netIncome !== undefined
+    || tx.netCommission !== undefined;
+}
+
 function getViewerVolume(tx: AgentTx): number {
   const allocation = getViewerAllocation(tx);
   if (allocation?.volumeCredit !== undefined && allocation?.volumeCredit !== null) {
@@ -1290,7 +1303,7 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Net to Me</p>
-                          <p className="text-sm font-semibold text-primary">{net ? formatCurrency(net) : '—'}</p>
+                          <p className="text-sm font-semibold text-primary">{hasViewerNet(t) ? formatCurrency(net) : '—'}</p>
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-2">
@@ -1476,18 +1489,18 @@ export function AgentTransactionsSection({ agentId, viewAs, isAdminViewer }: Pro
                             {isActiveListing
                               ? (estimatedNet !== null
                                   ? <span title={isEstimate ? '~Estimated based on list price × commission % × agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedNet)}</span>
-                                  : (net ? formatCurrency(net) : '—'))
+                                  : (hasViewerNet(t) ? formatCurrency(net) : '—'))
                               : isActiveBuyer
                                 ? (estimatedBuyerNet !== null
                                     ? <span title={isEstimate ? '~Estimated based on list price × buyer commission % × agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedBuyerNet)}</span>
-                                    : (net ? formatCurrency(net) : '—'))
+                                    : (hasViewerNet(t) ? formatCurrency(net) : '—'))
                               : isPending
                                 ? (net > 0
                                     ? <span title="Agent net from commission calculation">{formatCurrency(net)}</span>
                                     : pendingEstimatedNet !== null
                                       ? <span title="~Estimated based on sale price × commission % × agent split %">~{formatCurrency(pendingEstimatedNet)}</span>
                                       : '—')
-                                : (net ? formatCurrency(net) : '—')
+                                : (hasViewerNet(t) ? formatCurrency(net) : '—')
                             }
                           </TableCell>
                           <TableCell className="min-w-[90px] text-center" onClick={e => e.stopPropagation()}>
