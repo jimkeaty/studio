@@ -205,7 +205,9 @@ export async function rebuildAgentRollup(
     if (txYear === year) {
       // Closed transactions — calendar year
       if (status === 'closed') {
-        closed += sideCredit;
+        // A co-agent close is one completed unit for each participating agent.
+        // Only volume and commission are divided by the participant percentage.
+        closed += t.hasCoAgent ? 1 : sideCredit;
         // Pass-through: agent personal property — count the close but exclude
         // volume, GCI, and broker commission from leaderboard and tier totals.
         if (!t.isPassThrough) {

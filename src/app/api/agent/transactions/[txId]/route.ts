@@ -7,9 +7,9 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAllStaffUids, getTcUids, getStaffUidsForAgent } from '@/lib/notifications/getRecipientUids';
-import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
 import { resolveGCI } from '@/lib/commissions';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
+import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -63,6 +63,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'shortageInCommission', 'shortageAmount', 'shortageHandledBy',
   'occupancyAgreement', 'occupancyDates',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+  'txComplianceFeeAgentAllocation', 'txComplianceFeePrimaryAgentAmount', 'txComplianceFeeCoAgentAmount',
   // Referrals
   'hasOutboundReferral', 'outboundReferralRecipient', 'outboundReferralPercent',
   'outboundReferralFee', 'outboundReferralDollar',
@@ -400,6 +401,18 @@ export async function PATCH(
         updates.documents = [...existingDocs, ...newDocs];
       }
       // else: _replaceDocuments=true — use the provided array as-is (for delete/archive)
+    }
+    const allocationSource = { ...txData, ...updates };
+    if (allocationSource.hasCoAgent && allocationSource.coAgent?.agentId) {
+      try {
+        Object.assign(updates, await buildCoAgentAllocationUpdate(adminDb, allocationSource));
+      } catch (allocationErr: any) {
+        console.warn('[agent PATCH] Co-agent allocation refresh failed; preserving existing allocation:', allocationErr?.message);
+      }
+    } else if (updates.hasCoAgent === false) {
+      updates.participantAllocations = null;
+      updates.primaryAgentSideCredit = null;
+      updates.primaryAgentUnitCredit = null;
     }
     // Save updates to the transaction document
     await txRef.update(updates);
@@ -918,28 +931,8 @@ export async function PATCH(
       }
     })();
 
-    // ── Co-agent split on close ─────────────────────────────────────────────
-    // If this transaction has a co-agent and is now being marked closed,
-    // split it into two individual transactions (one per agent) and delete the original.
-    if (updates.status === 'closed' && previousStatus !== 'closed') {
-      const freshSnap = await txRef.get();
-      const freshData = freshSnap.data() as any;
-      if (freshData?.hasCoAgent && freshData?.coAgent?.agentId && freshData?.source !== 'co_agent_split') {
-        try {
-          const splitResult = await splitCoAgentTransaction(txId);
-          if (splitResult) {
-            return NextResponse.json({
-              ok: true,
-              split: true,
-              primaryTransactionId: splitResult.primaryTransactionId,
-              coAgentTransactionId: splitResult.coAgentTransactionId,
-            });
-          }
-        } catch (splitErr: any) {
-          console.warn('[api/agent/transactions] Co-agent split failed (non-fatal):', splitErr?.message);
-        }
-      }
-    }
+    // A status change to Closed must preserve this original shared transaction.
+    // Co-agent ledger and rollup credit come from participantAllocations instead.
 
     // ── Rebuild leaderboard rollup when transaction is closed or commission changes on a closed tx ──
     // This keeps the agent's YTD GCI, volume, and tier progression in sync immediately

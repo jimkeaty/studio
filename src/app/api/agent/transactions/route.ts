@@ -96,6 +96,17 @@ export async function GET(req: NextRequest) {
           txMap.set(doc.id, { id: doc.id, ...doc.data() });
         }
       }
+      // Shared co-agent files remain one transaction document. Include them in
+      // the co-agent's ledger and mark the viewer so the UI shows their own net.
+      const coSnap = await adminDb
+        .collection('transactions')
+        .where('coAgent.agentId', 'in', batch)
+        .get();
+      for (const doc of coSnap.docs) {
+        if (!txMap.has(doc.id)) {
+          txMap.set(doc.id, { id: doc.id, ...doc.data(), viewerIsCoAgent: true });
+        }
+      }
     }
 
     const transactions = Array.from(txMap.values());

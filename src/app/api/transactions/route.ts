@@ -4,7 +4,7 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup'
 import { isAdminLike } from '@/lib/auth/staffAccess'
 import { normalizeDealSource } from '@/lib/normalizeDealSource'
-import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction'
+import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -346,6 +346,9 @@ export async function POST(req: NextRequest) {
       ...(body.txComplianceFee ? { txComplianceFee: body.txComplianceFee } : {}),
       ...(body.txComplianceFeeAmount ? { txComplianceFeeAmount: toNumber(body.txComplianceFeeAmount) } : {}),
       ...(body.txComplianceFeePaidBy ? { txComplianceFeePaidBy: body.txComplianceFeePaidBy } : {}),
+      ...(body.txComplianceFeeAgentAllocation ? { txComplianceFeeAgentAllocation: body.txComplianceFeeAgentAllocation } : {}),
+      ...(body.txComplianceFeePrimaryAgentAmount !== undefined ? { txComplianceFeePrimaryAgentAmount: toNumber(body.txComplianceFeePrimaryAgentAmount) } : {}),
+      ...(body.txComplianceFeeCoAgentAmount !== undefined ? { txComplianceFeeCoAgentAmount: toNumber(body.txComplianceFeeCoAgentAmount) } : {}),
       ...(body.occupancyAgreement ? { occupancyAgreement: body.occupancyAgreement } : {}),
       ...(body.occupancyDates ? { occupancyDates: body.occupancyDates } : {}),
       ...(body.shortageInCommission ? { shortageInCommission: body.shortageInCommission } : {}),
@@ -359,29 +362,19 @@ export async function POST(req: NextRequest) {
 
      const ref = await adminDb.collection('transactions').add(payload)
 
-    // ── Co-agent split: if this is a closed transaction with a co-agent, split it now
-    // into two separate ledger entries (one per agent) with independent commission calc.
-    // splitCoAgentTransaction() handles rollups and notifications internally.
-    if (status === 'closed' && hasCoAgent && coAgentData?.agentId) {
+    // Co-agent accounting stays on this original shared file—even when closed.
+    if (hasCoAgent && coAgentData?.agentId) {
       try {
-        const splitResult = await splitCoAgentTransaction(ref.id)
-        if (splitResult) {
-          return NextResponse.json({
-            ok: true,
-            split: true,
-            id: splitResult.primaryTransactionId,
-            primaryTransactionId: splitResult.primaryTransactionId,
-            coAgentTransactionId: splitResult.coAgentTransactionId,
-          })
-        }
-      } catch (splitErr: any) {
-        console.warn('[API/transactions] Co-agent split failed (non-fatal):', splitErr?.message)
+        await ref.update(await buildCoAgentAllocationUpdate(adminDb, { ...payload, id: ref.id }))
+      } catch (allocationErr: any) {
+        console.warn('[API/transactions] Co-agent allocation initialization failed (non-fatal):', allocationErr?.message)
       }
     }
 
     // Rebuild the agent's year rollup so leaderboards stay in sync
     try {
       await rebuildAgentRollup(adminDb, agentId, year)
+      if (coAgentData?.agentId) await rebuildAgentRollup(adminDb, coAgentData.agentId, year)
     } catch (rollupErr: any) {
       console.warn('[API/transactions] Rollup rebuild failed (non-fatal):', rollupErr?.message)
     }

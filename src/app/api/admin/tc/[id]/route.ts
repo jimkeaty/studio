@@ -8,7 +8,7 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { resolveGCI } from '@/lib/commissions';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
-import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
+import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -1134,20 +1134,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         transactionId = txRef.id;
       }
 
-      // ── Co-agent split: if the approved transaction is closed and has a co-agent,
-      // split it into two separate ledger entries now.
-      // splitCoAgentTransaction() handles rollups and notifications internally.
-      let splitResult: { primaryTransactionId: string; coAgentTransactionId: string } | null = null;
-      if (txPayload.status === 'closed' && txPayload.hasCoAgent && pendingCoAgentData?.agentId) {
+      // Co-agent files retain this same original transaction ID on close. The
+      // participant allocation record handles each agent's fee, net, volume, and unit credit.
+      if (txPayload.hasCoAgent && pendingCoAgentData?.agentId) {
         try {
-          splitResult = await splitCoAgentTransaction(transactionId);
-          if (splitResult) {
-            // The original combined transaction was deleted by the split;
-            // update the intake link to point to the primary split transaction.
-            transactionId = splitResult.primaryTransactionId;
+          const sharedSnap = await adminDb.collection('transactions').doc(transactionId).get();
+          if (sharedSnap.exists) {
+            await adminDb.collection('transactions').doc(transactionId).update(
+              await buildCoAgentAllocationUpdate(adminDb, sharedSnap.data() as Record<string, any>)
+            );
           }
-        } catch (splitErr: any) {
-          console.warn('[TC approve] Co-agent split failed (non-fatal):', splitErr?.message);
+        } catch (allocationErr: any) {
+          console.warn('[TC approve] Co-agent allocation refresh failed (non-fatal):', allocationErr?.message);
         }
       }
 
@@ -1160,18 +1158,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         updatedAt: now,
       });
 
-      // Rebuild rollups for primary agent (skip if split already handled rollups)
-      if (!splitResult) {
-        try {
-          const { rebuildAgentRollup } = await import('@/lib/rollups/rebuildAgentRollup');
-          await rebuildAgentRollup(adminDb, agentId, year);
-          // Also rebuild co-agent rollup if present
-          if (pendingCoAgentData?.agentId) {
-            await rebuildAgentRollup(adminDb, pendingCoAgentData.agentId, year);
-          }
-        } catch (rollupErr) {
-          console.warn('[TC approve] Rollup rebuild failed (non-fatal):', rollupErr);
-        }
+      // Rebuild rollups for both participants from the same preserved transaction.
+      try {
+        const { rebuildAgentRollup } = await import('@/lib/rollups/rebuildAgentRollup');
+        await rebuildAgentRollup(adminDb, agentId, year);
+        if (pendingCoAgentData?.agentId) await rebuildAgentRollup(adminDb, pendingCoAgentData.agentId, year);
+      } catch (rollupErr) {
+        console.warn('[TC approve] Rollup rebuild failed (non-fatal):', rollupErr);
       }
 
       // Notify the agent their intake was approved

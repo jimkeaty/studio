@@ -106,8 +106,9 @@ export default function MyTransactionsPage() {
     const isActive = status === 'active' || status === 'coming_soon';
     const priceLabel = isActive ? 'List Price' : 'Sale Price';
     const commPct = tx.sellerPayingListingAgent ?? tx.commissionPercent ?? null;
-    const agentSplitPct = tx.splitSnapshot?.agentSplitPercent ?? tx.agentPct ?? null;
-    const agentNet = tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? null;
+    const viewerSplit = tx.viewerIsCoAgent ? tx.coAgent?.splitSnapshot : tx.splitSnapshot;
+    const agentSplitPct = viewerSplit?.agentSplitPercent ?? (tx.viewerIsCoAgent ? tx.coAgent?.splitPercent : tx.agentPct) ?? null;
+    const agentNet = viewerSplit?.agentNetCommission ?? tx.agentDollar ?? null;
     const hasCommission = commPct !== null || agentSplitPct !== null || agentNet !== null;
     const fmt$ = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -130,6 +131,9 @@ export default function MyTransactionsPage() {
                     <Badge className={cn('text-xs', STATUS_COLORS[status] || 'bg-muted text-foreground')}>
                       {status.replace(/_/g, ' ')}
                     </Badge>
+                    {tx.viewerIsCoAgent && (
+                      <Badge variant="secondary" className="text-xs">Co-agent share</Badge>
+                    )}
                     {side && (
                       <Badge variant="outline" className="text-xs capitalize">
                         {side.replace(/_/g, ' ')}

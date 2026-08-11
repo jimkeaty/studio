@@ -6,8 +6,8 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
-import { splitCoAgentTransaction } from '@/lib/transactions/splitCoAgentTransaction';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
+import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 
@@ -251,6 +251,7 @@ const UPDATABLE_FIELDS = new Set([
   // Additional info
   'warrantyAtClosing', 'warrantyPaidBy',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
+  'txComplianceFeeAgentAllocation', 'txComplianceFeePrimaryAgentAmount', 'txComplianceFeeCoAgentAmount',
   'occupancyAgreement', 'occupancyDates',
   'shortageInCommission', 'shortageAmount', 'buyerBringToClosing',
   // Financial overrides
@@ -269,7 +270,9 @@ const UPDATABLE_FIELDS = new Set([
   // Uploaded documents (Purchase Agreement, Listing Paperwork, etc.)
   'documents',
   // Co-agent fields — allow adding/editing co-agent on any transaction including closed
-  'hasCoAgent', 'coAgent',
+  'hasCoAgent', 'coAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
+  'primaryAgentSplitPercent', 'coAgentSplitPercent', 'primaryAgentSideCredit', 'primaryAgentUnitCredit',
+  'participantAllocations',
   // Outbound referral fee — paid to outside broker/relocation company off the top of GCI
   'outboundReferralFee',
   // Pre-listing inspection
@@ -448,6 +451,23 @@ export async function PATCH(req: NextRequest) {
     // Capture existing state BEFORE update so we can rebuild old rollups if needed
     const existingSnap = await adminDb.collection('transactions').doc(id).get();
     const existingData = existingSnap.data() as any;
+    if (!existingSnap.exists) return jsonError(404, 'Transaction not found');
+
+    // Preserve one shared transaction document for co-agents. The helper updates
+    // participant allocations only; it never creates replacement files or deletes
+    // the original transaction used by TC/Staff links and documents.
+    const allocationSource = { ...existingData, ...updates };
+    if (allocationSource.hasCoAgent && allocationSource.coAgent?.agentId) {
+      try {
+        Object.assign(updates, await buildCoAgentAllocationUpdate(adminDb, allocationSource));
+      } catch (allocationErr: any) {
+        console.warn('[api/admin/transactions PATCH] Co-agent allocation refresh failed; preserving existing allocation:', allocationErr?.message);
+      }
+    } else if (updates.hasCoAgent === false) {
+      updates.participantAllocations = null;
+      updates.primaryAgentSideCredit = null;
+      updates.primaryAgentUnitCredit = null;
+    }
 
     // If agentId is changing (transfer), capture the old agentId
     let oldAgentId: string | null = null;
@@ -487,6 +507,11 @@ export async function PATCH(req: NextRequest) {
         if (oldYear && oldYear !== txYear) {
           await rebuildAgentRollup(adminDb, agentId, oldYear);
         }
+      }
+      const coAgentId = String(txData?.coAgent?.agentId || '').trim();
+      if (coAgentId && txYear) {
+        await rebuildAgentRollup(adminDb, coAgentId, txYear);
+        if (oldYear && oldYear !== txYear) await rebuildAgentRollup(adminDb, coAgentId, oldYear);
       }
       // If agent changed (transfer), rebuild the OLD agent's rollup for both old and new year
       if (oldAgentId) {
@@ -683,29 +708,8 @@ export async function PATCH(req: NextRequest) {
     } catch (notifErr: any) {
       console.warn('[api/admin/transactions] Notification trigger failed (non-fatal):', notifErr?.message);
     }
-    // ── Co-agent split on close ─────────────────────────────────────────────
-    // Case 1: Transaction is being marked closed NOW and has a co-agent → split
-    // Case 2: Transaction is ALREADY closed and co-agent is being added retroactively → split
-    const isClosingNow = updates.status === 'closed' && existingData?.status !== 'closed';
-    const isRetroCoAgent = updates.hasCoAgent === true && existingData?.status === 'closed' && !existingData?.hasCoAgent;
-    if (isClosingNow || isRetroCoAgent) {
-      const txData = updatedSnap.data() as any;
-      if (txData?.hasCoAgent && txData?.coAgent?.agentId && txData?.source !== 'co_agent_split') {
-        try {
-          const splitResult = await splitCoAgentTransaction(id);
-          if (splitResult) {
-            return NextResponse.json({
-              ok: true,
-              split: true,
-              primaryTransactionId: splitResult.primaryTransactionId,
-              coAgentTransactionId: splitResult.coAgentTransactionId,
-            });
-          }
-        } catch (splitErr: any) {
-          console.warn('[api/admin/transactions] Co-agent split failed (non-fatal):', splitErr?.message);
-        }
-      }
-    }
+    // Closed co-agent files remain on this same transaction ID. The allocation
+    // record above provides each agent's volume, net, fee, and unit credit.
 
     // ── Retroactive referral fee recalculation ─────────────────────────────────────────
     // When a referral fee is added/changed on a closed transaction, recalculate the

@@ -523,6 +523,9 @@ const schema = z.object({
   txComplianceFee: z.enum(['yes', 'no']).optional(),
   txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   txComplianceFeePaidBy: z.string().optional(),
+  txComplianceFeeAgentAllocation: z.enum(['primary_agent', 'co_agent', 'split_equal', 'custom']).optional(),
+  txComplianceFeePrimaryAgentAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+  txComplianceFeeCoAgentAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   occupancyAgreement: z.enum(['yes', 'no']).optional(),
   occupancyDates: z.string().optional(),
   shortageInCommission: z.enum(['yes', 'no']).optional(),
@@ -1316,6 +1319,9 @@ export default function AddTransactionPage() {
       coAgentRole: 'co_list',
       primaryAgentSplitPercent: 50,
       coAgentSplitPercent: 50,
+      txComplianceFeeAgentAllocation: 'primary_agent',
+      txComplianceFeePrimaryAgentAmount: '',
+      txComplianceFeeCoAgentAmount: '',
       hasOutboundReferral: false,
     },
   });
@@ -1340,6 +1346,9 @@ export default function AddTransactionPage() {
   const txComplianceFee = form.watch('txComplianceFee');
   const txComplianceFeeAmount = Number(form.watch('txComplianceFeeAmount')) || 0;
   const txComplianceFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
+  const txComplianceFeeAgentAllocation = form.watch('txComplianceFeeAgentAllocation') || 'primary_agent';
+  const txComplianceFeePrimaryAgentAmount = Number(form.watch('txComplianceFeePrimaryAgentAmount')) || 0;
+  const txComplianceFeeCoAgentAmount = Number(form.watch('txComplianceFeeCoAgentAmount')) || 0;
   const shortageInCommission = form.watch('shortageInCommission');
   const shortageAmount = Number(form.watch('shortageAmount')) || 0;
   const shortageHandledBy = form.watch('shortageHandledBy') || '';
@@ -1386,6 +1395,22 @@ export default function AddTransactionPage() {
   const watchedPrimaryPct = Number(form.watch('primaryAgentSplitPercent') || 0);
   const watchedCoPct = Number(form.watch('coAgentSplitPercent') || 0);
   const splitTotal = watchedPrimaryPct + watchedCoPct;
+
+  const primaryAgentFeeShare = (() => {
+    if (txComplianceFee !== 'yes' || txComplianceFeePaidBy !== 'agent') return 0;
+    if (!hasCoAgent || txComplianceFeeAgentAllocation === 'primary_agent') return txComplianceFeeAmount;
+    if (txComplianceFeeAgentAllocation === 'co_agent') return 0;
+    if (txComplianceFeeAgentAllocation === 'split_equal') return Math.round((txComplianceFeeAmount / 2) * 100) / 100;
+    return Math.min(txComplianceFeeAmount, txComplianceFeePrimaryAgentAmount);
+  })();
+
+  const coAgentFeeShare = (() => {
+    if (txComplianceFee !== 'yes' || txComplianceFeePaidBy !== 'agent' || !hasCoAgent) return 0;
+    if (txComplianceFeeAgentAllocation === 'co_agent') return txComplianceFeeAmount;
+    if (txComplianceFeeAgentAllocation === 'split_equal') return Math.round((txComplianceFeeAmount - primaryAgentFeeShare) * 100) / 100;
+    if (txComplianceFeeAgentAllocation === 'custom') return Math.round((txComplianceFeeAmount - primaryAgentFeeShare) * 100) / 100;
+    return 0;
+  })();
 
   // Some established transactions hold only a legacy co-listing name. Once the
   // agent list is available, resolve that name to the current canonical ID so a
@@ -1981,6 +2006,9 @@ export default function AddTransactionPage() {
           txComplianceFee: safeEnum(tx.txComplianceFee, ''),
           txComplianceFeeAmount: tx.txComplianceFeeAmount || '',
           txComplianceFeePaidBy: tx.txComplianceFeePaidBy || '',
+          txComplianceFeeAgentAllocation: tx.txComplianceFeeAgentAllocation || 'primary_agent',
+          txComplianceFeePrimaryAgentAmount: tx.txComplianceFeePrimaryAgentAmount ?? '',
+          txComplianceFeeCoAgentAmount: tx.txComplianceFeeCoAgentAmount ?? '',
           occupancyAgreement: safeEnum(tx.occupancyAgreement, ''),
           occupancyDate: tx.occupancyDate || '',
           occupancyNotes: tx.occupancyNotes || '',
@@ -6029,6 +6057,7 @@ export default function AddTransactionPage() {
               </FormItem>
             )} />
             {txComplianceFee === 'yes' && (
+              <>
               <Grid2>
                 <FormField control={form.control} name="txComplianceFeeAmount" render={({ field }) => (
                   <FormItem>
@@ -6044,15 +6073,59 @@ export default function AddTransactionPage() {
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="buyer">Buyer</SelectItem>
-                        <SelectItem value="seller">Seller</SelectItem>
-                        <SelectItem value="agent">Agent</SelectItem>
-                        <SelectItem value="seller_closing_cost">Take out of Seller Paid Closing Cost</SelectItem>
+                        <SelectItem value="buyer">Buyer pays directly</SelectItem>
+                        <SelectItem value="seller">Seller pays directly</SelectItem>
+                        <SelectItem value="seller_closing_cost">Seller pays from buyer closing cost</SelectItem>
+                        <SelectItem value="agent">Agent(s) pay from commission</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormItem>
                 )} />
               </Grid2>
+              {txComplianceFeePaidBy === 'agent' && hasCoAgent && (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Co-Agent Transaction Fee Allocation</p>
+                  <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">This only changes each agent’s net on this transaction. It does not change the co-agent commission split.</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <FormField control={form.control} name="txComplianceFeeAgentAllocation" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>How should the agents split the fee?</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Choose allocation" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="primary_agent">Primary agent pays all</SelectItem>
+                            <SelectItem value="co_agent">Co-agent pays all</SelectItem>
+                            <SelectItem value="split_equal">Split equally</SelectItem>
+                            <SelectItem value="custom">Custom dollar split</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                    <div className="rounded-md border border-blue-100 bg-white p-3 text-sm dark:border-blue-900 dark:bg-slate-950">
+                      <p><span className="font-medium">Primary agent:</span> {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(primaryAgentFeeShare)}</p>
+                      <p><span className="font-medium">Co-agent:</span> {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(coAgentFeeShare)}</p>
+                    </div>
+                  </div>
+                  {txComplianceFeeAgentAllocation === 'custom' && (
+                    <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <FormField control={form.control} name="txComplianceFeePrimaryAgentAmount" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Primary agent fee amount ($)</FormLabel>
+                          <FormControl><CurrencyInput value={field.value as any} onChange={field.onChange} placeholder="0.00" /></FormControl>
+                        </FormItem>
+                      )} />
+                      <FormItem>
+                        <FormLabel>Co-agent fee amount ($)</FormLabel>
+                        <div className="flex h-10 items-center rounded-md border bg-muted px-3 text-sm font-medium">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(coAgentFeeShare)}
+                        </div>
+                        <FormDescription>Calculated as the remaining portion of the total fee.</FormDescription>
+                      </FormItem>
+                    </div>
+                  )}
+                </div>
+              )}
+              </>
             )}
 
             <Separator />
@@ -6620,9 +6693,10 @@ export default function AddTransactionPage() {
                   const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
                   if (gci <= 0) return null;
-                  // Fee only reduces agent take-home when agent is paying
-                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent';
-                  const feeDeduction = agentPaysFee ? watchedTxCompFeeAmt : 0;
+                  // When a co-agent exists, reduce only the primary agent's net
+                  // by that participant's approved allocation—not the full fee.
+                  const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent' && primaryAgentFeeShare > 0;
+                  const feeDeduction = agentPaysFee ? primaryAgentFeeShare : 0;
                   const agentNet = agentDollar - feeDeduction;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -6700,7 +6774,7 @@ export default function AddTransactionPage() {
                                   <div>
                                     <p className="text-xs text-muted-foreground">Transaction Fee</p>
                                     {agentPaysFee ? (
-                                      <p className="text-sm font-bold text-red-600">-{fmt(watchedTxCompFeeAmt)}</p>
+                                      <p className="text-sm font-bold text-red-600">-{fmt(feeDeduction)}</p>
                                     ) : (
                                       <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)}</p>
                                     )}
@@ -6728,7 +6802,7 @@ export default function AddTransactionPage() {
                                 <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-center">
                                   <p className="text-xs text-muted-foreground">Transaction Fee</p>
                                   {agentPaysFee ? (
-                                    <p className="text-sm font-bold text-red-600">-{fmt(watchedTxCompFeeAmt)} deducted from your commission</p>
+                                    <p className="text-sm font-bold text-red-600">-{fmt(feeDeduction)} deducted from your commission</p>
                                   ) : (
                                     <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)} — not deducted from your commission</p>
                                   )}
@@ -6756,7 +6830,7 @@ export default function AddTransactionPage() {
                               <div className="text-center">
                                 <p className="text-xs text-muted-foreground mb-0.5">Transaction Fee</p>
                                 {agentPaysFee ? (
-                                  <p className="text-lg font-black text-red-600">-{fmt(watchedTxCompFeeAmt)}</p>
+                                  <p className="text-lg font-black text-red-600">-{fmt(feeDeduction)}</p>
                                 ) : (
                                   <p className="text-sm font-semibold text-blue-600">{fmt(watchedTxCompFeeAmt)}</p>
                                 )}
