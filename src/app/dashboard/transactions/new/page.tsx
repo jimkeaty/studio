@@ -616,6 +616,7 @@ export default function AddTransactionPage() {
   const [archiveSubmitting, setArchiveSubmitting] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [intakeApproving, setIntakeApproving] = useState(false);
+  const lastSaveSucceededRef = useRef(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   // ── Checklist drawer state ─────────────────────────────────────────────────
@@ -2311,6 +2312,7 @@ export default function AddTransactionPage() {
   const onSubmit = async (values: FormValues) => {
     // ── Edit mode: PATCH the existing transaction ─────────────────────────
     if (editMode && editTxId) {
+      lastSaveSucceededRef.current = false;
       setSubmitting(true);
       try {
         const token = await user!.getIdToken();
@@ -2389,6 +2391,7 @@ export default function AddTransactionPage() {
           toast({ title: 'Save failed', description: data.error || 'Could not save changes.', variant: 'destructive' });
           return;
         }
+        lastSaveSucceededRef.current = true;
         toast({ title: 'Changes saved', description: 'Transaction updated successfully.' });
         // Reset dirty state
         setEditLoaded(false);
@@ -2546,6 +2549,16 @@ export default function AddTransactionPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleInvalidSubmit = (errors: Record<string, any>) => {
+    const firstError = Object.values(errors)[0] as any;
+    const message = firstError?.message || 'Please fill in all required fields before submitting.';
+    const firstKey = Object.keys(errors)[0];
+    console.error('[Form validation errors]', JSON.stringify(errors, null, 2));
+    toast({ title: 'Cannot save — required field missing', description: `Field: ${firstKey} — ${String(message)}`, variant: 'destructive' });
+    const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -2931,7 +2944,7 @@ export default function AddTransactionPage() {
               size="sm"
               variant="outline"
               disabled={submitting}
-              onClick={() => form.handleSubmit(onSubmit)()}
+              onClick={() => form.handleSubmit(onSubmit, handleInvalidSubmit)()}
               className="text-xs"
             >
               {submitting ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Saving...</> : '💾 Save Changes'}
@@ -2947,7 +2960,9 @@ export default function AddTransactionPage() {
                   setIntakeApproving(true);
                   try {
                     // Save form first
-                    await form.handleSubmit(onSubmit)();
+                    lastSaveSucceededRef.current = false;
+                    await form.handleSubmit(onSubmit, handleInvalidSubmit)();
+                    if (!lastSaveSucceededRef.current) return;
                     // Then approve
                     const token = await user.getIdToken();
                     const apiPath = queueRole === 'staff'
@@ -3107,18 +3122,7 @@ export default function AddTransactionPage() {
       )}
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
-          // Surface the first validation error as a toast so the user knows what to fix
-          const firstError = Object.values(errors)[0];
-          const message = firstError?.message || 'Please fill in all required fields before submitting.';
-          const firstKey = Object.keys(errors)[0];
-          // Log all errors to console for debugging
-          console.error('[Form validation errors]', JSON.stringify(errors, null, 2));
-          toast({ title: 'Cannot save — required field missing', description: `Field: ${firstKey} — ${String(message)}`, variant: 'destructive' });
-          // Scroll to the first field with an error
-          const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        })} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)} className="space-y-6">
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 1 — PROPERTY / TRANSACTION DETAILS
@@ -4584,7 +4588,7 @@ export default function AddTransactionPage() {
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
-                              <Input type="date" value={row.preferredDate} min={today}
+                              <Input type="date" value={row.preferredDate}
                                 onChange={e => {
                                   updateInspRow(key, { preferredDate: e.target.value });
                                   if (key === 'inspector_general' && e.target.value) {
@@ -4613,7 +4617,7 @@ export default function AddTransactionPage() {
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
-                              <Input type="date" value={row.fallbackDateStart || today} min={today}
+                              <Input type="date" value={row.fallbackDateStart || today}
                                 onChange={e => updateInspRow(key, { fallbackDateStart: e.target.value })} />
                             </div>
                             <div>
@@ -5781,7 +5785,7 @@ export default function AddTransactionPage() {
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Preferred Date</label>
-                              <Input type="date" value={row.preferredDate} min={today2}
+                              <Input type="date" value={row.preferredDate}
                                 onChange={e => {
                                   updateInspRow(key, { preferredDate: e.target.value });
                                   if (key === 'inspector_general' && e.target.value) {
@@ -5810,7 +5814,7 @@ export default function AddTransactionPage() {
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="text-xs font-medium text-muted-foreground mb-1 block">Available From</label>
-                              <Input type="date" value={row.fallbackDateStart || today2} min={today2}
+                              <Input type="date" value={row.fallbackDateStart || today2}
                                 onChange={e => updateInspRow(key, { fallbackDateStart: e.target.value })} />
                             </div>
                             <div>
