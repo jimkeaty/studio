@@ -6789,24 +6789,25 @@ export default function AddTransactionPage() {
                   const calculatedCoAgentGross = coAgentTier
                     ? Number((coAgentGci * (coAgentTier.agentSplitPercent / 100)).toFixed(2))
                     : 0;
-                  // Field-by-field hydration can mark the form dirty before a user changes
-                  // anything. A stored participant allocation remains authoritative for the
-                  // shared-file preview until the transaction is recalculated on save.
-                  const exactCoAgentAllocation = shouldUseCoAgentPreview
-                    ? viewerParticipantAllocation
-                    : null;
-                  const displayedTier = shouldUseCoAgentPreview ? coAgentTier : activeTier;
-                  const displayedSplitGci = shouldUseCoAgentPreview ? coAgentGci : adminNetGci;
-                  const displayedAgentDollar = shouldUseCoAgentPreview
+                  // The GET route only supplies this allocation to an authorized co-agent.
+                  // Its presence is therefore the authoritative current-viewer signal; do not
+                  // re-derive that identity through client state that may hydrate later.
+                  const exactCoAgentAllocation = viewerParticipantAllocation;
+                  const hasParticipantPreview = Boolean(exactCoAgentAllocation);
+                  const displayedTier = hasParticipantPreview ? coAgentTier : activeTier;
+                  const displayedSplitGci = hasParticipantPreview
+                    ? Number(exactCoAgentAllocation?.grossCommission || coAgentGci)
+                    : adminNetGci;
+                  const displayedAgentDollar = hasParticipantPreview
                     ? (exactCoAgentAllocation
                         ? Number(exactCoAgentAllocation.netCommission || 0) + coAgentFeeShare
                         : calculatedCoAgentGross)
                     : agentDollar;
                   // In a shared file, deduct only the fee assigned to the participant viewing it.
-                  const viewerFeeShare = shouldUseCoAgentPreview ? coAgentFeeShare : primaryAgentFeeShare;
+                  const viewerFeeShare = hasParticipantPreview ? coAgentFeeShare : primaryAgentFeeShare;
                   const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent' && viewerFeeShare > 0;
                   const feeDeduction = agentPaysFee ? viewerFeeShare : 0;
-                  const agentNet = shouldUseCoAgentPreview && exactCoAgentAllocation
+                  const agentNet = hasParticipantPreview && exactCoAgentAllocation
                     ? Number(exactCoAgentAllocation.netCommission || 0)
                     : displayedAgentDollar - feeDeduction;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
