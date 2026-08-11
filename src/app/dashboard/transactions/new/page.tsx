@@ -1362,6 +1362,10 @@ export default function AddTransactionPage() {
   const inspectionTypes = form.watch('inspectionTypes') || [];
   const watchedStatus = form.watch('status');
   const watchedDealType = form.watch('dealType');
+  // Agents may review closed files, but only admin, staff, and TC users may
+  // correct them. An impersonated admin is intentionally treated as an agent
+  // here so the agent view cannot bypass the same permission rule.
+  const isClosedAgentView = editMode && watchedStatus === 'closed' && !isAdminOrTC;
   const isActiveListing = watchedStatus === 'active' && (watchedClosingType === 'listing' || watchedClosingType === 'dual');
   // When a listing goes pending/under_contract, reveal all buyer/contract fields on the same form
   const PENDING_STATUSES = ['pending', 'under_contract', 'closed'];
@@ -2391,6 +2395,14 @@ export default function AddTransactionPage() {
   const onSubmit = async (values: FormValues) => {
     // ── Edit mode: PATCH the existing transaction ─────────────────────────
     if (editMode && editTxId) {
+      if (isClosedAgentView) {
+        toast({
+          title: 'Closed transaction',
+          description: 'Agents cannot edit closed transactions. Contact your admin, staff, or TC if a correction is needed.',
+          variant: 'destructive',
+        });
+        return;
+      }
       lastSaveSucceededRef.current = false;
       setSubmitting(true);
       try {
@@ -2679,7 +2691,9 @@ export default function AddTransactionPage() {
           </h1>
           <p className="text-muted-foreground mt-1">
             {editMode
-              ? 'Make changes below and click Save Changes when done.'
+              ? isClosedAgentView
+                ? 'This transaction is closed and is available for review only. Contact your admin, staff, or TC if a correction is needed.'
+                : 'Make changes below and click Save Changes when done.'
               : pdfStep === 'upload' ? 'Upload a purchase agreement to auto-fill the form, or skip to fill manually.' : pdfStep === 'extracting' ? 'Reading your purchase agreement...' : 'Review the auto-filled details below and submit to the TC Queue.'}
           </p>
         </div>
@@ -3230,6 +3244,13 @@ export default function AddTransactionPage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)} className="space-y-6">
+          {isClosedAgentView && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+              <p className="font-semibold">Closed transaction — review only</p>
+              <p className="mt-1 text-xs">Agents cannot change a closed transaction. Admin, staff, and TC users retain correction access.</p>
+            </div>
+          )}
+          <fieldset disabled={isClosedAgentView} className="m-0 min-w-0 border-0 p-0">
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECTION 1 — PROPERTY / TRANSACTION DETAILS
@@ -6987,14 +7008,17 @@ export default function AddTransactionPage() {
             <Button
               type="submit"
               size="lg"
-              disabled={submitting || (isAdmin && agentsLoading)}
+              disabled={isClosedAgentView || submitting || (isAdmin && agentsLoading)}
               className="min-w-[200px]"
             >
               <Send className="mr-2 h-4 w-4" />
-              {submitting ? (editMode ? 'Saving...' : 'Submitting...') : (editMode ? 'Save Changes' : 'Submit to TC Queue')}
+              {isClosedAgentView
+                ? 'Closed — Review Only'
+                : submitting ? (editMode ? 'Saving...' : 'Submitting...') : (editMode ? 'Save Changes' : 'Submit to TC Queue')}
             </Button>
           </div>
 
+          </fieldset>
         </form>
       </Form>
       </>)}
