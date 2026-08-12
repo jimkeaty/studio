@@ -6893,11 +6893,17 @@ export default function AddTransactionPage() {
                           {hasOperationalEditAuthority ? (
                             // Admin/TC sees full breakdown: GCI, broker cut, leader split, agent net
                             <>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
                                 <div className="text-center">
                                   <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
                                   <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
                                 </div>
+                                {hasPrimaryParticipantPreview && (
+                                  <div className="text-center">
+                                    <p className="text-xs text-muted-foreground mb-0.5">{primaryParticipantAllocation?.agentDisplayName || 'Primary Agent'} Allocated GCI</p>
+                                    <p className="text-lg font-black text-foreground">{fmt(displayedSplitGci)}</p>
+                                  </div>
+                                )}
                                 <div className="text-center">
                                   <p className="text-xs text-muted-foreground mb-0.5">Broker ({companyPct}%)</p>
                                   <p className="text-lg font-black text-foreground">{fmt(companyRetained)}</p>
@@ -6965,12 +6971,18 @@ export default function AddTransactionPage() {
                       ) : (
                         // ── Standard single-step breakdown ──────────────────────────────────
                         <>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                             {/* Gross Commission — admin and TC only */}
                             {hasOperationalEditAuthority && (
                               <div className="text-center">
                                 <p className="text-xs text-muted-foreground mb-0.5">Gross Commission</p>
                                 <p className="text-lg font-black text-foreground">{fmt(gci)}</p>
+                              </div>
+                            )}
+                            {hasPrimaryParticipantPreview && (
+                              <div className="text-center">
+                                <p className="text-xs text-muted-foreground mb-0.5">{primaryParticipantAllocation?.agentDisplayName || 'Primary Agent'} Allocated GCI</p>
+                                <p className="text-lg font-black text-foreground">{fmt(displayedSplitGci)}</p>
                               </div>
                             )}
                             <div className="text-center">
