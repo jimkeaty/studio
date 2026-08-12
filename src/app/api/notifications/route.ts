@@ -66,12 +66,16 @@ export async function GET(req: NextRequest) {
         .get();
       allDocs = [...unreadSnap.docs, ...readSnap.docs];
     } catch {
-      // Composite index missing — fall back to simple recipientUid-only query
+      // Composite index unavailable — fall back to a broad recipient-only scan.
+      // The result has no server-side order, so a small arbitrary limit can hide
+      // newly written bell records for users with older notification history.
+      // This API sorts the scanned records below; 500 is a safe per-user cap for
+      // the bell while the requested composite index is unavailable.
       usedFallback = true;
       const fallbackSnap = await adminDb
         .collection('notifications')
         .where('recipientUid', '==', uid)
-        .limit(limit + 10)
+        .limit(Math.max(limit + 10, 500))
         .get();
       allDocs = fallbackSnap.docs;
     }

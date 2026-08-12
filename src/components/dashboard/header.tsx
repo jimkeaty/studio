@@ -231,12 +231,11 @@ export function Header() {
     }
   }, [user]);
 
-  // Fetch on open if never fetched or data is >30 s stale
+  // Fetch once as soon as a signed-in user is available so the badge reflects
+  // notifications that were written before the user opens the bell.
   useEffect(() => {
-    if (notifOpen && Date.now() - lastFetchedAtRef.current > 30_000) {
-      fetchNotifications();
-    }
-  }, [notifOpen, fetchNotifications]);
+    if (user) fetchNotifications();
+  }, [user, fetchNotifications]);
 
   // Poll every 60 seconds regardless of dropdown state so the badge and
   // bell chime fire even when the panel is closed
@@ -277,7 +276,7 @@ export function Header() {
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'mark_read', ids: [id] }),
+        body: JSON.stringify({ action: 'mark_read', notificationIds: [id] }),
       });
     } catch { /* non-fatal */ }
   };
@@ -357,7 +356,14 @@ export function Header() {
               'relative h-9 w-9 rounded-full transition-transform',
               bellPulse && 'animate-bell-ring',
             )}
-            onClick={() => setNotifOpen(prev => !prev)}
+            onClick={() => {
+              const nextOpen = !notifOpen;
+              setNotifOpen(nextOpen);
+              // Always refresh on an explicit bell click. This makes the
+              // dropdown deterministic even after a tab has been open for a
+              // long time or browser polling was suspended.
+              if (nextOpen) fetchNotifications();
+            }}
             aria-label="Notifications"
             aria-expanded={notifOpen}
           >
