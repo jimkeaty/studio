@@ -305,7 +305,7 @@ export const ARTICLES: Article[] = [
   <li><strong>TC Approvals & Rejections</strong> — Alerts when a Transaction Coordinator reviews your submitted deal.</li>
   <li><strong>Transaction Status Changes</strong> — Alerts when a deal moves to Pending, Closed, etc.</li>
   <li><strong>Staff Queue Updates</strong> — Alerts when admin staff process your listings.</li>
-  <li><strong>Co-Agent Splits</strong> — Alerts when a shared transaction closes and is split into your individual record.</li>
+  <li><strong>Shared Co-Agent Transactions</strong> — Alerts related to a transaction you share with another internal agent, including relevant status and file updates.</li>
 </ul>
     `,
   },
@@ -387,32 +387,37 @@ export const ARTICLES: Article[] = [
   // ── CO-AGENT SPLITS (ADMIN/STAFF) ─────────────────────────────────────────────
   {
     id: 'admin-co-agent-splits',
-    title: 'Admin: Managing Co-Agent Transaction Splits',
+    title: 'Admin: Reviewing Shared Co-Agent Transactions',
     description:
-      'How the system handles co-agent deals at closing, what the ledger shows, and what to do if a split needs correction.',
+      'How to review shared co-agent transactions, confirm participant allocations and fee responsibility, and make operational corrections.',
     category: 'Admin Tools',
     audience: 'staff',
     readingTimeMinutes: 4,
-    publishedAt: '2026-05-06',
+    publishedAt: '2026-08-12',
     content: `
 <h2>Overview</h2>
-<p>When a transaction in the ledger has a co-agent assigned, it will automatically split into two individual records the moment it is moved to <strong>Closed</strong> status. This applies whether the status is changed by the agent from their dashboard or by an admin from the Transaction Ledger.</p>
+<p>A co-agent deal is one <strong>shared transaction file</strong>. Do not create a second transaction for the other internal agent, and do not expect the file to be deleted or split into replacement records when it closes.</p>
 
-<h2>What Happens at Closing</h2>
-<ol>
-  <li>The single shared transaction is <strong>permanently deleted</strong> from the ledger.</li>
-  <li>Two new individual transactions are created — one for each agent.</li>
-  <li>The Sale Price and GCI are split according to the percentages set on the original transaction.</li>
-  <li>Each agent's commission tier is applied independently to their portion of the GCI.</li>
-  <li>The Transaction Compliance Fee (if any) is split equally between the two records.</li>
-  <li>Both agents receive a notification with a link to their new individual transaction.</li>
-</ol>
+<h2>Reviewing the Shared File</h2>
+<p>In the <strong>Agent Participation</strong> section, confirm that the co-agent, role, and percentages are correct. The two split percentages must total <strong>100%</strong>. The Live Split Preview shows the volume and GCI allocated to each participant.</p>
 
-<h2>Audit Trail</h2>
-<p>Each split transaction carries a <code>splitFromTransactionId</code> field that references the original shared transaction's ID. This is stored in Firestore and can be used for audit or reconciliation purposes.</p>
+<h2>Commission and Fee Review</h2>
+<p>Each participant's commission tier is applied to their own allocated GCI. The operational payout card shows the current viewer's <strong>Allocated GCI</strong>, split percentage, assigned transaction fee, and net payout.</p>
+<table>
+  <thead><tr><th>Check</th><th>What to Confirm</th></tr></thead>
+  <tbody>
+    <tr><td>Participant allocation</td><td>Each agent's volume and GCI match the agreed split percentage.</td></tr>
+    <tr><td>Transaction fee</td><td>Confirm whether the primary agent, co-agent, both equally, or a custom split is responsible. Buyer-direct and seller-closing-cost choices are handled separately.</td></tr>
+    <tr><td>Net payout</td><td>Review each participant's own payout; do not use one agent's net as the other agent's expected payout.</td></tr>
+    <tr><td>Closed-unit credit</td><td>Each participating internal agent receives one closed-unit credit; volume is still divided by the agreed split.</td></tr>
+  </tbody>
+</table>
 
-<h2>Correcting a Split</h2>
-<p>If a split produces incorrect numbers (e.g., the wrong split percentage was set), you can edit either individual transaction directly in the <strong>Transaction Ledger</strong> using the Admin Edit page. Adjust the GCI, commission fields, or agent assignment as needed. The split itself cannot be undone, but the resulting records are fully editable.</p>
+<h2>Closing and Corrections</h2>
+<p>When the transaction closes, the original shared file remains the record of the deal. Agents are review-only on a Closed transaction; authorized Admin, Staff, and TC users can make operational corrections when necessary.</p>
+
+<h2>Removing an Accidental Co-Agent</h2>
+<p>If the transaction should not be shared, turn off <strong>Co-Agent on This Transaction</strong> and select <strong>Save Changes</strong>. This removes the co-agent relationship and its allocation fields from the transaction. Do not create a duplicate file to correct an accidental co-agent selection.</p>
     `,
   },
 
@@ -455,32 +460,55 @@ export const ARTICLES: Article[] = [
   // ── CO-AGENT SPLITS (AGENT) ──────────────────────────────────────────────────
   {
     id: 'co-agent-splits',
-    title: 'Co-Agent Transactions & Automatic Splits',
+    title: 'Shared Co-Agent Transactions: Splits, Fees & Editing',
     description:
-      'How deals with co-agents are handled and what happens when they close.',
+      'How to set up a shared co-agent transaction, understand your own volume and commission allocation, assign fees, and update the file correctly.',
     category: 'Team & Commission',
-    audience: 'agent',
-    readingTimeMinutes: 3,
-    publishedAt: '2026-05-06',
+    audience: 'both',
+    readingTimeMinutes: 6,
+    publishedAt: '2026-08-12',
     content: `
-<h2>Submitting a Co-Agent Deal</h2>
-<p>When you work a deal with another agent in the brokerage, you only need to submit <strong>one transaction</strong>. In the Add Transaction form, toggle <em>Has Co-Agent?</em> to <strong>Yes</strong>, select the agent, and enter the split percentage (e.g., 50/50).</p>
+<h2>One Shared File</h2>
+<p>When two internal agents work the same deal, use <strong>one shared transaction</strong>. Do not create a duplicate transaction for the co-agent. The shared file stays in place from intake through closing.</p>
 
-<h2>What Happens While Pending</h2>
-<p>While the deal is Active or Pending, it exists as a single shared transaction in the ledger. The primary agent manages the updates.</p>
-
-<h2>The Automatic Split at Closing</h2>
-<p>The magic happens when the transaction status is changed to <strong>Closed</strong>. The system will automatically:</p>
+<h2>Setting Up the Co-Agent</h2>
 <ol>
-  <li>Delete the single shared transaction.</li>
-  <li>Create <strong>two separate, individual transactions</strong> — one for you and one for your co-agent.</li>
-  <li>Split the Sale Price and GCI according to the percentages you set.</li>
-  <li>Apply each agent's individual commission tier to their portion of the GCI.</li>
-  <li>Send a notification to both agents with a link to their new individual record.</li>
+  <li>In <strong>Agent Participation</strong>, turn on <strong>Co-Agent on This Transaction</strong>.</li>
+  <li>Select the other internal agent and choose the correct role.</li>
+  <li>Enter the agreed split. The starting point is usually 50/50, but the split can be changed for the file.</li>
+  <li>Confirm the total equals <strong>100%</strong> before saving.</li>
 </ol>
 
-<h2>Why We Do This</h2>
-<p>Splitting the transaction at closing ensures that your personal dashboard, conversion rates, and average commission percentages remain perfectly accurate. If you split a 3% commission 50/50, your record will show you earned 3% on half the volume, rather than 1.5% on the full volume.</p>
+<h2>What Each Participant Sees</h2>
+<p>The Live Split Preview shows each participant's allocated volume and GCI. Your commission card then applies <strong>your own tier or split</strong> to your allocated GCI. This means your take-home may differ from the other agent's take-home even when the transaction is split 50/50.</p>
+<table>
+  <thead><tr><th>Item</th><th>How It Works</th></tr></thead>
+  <tbody>
+    <tr><td>Volume</td><td>Divided by the agreed co-agent percentage.</td></tr>
+    <tr><td>GCI</td><td>Divided by the agreed co-agent percentage before each person's commission tier is applied.</td></tr>
+    <tr><td>Closed units</td><td>Each participating internal agent receives one closed-unit credit.</td></tr>
+    <tr><td>Net payout</td><td>Calculated separately for each participant using their own commission structure and assigned fees.</td></tr>
+  </tbody>
+</table>
+
+<h2>Transaction Fee Choices</h2>
+<p>For a shared transaction, the transaction fee can be assigned to the primary agent, the co-agent, split equally, or split by custom dollar amount. A buyer may also pay directly, or the fee may be paid from seller-provided buyer closing costs. If an agent is responsible for the fee, it is deducted only from that agent's take-home after the commission split.</p>
+
+<h2>Editing the Shared File</h2>
+<p>Both participants can open and update a shared file while it is <strong>Active</strong> or <strong>Pending</strong>. The transaction remains one shared file, so a saved change is visible to both participants. After a transaction is <strong>Closed</strong>, agents can review it but cannot edit it. Authorized Admin, Staff, and TC users can make operational corrections after closing.</p>
+
+<h2>Removing an Accidental Co-Agent</h2>
+<p>If a co-agent was selected by mistake, turn off <strong>Co-Agent on This Transaction</strong> and select <strong>Save Changes</strong>. This removes the shared relationship from the file. Do not leave the person selected and do not create a duplicate transaction to correct the mistake.</p>
+
+<h2>Final Review Before Closing</h2>
+<ul>
+  <li>Confirm the co-agent name and role.</li>
+  <li>Confirm the percentages total 100%.</li>
+  <li>Confirm who is responsible for the transaction fee.</li>
+  <li>Review your own allocated GCI and net payout, not the other agent's payout.</li>
+</ul>
+
+<blockquote><strong>Remember:</strong> One shared file, one agreed split, and one clear fee assignment. Each participant sees their own allocation.</blockquote>
     `,
   },
 
