@@ -58,31 +58,44 @@ export async function GET(req: NextRequest) {
       issues.push('notificationPrefs.in_app is set to false — in-app notifications are disabled for this user. Click "Force-Fix All Staff" to enable it.');
     }
 
-    // Check how many notifications exist in Firestore for this UID
+    // Check recent notifications for this UID. Do not apply a small Firestore
+    // limit before sorting: this query is unordered by design so a limit can
+    // hide the newest records for staff with a longer notification history.
     let recentNotifCount = 0;
     let unreadNotifCount = 0;
     let lastNotifAt: string | null = null;
+    let recentNotifications: Array<{ id: string; type: string; title: string; body: string; createdAt: string | null; read: boolean }> = [];
     try {
       const notifSnap = await db.collection('notifications')
         .where('recipientUid', '==', firebaseUid)
-        .limit(20)
+        .limit(500)
         .get();
       recentNotifCount = notifSnap.size;
       const unread = notifSnap.docs.filter(d => !d.data().read);
       unreadNotifCount = unread.length;
-      if (notifSnap.size > 0) {
-        const dates = notifSnap.docs
-          .map(d => d.data().createdAt?.toDate?.()?.toISOString())
-          .filter(Boolean) as string[];
-        if (dates.length > 0) lastNotifAt = dates.sort().reverse()[0];
-      }
+      recentNotifications = notifSnap.docs
+        .map((d) => {
+          const notification = d.data() as Record<string, any>;
+          const createdAt = notification.createdAt?.toDate?.()?.toISOString() || notification.createdAt || null;
+          return {
+            id: d.id,
+            type: String(notification.type || ''),
+            title: String(notification.title || ''),
+            body: String(notification.body || ''),
+            createdAt,
+            read: !!notification.read,
+          };
+        })
+        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+        .slice(0, 10);
+      lastNotifAt = recentNotifications[0]?.createdAt || null;
     } catch { /* non-fatal */ }
 
     if (recentNotifCount === 0 && usersDocExists && notificationPrefs?.in_app !== false) {
       issues.push('No notifications found in Firestore for this UID. Either no notifications have been sent yet, or sendNotification is failing silently. Try clicking the purple bell icon on the Staff Users page to send a test notification, then re-run this diagnostic.');
     }
 
-    rows.push({ email, firebaseUid, usersDocExists, notificationPrefs, recentNotifCount, unreadNotifCount, lastNotifAt, issues });
+    rows.push({ email, firebaseUid, usersDocExists, notificationPrefs, recentNotifCount, unreadNotifCount, lastNotifAt, recentNotifications, issues });
   }
 
   return NextResponse.json({ ok: true, rows, usedFallback });
