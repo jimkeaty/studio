@@ -1402,7 +1402,8 @@ export default function AddTransactionPage() {
   // correct them. An impersonated admin is intentionally treated as an agent
   // here so the agent view cannot bypass the same permission rule.
   const isClosedAgentView = editMode && persistedEditStatus === 'closed' && !hasOperationalEditAuthority;
-  const isActiveListing = watchedStatus === 'active' && (watchedClosingType === 'listing' || watchedClosingType === 'dual');
+  const isListingSideTransaction = watchedClosingType === 'listing' || watchedClosingType === 'dual';
+  const isActiveListing = watchedStatus === 'active' && isListingSideTransaction;
   // When a listing goes pending/under_contract, reveal all buyer/contract fields on the same form
   const PENDING_STATUSES = ['pending', 'under_contract', 'closed'];
   const isPendingListing = watchedClosingType === 'listing' && PENDING_STATUSES.includes(watchedStatus as string);
@@ -4185,8 +4186,8 @@ export default function AddTransactionPage() {
               SECTION 2 — KEY DATES
           ═══════════════════════════════════════════════════════════════════ */}
           <Section title="Key Dates">
-            {/* Listing lifecycle dates remain relevant after a listing moves to Pending. */}
-            {(watchedClosingType === 'listing' || watchedClosingType === 'dual' || isPendingListing) && (
+            {/* Listing lifecycle dates remain visible through every listing status. */}
+            {isListingSideTransaction && (
               <Grid3>
                 <FormField control={form.control} name="listingDate" render={({ field }) => (
                   <FormItem><FormLabel>Listing Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>

@@ -26,5 +26,6 @@ test('reopened shared transaction forms hydrate and submit their document list',
 test('listing lifecycle dates remain visible and hydrate after a listing becomes Pending', () => {
   assert.match(formSource, /listingDate: tx\.listingDate \|\| tx\.listDate \|\| ''/);
   assert.match(formSource, /listingExpirationDate: tx\.listingExpirationDate \|\| tx\.expirationDate \|\| tx\.listingExpiration \|\| ''/);
-  assert.match(formSource, /watchedClosingType === 'listing' \|\| watchedClosingType === 'dual' \|\| isPendingListing/);
+  assert.match(formSource, /const isListingSideTransaction = watchedClosingType === 'listing' \|\| watchedClosingType === 'dual'/);
+  assert.match(formSource, /\{isListingSideTransaction && \(/);
 });
