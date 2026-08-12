@@ -8,7 +8,7 @@ import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
-import { ensureTcChecklist } from '@/lib/transactions/tcChecklist';
+import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 
@@ -551,6 +551,9 @@ export async function PATCH(req: NextRequest) {
 
         if (activeIntake) {
           // Heal a stale/missing pointer without changing the TC's workflow state.
+          // Older recovery records may not have received their checklist when a
+          // previous best-effort write failed. Repair that workflow-only state.
+          await ensureTcChecklist(adminDb, activeIntake.id);
           if (txForTcQueue?.tcIntakeId !== activeIntake.id || txForTcQueue?.workingWithTc !== true) {
             await adminDb.collection('transactions').doc(id).update({
               tcIntakeId: activeIntake.id,
@@ -560,7 +563,10 @@ export async function PATCH(req: NextRequest) {
           }
         } else {
           const nowIso = new Date().toISOString();
-          const intakeRef = await adminDb.collection('tcIntakes').add({
+          // Create the intake and checklist in one batch using the transaction ID
+          // as the deterministic intake ID. Parallel saves cannot produce two
+          // submitted records for the same transaction.
+          const intakeRef = await createTcIntakeWithChecklist(adminDb, id, {
             // Workflow state. The transaction's status remains authoritative for
             // the deal; this status only controls the TC work queue.
             status: 'submitted',
@@ -591,7 +597,6 @@ export async function PATCH(req: NextRequest) {
             closingDate: txForTcQueue?.closingDate ?? txForTcQueue?.closedDate ?? null,
             documents: Array.isArray(txForTcQueue?.documents) ? txForTcQueue.documents : [],
           });
-          await ensureTcChecklist(adminDb, intakeRef.id);
 
           await adminDb.collection('transactions').doc(id).update({
             tcIntakeId: intakeRef.id,

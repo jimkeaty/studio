@@ -41,3 +41,33 @@ export async function ensureTcChecklist(db: Firestore, intakeId: string) {
   });
   await batch.commit();
 }
+
+/**
+ * Create one TC workflow intake and its default checklist in the same Firestore
+ * batch. Callers provide a deterministic intake ID (the canonical transaction
+ * ID) so concurrent agent/admin saves cannot create parallel active intakes.
+ */
+export async function createTcIntakeWithChecklist(
+  db: Firestore,
+  intakeId: string,
+  intake: Record<string, any>,
+) {
+  const intakeRef = db.collection('tcIntakes').doc(intakeId);
+  const checklistRef = intakeRef.collection('checklist');
+  const batch = db.batch();
+
+  batch.set(intakeRef, intake);
+  DEFAULT_TC_CHECKLIST.forEach((label, index) => {
+    const order = index + 1;
+    batch.set(checklistRef.doc(`item_${String(order).padStart(2, '0')}`), {
+      order,
+      label,
+      completed: false,
+      completedBy: null,
+      completedAt: null,
+    });
+  });
+
+  await batch.commit();
+  return intakeRef;
+}

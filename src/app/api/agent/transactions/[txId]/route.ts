@@ -10,7 +10,7 @@ import { getAllStaffUids, getTcUids, getStaffUidsForAgent } from '@/lib/notifica
 import { resolveGCI } from '@/lib/commissions';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
-import { ensureTcChecklist } from '@/lib/transactions/tcChecklist';
+import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -685,8 +685,9 @@ export async function PATCH(
       // records and older manual intakes behave consistently.
       intake.transactionId = txId;
 
-      const createdIntake = await adminDb.collection('tcIntakes').add(intake);
-      await ensureTcChecklist(adminDb, createdIntake.id);
+      // One deterministic intake per transaction makes concurrent agent/admin
+      // saves idempotent. The checklist is created in the same atomic batch.
+      const createdIntake = await createTcIntakeWithChecklist(adminDb, txId, intake);
 
       // Persist the current valid queue link so future TC detail navigation
       // never points at an archived or missing legacy intake.
