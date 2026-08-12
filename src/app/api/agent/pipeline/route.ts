@@ -35,6 +35,11 @@ function serializeFirestore(val: any): any {
  */
 async function resolveQueryIds(uid: string, email?: string): Promise<string[]> {
   const ids = new Set<string>([uid]);
+  const slugify = (value: unknown) => String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   try {
     // Strategy 1: uid IS the agentProfile doc ID
     // Always add both the doc ID AND the agentId field value.
@@ -125,6 +130,29 @@ async function resolveQueryIds(uid: string, email?: string): Promise<string[]> {
           console.log(`[api/agent/pipeline] Strategy 5 matched profile ${profileDoc.id} via email ${email}`);
         }
       } catch { /* non-fatal */ }
+    }
+
+    // Strategy 6: admin impersonation commonly uses a readable URL slug such
+    // as "charles-ditch", while the canonical profile may use a different
+    // Firestore document ID / Firebase UID. Resolve that slug against profile
+    // display-name fields so the dashboard list queries the same IDs as the
+    // unified form's co-agent compatibility path.
+    if (ids.size === 1 && uid.includes('-')) {
+      try {
+        const targetSlug = slugify(uid);
+        const profiles = await adminDb.collection('agentProfiles').limit(500).get();
+        const match = profiles.docs.find((profile) => {
+          const data = profile.data() || {};
+          return [data.displayName, data.agentName, data.name, data.fullName]
+            .some((name) => slugify(name) === targetSlug);
+        });
+        if (match) {
+          const data = match.data() || {};
+          ids.add(match.id);
+          if (data.agentId) ids.add(String(data.agentId));
+          if (data.firebaseUid) ids.add(String(data.firebaseUid));
+        }
+      } catch { /* non-fatal — keep the supplied ID fallback */ }
     }
   } catch (err: any) {
     console.warn('[api/agent/pipeline] resolveQueryIds failed:', err.message);
