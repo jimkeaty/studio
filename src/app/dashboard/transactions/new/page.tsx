@@ -1188,6 +1188,7 @@ export default function AddTransactionPage() {
   const [viewerIsCoAgent, setViewerIsCoAgent] = useState(false);
   const [viewerParticipantAllocation, setViewerParticipantAllocation] = useState<Record<string, any> | null>(null);
   const [viewerAgentId, setViewerAgentId] = useState('');
+  const [participantAllocations, setParticipantAllocations] = useState<Record<string, any> | null>(null);
   const [coAgentViewerCommission, setCoAgentViewerCommission] = useState<AgentCommissionData | null>(null);
   const commissionManualOverride = useRef(false);
   // Saved transaction-specific overrides must survive the profile lookup in edit mode.
@@ -1891,6 +1892,17 @@ export default function AddTransactionPage() {
 
   // ── Load existing transaction for edit mode (?edit=txId) ─────────────────────
   const [editLoaded, setEditLoaded] = useState(false);
+  // The form component remains mounted when an admin exits impersonation. Clear the
+  // co-agent-only response state and reload the transaction for the new viewer so an
+  // administrative payout card cannot retain a prior co-agent allocation.
+  useEffect(() => {
+    setEditLoaded(false);
+    setViewerIsCoAgent(false);
+    setViewerParticipantAllocation(null);
+    setViewerAgentId('');
+    setParticipantAllocations(null);
+  }, [editTxId, isImpersonating, effectiveUid, effectiveName]);
+
   useEffect(() => {
     if (!editTxId || !user || editLoaded) return;
     const loadTx = async () => {
@@ -1911,6 +1923,7 @@ export default function AddTransactionPage() {
         setViewerIsCoAgent(Boolean(tx.viewerIsCoAgent));
         setViewerParticipantAllocation(tx.viewerParticipantAllocation ?? null);
         setViewerAgentId(String(tx.viewerAgentId || ''));
+        setParticipantAllocations(tx.participantAllocations ?? null);
         // This override is authoritative for this transaction only. Set it before
         // form values load so the profile-tier effect cannot replace it with 70/30.
         editCommissionOverride.current = Boolean(tx.commissionOverridden);
@@ -6807,26 +6820,34 @@ export default function AddTransactionPage() {
                   const calculatedCoAgentGross = coAgentTier
                     ? Number((coAgentGci * (coAgentTier.agentSplitPercent / 100)).toFixed(2))
                     : 0;
-                  // The GET route only supplies this allocation to an authorized co-agent.
-                  // Its presence is therefore the authoritative current-viewer signal; do not
-                  // re-derive that identity through client state that may hydrate later.
+                  // Agent views use their own authorized allocation. Operational views always
+                  // use the primary participant's allocation, which prevents a prior
+                  // impersonated co-agent view from changing the admin payout card.
                   const exactCoAgentAllocation = viewerParticipantAllocation;
-                  const hasParticipantPreview = Boolean(exactCoAgentAllocation);
-                  const displayedTier = hasParticipantPreview ? coAgentTier : activeTier;
+                  const primaryParticipantAllocation = participantAllocations?.primary;
+                  const hasCoAgentParticipantPreview = !hasOperationalEditAuthority && Boolean(exactCoAgentAllocation);
+                  const hasPrimaryParticipantPreview = hasOperationalEditAuthority && Boolean(primaryParticipantAllocation);
+                  const payoutAllocation = hasPrimaryParticipantPreview
+                    ? primaryParticipantAllocation
+                    : exactCoAgentAllocation;
+                  const hasParticipantPreview = hasCoAgentParticipantPreview || hasPrimaryParticipantPreview;
+                  const displayedTier = hasCoAgentParticipantPreview ? coAgentTier : activeTier;
                   const displayedSplitGci = hasParticipantPreview
-                    ? Number(exactCoAgentAllocation?.grossCommission || coAgentGci)
+                    ? Number(payoutAllocation?.grossCommission || (hasCoAgentParticipantPreview ? coAgentGci : adminNetGci))
                     : adminNetGci;
                   const displayedAgentDollar = hasParticipantPreview
-                    ? (exactCoAgentAllocation
-                        ? Number(exactCoAgentAllocation.netCommission || 0) + coAgentFeeShare
+                    ? (payoutAllocation
+                        ? Number(payoutAllocation.netCommission || 0) + Number(payoutAllocation.transactionFeeDeduction || 0)
                         : calculatedCoAgentGross)
                     : agentDollar;
                   // In a shared file, deduct only the fee assigned to the participant viewing it.
-                  const viewerFeeShare = hasParticipantPreview ? coAgentFeeShare : primaryAgentFeeShare;
+                  const viewerFeeShare = hasParticipantPreview
+                    ? Number(payoutAllocation?.transactionFeeDeduction || 0)
+                    : primaryAgentFeeShare;
                   const agentPaysFee = watchedTxCompFee === 'yes' && watchedTxCompFeeAmt > 0 && watchedTxCompFeePaidBy === 'agent' && viewerFeeShare > 0;
                   const feeDeduction = agentPaysFee ? viewerFeeShare : 0;
-                  const agentNet = hasParticipantPreview && exactCoAgentAllocation
-                    ? Number(exactCoAgentAllocation.netCommission || 0)
+                  const agentNet = hasParticipantPreview && payoutAllocation
+                    ? Number(payoutAllocation.netCommission || 0)
                     : displayedAgentDollar - feeDeduction;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
