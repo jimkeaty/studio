@@ -546,8 +546,34 @@ export async function PATCH(
     //   2. Status is changing to 'pending' (or 'under_contract') AND workingWithTc=true
     //      (this handles the case where the agent changes status from the detail page
     //       without explicitly clicking a "resubmit" button)
+    const isPendingStatus = ['pending', 'under_contract'].includes(String(newStatus || txData.status || '').toLowerCase());
     const isStatusChangeToPending = !!(newStatus && ['pending', 'under_contract'].includes(newStatus) && newStatus !== previousStatus);
-    const shouldResubmitToTc = effectiveWorkingWithTc && (!!resubmitToTc || isStatusChangeToPending);
+
+    // A transaction can retain a stale tcIntakeId after an older intake was
+    // archived or deleted. Do not trust the stored ID alone: inspect linked
+    // intakes and recreate a working queue record whenever a TC-managed file
+    // is Pending without an active submitted/in-review intake.
+    let hasWorkingTcIntake = false;
+    if (effectiveWorkingWithTc && isPendingStatus) {
+      try {
+        const linkedIntakes = await adminDb
+          .collection('tcIntakes')
+          .where('approvedTransactionId', '==', txId)
+          .get();
+        hasWorkingTcIntake = linkedIntakes.docs.some((doc) => {
+          const intakeStatus = String(doc.data().status || '').toLowerCase();
+          return intakeStatus === 'submitted' || intakeStatus === 'in_review';
+        });
+      } catch (intakeLookupErr: any) {
+        console.warn('[agent PATCH] TC intake recovery lookup failed:', intakeLookupErr?.message);
+      }
+    }
+
+    const shouldResubmitToTc = effectiveWorkingWithTc && (
+      !!resubmitToTc ||
+      isStatusChangeToPending ||
+      (isPendingStatus && !hasWorkingTcIntake)
+    );
     if (shouldResubmitToTc) {
       const mergedData = { ...txData, ...updates };
       const intake: Record<string, any> = {
@@ -655,7 +681,14 @@ export async function PATCH(
       // instead of creating a brand-new duplicate transaction.
       intake.approvedTransactionId = txId;
 
-      await adminDb.collection('tcIntakes').add(intake);
+      const createdIntake = await adminDb.collection('tcIntakes').add(intake);
+
+      // Persist the current valid queue link so future TC detail navigation
+      // never points at an archived or missing legacy intake.
+      await txRef.update({
+        tcIntakeId: createdIntake.id,
+        updatedAt: new Date().toISOString(),
+      });
     }
 
     // ── Notifications ────────────────────────────────────────────────────────
