@@ -70,12 +70,24 @@ export async function GET(req: NextRequest) {
   let recentNotifs: any[] = [];
   if (uidToCheck) {
     try {
+      // Avoid requiring a composite index solely for this diagnostic endpoint.
+      // Notification timestamps can be Firestore Timestamp objects or legacy
+      // ISO strings, so sort after reading the recipient's recent records.
       const nSnap = await adminDb.collection('notifications')
         .where('recipientUid', '==', uidToCheck)
-        .orderBy('createdAt', 'desc')
-        .limit(10)
+        .limit(100)
         .get();
-      recentNotifs = nSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      recentNotifs = nSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => {
+          const toMillis = (value: any) => {
+            if (value?.toDate) return value.toDate().getTime();
+            const parsed = new Date(value || 0).getTime();
+            return Number.isFinite(parsed) ? parsed : 0;
+          };
+          return toMillis(b.createdAt) - toMillis(a.createdAt);
+        })
+        .slice(0, 10);
     } catch (e: any) {
       recentNotifs = [{ error: e.message }];
     }
