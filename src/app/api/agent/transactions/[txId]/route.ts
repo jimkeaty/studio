@@ -410,6 +410,20 @@ export async function PATCH(
         console.warn('[agent PATCH] Co-agent allocation refresh failed; preserving existing allocation:', allocationErr?.message);
       }
     } else if (updates.hasCoAgent === false) {
+      // An intentional removal must clear every canonical and legacy alias.
+      // Otherwise a stale legacy ID can resurrect the co-agent on reload.
+      updates.coAgent = null;
+      updates.coAgentId = '';
+      updates.coAgentDisplayName = '';
+      updates.coAgentRole = '';
+      updates.coAgentSplitPercent = '';
+      updates.primaryAgentSplitPercent = '';
+      updates.isCoListing = false;
+      updates.coListingAgentName = '';
+      updates.coListingAgentEmail = '';
+      updates.coListingAgentBrokerage = '';
+      updates.coListingAgentPhone = '';
+      updates.coListingAgentSplit = '';
       updates.participantAllocations = null;
       updates.primaryAgentSideCredit = null;
       updates.primaryAgentUnitCredit = null;

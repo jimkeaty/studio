@@ -2539,8 +2539,16 @@ export default function AddTransactionPage() {
           : {
               hasCoAgent: false,
               coAgent: null,
+              coAgentId: '',
+              coAgentDisplayName: '',
+              coAgentRole: '',
+              primaryAgentSplitPercent: '',
+              coAgentSplitPercent: '',
               isCoListing: false,
               coListingAgentName: '',
+              coListingAgentEmail: '',
+              coListingAgentBrokerage: '',
+              coListingAgentPhone: '',
               coListingAgentSplit: '',
             };
         let apiUrl: string;

@@ -464,6 +464,21 @@ export async function PATCH(req: NextRequest) {
         console.warn('[api/admin/transactions PATCH] Co-agent allocation refresh failed; preserving existing allocation:', allocationErr?.message);
       }
     } else if (updates.hasCoAgent === false) {
+      // An intentional removal must clear every canonical and legacy alias.
+      // Otherwise the unified form rehydrates the relationship from a stale ID
+      // or display name on the next load.
+      updates.coAgent = null;
+      updates.coAgentId = '';
+      updates.coAgentDisplayName = '';
+      updates.coAgentRole = '';
+      updates.coAgentSplitPercent = '';
+      updates.primaryAgentSplitPercent = '';
+      updates.isCoListing = false;
+      updates.coListingAgentName = '';
+      updates.coListingAgentEmail = '';
+      updates.coListingAgentBrokerage = '';
+      updates.coListingAgentPhone = '';
+      updates.coListingAgentSplit = '';
       updates.participantAllocations = null;
       updates.primaryAgentSideCredit = null;
       updates.primaryAgentUnitCredit = null;
