@@ -8,6 +8,7 @@ import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
+import { ensureTcChecklist } from '@/lib/transactions/tcChecklist';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 
@@ -523,6 +524,88 @@ export async function PATCH(req: NextRequest) {
     // Fetch the updated doc to return
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
     const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });
+
+    // ── TC Queue recovery ──────────────────────────────────────────────────
+    // All operational editors (admin, staff, TC, and an admin impersonating an
+    // agent) save through this route. A TC-managed Pending file must therefore
+    // have an active intake even when the save did not travel through the agent
+    // PATCH route. Keep the queue as a workflow index that points back to this
+    // same canonical transaction document; never create a second transaction.
+    try {
+      const txForTcQueue = updatedSnap.data() as any;
+      const isTcYes = (value: unknown) => value === true || String(value ?? '').trim().toLowerCase() === 'yes';
+      const isTcManaged = isTcYes(txForTcQueue?.workingWithTc) || isTcYes(txForTcQueue?.tcWorking);
+      const isPendingForTc = ['pending', 'under_contract'].includes(
+        String(txForTcQueue?.status || '').trim().toLowerCase(),
+      );
+
+      if (isTcManaged && isPendingForTc) {
+        const linkedIntakes = await adminDb
+          .collection('tcIntakes')
+          .where('approvedTransactionId', '==', id)
+          .get();
+        const activeIntake = linkedIntakes.docs.find((doc) => {
+          const intakeStatus = String(doc.data().status || '').trim().toLowerCase();
+          return intakeStatus === 'submitted' || intakeStatus === 'in_review';
+        });
+
+        if (activeIntake) {
+          // Heal a stale/missing pointer without changing the TC's workflow state.
+          if (txForTcQueue?.tcIntakeId !== activeIntake.id || txForTcQueue?.workingWithTc !== true) {
+            await adminDb.collection('transactions').doc(id).update({
+              tcIntakeId: activeIntake.id,
+              workingWithTc: true,
+              updatedAt: new Date(),
+            });
+          }
+        } else {
+          const nowIso = new Date().toISOString();
+          const intakeRef = await adminDb.collection('tcIntakes').add({
+            // Workflow state. The transaction's status remains authoritative for
+            // the deal; this status only controls the TC work queue.
+            status: 'submitted',
+            listingStatus: 'pending',
+            submittedAt: nowIso,
+            updatedAt: nowIso,
+            submittedBy: decoded.uid,
+            submittedByUid: decoded.uid,
+            isResubmission: true,
+            originalTransactionId: id,
+            transactionId: id,
+            approvedTransactionId: id,
+
+            // Queue-list fields. Detail editing reopens the transaction above.
+            agentId: txForTcQueue?.agentId || null,
+            agentDisplayName: txForTcQueue?.agentDisplayName || '',
+            address: txForTcQueue?.address || txForTcQueue?.propertyAddress || null,
+            propertyAddress: txForTcQueue?.propertyAddress || txForTcQueue?.address || null,
+            closingType: txForTcQueue?.closingType || null,
+            dealType: txForTcQueue?.dealType || txForTcQueue?.transactionType || null,
+            transactionType: txForTcQueue?.transactionType || txForTcQueue?.dealType || null,
+            clientName: txForTcQueue?.clientName || txForTcQueue?.buyerName || txForTcQueue?.sellerName || '',
+            listPrice: txForTcQueue?.listPrice ?? null,
+            salePrice: txForTcQueue?.salePrice ?? null,
+            commissionPercent: txForTcQueue?.commissionPercent ?? null,
+            gci: txForTcQueue?.gci ?? null,
+            contractDate: txForTcQueue?.contractDate ?? null,
+            closingDate: txForTcQueue?.closingDate ?? txForTcQueue?.closedDate ?? null,
+            documents: Array.isArray(txForTcQueue?.documents) ? txForTcQueue.documents : [],
+          });
+          await ensureTcChecklist(adminDb, intakeRef.id);
+
+          await adminDb.collection('transactions').doc(id).update({
+            tcIntakeId: intakeRef.id,
+            workingWithTc: true,
+            updatedAt: new Date(),
+          });
+        }
+      }
+    } catch (tcQueueErr: any) {
+      // A queue-index failure must not discard a valid transaction edit. Log it
+      // loudly so it can be repaired without risking the transaction record.
+      console.error('[api/admin/transactions PATCH] TC queue recovery failed:', tcQueueErr?.message || tcQueueErr);
+    }
+
     // Rebuild rollup(s) so leaderboards, agent dashboard, TV mode, and reporting stay in sync
     try {
       const txData = updatedSnap.data() as any;
