@@ -619,6 +619,10 @@ export default function AddTransactionPage() {
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [intakeStatus, setIntakeStatus] = useState<string | null>(null);
+  // Preserve the status that was actually stored when an edit session opened.
+  // An agent may transition a Pending file to Closed, but must become read-only
+  // after a persisted Closed file is reopened.
+  const [persistedEditStatus, setPersistedEditStatus] = useState<string | null>(null);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
@@ -1377,7 +1381,7 @@ export default function AddTransactionPage() {
   // Agents may review closed files, but only admin, staff, and TC users may
   // correct them. An impersonated admin is intentionally treated as an agent
   // here so the agent view cannot bypass the same permission rule.
-  const isClosedAgentView = editMode && watchedStatus === 'closed' && !hasOperationalEditAuthority;
+  const isClosedAgentView = editMode && persistedEditStatus === 'closed' && !hasOperationalEditAuthority;
   const isActiveListing = watchedStatus === 'active' && (watchedClosingType === 'listing' || watchedClosingType === 'dual');
   // When a listing goes pending/under_contract, reveal all buyer/contract fields on the same form
   const PENDING_STATUSES = ['pending', 'under_contract', 'closed'];
@@ -2167,6 +2171,7 @@ export default function AddTransactionPage() {
           isCommercial: tx.isCommercial ?? false,
           showingTimeId: tx.showingTimeId || '',
         };
+        setPersistedEditStatus(String(fieldMap.status || '').toLowerCase() || null);
         // Global sanitization: for any string field that has an array value in Firestore
         // (legacy data from old form versions), coerce it to the first element or empty string.
         // This prevents z.string() validation failures across all 80+ string fields at once.
@@ -2631,6 +2636,9 @@ export default function AddTransactionPage() {
           return;
         }
         lastSaveSucceededRef.current = true;
+        if (!hasOperationalEditAuthority && String(values.status || '').toLowerCase() === 'closed') {
+          setPersistedEditStatus('closed');
+        }
         toast({ title: 'Changes saved', description: 'Transaction updated successfully.' });
         // Reset dirty state
         setEditLoaded(false);
