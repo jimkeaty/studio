@@ -10,10 +10,11 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs && node --test scripts/coagent-removal-regression.test.mjs scripts/tc-queue-routing-regression.test.mjs",
+    "prebuild": "node scripts/writeFirebaseWebAppConfig.mjs && node scripts/writeBuildStamp.mjs && node scripts/guardrails.mjs && node --test scripts/coagent-removal-regression.test.mjs scripts/tc-queue-routing-regression.test.mjs scripts/transaction-form-regression.test.mjs",
     "smoke-test": "node scripts/smoke-test.mjs",
     "test:coagent-removal": "node --test scripts/coagent-removal-regression.test.mjs",
-    "test:tc-queue-routing": "node --test scripts/tc-queue-routing-regression.test.mjs"
+    "test:tc-queue-routing": "node --test scripts/tc-queue-routing-regression.test.mjs",
+    "test:transaction-form": "node --test scripts/transaction-form-regression.test.mjs"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",

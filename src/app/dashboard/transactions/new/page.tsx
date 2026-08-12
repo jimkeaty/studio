@@ -1338,6 +1338,12 @@ export default function AddTransactionPage() {
       coAgentRole: 'co_list',
       primaryAgentSplitPercent: 50,
       coAgentSplitPercent: 50,
+      // Buyer transactions always begin with the standard compliance fee. The
+      // fee remains fully editable, including payer, before the transaction is
+      // saved. Listing-side and legacy edit records retain their saved values.
+      txComplianceFee: initialClosingType === 'buyer' ? 'yes' : '',
+      txComplianceFeeAmount: initialClosingType === 'buyer' ? 395 : '',
+      txComplianceFeePaidBy: initialClosingType === 'buyer' ? 'agent' : '',
       txComplianceFeeAgentAllocation: 'primary_agent',
       txComplianceFeePrimaryAgentAmount: '',
       txComplianceFeeCoAgentAmount: '',
@@ -1368,6 +1374,20 @@ export default function AddTransactionPage() {
   const txComplianceFeeAgentAllocation = form.watch('txComplianceFeeAgentAllocation') || 'primary_agent';
   const txComplianceFeePrimaryAgentAmount = Number(form.watch('txComplianceFeePrimaryAgentAmount')) || 0;
   const txComplianceFeeCoAgentAmount = Number(form.watch('txComplianceFeeCoAgentAmount')) || 0;
+
+  // A user can switch an add form from a listing/referral into a buyer
+  // transaction after the initial type selection. Apply the standard $395
+  // default only when the fee is still blank, never over an intentional value.
+  useEffect(() => {
+    if (editMode || watchedClosingType !== 'buyer') return;
+    const currentAmount = Number(form.getValues('txComplianceFeeAmount')) || 0;
+    if (currentAmount > 0) return;
+    form.setValue('txComplianceFee', 'yes');
+    form.setValue('txComplianceFeeAmount', 395 as any);
+    if (!form.getValues('txComplianceFeePaidBy')) {
+      form.setValue('txComplianceFeePaidBy', 'agent');
+    }
+  }, [editMode, watchedClosingType]);
   const shortageInCommission = form.watch('shortageInCommission');
   const shortageAmount = Number(form.watch('shortageAmount')) || 0;
   const shortageHandledBy = form.watch('shortageHandledBy') || '';
@@ -2194,6 +2214,28 @@ export default function AddTransactionPage() {
             }
           }
         });
+        // Documents are stored on the authoritative transaction document, not
+        // the ledger projection. Hydrate the local document state from that
+        // saved array so every editor sees uploaded files after reopening the
+        // same shared form. Normalize legacy aliases defensively.
+        const hydratedDocs = (Array.isArray(tx.documents) ? tx.documents : [])
+          .map((doc: any, index: number): UploadedDoc | null => {
+            if (!doc || typeof doc !== 'object') return null;
+            const storagePath = String(
+              doc.storagePath || doc.path || doc.storageKey || doc.url || `legacy-document-${index}`,
+            ).trim();
+            const url = String(doc.url || doc.downloadUrl || doc.downloadURL || doc.fileUrl || doc.fileURL || '').trim();
+            const name = String(doc.name || doc.fileName || doc.filename || doc.originalName || `Document ${index + 1}`).trim();
+            if (!storagePath || !url) return null;
+            return {
+              name,
+              url,
+              storagePath,
+              uploadedAt: String(doc.uploadedAt || doc.createdAt || ''),
+            };
+          })
+          .filter((doc: UploadedDoc | null): doc is UploadedDoc => Boolean(doc));
+        setUploadedDocs(Array.from(new Map(hydratedDocs.map((doc) => [doc.storagePath, doc])).values()));
         // Also restore inspection row data
         if (tx.inspectionRowData) {
           const newRows: Record<string, any> = {};
@@ -2605,6 +2647,10 @@ export default function AddTransactionPage() {
             ...values,
             ...coAgentCompatibility,
             documents: uploadedDocs,
+            // The hydrated document list is authoritative for this shared
+            // edit form. This prevents a stale editor from dropping files and
+            // allows intentional document removal to persist for agents too.
+            _replaceDocuments: true,
             inspectionRowData,
             // Mark that commission was manually overridden if split fields changed
             ...(values.agentPct || values.brokerPct ? {
@@ -2621,6 +2667,7 @@ export default function AddTransactionPage() {
             ...values,
             ...coAgentCompatibility,
             documents: uploadedDocs,
+            _replaceDocuments: true,
             inspectionRowData,
           };
         }
