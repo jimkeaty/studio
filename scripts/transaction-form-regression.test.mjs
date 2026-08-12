@@ -22,3 +22,9 @@ test('reopened shared transaction forms hydrate and submit their document list',
   assert.match(agentRouteSource, /When _replaceDocuments=true \(delete\/archive\), use the provided array as-is/);
   assert.match(adminRouteSource, /'documents'/);
 });
+
+test('listing lifecycle dates remain visible and hydrate after a listing becomes Pending', () => {
+  assert.match(formSource, /listingDate: tx\.listingDate \|\| tx\.listDate \|\| ''/);
+  assert.match(formSource, /listingExpirationDate: tx\.listingExpirationDate \|\| tx\.expirationDate \|\| tx\.listingExpiration \|\| ''/);
+  assert.match(formSource, /watchedClosingType === 'listing' \|\| watchedClosingType === 'dual' \|\| isPendingListing/);
+});

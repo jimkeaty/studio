@@ -2045,8 +2045,10 @@ export default function AddTransactionPage() {
           agentPct: tx.agentPct || tx.splitSnapshot?.agentSplitPercent || '',
           agentDollar: tx.agentDollar || tx.splitSnapshot?.agentNetCommission || '',
           mlsNumber: tx.mlsNumber || '',
-          listingDate: tx.listingDate || '',
-          listingExpirationDate: tx.listingExpirationDate || '',
+          // Listings saved before the unified form used legacy aliases. Preserve
+          // those dates when the same transaction is reopened by any role.
+          listingDate: tx.listingDate || tx.listDate || '',
+          listingExpirationDate: tx.listingExpirationDate || tx.expirationDate || tx.listingExpiration || '',
           contractDate: tx.contractDate || '',
           optionExpiration: tx.optionExpiration || '',
           inspectionDeadline: tx.inspectionDeadline || '',
@@ -4183,8 +4185,8 @@ export default function AddTransactionPage() {
               SECTION 2 — KEY DATES
           ═══════════════════════════════════════════════════════════════════ */}
           <Section title="Key Dates">
-            {/* Listing dates — shown for listing and dual only */}
-            {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+            {/* Listing lifecycle dates remain relevant after a listing moves to Pending. */}
+            {(watchedClosingType === 'listing' || watchedClosingType === 'dual' || isPendingListing) && (
               <Grid3>
                 <FormField control={form.control} name="listingDate" render={({ field }) => (
                   <FormItem><FormLabel>Listing Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
