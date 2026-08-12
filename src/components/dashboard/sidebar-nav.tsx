@@ -225,6 +225,7 @@ const adminMenuGroups = [
     label: 'System',
     items: [
       { href: '/dashboard/admin/tools', label: 'Admin Tools', icon: Wrench },
+      { href: '/dashboard/admin/notification-monitor', label: 'Notification Monitor', icon: Bell },
       { href: '/dashboard/admin/plugins', label: 'Plugin Manager', icon: Puzzle },
     ],
   },

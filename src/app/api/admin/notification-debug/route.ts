@@ -31,7 +31,19 @@ export async function GET(req: NextRequest) {
   // The index is confirmed to exist in Firebase Console.
   const usedFallback = false;
 
-  const rows = [];
+  const rows: Array<Record<string, any>> = [];
+  const eventCounts = new Map<string, number>();
+  const monitorEvents: Array<{
+    id: string;
+    recipient: string;
+    type: string;
+    title: string;
+    body: string;
+    createdAt: string | null;
+    read: boolean;
+  }> = [];
+  let eventsLast24h = 0;
+  const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
   for (const doc of staffSnap.docs) {
     const data = doc.data() as Record<string, any>;
     const email = String(data.email || '').toLowerCase().trim();
@@ -73,10 +85,12 @@ export async function GET(req: NextRequest) {
       recentNotifCount = notifSnap.size;
       const unread = notifSnap.docs.filter(d => !d.data().read);
       unreadNotifCount = unread.length;
-      recentNotifications = notifSnap.docs
+      const allNotifications = notifSnap.docs
         .map((d) => {
           const notification = d.data() as Record<string, any>;
-          const createdAt = notification.createdAt?.toDate?.()?.toISOString() || notification.createdAt || null;
+          const rawCreatedAt = notification.createdAt;
+          const createdAt = rawCreatedAt?.toDate?.()?.toISOString()
+            || (rawCreatedAt instanceof Date ? rawCreatedAt.toISOString() : rawCreatedAt || null);
           return {
             id: d.id,
             type: String(notification.type || ''),
@@ -85,7 +99,18 @@ export async function GET(req: NextRequest) {
             createdAt,
             read: !!notification.read,
           };
-        })
+        });
+
+      for (const notification of allNotifications) {
+        const createdAtMs = notification.createdAt ? new Date(notification.createdAt).getTime() : 0;
+        if (createdAtMs >= twentyFourHoursAgo) {
+          eventsLast24h += 1;
+          eventCounts.set(notification.type || 'unknown', (eventCounts.get(notification.type || 'unknown') || 0) + 1);
+        }
+        monitorEvents.push({ ...notification, recipient: email || firebaseUid });
+      }
+
+      recentNotifications = allNotifications
         .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
         .slice(0, 10);
       lastNotifAt = recentNotifications[0]?.createdAt || null;
@@ -98,5 +123,25 @@ export async function GET(req: NextRequest) {
     rows.push({ email, firebaseUid, usersDocExists, notificationPrefs, recentNotifCount, unreadNotifCount, lastNotifAt, recentNotifications, issues });
   }
 
-  return NextResponse.json({ ok: true, rows, usedFallback });
+  const unreadTotal = rows.reduce((total, row) => total + Number(row.unreadNotifCount || 0), 0);
+  const staffWithIssues = rows.filter((row) => Array.isArray(row.issues) && row.issues.length > 0).length;
+  const recentEvents = monitorEvents
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    .slice(0, 60);
+
+  return NextResponse.json({
+    ok: true,
+    rows,
+    usedFallback,
+    monitoring: {
+      generatedAt: new Date().toISOString(),
+      staffCount: rows.length,
+      healthyStaffCount: rows.length - staffWithIssues,
+      staffWithIssues,
+      unreadTotal,
+      eventsLast24h,
+      eventsByType: Object.fromEntries(eventCounts),
+      recentEvents,
+    },
+  });
 }
