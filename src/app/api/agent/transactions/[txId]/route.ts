@@ -298,6 +298,18 @@ export async function PATCH(
     updates.updatedAt = new Date().toISOString();
     updates.lastUpdatedBy = uid;
 
+    // Use closedDate as the canonical saved value while preserving ledger/legacy
+    // aliases. This prevents an agent save from leaving a date visible only in one
+    // transaction view.
+    const suppliedCloseDateKey = ['closedDate', 'closingDate']
+      .find((key) => Object.prototype.hasOwnProperty.call(updates, key));
+    if (suppliedCloseDateKey) {
+      const normalizedCloseDate = updates[suppliedCloseDateKey] || '';
+      updates.closedDate = normalizedCloseDate || null;
+      updates.closingDate = normalizedCloseDate || null;
+      updates.actualCloseDate = normalizedCloseDate || null;
+    }
+
     // Keep dealType and transactionType in sync — both fields are used in different parts
     // of the codebase; updating one must always update the other.
     if (updates.dealType !== undefined) {
@@ -479,8 +491,9 @@ export async function PATCH(
     //   - Buyer/referral transactions: notify ONLY when status changes to 'closed'
     const previousStatus = txData.status;
     const newStatus = updates.status;
-    const txClosingType = String(txData.closingType || txData.transactionType || '');
-    const isListingTx = LISTING_CLOSING_TYPES.has(txClosingType);
+    const txClosingType = String(updates.closingType ?? txData.closingType ?? txData.transactionType ?? '').toLowerCase();
+    const txClientType = String(updates.clientType ?? txData.clientType ?? '').toLowerCase();
+    const isListingTx = LISTING_CLOSING_TYPES.has(txClosingType) || txClientType === 'seller' || txClientType === 'dual';
     const triggerSet = isListingTx ? LISTING_STATUS_TRIGGERS : BUYER_STATUS_TRIGGERS;
     const shouldNotifyStaff = newStatus && newStatus !== previousStatus && triggerSet.has(newStatus);
 
@@ -518,8 +531,16 @@ export async function PATCH(
     // IMPORTANT: check updates.workingWithTc first (the value being saved in this request) because
     // the agent may be toggling TC on at the same time as changing the status. Fall back to the
     // existing txData value if the field was not included in this update.
+    const isTcYes = (value: unknown) => value === true || String(value ?? '').trim().toLowerCase() === 'yes';
     const effectiveWorkingWithTc =
-      updates.workingWithTc !== undefined ? !!updates.workingWithTc : !!txData.workingWithTc;
+      updates.workingWithTc !== undefined
+        ? isTcYes(updates.workingWithTc)
+        : isTcYes(txData.workingWithTc) || isTcYes(txData.tcWorking);
+    // Heal older records on the next edit so subsequent queue and notification
+    // processing always has the canonical boolean.
+    if (effectiveWorkingWithTc && !isTcYes(txData.workingWithTc)) {
+      updates.workingWithTc = true;
+    }
     // Auto-resubmit to TC queue when:
     //   1. Agent explicitly sends resubmitToTc=true, OR
     //   2. Status is changing to 'pending' (or 'under_contract') AND workingWithTc=true
@@ -718,7 +739,11 @@ export async function PATCH(
             }
 
             await sendNotification(adminDb, {
-              type: 'staff_queue_new',
+              // Status alerts must respect the visible "Transaction Status Change"
+              // preference, not the unrelated "New Staff Queue Item" preference.
+              // The queue row is still created above; this notification describes
+              // the transition that caused it.
+              type: 'tx_status_change',
               recipientUids: staffUids,
               title: staffTitle,
               body: staffBody,
@@ -768,7 +793,10 @@ export async function PATCH(
               }
 
               await sendNotification(adminDb, {
-                type: isActiveToPending ? 'tc_new_intake' : 'tx_status_change',
+                // A Pending requeue also sends its own tc_new_intake notice below.
+                // Keep this notification categorized as a status change so TCs
+                // who enabled status alerts receive the actual transition.
+                type: 'tx_status_change',
                 recipientUids: tcRecipients,
                 title: tcTitle,
                 body: tcBody,

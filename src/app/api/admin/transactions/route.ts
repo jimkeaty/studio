@@ -343,6 +343,18 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // closedDate is the canonical transaction-form field, while older ledger and
+    // TC records can carry closingDate / actualCloseDate. Mirror any explicitly
+    // supplied alias so the ledger overview and reopened unified form agree.
+    const suppliedCloseDateKey = ['closedDate', 'closingDate', 'actualCloseDate']
+      .find((key) => Object.prototype.hasOwnProperty.call(updates, key));
+    if (suppliedCloseDateKey) {
+      const normalizedCloseDate = updates[suppliedCloseDateKey] || '';
+      updates.closedDate = normalizedCloseDate;
+      updates.closingDate = normalizedCloseDate;
+      updates.actualCloseDate = normalizedCloseDate;
+    }
+
     // Normalize dealSource if present
     if (updates.dealSource) {
       updates.dealSource = normalizeDealSource(updates.dealSource) || updates.dealSource;
@@ -387,6 +399,8 @@ export async function PATCH(req: NextRequest) {
     // If closedDate is explicitly cleared (empty string), null it out and recalculate year from contractDate
     if (updates.closedDate === '') {
       updates.closedDate = null;
+      updates.closingDate = null;
+      updates.actualCloseDate = null;
     }
 
     // Recalculate year if dates changed

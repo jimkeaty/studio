@@ -407,6 +407,9 @@ const schema = z.object({
 
   // TC Working File
   tcWorking: z.enum(['yes', 'no'], { required_error: 'Please select Yes or No.' }),
+  // Canonical routing flag stored on transactions. The UI exposes tcWorking for
+  // clarity, but every save also carries this boolean for queue/notification logic.
+  workingWithTc: z.boolean().optional(),
 
   // Client Type
   clientType: z.enum(['buyer', 'seller', 'dual']).optional(),
@@ -1944,6 +1947,31 @@ export default function AddTransactionPage() {
           return String(val);
         };
 
+        // Date aliases accumulated across the legacy ledger, TC queue, and unified
+        // form. The rendered field is `closedDate`, so always hydrate it from the
+        // first saved close-date value rather than leaving the editable field blank.
+        const resolvedClosedDate = safeStr(
+          tx.closedDate || tx.closingDate || tx.actualCloseDate,
+          '',
+        );
+
+        // Some legacy saves retained a fee amount/payer (or a recorded agent fee
+        // deduction) while omitting or changing the yes/no toggle. Treat that saved
+        // financial state as authoritative so staff can always see and correct the
+        // payer instead of having the related controls disappear after reload.
+        const rawComplianceFee = safeStr(tx.txComplianceFee, '').trim().toLowerCase();
+        const resolvedFeePayer = safeStr(tx.txComplianceFeePaidBy, '').trim().toLowerCase();
+        const resolvedFeeAmount = Number(tx.txComplianceFeeAmount ?? 0) || 0;
+        const resolvedRecordedFee = Number(tx.splitSnapshot?.agentFeeDeduction ?? 0) || 0;
+        const resolvedComplianceFee = (
+          rawComplianceFee === 'yes' ||
+          rawComplianceFee === 'true' ||
+          tx.txComplianceFee === true ||
+          resolvedFeeAmount > 0 ||
+          resolvedRecordedFee > 0 ||
+          ['buyer', 'seller', 'seller_closing_cost', 'agent'].includes(resolvedFeePayer)
+        ) ? 'yes' : 'no';
+
         // Co-agent compatibility bridge -------------------------------------------------
         // Older transaction documents stored an internal co-listing partner as
         // isCoListing + coListingAgent*. The unified form stores the same business
@@ -2004,9 +2032,11 @@ export default function AddTransactionPage() {
           loanApplicationDeadline: tx.loanApplicationDeadline || '',
           finalLoanCommitment: tx.finalLoanCommitment || '',
           projectedCloseDate: tx.projectedCloseDate || '',
-          closingDate: tx.closingDate || '',
-          actualCloseDate: tx.actualCloseDate || '',
-          workingWithTc: tx.workingWithTc ?? false,
+          closedDate: resolvedClosedDate,
+          closingDate: resolvedClosedDate,
+          actualCloseDate: resolvedClosedDate,
+          workingWithTc: Boolean(tx.workingWithTc || tx.tcWorking === 'yes'),
+          tcWorking: (tx.workingWithTc || tx.tcWorking === 'yes') ? 'yes' : 'no',
           hasCoAgent: resolvedHasCoAgent,
           coAgentId: resolvedCoAgentId,
           coAgentDisplayName: legacyCoAgentName,
@@ -2085,9 +2115,9 @@ export default function AddTransactionPage() {
           warrantyAtClosing: safeEnum(tx.warrantyAtClosing, ''),
           warrantyAmount: tx.warrantyAmount || '',
           warrantyPaidBy: tx.warrantyPaidBy || '',
-          txComplianceFee: safeEnum(tx.txComplianceFee, ''),
-          txComplianceFeeAmount: tx.txComplianceFeeAmount || '',
-          txComplianceFeePaidBy: tx.txComplianceFeePaidBy || '',
+          txComplianceFee: resolvedComplianceFee,
+          txComplianceFeeAmount: resolvedFeeAmount || resolvedRecordedFee || '',
+          txComplianceFeePaidBy: resolvedFeePayer,
           txComplianceFeeAgentAllocation: tx.txComplianceFeeAgentAllocation || 'primary_agent',
           txComplianceFeePrimaryAgentAmount: tx.txComplianceFeePrimaryAgentAmount ?? '',
           txComplianceFeeCoAgentAmount: tx.txComplianceFeeCoAgentAmount ?? '',
@@ -2468,6 +2498,13 @@ export default function AddTransactionPage() {
 
   // ── Submit handler ─────────────────────────────────────────────────────────
   const onSubmit = async (values: FormValues) => {
+    // Keep the visible Yes/No selector and the canonical routing field in lockstep.
+    // Existing queue and notification routes depend on workingWithTc, while older
+    // records may carry only tcWorking.
+    values = {
+      ...values,
+      workingWithTc: values.tcWorking === 'yes' || values.workingWithTc === true,
+    };
     // ── Edit mode: PATCH the existing transaction ─────────────────────────
     if (editMode && editTxId) {
       if (isClosedAgentView) {
