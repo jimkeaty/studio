@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import {
   BarChart3,
   Bell,
+  SearchCheck,
   Building,
   CalendarDays,
   ClipboardList,
@@ -227,6 +228,7 @@ const adminMenuGroups = [
     items: [
       { href: '/dashboard/admin/tools', label: 'Admin Tools', icon: Wrench },
       { href: '/dashboard/admin/notification-monitor', label: 'Notification Monitor', icon: Bell },
+      { href: '/dashboard/admin/gci-integrity', label: 'GCI Integrity Audit', icon: SearchCheck },
       { href: '/dashboard/admin/plugins', label: 'Plugin Manager', icon: Puzzle },
     ],
   },
