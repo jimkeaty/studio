@@ -69,3 +69,16 @@ test('a legacy zero GCI is recalculated from saved commission base and rate befo
   assert.match(formSource, /const inferredLegacyGci = !isPassThroughTransaction && Number\(explicitGci\) <= 0 && calculatedLegacyGci <= 0/);
   assert.match(formSource, /const resolvedGci = Number\(explicitGci\) > 0 \? explicitGci : \(calculatedLegacyGci \|\| inferredLegacyGci \|\| ''\)/);
 });
+
+test('operational staff can override closed-file GCI while agents remain read-only', () => {
+  assert.match(formSource, /const isClosedAgentView = editMode && persistedEditStatus === 'closed' && !hasOperationalEditAuthority/);
+  assert.match(formSource, /\{hasOperationalEditAuthority && \(/);
+  assert.match(formSource, /gciManuallyEdited\.current = true/);
+  assert.match(formSource, /if \(gciManuallyEdited\.current\) return/);
+  assert.match(formSource, /if \(!hasOperationalEditAuthority\) return/);
+  assert.match(adminRouteSource, /'gci'/);
+  assert.match(adminRouteSource, /'brokerPct'/);
+  assert.match(adminRouteSource, /'agentPct'/);
+  assert.match(adminRouteSource, /'brokerGci'/);
+  assert.match(adminRouteSource, /'agentDollar'/);
+});
