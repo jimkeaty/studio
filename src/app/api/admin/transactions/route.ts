@@ -353,6 +353,9 @@ export async function PATCH(req: NextRequest) {
       updates.txComplianceFeePaidBy = '';
       updates.txComplianceFeePrimaryAgentAmount = 0;
       updates.txComplianceFeeCoAgentAmount = 0;
+      updates.transactionFee = 0;
+    } else if (String(updates.txComplianceFee || '').toLowerCase() === 'yes' && updates.txComplianceFeeAmount !== undefined) {
+      updates.transactionFee = Number(updates.txComplianceFeeAmount) || 0;
     }
 
     // closedDate is the canonical transaction-form field, while older ledger and

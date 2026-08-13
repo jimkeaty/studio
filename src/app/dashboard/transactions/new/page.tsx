@@ -2010,12 +2010,17 @@ export default function AddTransactionPage() {
           '',
         );
 
+        // Some legacy listing saves used `transactionFee` while newer files use
+        // txComplianceFee*. Resolve every saved representation into the editable
+        // controls so a fee deduction can never be hidden from the editor.
+        const resolvedLegacyListingFee = Number(tx.transactionFee ?? 0) || 0;
         // Some legacy saves retained a fee amount/payer (or a recorded agent fee
         // deduction) while omitting or changing the yes/no toggle. Treat that saved
         // financial state as authoritative so staff can always see and correct the
         // payer instead of having the related controls disappear after reload.
         const rawComplianceFee = safeStr(tx.txComplianceFee, '').trim().toLowerCase();
-        const resolvedFeePayer = safeStr(tx.txComplianceFeePaidBy, '').trim().toLowerCase();
+        const resolvedFeePayer = safeStr(tx.txComplianceFeePaidBy, '').trim().toLowerCase()
+          || ((resolvedLegacyListingFee > 0 || Number(tx.splitSnapshot?.agentFeeDeduction ?? 0) > 0) ? 'agent' : '');
         const resolvedFeeAmount = Number(tx.txComplianceFeeAmount ?? 0) || 0;
         const resolvedRecordedFee = Number(tx.splitSnapshot?.agentFeeDeduction ?? 0) || 0;
         const feeExplicitlyDisabled = ['no', 'false', 'off', '0'].includes(rawComplianceFee) || tx.txComplianceFee === false;
@@ -2027,6 +2032,7 @@ export default function AddTransactionPage() {
             tx.txComplianceFee === true ||
             resolvedFeeAmount > 0 ||
             resolvedRecordedFee > 0 ||
+            resolvedLegacyListingFee > 0 ||
             ['buyer', 'seller', 'seller_closing_cost', 'agent'].includes(resolvedFeePayer)
           ) ? 'yes' : 'no';
 
@@ -2176,8 +2182,11 @@ export default function AddTransactionPage() {
           warrantyAmount: tx.warrantyAmount || '',
           warrantyPaidBy: tx.warrantyPaidBy || '',
           txComplianceFee: resolvedComplianceFee,
-          txComplianceFeeAmount: resolvedComplianceFee === 'yes' ? (resolvedFeeAmount || resolvedRecordedFee || '') : '',
+          txComplianceFeeAmount: resolvedComplianceFee === 'yes' ? (resolvedFeeAmount || resolvedRecordedFee || resolvedLegacyListingFee || '') : '',
           txComplianceFeePaidBy: resolvedComplianceFee === 'yes' ? resolvedFeePayer : '',
+          // Keep the legacy listing field aligned on the next save. This prevents
+          // older commission calculations from retaining a stale hidden deduction.
+          transactionFee: resolvedComplianceFee === 'yes' ? (resolvedFeeAmount || resolvedLegacyListingFee || resolvedRecordedFee || '') : 0,
           txComplianceFeeAgentAllocation: tx.txComplianceFeeAgentAllocation || 'primary_agent',
           txComplianceFeePrimaryAgentAmount: tx.txComplianceFeePrimaryAgentAmount ?? '',
           txComplianceFeeCoAgentAmount: tx.txComplianceFeeCoAgentAmount ?? '',
@@ -6227,7 +6236,7 @@ export default function AddTransactionPage() {
           {/* ── Additional Info (warranty / compliance / occupancy / shortage) ──────────────────────────
               Moved above Buyer Closing Cost so agents fill in these details before entering commission.
           ─────────────────────────────────────────────────────────────────── */}
-          {watchedClosingType !== 'referral' && watchedClosingType !== 'listing' && !isActiveListing && <Section title="Additional Info">
+          {watchedClosingType !== 'referral' && <Section title="Additional Info">
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
               <FormItem>
@@ -6289,6 +6298,7 @@ export default function AddTransactionPage() {
                     form.setValue('txComplianceFeePaidBy', '');
                     form.setValue('txComplianceFeePrimaryAgentAmount', '');
                     form.setValue('txComplianceFeeCoAgentAmount', '');
+                    form.setValue('transactionFee', '');
                   }
                 }} value={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>

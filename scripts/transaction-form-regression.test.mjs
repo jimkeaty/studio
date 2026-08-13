@@ -44,3 +44,13 @@ test('broker configuration exposes separate buyer and listing defaults', () => {
   assert.match(formSource, /defaults\.listingDefault/);
   assert.match(formSource, /defaults\.buyerDefault/);
 });
+
+test('legacy listing fees hydrate into visible editable fee controls and clear canonically', () => {
+  assert.match(formSource, /const resolvedLegacyListingFee = Number\(tx\.transactionFee \?\? 0\) \|\| 0/);
+  assert.match(formSource, /resolvedLegacyListingFee > 0/);
+  assert.match(formSource, /transactionFee: resolvedComplianceFee === 'yes'/);
+  assert.match(formSource, /watchedClosingType !== 'referral' && <Section title="Additional Info">/);
+  assert.match(formSource, /form\.setValue\('transactionFee', ''\)/);
+  assert.match(adminRouteSource, /updates\.transactionFee = 0/);
+  assert.match(agentRouteSource, /updates\.transactionFee = 0/);
+});
