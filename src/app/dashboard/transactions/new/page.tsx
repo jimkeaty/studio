@@ -2083,11 +2083,11 @@ export default function AddTransactionPage() {
           // `commission` or `grossCommission` rather than the unified `gci` field.
           // Hydrate those aliases so the editable commission values—and the
           // earnings breakdown that depends on GCI—remain available after reopen.
-          gci: tx.gci || tx.splitSnapshot?.grossCommission || tx.grossCommission || tx.commission || tx.grossCommissionIncome || '',
+          gci: tx.gci || tx.splitSnapshot?.grossCommission || tx.splitSnapshot?.grossCommissionAmount || tx.grossCommission || tx.commission || tx.commissionAmount || tx.grossCommissionIncome || '',
           brokerPct: tx.brokerPct || tx.splitSnapshot?.companySplitPercent || tx.companySplitPercent || '',
           brokerGci: tx.brokerGci || tx.splitSnapshot?.companyRetained || tx.companyRetained || '',
           agentPct: tx.agentPct || tx.splitSnapshot?.agentSplitPercent || tx.agentSplitPercent || '',
-          agentDollar: tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.agentNetCommission || tx.agentCommission || '',
+          agentDollar: tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.splitSnapshot?.agentDollar || tx.agentNetCommission || tx.agentCommission || '',
           mlsNumber: tx.mlsNumber || '',
           // Listings saved before the unified form used legacy aliases. Preserve
           // those dates when the same transaction is reopened by any role.

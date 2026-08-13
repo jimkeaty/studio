@@ -56,6 +56,6 @@ test('legacy listing fees hydrate into visible editable fee controls and clear c
 });
 
 test('legacy finalized commission aliases hydrate the earnings breakdown GCI', () => {
-  assert.match(formSource, /gci: tx\.gci \|\| tx\.splitSnapshot\?\.grossCommission \|\| tx\.grossCommission \|\| tx\.commission \|\| tx\.grossCommissionIncome \|\| ''/);
-  assert.match(formSource, /agentDollar: tx\.agentDollar \|\| tx\.splitSnapshot\?\.agentNetCommission \|\| tx\.agentNetCommission \|\| tx\.agentCommission \|\| ''/);
+  assert.match(formSource, /gci: tx\.gci \|\| tx\.splitSnapshot\?\.grossCommission \|\| tx\.splitSnapshot\?\.grossCommissionAmount \|\| tx\.grossCommission \|\| tx\.commission \|\| tx\.commissionAmount \|\| tx\.grossCommissionIncome \|\| ''/);
+  assert.match(formSource, /agentDollar: tx\.agentDollar \|\| tx\.splitSnapshot\?\.agentNetCommission \|\| tx\.splitSnapshot\?\.agentDollar \|\| tx\.agentNetCommission \|\| tx\.agentCommission \|\| ''/);
 });
