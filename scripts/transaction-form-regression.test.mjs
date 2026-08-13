@@ -54,3 +54,8 @@ test('legacy listing fees hydrate into visible editable fee controls and clear c
   assert.match(adminRouteSource, /updates\.transactionFee = 0/);
   assert.match(agentRouteSource, /updates\.transactionFee = 0/);
 });
+
+test('legacy finalized commission aliases hydrate the earnings breakdown GCI', () => {
+  assert.match(formSource, /gci: tx\.gci \|\| tx\.splitSnapshot\?\.grossCommission \|\| tx\.grossCommission \|\| tx\.commission \|\| tx\.grossCommissionIncome \|\| ''/);
+  assert.match(formSource, /agentDollar: tx\.agentDollar \|\| tx\.splitSnapshot\?\.agentNetCommission \|\| tx\.agentNetCommission \|\| tx\.agentCommission \|\| ''/);
+});

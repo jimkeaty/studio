@@ -2079,11 +2079,15 @@ export default function AddTransactionPage() {
           commissionBasePrice: tx.commissionBasePrice || '',
           sellerCommissionPct: tx.sellerCommissionPct || tx.commissionPercent || '',
           buyerCommissionPct: tx.buyerCommissionPct || '',
-          gci: tx.gci || tx.splitSnapshot?.grossCommission || '',
-          brokerPct: tx.brokerPct || tx.splitSnapshot?.companySplitPercent || '',
-          brokerGci: tx.brokerGci || tx.splitSnapshot?.companyRetained || '',
-          agentPct: tx.agentPct || tx.splitSnapshot?.agentSplitPercent || '',
-          agentDollar: tx.agentDollar || tx.splitSnapshot?.agentNetCommission || '',
+          // Historical listing files may carry their finalized commission under
+          // `commission` or `grossCommission` rather than the unified `gci` field.
+          // Hydrate those aliases so the editable commission values—and the
+          // earnings breakdown that depends on GCI—remain available after reopen.
+          gci: tx.gci || tx.splitSnapshot?.grossCommission || tx.grossCommission || tx.commission || tx.grossCommissionIncome || '',
+          brokerPct: tx.brokerPct || tx.splitSnapshot?.companySplitPercent || tx.companySplitPercent || '',
+          brokerGci: tx.brokerGci || tx.splitSnapshot?.companyRetained || tx.companyRetained || '',
+          agentPct: tx.agentPct || tx.splitSnapshot?.agentSplitPercent || tx.agentSplitPercent || '',
+          agentDollar: tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.agentNetCommission || tx.agentCommission || '',
           mlsNumber: tx.mlsNumber || '',
           // Listings saved before the unified form used legacy aliases. Preserve
           // those dates when the same transaction is reopened by any role.
