@@ -56,6 +56,16 @@ test('legacy listing fees hydrate into visible editable fee controls and clear c
 });
 
 test('legacy finalized commission aliases hydrate the earnings breakdown GCI', () => {
-  assert.match(formSource, /gci: tx\.gci \|\| tx\.splitSnapshot\?\.grossCommission \|\| tx\.splitSnapshot\?\.grossCommissionAmount \|\| tx\.grossCommission \|\| tx\.commission \|\| tx\.commissionAmount \|\| tx\.grossCommissionIncome \|\| ''/);
-  assert.match(formSource, /agentDollar: tx\.agentDollar \|\| tx\.splitSnapshot\?\.agentNetCommission \|\| tx\.splitSnapshot\?\.agentDollar \|\| tx\.agentNetCommission \|\| tx\.agentCommission \|\| ''/);
+  assert.match(formSource, /const explicitGci = tx\.gci \|\| tx\.splitSnapshot\?\.grossCommission \|\| tx\.splitSnapshot\?\.grossCommissionAmount \|\| tx\.grossCommission \|\| tx\.commission \|\| tx\.commissionAmount \|\| tx\.grossCommissionIncome \|\| ''/);
+  assert.match(formSource, /const resolvedAgentDollar = tx\.agentDollar \|\| tx\.splitSnapshot\?\.agentNetCommission \|\| tx\.splitSnapshot\?\.agentDollar \|\| tx\.agentNetCommission \|\| tx\.agentCommission \|\| ''/);
+  assert.match(formSource, /gci: resolvedGci/);
+  assert.match(formSource, /agentDollar: resolvedAgentDollar/);
+});
+
+test('a legacy zero GCI is recalculated from saved commission base and rate before split-dollar inference', () => {
+  assert.match(formSource, /const resolvedCommissionBasePrice = tx\.commissionBasePrice \|\| resolvedSalePrice \|\| ''/);
+  assert.match(formSource, /const calculatedLegacyGci = !isPassThroughTransaction && Number\(explicitGci\) <= 0 && Number\(resolvedCommissionBasePrice\) > 0 && Number\(resolvedCommissionPercent\) > 0/);
+  assert.match(formSource, /resolveGCI\(\{ commissionBasePrice: Number\(resolvedCommissionBasePrice\), commissionPercent: Number\(resolvedCommissionPercent\) \}\)/);
+  assert.match(formSource, /const inferredLegacyGci = !isPassThroughTransaction && Number\(explicitGci\) <= 0 && calculatedLegacyGci <= 0/);
+  assert.match(formSource, /const resolvedGci = Number\(explicitGci\) > 0 \? explicitGci : \(calculatedLegacyGci \|\| inferredLegacyGci \|\| ''\)/);
 });

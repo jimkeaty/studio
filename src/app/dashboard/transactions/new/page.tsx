@@ -2064,6 +2064,27 @@ export default function AddTransactionPage() {
           tx.hasCoAgent || tx.isCoListing || resolvedCoAgentId || legacyCoAgentName
         );
 
+        // Some closed legacy files retained their sale price and commission rate but
+        // stored `gci` as 0. A zero must not suppress the commission calculation or
+        // hide the earnings card when the inputs prove a gross commission. Preserve
+        // an explicit positive GCI first, then calculate it from the saved base and
+        // rate, and only then infer it from finalized split dollars. Pass-through
+        // files intentionally retain zero broker economics and are excluded.
+        const resolvedSalePrice = tx.salePrice || tx.finalSalePrice || tx.closedSalePrice || '';
+        const resolvedCommissionBasePrice = tx.commissionBasePrice || resolvedSalePrice || '';
+        const resolvedCommissionPercent = tx.commissionPercent || tx.sellerCommissionPct || '';
+        const resolvedBrokerGci = tx.brokerGci || tx.splitSnapshot?.companyRetained || tx.companyRetained || '';
+        const resolvedAgentDollar = tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.splitSnapshot?.agentDollar || tx.agentNetCommission || tx.agentCommission || '';
+        const explicitGci = tx.gci || tx.splitSnapshot?.grossCommission || tx.splitSnapshot?.grossCommissionAmount || tx.grossCommission || tx.commission || tx.commissionAmount || tx.grossCommissionIncome || '';
+        const isPassThroughTransaction = Boolean(tx.passThrough || tx.isPassThrough);
+        const calculatedLegacyGci = !isPassThroughTransaction && Number(explicitGci) <= 0 && Number(resolvedCommissionBasePrice) > 0 && Number(resolvedCommissionPercent) > 0
+          ? resolveGCI({ commissionBasePrice: Number(resolvedCommissionBasePrice), commissionPercent: Number(resolvedCommissionPercent) })
+          : 0;
+        const inferredLegacyGci = !isPassThroughTransaction && Number(explicitGci) <= 0 && calculatedLegacyGci <= 0 && Number(resolvedBrokerGci) > 0 && Number(resolvedAgentDollar) > 0
+          ? Number(resolvedBrokerGci) + Number(resolvedAgentDollar)
+          : 0;
+        const resolvedGci = Number(explicitGci) > 0 ? explicitGci : (calculatedLegacyGci || inferredLegacyGci || '');
+
         const fieldMap: Record<string, unknown> = {
           agentId: tx.agentId || effectiveUid || '',
           agentDisplayName: tx.agentDisplayName || effectiveName || '',
@@ -2074,20 +2095,20 @@ export default function AddTransactionPage() {
           clientName: tx.clientName || '',
           dealSource: tx.dealSource || '',
           listPrice: tx.listPrice || '',
-          salePrice: tx.salePrice || '',
-          commissionPercent: tx.commissionPercent || '',
-          commissionBasePrice: tx.commissionBasePrice || '',
+          salePrice: resolvedSalePrice,
+          commissionPercent: resolvedCommissionPercent,
+          commissionBasePrice: resolvedCommissionBasePrice,
           sellerCommissionPct: tx.sellerCommissionPct || tx.commissionPercent || '',
           buyerCommissionPct: tx.buyerCommissionPct || '',
           // Historical listing files may carry their finalized commission under
           // `commission` or `grossCommission` rather than the unified `gci` field.
           // Hydrate those aliases so the editable commission values—and the
           // earnings breakdown that depends on GCI—remain available after reopen.
-          gci: tx.gci || tx.splitSnapshot?.grossCommission || tx.splitSnapshot?.grossCommissionAmount || tx.grossCommission || tx.commission || tx.commissionAmount || tx.grossCommissionIncome || '',
+          gci: resolvedGci,
           brokerPct: tx.brokerPct || tx.splitSnapshot?.companySplitPercent || tx.companySplitPercent || '',
-          brokerGci: tx.brokerGci || tx.splitSnapshot?.companyRetained || tx.companyRetained || '',
+          brokerGci: resolvedBrokerGci,
           agentPct: tx.agentPct || tx.splitSnapshot?.agentSplitPercent || tx.agentSplitPercent || '',
-          agentDollar: tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.splitSnapshot?.agentDollar || tx.agentNetCommission || tx.agentCommission || '',
+          agentDollar: resolvedAgentDollar,
           mlsNumber: tx.mlsNumber || '',
           // Listings saved before the unified form used legacy aliases. Preserve
           // those dates when the same transaction is reopened by any role.
