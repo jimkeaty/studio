@@ -296,6 +296,15 @@ export async function PATCH(
         updates[k] = v;
       }
     }
+    // Preserve an explicit fee removal as a canonical zero-value state rather
+    // than allowing stale legacy amounts to reappear on the next edit.
+    if (String(updates.txComplianceFee || '').toLowerCase() === 'no' || updates.txComplianceFee === false) {
+      updates.txComplianceFee = 'no';
+      updates.txComplianceFeeAmount = 0;
+      updates.txComplianceFeePaidBy = '';
+      updates.txComplianceFeePrimaryAgentAmount = 0;
+      updates.txComplianceFeeCoAgentAmount = 0;
+    }
     updates.updatedAt = new Date().toISOString();
     updates.lastUpdatedBy = uid;
 

@@ -344,6 +344,17 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // An explicit "No" must remove every fee input from the transaction. This
+    // prevents stale legacy dollar fields or split deductions from continuing to
+    // reduce agent net after an authorized editor turns the fee off.
+    if (String(updates.txComplianceFee || '').toLowerCase() === 'no' || updates.txComplianceFee === false) {
+      updates.txComplianceFee = 'no';
+      updates.txComplianceFeeAmount = 0;
+      updates.txComplianceFeePaidBy = '';
+      updates.txComplianceFeePrimaryAgentAmount = 0;
+      updates.txComplianceFeeCoAgentAmount = 0;
+    }
+
     // closedDate is the canonical transaction-form field, while older ledger and
     // TC records can carry closingDate / actualCloseDate. Mirror any explicitly
     // supplied alias so the ledger overview and reopened unified form agree.

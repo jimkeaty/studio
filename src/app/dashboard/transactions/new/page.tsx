@@ -1350,6 +1350,8 @@ export default function AddTransactionPage() {
       hasOutboundReferral: false,
     },
   });
+  const [, setBrokerFeeDefaults] = useState<{ buyerDefault: number; listingDefault: number } | null>(null);
+  const [brokerFeeDefaultsLoaded, setBrokerFeeDefaultsLoaded] = useState(false);
 
   // Watched values for conditional rendering
   const clientType = form.watch('clientType');
@@ -1777,6 +1779,34 @@ export default function AddTransactionPage() {
 
   // Fetch agent commission structure
   const watchedAgentId = form.watch('agentId');
+  // Broker defaults apply only to new files. Existing files retain their saved fee
+  // decision, including an explicit "No", regardless of a profile/tier default.
+  useEffect(() => {
+    if (!user || editMode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/admin/transaction-fee-settings', { headers: { Authorization: `Bearer ${token}` } });
+        const data = await response.json();
+        if (!response.ok || !data.ok || cancelled) return;
+        const defaults = data.settings as { buyerDefault: number; listingDefault: number };
+        setBrokerFeeDefaults(defaults);
+        const fee = watchedClosingType === 'listing' || watchedClosingType === 'dual'
+          ? Number(defaults.listingDefault || 0)
+          : Number(defaults.buyerDefault || 0);
+        form.setValue('txComplianceFee', fee > 0 ? 'yes' : 'no');
+        form.setValue('txComplianceFeeAmount', fee > 0 ? fee as any : '');
+        form.setValue('txComplianceFeePaidBy', fee > 0 ? (form.getValues('txComplianceFeePaidBy') || 'agent') : '');
+      } catch {
+        // Existing hard-coded new-buyer default remains a safe fallback if settings are unavailable.
+      } finally {
+        if (!cancelled) setBrokerFeeDefaultsLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, editMode, watchedClosingType]);
+
   useEffect(() => {
     if (!user || !watchedAgentId) {
       setAgentCommission(null);
@@ -1796,7 +1826,7 @@ export default function AddTransactionPage() {
         const data = await res.json();
         if (!cancelled && data.ok) {
           setAgentCommission(data);
-          if (!editCommissionOverride.current && data.defaultTransactionFee != null && data.defaultTransactionFee > 0) {
+          if (!editMode && !brokerFeeDefaultsLoaded && !editCommissionOverride.current && data.defaultTransactionFee != null && data.defaultTransactionFee > 0) {
             form.setValue('txComplianceFee', 'yes');
             form.setValue('txComplianceFeeAmount', data.defaultTransactionFee as any);
             // Default to agent-pays so the math is conservative
@@ -1810,7 +1840,7 @@ export default function AddTransactionPage() {
     };
     fetchCommission();
     return () => { cancelled = true; };
-  }, [user, isAdmin, watchedAgentId]);
+  }, [user, isAdmin, watchedAgentId, editMode, brokerFeeDefaultsLoaded]);
 
   // Auto-calculate commission split
   const watchedGCI = form.watch('gci');
@@ -1852,7 +1882,7 @@ export default function AddTransactionPage() {
       const txFee = tier.transactionFee ?? agentCommission.defaultTransactionFee ?? 0;
 
       // Set fee fields first so we can read them back for the deduction
-      if (txFee > 0) {
+      if (!editMode && !brokerFeeDefaultsLoaded && txFee > 0) {
         form.setValue('txComplianceFee', 'yes');
         form.setValue('txComplianceFeeAmount', txFee as any);
         if (!form.getValues('txComplianceFeePaidBy')) {
@@ -1879,7 +1909,7 @@ export default function AddTransactionPage() {
       form.setValue('agentDollar', agentGross as any);
       form.setValue('brokerGci', brokerGci as any);
     }
-  }, [watchedGCI, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy]);
+  }, [watchedGCI, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy, editMode, brokerFeeDefaultsLoaded]);
 
   // Sync additionalComments → notes
   const watchedAdditionalComments = form.watch('additionalComments');
@@ -1988,14 +2018,17 @@ export default function AddTransactionPage() {
         const resolvedFeePayer = safeStr(tx.txComplianceFeePaidBy, '').trim().toLowerCase();
         const resolvedFeeAmount = Number(tx.txComplianceFeeAmount ?? 0) || 0;
         const resolvedRecordedFee = Number(tx.splitSnapshot?.agentFeeDeduction ?? 0) || 0;
-        const resolvedComplianceFee = (
-          rawComplianceFee === 'yes' ||
-          rawComplianceFee === 'true' ||
-          tx.txComplianceFee === true ||
-          resolvedFeeAmount > 0 ||
-          resolvedRecordedFee > 0 ||
-          ['buyer', 'seller', 'seller_closing_cost', 'agent'].includes(resolvedFeePayer)
-        ) ? 'yes' : 'no';
+        const feeExplicitlyDisabled = ['no', 'false', 'off', '0'].includes(rawComplianceFee) || tx.txComplianceFee === false;
+        const resolvedComplianceFee = feeExplicitlyDisabled
+          ? 'no'
+          : (
+            rawComplianceFee === 'yes' ||
+            rawComplianceFee === 'true' ||
+            tx.txComplianceFee === true ||
+            resolvedFeeAmount > 0 ||
+            resolvedRecordedFee > 0 ||
+            ['buyer', 'seller', 'seller_closing_cost', 'agent'].includes(resolvedFeePayer)
+          ) ? 'yes' : 'no';
 
         // Co-agent compatibility bridge -------------------------------------------------
         // Older transaction documents stored an internal co-listing partner as
@@ -2143,8 +2176,8 @@ export default function AddTransactionPage() {
           warrantyAmount: tx.warrantyAmount || '',
           warrantyPaidBy: tx.warrantyPaidBy || '',
           txComplianceFee: resolvedComplianceFee,
-          txComplianceFeeAmount: resolvedFeeAmount || resolvedRecordedFee || '',
-          txComplianceFeePaidBy: resolvedFeePayer,
+          txComplianceFeeAmount: resolvedComplianceFee === 'yes' ? (resolvedFeeAmount || resolvedRecordedFee || '') : '',
+          txComplianceFeePaidBy: resolvedComplianceFee === 'yes' ? resolvedFeePayer : '',
           txComplianceFeeAgentAllocation: tx.txComplianceFeeAgentAllocation || 'primary_agent',
           txComplianceFeePrimaryAgentAmount: tx.txComplianceFeePrimaryAgentAmount ?? '',
           txComplianceFeeCoAgentAmount: tx.txComplianceFeeCoAgentAmount ?? '',
@@ -6249,7 +6282,15 @@ export default function AddTransactionPage() {
             <FormField control={form.control} name="txComplianceFee" render={({ field }) => (
               <FormItem>
                 <FormLabel>Transaction Compliance Fee?</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={(value) => {
+                  field.onChange(value);
+                  if (value === 'no') {
+                    form.setValue('txComplianceFeeAmount', '');
+                    form.setValue('txComplianceFeePaidBy', '');
+                    form.setValue('txComplianceFeePrimaryAgentAmount', '');
+                    form.setValue('txComplianceFeeCoAgentAmount', '');
+                  }
+                }} value={field.value}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="yes">Yes</SelectItem>

@@ -212,6 +212,7 @@ const adminMenuGroups = [
     items: [
       { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
       { href: '/dashboard/admin/open-house-settings', label: 'Open House Settings', icon: Home },
+      { href: '/dashboard/admin/transaction-fee-settings', label: 'Broker Fee Defaults', icon: Receipt },
       { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },
     ],
   },
