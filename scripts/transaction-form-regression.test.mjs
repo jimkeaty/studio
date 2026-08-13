@@ -8,6 +8,7 @@ const formSource = readFileSync(resolve(root, 'src/app/dashboard/transactions/ne
 const agentRouteSource = readFileSync(resolve(root, 'src/app/api/agent/transactions/[txId]/route.ts'), 'utf8');
 const adminRouteSource = readFileSync(resolve(root, 'src/app/api/admin/transactions/route.ts'), 'utf8');
 const brokerFeeSettingsSource = readFileSync(resolve(root, 'src/app/api/admin/transaction-fee-settings/route.ts'), 'utf8');
+const createTransactionSource = readFileSync(resolve(root, 'src/app/api/tc/route.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -81,4 +82,18 @@ test('operational staff can override closed-file GCI while agents remain read-on
   assert.match(adminRouteSource, /'agentPct'/);
   assert.match(adminRouteSource, /'brokerGci'/);
   assert.match(adminRouteSource, /'agentDollar'/);
+});
+
+test('referrals keep address optional while persisting optional contacts, key dates, and referral fee details', () => {
+  assert.match(formSource, /address: z\.string\(\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /data\.closingType === 'referral' \|\| String\(data\.address \|\| ''\)\.trim\(\)\.length >= 5/);
+  assert.match(formSource, /outboundReferralEmail: z\.string\(\)\.email\(\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /Referral Key Dates/);
+  assert.match(formSource, /Expected Gross Commission/);
+  assert.match(createTransactionSource, /if \(!address && closingType !== 'referral'\) return jsonError\(400, 'address is required'\)/);
+  assert.match(createTransactionSource, /outboundReferralEmail: toStr\(body\.outboundReferralEmail\) \|\| null/);
+  assert.match(createTransactionSource, /outboundReferralPhone: toStr\(body\.outboundReferralPhone\) \|\| null/);
+  assert.match(agentRouteSource, /'outboundReferralFeePercent', 'outboundReferralFeeDollar'/);
+  assert.match(agentRouteSource, /'outboundReferralEmail', 'outboundReferralPhone'/);
+  assert.match(adminRouteSource, /'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar'/);
 });

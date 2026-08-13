@@ -19,7 +19,7 @@ function jsonError(status: number, error: string) {
 // Fields an agent is allowed to update on their own transaction
 const AGENT_ALLOWED_FIELDS = new Set([
   'status',
-  'propertyAddress',
+  'propertyAddress', 'address',
   'salePrice',
   'listPrice',
   'contractDate',
@@ -67,10 +67,10 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'txComplianceFeeAgentAllocation', 'txComplianceFeePrimaryAgentAmount', 'txComplianceFeeCoAgentAmount',
   // Referrals
   'hasOutboundReferral', 'outboundReferralRecipient', 'outboundReferralPercent',
-  'outboundReferralFee', 'outboundReferralDollar',
+  'outboundReferralFee', 'outboundReferralDollar', 'outboundReferralFeePercent', 'outboundReferralFeeDollar',
   'hasInboundReferral', 'inboundReferral', 'inboundReferralAgentName', 'inboundReferralBrokerage',
   'inboundReferralFeePercent', 'inboundReferralFee', 'inboundReferralEmail', 'inboundReferralPhone',
-  'outboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
+  'outboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage', 'outboundReferralEmail', 'outboundReferralPhone',
   // Buyer inspection
   'inspectionOrdered', 'targetInspectionDate', 'inspectorName',
   'inspectionTypes', 'tcScheduleInspections', 'tcScheduleInspectionsOther',

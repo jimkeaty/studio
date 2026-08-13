@@ -50,11 +50,11 @@ export async function POST(req: NextRequest) {
 
     // Required fields
     const address = toStr(body.address);
-    if (!address) return jsonError(400, 'address is required');
     const closingType = toStr(body.closingType);
     if (!closingType || !VALID_CLOSING_TYPES.has(closingType)) {
       return jsonError(400, 'closingType must be: buyer, listing, dual, or referral');
     }
+    if (!address && closingType !== 'referral') return jsonError(400, 'address is required');
     const clientName =
       toStr(body.clientName) ||
       toStr(body.sellerName) ||
@@ -359,6 +359,8 @@ export async function POST(req: NextRequest) {
       hasOutboundReferral: toBool(body.hasOutboundReferral),
       outboundReferralAgentName: toStr(body.outboundReferralAgentName) || null,
       outboundReferralBrokerage: toStr(body.outboundReferralBrokerage) || null,
+      outboundReferralEmail: toStr(body.outboundReferralEmail) || null,
+      outboundReferralPhone: toStr(body.outboundReferralPhone) || null,
       outboundReferralFeePercent: toNum(body.outboundReferralFeePercent) || null,
       outboundReferralFeeDollar: toNum(body.outboundReferralFeeDollar) || null,
       outboundReferralPercent: toNum(body.outboundReferralFeePercent) || toNum(body.outboundReferralPercent) || null,

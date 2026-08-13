@@ -321,7 +321,8 @@ const schema = z.object({
   // Basics
   closingType: z.enum(['buyer', 'listing', 'referral', 'dual'], { required_error: 'Type of closing is required' }),
   dealType: z.enum(['residential_sale', 'residential_lease', 'land', 'commercial_listing', 'commercial_sale', 'commercial_lease']),
-  address: z.string().min(5, 'Full property address is required'),
+  // Referrals may be created before a property is identified; all other deal types require an address.
+  address: z.string().optional().or(z.literal('')),
   clientName: z.string().optional(),  // Populated from Buyer/Seller section; not shown in Property Details
   dealSource: z.string().optional(),
 
@@ -546,6 +547,8 @@ const schema = z.object({
   hasOutboundReferral: z.boolean().optional(),
   outboundReferralAgentName: z.string().optional(),
   outboundReferralBrokerage: z.string().optional(),
+  outboundReferralEmail: z.string().email().optional().or(z.literal('')),
+  outboundReferralPhone: z.string().optional(),
   outboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   outboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
 
@@ -563,6 +566,9 @@ const schema = z.object({
   primaryAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   coAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
 }).refine(
+  (data) => data.closingType === 'referral' || String(data.address || '').trim().length >= 5,
+  { message: 'Full property address is required for buyer, listing, and dual transactions.', path: ['address'] }
+).refine(
   (data) => {
     if (!data.hasCoAgent) return true;
     const p = Number(data.primaryAgentSplitPercent || 0);
@@ -3612,8 +3618,9 @@ export default function AddTransactionPage() {
 
             <FormField control={form.control} name="address" render={({ field }) => (
               <FormItem>
-                <FormLabel>Property Address <span className="text-destructive">*</span></FormLabel>
+                <FormLabel>Property Address {watchedClosingType !== 'referral' && <span className="text-destructive">*</span>} {watchedClosingType === 'referral' && <span className="text-muted-foreground font-normal text-xs">(optional)</span>}</FormLabel>
                 <FormControl><Input placeholder="123 Main St, Lafayette, LA 70508" {...field} /></FormControl>
+                {watchedClosingType === 'referral' && <FormDescription>Enter the property address when known. It is not required for a referral.</FormDescription>}
                 <FormMessage />
               </FormItem>
             )} />
@@ -4669,20 +4676,27 @@ export default function AddTransactionPage() {
           </Section>}
 
           {/* ═══════════════════════════════════════════════════════════════════
-              OUTBOUND REFERRAL — minimal form (referral type only)
+              OUTBOUND REFERRAL — streamlined, with all optional referral context
           ═══════════════════════════════════════════════════════════════════ */}
           {watchedClosingType === 'referral' && (
-            <Section title="Outbound Referral Details" description="You are referring this client out. Fill in the receiving agent and your referral fee.">
-              {/* Client name — optional for referrals */}
-              <FormField control={form.control} name="clientName" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client Name <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel>
-                  <FormControl>
-                    <Input placeholder="Client being referred (optional)" {...field} />
-                  </FormControl>
-                  <FormDescription className="text-xs">The person you are referring out. Not required to save.</FormDescription>
-                </FormItem>
-              )} />
+            <>
+            <Section title="Outbound Referral Details" description="All referral details are optional. Capture what is known so the referral can be followed through completion.">
+              <Grid2>
+                <FormField control={form.control} name="clientName" render={({ field }) => (
+                  <FormItem><FormLabel>Client Name <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input placeholder="Client being referred" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="clientEmail" render={({ field }) => (
+                  <FormItem><FormLabel>Client Email <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input type="email" placeholder="client@email.com" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+              </Grid2>
+              <Grid2>
+                <FormField control={form.control} name="clientPhone" render={({ field }) => (
+                  <FormItem><FormLabel>Client Phone <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input type="tel" placeholder="(337) 555-1234" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="clientNewAddress" render={({ field }) => (
+                  <FormItem><FormLabel>Client Forwarding / New Address <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input placeholder="Forwarding address" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid2>
               <Grid2>
                 <FormField control={form.control} name="outboundReferralAgentName" render={({ field }) => (
                   <FormItem><FormLabel>Referred-To Agent Name</FormLabel><FormControl><Input placeholder="Agent receiving the referral" {...field} /></FormControl></FormItem>
@@ -4692,6 +4706,17 @@ export default function AddTransactionPage() {
                 )} />
               </Grid2>
               <Grid2>
+                <FormField control={form.control} name="outboundReferralEmail" render={({ field }) => (
+                  <FormItem><FormLabel>Referred-To Agent Email <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input type="email" placeholder="agent@brokerage.com" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="outboundReferralPhone" render={({ field }) => (
+                  <FormItem><FormLabel>Referred-To Agent Phone <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input type="tel" placeholder="(337) 555-6789" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid2>
+              <Grid2>
+                <FormField control={form.control} name="gci" render={({ field }) => (
+                  <FormItem><FormLabel>Expected Gross Commission ($) <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><CurrencyInput value={field.value as any} onChange={(value) => field.onChange(value)} placeholder="0" /></FormControl><FormDescription className="text-xs">Use when known to estimate the referral fee. It is not required to save.</FormDescription></FormItem>
+                )} />
                 <FormField control={form.control} name="outboundReferralFeePercent" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Referral Fee % (optional)</FormLabel>
@@ -4722,6 +4747,28 @@ export default function AddTransactionPage() {
                 </FormItem>
               )} />
             </Section>
+            <Section title="Referral Key Dates" description="Optional dates for tracking the referral lifecycle.">
+              <Grid2>
+                <FormField control={form.control} name="listingDate" render={({ field }) => (
+                  <FormItem><FormLabel>Listing / Referral Start Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="listingExpirationDate" render={({ field }) => (
+                  <FormItem><FormLabel>Listing Expiration Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid2>
+              <Grid2>
+                <FormField control={form.control} name="contractDate" render={({ field }) => (
+                  <FormItem><FormLabel>Contract Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="projectedCloseDate" render={({ field }) => (
+                  <FormItem><FormLabel>Expected Close Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                )} />
+              </Grid2>
+              <FormField control={form.control} name="closedDate" render={({ field }) => (
+                <FormItem className="max-w-sm"><FormLabel>Completed / Closed Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+              )} />
+            </Section>
+            </>
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════

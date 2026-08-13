@@ -275,7 +275,7 @@ const UPDATABLE_FIELDS = new Set([
   'primaryAgentSplitPercent', 'coAgentSplitPercent', 'primaryAgentSideCredit', 'primaryAgentUnitCredit',
   'participantAllocations',
   // Outbound referral fee — paid to outside broker/relocation company off the top of GCI
-  'outboundReferralFee',
+  'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar',
   // Pre-listing inspection
   'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
   'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
