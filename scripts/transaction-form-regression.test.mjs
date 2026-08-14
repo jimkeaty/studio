@@ -84,6 +84,17 @@ test('operational staff can override closed-file GCI while agents remain read-on
   assert.match(adminRouteSource, /'agentDollar'/);
 });
 
+test('manual broker or agent dollar overrides clear split percentages and persist as overrides', () => {
+  assert.match(formSource, /const setManualDollarSplit = \(field: 'brokerGci' \| 'agentDollar', value: unknown\) => \{/);
+  assert.match(formSource, /form\.setValue\('brokerPct', '' as any, \{ shouldDirty: true, shouldValidate: true \}\)/);
+  assert.match(formSource, /form\.setValue\('agentPct', '' as any, \{ shouldDirty: true, shouldValidate: true \}\)/);
+  assert.match(formSource, /setManualDollarSplit\('brokerGci', val\)/);
+  assert.match(formSource, /setManualDollarSplit\('agentDollar', val\)/);
+  assert.match(formSource, /commissionManualOverride\.current \? \{[\s\S]*commissionOverridden: true/);
+  assert.match(adminRouteSource, /body\.agentPct !== undefined \? \{ agentSplitPercent: Number\(body\.agentPct\) \} : \{\}/);
+  assert.match(adminRouteSource, /body\.brokerPct !== undefined \? \{ companySplitPercent: Number\(body\.brokerPct\) \} : \{\}/);
+});
+
 test('referrals keep address optional while persisting optional contacts, key dates, and referral fee details', () => {
   assert.match(formSource, /address: z\.string\(\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
   assert.match(formSource, /data\.closingType === 'referral' \|\| String\(data\.address \|\| ''\)\.trim\(\)\.length >= 5/);

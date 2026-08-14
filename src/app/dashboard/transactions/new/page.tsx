@@ -2757,7 +2757,7 @@ export default function AddTransactionPage() {
             _replaceDocuments: true,
             inspectionRowData,
             // Mark that commission was manually overridden if split fields changed
-            ...(values.agentPct || values.brokerPct ? {
+            ...(commissionManualOverride.current ? {
               commissionOverridden: true,
               commissionOverriddenBy: user!.uid,
               commissionOverriddenAt: new Date().toISOString(),
@@ -2957,6 +2957,18 @@ export default function AddTransactionPage() {
     toast({ title: 'Cannot save — required field missing', description: `Field: ${firstKey} — ${String(message)}`, variant: 'destructive' });
     const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const setManualDollarSplit = (field: 'brokerGci' | 'agentDollar', value: unknown) => {
+    // A deliberate dollar override and a percentage split are competing inputs.
+    // Clear both percentages so the percentage-driven live calculation cannot
+    // overwrite the manually entered broker and agent dollar amounts.
+    commissionManualOverride.current = true;
+    if (value !== '' && value !== null && value !== undefined) {
+      form.setValue('brokerPct', '' as any, { shouldDirty: true, shouldValidate: true });
+      form.setValue('agentPct', '' as any, { shouldDirty: true, shouldValidate: true });
+    }
+    form.setValue(field, value as any, { shouldDirty: true, shouldValidate: true });
   };
 
   const chooseTransactionType = (side: TransactionSide) => {
@@ -7013,6 +7025,11 @@ export default function AddTransactionPage() {
                     </button>
                   )}
                 </div>
+                {hasOperationalEditAuthority && commissionManualOverride.current && !Number(watchedBrokerPct) && !Number(watchedAgentPct) && (
+                  <p className="text-xs text-amber-700">
+                    Manual dollar override: percentage splits are cleared so the entered dollar amounts remain authoritative.
+                  </p>
+                )}
                 <Grid2>
                   <FormField control={form.control} name="brokerPct" render={({ field }) => (
                     <FormItem>
@@ -7032,7 +7049,7 @@ export default function AddTransactionPage() {
                       <FormControl>
                         <CurrencyInput
                           value={field.value as any}
-                          onChange={(val) => { commissionManualOverride.current = true; field.onChange(val); }}
+                          onChange={(val) => setManualDollarSplit('brokerGci', val)}
                           placeholder="0"
                         />
                       </FormControl>
@@ -7056,11 +7073,11 @@ export default function AddTransactionPage() {
                       <FormControl>
                         <CurrencyInput
                           value={field.value as any}
-                          onChange={(val) => { commissionManualOverride.current = true; field.onChange(val); }}
+                          onChange={(val) => setManualDollarSplit('agentDollar', val)}
                           placeholder="0"
                         />
                       </FormControl>
-                      <FormDescription>Auto-calculated from agent profile. Edit to override.</FormDescription>
+                      <FormDescription>Auto-calculated from agent profile. Editing a dollar amount clears both percentage splits and saves a manual override.</FormDescription>
                     </FormItem>
                   )} />
                 </Grid2>
