@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -143,7 +144,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const allTx = Array.from(txMap.values()).sort((a, b) => {
+    const allTx = Array.from(txMap.values()).map((transaction: any) => {
+      const sideResolution = resolveTransactionSide(transaction);
+      return {
+        ...transaction,
+        ...(sideResolution.side ? { closingType: sideResolution.side } : {}),
+        transactionSideResolution: sideResolution,
+      };
+    }).sort((a, b) => {
       const aTime = new Date(a.createdAt || 0).getTime() || 0;
       const bTime = new Date(b.createdAt || 0).getTime() || 0;
       return bTime - aTime;

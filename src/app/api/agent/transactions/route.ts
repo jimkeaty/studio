@@ -10,6 +10,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
+import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -109,7 +110,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const transactions = Array.from(txMap.values());
+    // Normalize only the response shown in the ledger. This never writes a
+    // legacy document; its raw fields remain unchanged in Firestore.
+    const transactions = Array.from(txMap.values()).map((transaction: any) => {
+      const sideResolution = resolveTransactionSide(transaction);
+      return {
+        ...transaction,
+        ...(sideResolution.side ? { closingType: sideResolution.side } : {}),
+        transactionSideResolution: sideResolution,
+      };
+    });
 
     // Sort combined results by createdAt desc
     transactions.sort((a, b) => {

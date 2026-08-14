@@ -11,6 +11,7 @@ import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllo
 import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
+import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -77,6 +78,17 @@ export async function GET(req: NextRequest) {
         }
       }
     }
+
+    // Resolve legacy Buyer/Listing labels only in this GET response. The
+    // canonical transaction document is not changed by viewing the ledger.
+    transactions = transactions.map((transaction: any) => {
+      const sideResolution = resolveTransactionSide(transaction);
+      return {
+        ...transaction,
+        ...(sideResolution.side ? { closingType: sideResolution.side } : {}),
+        transactionSideResolution: sideResolution,
+      };
+    });
 
     // ── Filter out demo account transactions ─────────────────────────────
     // Load all demo agent IDs from agentProfiles and exclude their transactions

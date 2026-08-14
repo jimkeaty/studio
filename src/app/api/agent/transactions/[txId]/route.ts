@@ -11,6 +11,7 @@ import { resolveGCI } from '@/lib/commissions';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
+import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -1267,6 +1268,10 @@ export async function GET(
     transaction: {
       id: snap.id,
       ...data,
+      // Keep raw type fields intact for the edit form's no-write safeguards while
+      // exposing the best available display value to any read-only consumer.
+      displayClosingType: resolveTransactionSide(data).side,
+      transactionSideResolution: resolveTransactionSide(data),
       viewerIsCoAgent: Boolean(viewerIsCoAgent && !viewerIsPrimary),
       viewerParticipantAllocation,
       viewerAgentId: viewerCanonicalAgentId || viewerId,

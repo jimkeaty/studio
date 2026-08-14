@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff } from '@/lib/auth/staffAccess';
+import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -74,7 +75,8 @@ export async function GET(req: NextRequest) {
       try {
         let resolvedAddress = (item.transactionAddress || '').trim() || (item.address || '').trim();
         let salePrice: number | null = item.salePrice ?? null;
-        let closingType: string | null = item.closingType ?? null;
+        const itemSideResolution = resolveTransactionSide(item);
+        let closingType: string | null = itemSideResolution.side ?? item.closingType ?? null;
         let dealType: string | null = item.dealType ?? null;
         let contractDate: string | null = item.contractDate ?? null;
         let closedDate: string | null = item.closedDate ?? null;
@@ -87,7 +89,7 @@ export async function GET(req: NextRequest) {
             const tx = txDoc.data()!;
             if (!resolvedAddress) resolvedAddress = (tx.propertyAddress || tx.address || '').trim();
             if (salePrice == null) salePrice = tx.salePrice ?? null;
-            if (!closingType) closingType = tx.closingType ?? null;
+            if (!closingType) closingType = resolveTransactionSide(tx).side ?? tx.closingType ?? null;
             if (!dealType) dealType = tx.transactionType ?? tx.dealType ?? null;
             if (!contractDate) contractDate = tx.contractDate ?? null;
             if (!closedDate) closedDate = tx.closedDate ?? tx.closingDate ?? null;
@@ -101,7 +103,7 @@ export async function GET(req: NextRequest) {
             const intake = intakeDoc.data()!;
             if (!resolvedAddress) resolvedAddress = (intake.address || intake.propertyAddress || '').trim();
             if (salePrice == null) salePrice = intake.salePrice ?? null;
-            if (!closingType) closingType = intake.closingType ?? null;
+            if (!closingType) closingType = resolveTransactionSide(intake).side ?? intake.closingType ?? null;
             if (!dealType) dealType = intake.dealType ?? null;
             if (!contractDate) contractDate = intake.contractDate ?? null;
             if (!closedDate) closedDate = intake.projectedCloseDate ?? null;
@@ -117,6 +119,7 @@ export async function GET(req: NextRequest) {
         if (contractDate) item.contractDate = contractDate;
         if (closedDate) item.closedDate = closedDate;
         if (gci != null) item.gci = gci;
+        item.transactionSideResolution = itemSideResolution;
       } catch {
         // Non-fatal: skip enrichment for this item
       }

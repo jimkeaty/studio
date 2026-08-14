@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
 import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
+import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -650,8 +651,10 @@ export default function AddTransactionPage() {
   // ── PDF extraction state ──────────────────────────────────────────────────
   // 'type' is the new first step — select Buyer / Listing / Dual / Referral
   // Skip 'type' step when closingType is pre-set from URL params (e.g. listing→pending flow)
-  type PdfStep = 'type' | 'upload' | 'extracting' | 'review' | 'form';
-  const [pdfStep, setPdfStep] = useState<PdfStep>(editMode ? 'form' : (typeParamEarly ? 'upload' : 'type'));
+  type PdfStep = 'loading' | 'type' | 'upload' | 'extracting' | 'review' | 'form';
+  // An edit session begins in a neutral loading state so a legacy record never
+  // flashes the Buyer or Listing layout before its stored side is resolved.
+  const [pdfStep, setPdfStep] = useState<PdfStep>(editMode ? 'loading' : (typeParamEarly ? 'upload' : 'type'));
   const [pdfName, setPdfName] = useState<string>('');
   const [pdfConfidence, setPdfConfidence] = useState<Record<string, number>>({});
   const [pdfHighlightFields, setPdfHighlightFields] = useState<Set<string>>(new Set());
@@ -1956,6 +1959,8 @@ export default function AddTransactionPage() {
 
   // ── Load existing transaction for edit mode (?edit=txId) ─────────────────────
   const [editLoaded, setEditLoaded] = useState(false);
+  const [legacySideNeedsReview, setLegacySideNeedsReview] = useState(false);
+  const legacySideResolutionRef = useRef({ preventsAutomaticPersistence: false });
   // The form component remains mounted when an admin exits impersonation. Clear the
   // co-agent-only response state and reload the transaction for the new viewer so an
   // administrative payout card cannot retain a prior co-agent allocation.
@@ -1965,6 +1970,9 @@ export default function AddTransactionPage() {
     setViewerParticipantAllocation(null);
     setViewerAgentId('');
     setParticipantAllocations(null);
+    setLegacySideNeedsReview(false);
+    legacySideResolutionRef.current = { preventsAutomaticPersistence: false };
+    if (editTxId) setPdfStep('loading');
   }, [editTxId, isImpersonating, effectiveUid, effectiveName]);
 
   useEffect(() => {
@@ -2007,6 +2015,14 @@ export default function AddTransactionPage() {
           if (val === null || val === undefined) return fallback;
           return String(val);
         };
+
+        // The current form uses closingType, while older files may use the legacy
+        // type field. Resolve for display without writing the inferred value back.
+        const sideResolution = resolveTransactionSide(tx);
+        legacySideResolutionRef.current = {
+          preventsAutomaticPersistence: sideResolution.preventsAutomaticPersistence,
+        };
+        setLegacySideNeedsReview(sideResolution.requiresManualReview);
 
         // Date aliases accumulated across the legacy ledger, TC queue, and unified
         // form. The rendered field is `closedDate`, so always hydrate it from the
@@ -2095,7 +2111,9 @@ export default function AddTransactionPage() {
           agentId: tx.agentId || effectiveUid || '',
           agentDisplayName: tx.agentDisplayName || effectiveName || '',
           status: safeEnum(tx.status || tx.listingStatus, 'active') as any,
-          closingType: safeEnum(tx.closingType || tx.side, 'listing') as any,
+          // A record with no safe side must choose one before editing. Buyer is a
+          // temporary non-displayed form value only; it is never silently saved.
+          closingType: (sideResolution.side || 'buyer') as any,
           dealType: safeEnum(tx.dealType, 'residential_sale') as any,
           address: tx.address || '',
           clientName: tx.clientName || '',
@@ -2331,6 +2349,7 @@ export default function AddTransactionPage() {
           });
           setInspRows(newRows);
         }
+        setPdfStep(sideResolution.requiresManualReview ? 'type' : 'form');
         setEditLoaded(true);
         toast({ title: 'Transaction loaded', description: 'All fields have been pre-filled. Make your changes and save.' });
       } catch (err: any) {
@@ -2711,6 +2730,15 @@ export default function AddTransactionPage() {
               coListingAgentPhone: '',
               coListingAgentSplit: '',
             };
+        // A legacy side inferred only for display must not be backfilled merely
+        // because someone saved an unrelated note, date, or document. The later
+        // approved migration owns those writes. An explicit user selection clears
+        // this safeguard below and may be saved normally.
+        const valuesForSave: Record<string, any> = { ...values };
+        if (legacySideResolutionRef.current.preventsAutomaticPersistence) {
+          delete valuesForSave.closingType;
+        }
+
         let apiUrl: string;
         let apiBody: Record<string, any>;
 
@@ -2720,7 +2748,7 @@ export default function AddTransactionPage() {
           apiUrl = `/api/admin/transactions`;
           apiBody = {
             id: editTxId,
-            ...values,
+            ...valuesForSave,
             ...coAgentCompatibility,
             documents: uploadedDocs,
             // The hydrated document list is authoritative for this shared
@@ -2740,7 +2768,7 @@ export default function AddTransactionPage() {
           const viewAsParam = isImpersonating && effectiveUid ? `?viewAs=${effectiveUid}` : '';
           apiUrl = `/api/agent/transactions/${editTxId}${viewAsParam}`;
           apiBody = {
-            ...values,
+            ...valuesForSave,
             ...coAgentCompatibility,
             documents: uploadedDocs,
             _replaceDocuments: true,
@@ -2931,6 +2959,16 @@ export default function AddTransactionPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  const chooseTransactionType = (side: TransactionSide) => {
+    form.setValue('closingType', side);
+    // This is a deliberate human selection. It is allowed to persist on the
+    // next normal save; simply loading an inferred legacy side is not.
+    legacySideResolutionRef.current = { preventsAutomaticPersistence: false };
+    setLegacySideNeedsReview(false);
+    if (!editMode && side === 'listing') form.setValue('status', 'active');
+    setPdfStep(editMode || side === 'referral' ? 'form' : 'upload');
+  };
+
   // ───────────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-24">
@@ -2953,20 +2991,31 @@ export default function AddTransactionPage() {
         </Badge>
       </div>
 
+      {pdfStep === 'loading' && (
+        <Card>
+          <CardContent className="py-12 flex items-center justify-center gap-3 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" /> Loading transaction details…
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Transaction Type Selection ─────────────────────────────────────── */}
       {pdfStep === 'type' && (
         <div className="space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold">What type of transaction is this?</h2>
-            <p className="text-muted-foreground">Select the transaction type to load the right form fields.</p>
+            <p className="text-muted-foreground">
+              {legacySideNeedsReview
+                ? 'This older file does not clearly identify the representation side. Select a type only if you know it is correct; nothing is changed until you save.'
+                : 'Select the transaction type to load the right form fields.'}
+            </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
             {/* Buyer */}
             <button
               type="button"
               onClick={() => {
-                form.setValue('closingType', 'buyer');
-                setPdfStep('upload');
+                chooseTransactionType('buyer');
               }}
               className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-blue-200 bg-blue-50 hover:border-blue-500 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:hover:border-blue-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
             >
@@ -2982,9 +3031,7 @@ export default function AddTransactionPage() {
             <button
               type="button"
               onClick={() => {
-                form.setValue('closingType', 'listing');
-                form.setValue('status', 'active'); // listings default to Active
-                setPdfStep('upload');
+                chooseTransactionType('listing');
               }}
               className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-green-200 bg-green-50 hover:border-green-500 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:hover:border-green-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
             >
@@ -3000,8 +3047,7 @@ export default function AddTransactionPage() {
             <button
               type="button"
               onClick={() => {
-                form.setValue('closingType', 'dual');
-                setPdfStep('upload');
+                chooseTransactionType('dual');
               }}
               className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-purple-200 bg-purple-50 hover:border-purple-500 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/30 dark:hover:border-purple-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
             >
@@ -3017,8 +3063,7 @@ export default function AddTransactionPage() {
             <button
               type="button"
               onClick={() => {
-                form.setValue('closingType', 'referral');
-                setPdfStep('form');
+                chooseTransactionType('referral');
               }}
               className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-amber-200 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:hover:border-amber-500 p-6 text-center transition-all shadow-sm hover:shadow-md"
             >
