@@ -12,6 +12,7 @@ const createTransactionSource = readFileSync(resolve(root, 'src/app/api/tc/route
 const commercialParserSource = readFileSync(resolve(root, 'src/app/api/agent/parse-commercial-agreement/route.ts'), 'utf8');
 const inspectionRequestSource = readFileSync(resolve(root, 'src/app/api/agent/inspection-request/route.ts'), 'utf8');
 const transactionSectionsSource = readFileSync(resolve(root, 'src/components/transactions/TransactionFormSections.tsx'), 'utf8');
+const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/transaction-reminders/route.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -208,4 +209,19 @@ test('inspection requests use the supported JSON API and can deliver by vendor e
   assert.match(inspectionRequestSource, /No active vendors with an email address or mobile number found/);
   assert.match(inspectionRequestSource, /smsSent/);
   assert.match(inspectionRequestSource, /TWILIO_ACCOUNT_SID/);
+});
+
+test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {
+  assert.match(transactionReminderSource, /const MILESTONE_REMINDER_DAYS = \[3, 1\] as const/);
+  for (const field of ['inspectionDeadline', 'appraisalDeadline', 'finalLoanCommitmentDeadline', 'depositDeadline', 'projectedCloseDate']) {
+    assert.match(transactionReminderSource, new RegExp(`field: '${field}'`));
+  }
+  assert.match(transactionReminderSource, /recipientUids = \[\.\.\.new Set\(\[tx\.agentId, tx\.coAgentId\]/);
+  assert.match(transactionReminderSource, /Notify every internal agent assigned to the transaction, but never[\s\S]*TC or staff/);
+  assert.match(transactionReminderSource, /const reminderKey = `\$\{milestone\.key\}_\$\{daysBefore\}_days`/);
+  assert.match(transactionReminderSource, /if \(sentMap\[reminderKey\] === targetDate\) continue/);
+  assert.match(transactionReminderSource, /milestoneRemindersSent\.\$\{reminderKey\}/);
+  assert.match(transactionReminderSource, /type: 'agent_task_reminder'/);
+  const milestoneSection = transactionReminderSource.split('// ── 4. Agent Milestone Reminders')[1] || '';
+  assert.doesNotMatch(milestoneSection, /staffUids|tcId|recipientUids: \[tx\.tcId\]/, 'Milestone reminders must not be broadcast to staff or TC');
 });

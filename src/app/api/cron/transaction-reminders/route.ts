@@ -39,13 +39,27 @@ function diffDays(a: string, b: string): number {
   return Math.round((db - da) / 86400000);
 }
 
+const MILESTONE_REMINDERS = [
+  { field: 'inspectionDeadline', key: 'inspection', label: 'Inspection / Due Diligence' },
+  { field: 'appraisalDeadline', key: 'appraisal', label: 'Appraisal' },
+  { field: 'finalLoanCommitmentDeadline', key: 'loan_commitment', label: 'Final Loan Commitment' },
+  { field: 'depositDeadline', key: 'deposit', label: 'Deposit' },
+  { field: 'projectedCloseDate', key: 'projected_close', label: 'Projected Closing' },
+] as const;
+
+const MILESTONE_REMINDER_DAYS = [3, 1] as const;
+
+function isActiveMilestoneTransaction(status: unknown): boolean {
+  return !['closed', 'cancelled', 'canceled', 'withdrawn', 'archived', 'dead'].includes(String(status || '').toLowerCase());
+}
+
 export async function POST(req: NextRequest) {
   // Auth check
   const secret = req.headers.get('x-cron-secret') || req.headers.get('authorization')?.replace('Bearer ', '');
   if (!CRON_SECRET || secret !== CRON_SECRET) return jsonErr(401, 'Unauthorized');
 
   const today = todayStr();
-  const results = { weeklyHug: 0, commissionSummary: 0, buyerCheckin: 0, errors: 0 };
+  const results = { weeklyHug: 0, commissionSummary: 0, buyerCheckin: 0, milestoneReminders: 0, errors: 0 };
 
   try {
     // ── 1. Weekly Hug Reminders ─────────────────────────────────────────────
@@ -180,6 +194,64 @@ export async function POST(req: NextRequest) {
         } catch (e) {
           console.error('buyer_checkin error', e);
           results.errors++;
+        }
+      }
+    }
+
+    // ── 4. Agent Milestone Reminders (3 days and 1 day before) ───────────────
+    // Each milestone is checked by its own exact-date query. A persisted
+    // milestoneRemindersSent map makes the run idempotent: retries and future
+    // daily runs cannot re-send the same milestone/timeframe combination.
+    for (const daysBefore of MILESTONE_REMINDER_DAYS) {
+      const targetDate = addDays(today, daysBefore);
+
+      for (const milestone of MILESTONE_REMINDERS) {
+        const deadlineSnap = await adminDb.collection('transactions')
+          .where(milestone.field, '==', targetDate)
+          .get();
+
+        for (const txDoc of deadlineSnap.docs) {
+          const tx = txDoc.data();
+          if (!isActiveMilestoneTransaction(tx.status)) continue;
+
+          // Notify every internal agent assigned to the transaction, but never
+          // TC or staff. Co-agents are included only when they have a canonical
+          // assigned uid on the same shared transaction record.
+          const recipientUids = [...new Set([tx.agentId, tx.coAgentId]
+            .filter((uid): uid is string => typeof uid === 'string' && uid.trim().length > 0))];
+          if (recipientUids.length === 0) continue;
+
+          const reminderKey = `${milestone.key}_${daysBefore}_days`;
+          const sentMap = (tx.milestoneRemindersSent || {}) as Record<string, string>;
+          if (sentMap[reminderKey] === targetDate) continue;
+
+          const address = tx.address || tx.transactionAddress || 'your transaction';
+          const dayLabel = daysBefore === 1 ? 'tomorrow' : `in ${daysBefore} days`;
+
+          try {
+            await sendNotification(adminDb, {
+              recipientUids,
+              type: 'agent_task_reminder',
+              title: `⏰ ${milestone.label} due ${dayLabel}`,
+              body: `${milestone.label} is due ${targetDate} for ${address}. Review the transaction and take any needed action.`,
+              url: `/dashboard/transactions/new?edit=${txDoc.id}`,
+              data: {
+                transactionId: txDoc.id,
+                milestone: milestone.key,
+                deadlineDate: targetDate,
+                daysBefore: String(daysBefore),
+              },
+            });
+
+            await txDoc.ref.update({
+              [`milestoneRemindersSent.${reminderKey}`]: targetDate,
+              milestoneRemindersLastRunAt: new Date(),
+            });
+            results.milestoneReminders++;
+          } catch (e) {
+            console.error('milestone reminder error', { transactionId: txDoc.id, milestone: milestone.key, daysBefore, error: e });
+            results.errors++;
+          }
         }
       }
     }
