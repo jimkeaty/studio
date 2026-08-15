@@ -2750,6 +2750,95 @@ export default function AddTransactionPage() {
 
   // ── Submit handler ─────────────────────────────────────────────────────────
   const onSubmit = async (values: FormValues) => {
+    // Persist transaction-entered contacts only after the transaction itself
+    // saves successfully. This supports both initial creation and later edits,
+    // scopes contacts to the submitting/impersonated agent, and leaves a failed
+    // contact upsert non-fatal to the underlying transaction save.
+    const syncContactsToBook = async (token: string) => {
+      const saveContact = async (type: string, fields: Record<string, any>) => {
+        const hasData = Object.values(fields).some((v) => v && String(v).trim());
+        if (!hasData) return;
+        try {
+          const response = await fetch('/api/contacts', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type,
+              upsert: true,
+              ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}),
+              ...fields,
+            }),
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            console.warn('Contact Book upsert failed', { type, error: payload.error || response.status });
+          }
+        } catch (error) {
+          console.warn('Contact Book upsert failed', { type, error });
+        }
+      };
+
+      const contactSaves: Promise<void>[] = [
+        saveContact('lender', {
+          mortgageCompany: values.mortgageCompany,
+          loanOfficer: values.loanOfficer,
+          loanOfficerEmail: values.loanOfficerEmail,
+          loanOfficerPhone: values.loanOfficerPhone,
+          lenderOffice: values.lenderOffice,
+        }),
+        saveContact('title', {
+          titleCompany: values.titleCompany,
+          titleOfficer: values.titleOfficer,
+          titleOfficerEmail: values.titleOfficerEmail,
+          titleOfficerPhone: values.titleOfficerPhone,
+          titleAttorney: values.titleAttorney,
+          titleOffice: values.titleOffice,
+        }),
+        saveContact('other_agent', {
+          otherAgentName: values.otherAgentName,
+          otherAgentEmail: values.otherAgentEmail,
+          otherAgentPhone: values.otherAgentPhone,
+          otherBrokerage: values.otherBrokerage,
+        }),
+        saveContact('inspector', { name: values.inspectorName }),
+      ];
+
+      const clientFields = [
+        { name: values.clientName, email: values.clientEmail, phone: values.clientPhone },
+        { name: values.client2Name, email: values.client2Email, phone: values.client2Phone },
+        { name: values.buyerName, email: values.buyerEmail, phone: values.buyerPhone },
+        { name: values.buyer2Name, email: values.buyer2Email, phone: values.buyer2Phone },
+        { name: values.sellerName, email: values.sellerEmail, phone: values.sellerPhone },
+        { name: values.seller2Name, email: values.seller2Email, phone: values.seller2Phone },
+      ];
+      for (const contact of clientFields) {
+        if (contact.name || contact.email || contact.phone) contactSaves.push(saveContact('client', contact));
+      }
+
+      // Add every selected inspection vendor to this agent's Contact Book.
+      // A previously selected vendor is upserted, never duplicated.
+      for (const { key, label } of INSP_TYPES) {
+        const row = inspRows[key];
+        if (!row?.vendorId) continue;
+        const effectiveVendorId = row.vendorId === 'USE_GENERAL'
+          ? (inspRows.inspector_general?.vendorId || '')
+          : row.vendorId;
+        const vendors = row.vendorId === 'USE_GENERAL'
+          ? (inspVendors.inspector_general || [])
+          : (inspVendors[key] || []);
+        const vendor = vendors.find((item) => item.id === effectiveVendorId);
+        if (!vendor) continue;
+        contactSaves.push(saveContact('inspector', {
+          name: vendor.name || vendor.company,
+          companyName: vendor.company,
+          email: vendor.email,
+          phone: vendor.phone,
+          specialties: label,
+        }));
+      }
+
+      await Promise.allSettled(contactSaves);
+    };
     // Keep the visible Yes/No selector and the canonical routing field in lockstep.
     // Existing queue and notification routes depend on workingWithTc, while older
     // records may carry only tcWorking.
@@ -2926,6 +3015,7 @@ export default function AddTransactionPage() {
           toast({ title: 'Save failed', description: data.error || 'Could not save changes.', variant: 'destructive' });
           return;
         }
+        await syncContactsToBook(token);
         lastSaveSucceededRef.current = true;
         if (!hasOperationalEditAuthority && String(values.status || '').toLowerCase() === 'closed') {
           setPersistedEditStatus('closed');
@@ -2946,58 +3036,6 @@ export default function AddTransactionPage() {
     setSubmitting(true);
     try {
       const token = await user.getIdToken();
-
-      // ── Auto-save contacts to the Contacts Book ──────────────────────────
-      const saveContact = async (type: string, fields: Record<string, any>) => {
-        const hasData = Object.values(fields).some((v) => v && String(v).trim());
-        if (!hasData) return;
-        try {
-          await fetch('/api/contacts', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, upsert: true, ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}), ...fields }),
-          });
-        } catch { /* non-fatal */ }
-      };
-      // Save lender
-      await saveContact('lender', {
-        mortgageCompany: values.mortgageCompany,
-        loanOfficer: values.loanOfficer,
-        loanOfficerEmail: values.loanOfficerEmail,
-        loanOfficerPhone: values.loanOfficerPhone,
-        lenderOffice: values.lenderOffice,
-      });
-      // Save title company
-      await saveContact('title', {
-        titleCompany: values.titleCompany,
-        titleOfficer: values.titleOfficer,
-        titleOfficerEmail: values.titleOfficerEmail,
-        titleOfficerPhone: values.titleOfficerPhone,
-        titleAttorney: values.titleAttorney,
-        titleOffice: values.titleOffice,
-      });
-      // Save cooperating agent
-      await saveContact('other_agent', {
-        otherAgentName: values.otherAgentName,
-        otherAgentEmail: values.otherAgentEmail,
-        otherAgentPhone: values.otherAgentPhone,
-        otherBrokerage: values.otherBrokerage,
-      });
-      // Save inspector
-      await saveContact('inspector', { inspectorName: values.inspectorName });
-      // Save clients (buyer/seller/client)
-      const clientFields = [
-        { name: values.clientName, email: values.clientEmail, phone: values.clientPhone },
-        { name: values.client2Name, email: values.client2Email, phone: values.client2Phone },
-        { name: values.buyerName, email: values.buyerEmail, phone: values.buyerPhone },
-        { name: values.buyer2Name, email: values.buyer2Email, phone: values.buyer2Phone },
-        { name: values.sellerName, email: values.sellerEmail, phone: values.sellerPhone },
-        { name: values.seller2Name, email: values.seller2Email, phone: values.seller2Phone },
-      ];
-      for (const cf of clientFields) {
-        if (cf.name || cf.email) await saveContact('client', cf);
-      }
-      // ── End auto-save ─────────────────────────────────────────────────────
 
       // Ensure clientName is never blank — fall back to seller/buyer name so
       // the API never rejects a listing that has no top-level clientName field.
@@ -3074,6 +3112,7 @@ export default function AddTransactionPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Submission failed');
+      await syncContactsToBook(token);
       setResultId(data.id);
       // Clear draft on successful submit
       try { localStorage.removeItem(DRAFT_KEY); } catch {}

@@ -13,6 +13,7 @@ const commercialParserSource = readFileSync(resolve(root, 'src/app/api/agent/par
 const inspectionRequestSource = readFileSync(resolve(root, 'src/app/api/agent/inspection-request/route.ts'), 'utf8');
 const transactionSectionsSource = readFileSync(resolve(root, 'src/components/transactions/TransactionFormSections.tsx'), 'utf8');
 const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/transaction-reminders/route.ts'), 'utf8');
+const contactsRouteSource = readFileSync(resolve(root, 'src/app/api/contacts/route.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -224,4 +225,16 @@ test('milestone reminders notify assigned agents only at 3 and 1 days before wit
   assert.match(transactionReminderSource, /type: 'agent_task_reminder'/);
   const milestoneSection = transactionReminderSource.split('// ── 4. Agent Milestone Reminders')[1] || '';
   assert.doesNotMatch(milestoneSection, /staffUids|tcId|recipientUids: \[tx\.tcId\]/, 'Milestone reminders must not be broadcast to staff or TC');
+});
+
+test('transaction-entered contacts upsert after both creates and edits for the owning agent', () => {
+  assert.match(formSource, /const syncContactsToBook = async \(token: string\)/);
+  assert.match(formSource, /body: JSON\.stringify\(\{[\s\S]*type,[\s\S]*upsert: true,[\s\S]*viewAs: effectiveUid/);
+  assert.match(formSource, /await syncContactsToBook\(token\);[\s\S]*lastSaveSucceededRef\.current = true/);
+  assert.match(formSource, /if \(!res\.ok \|\| !data\.ok\) throw new Error\(data\.error \|\| 'Submission failed'\);[\s\S]*await syncContactsToBook\(token\);/);
+  assert.match(formSource, /if \(contact\.name \|\| contact\.email \|\| contact\.phone\)/);
+  assert.match(formSource, /Add every selected inspection vendor to this agent's Contact Book/);
+  assert.match(contactsRouteSource, /const effectiveCreatedBy = \(callerIsStaff && postViewAs\) \? postViewAs : uid/);
+  assert.match(contactsRouteSource, /where\('createdBy', '==', effectiveCreatedBy\)/);
+  assert.match(contactsRouteSource, /contact\.specialties = \(fields\.specialties \|\| fields\.specialty \|\| ''\)\.trim\(\)/);
 });

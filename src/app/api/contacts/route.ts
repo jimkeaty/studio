@@ -142,9 +142,11 @@ export async function POST(req: NextRequest) {
       contact.phone = (fields.phone || fields.otherAgentPhone || '').trim();
       contact.brokerage = (fields.brokerage || fields.otherBrokerage || '').trim();
     } else if (type === 'inspector') {
-      contact.name = (fields.name || fields.inspectorName || '').trim();
+      contact.companyName = (fields.companyName || fields.inspectorCompany || '').trim();
+      contact.name = (fields.name || fields.inspectorName || contact.companyName || '').trim();
       contact.email = (fields.email || '').trim().toLowerCase();
       contact.phone = (fields.phone || '').trim();
+      contact.specialties = (fields.specialties || fields.specialty || '').trim();
     }
 
     // Skip if no meaningful data
