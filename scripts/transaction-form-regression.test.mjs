@@ -137,8 +137,12 @@ test('commercial agreement extraction preserves the selected side and never turn
   assert.match(commercialParserSource, /Always return closingType: "" and clientType: ""/);
   assert.match(commercialParserSource, /Do NOT infer dual agency from the commission clause/);
   assert.match(commercialParserSource, /Do NOT create, infer, or populate an internal co-agent/);
-  assert.match(formSource, /const selectedSide = form\.getValues\('closingType'\)/);
+  assert.match(formSource, /const rawSelectedSide = form\.getValues\('closingType'\)/);
+  assert.match(formSource, /const selectedClientType = selectedSide === 'listing' \? 'seller' : selectedSide === 'dual' \? 'dual' : 'buyer'/);
+  assert.match(formSource, /form\.setValue\('closingType', selectedSide, \{ shouldDirty: true \}\)/);
+  assert.match(formSource, /form\.setValue\('clientType', selectedClientType, \{ shouldDirty: true \}\)/);
   assert.match(formSource, /const isListingSide = selectedSide === 'listing' \|\| selectedSide === 'dual'/);
+  assert.match(formSource, /setIfPresent\('otherAgentName', f\.listingAgentName\)/);
   assert.doesNotMatch(formSource, /if \(f\.closingType && \['buyer', 'listing', 'dual'\]\.includes\(f\.closingType as string\)\)[\s\S]{0,160}form\.setValue\('closingType'/);
 });
 

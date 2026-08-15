@@ -1005,7 +1005,16 @@ export default function AddTransactionPage() {
       setIfPresent('seller2Name', f.seller2Name);
       // The header names agents on opposite sides of the deal. Keep the
       // representation side selected by the user; never infer dual agency.
-      const selectedSide = form.getValues('closingType');
+      // Reassert both fields after extraction because a stale clientType from
+      // an earlier form state would otherwise make a buyer commercial file
+      // render seller/listing sections even when closingType remains buyer.
+      const rawSelectedSide = form.getValues('closingType');
+      const selectedSide = rawSelectedSide === 'listing' || rawSelectedSide === 'dual' || rawSelectedSide === 'buyer'
+        ? rawSelectedSide
+        : 'buyer';
+      const selectedClientType = selectedSide === 'listing' ? 'seller' : selectedSide === 'dual' ? 'dual' : 'buyer';
+      form.setValue('closingType', selectedSide, { shouldDirty: true });
+      form.setValue('clientType', selectedClientType, { shouldDirty: true });
       const isListingSide = selectedSide === 'listing' || selectedSide === 'dual';
       if (isListingSide) {
         setIfPresent('otherAgentName', f.buyerAgentName);
@@ -1018,9 +1027,6 @@ export default function AddTransactionPage() {
       }
       // Always set dealType to commercial_sale
       form.setValue('dealType', 'commercial_sale' as any);
-      if (!form.getValues('clientType')) {
-        form.setValue('clientType', selectedSide === 'listing' ? 'seller' : selectedSide === 'dual' ? 'dual' : 'buyer');
-      }
       setIfPresent('appraisalConditioned', f.appraisalConditioned);
       setIfPresent('appraisalPeriodDays', f.appraisalPeriodDays);
       setIfPresent('depositDueDays', f.depositDueDays);
