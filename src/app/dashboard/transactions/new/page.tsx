@@ -41,6 +41,18 @@ import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions
 // ─────────────────────────────────────────────────────────────────────────────
 const SOURCES = CANONICAL_SOURCES;
 
+/** Commercial agreement periods are calendar days beginning the day after the effective date. */
+function calculateCommercialCalendarDeadline(effectiveDate: unknown, periodDays: unknown): string {
+  if (typeof effectiveDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) return '';
+  const days = Number(periodDays);
+  if (!Number.isFinite(days) || days < 0 || !Number.isInteger(days)) return '';
+  const [year, month, day] = effectiveDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return '';
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 const INSPECTION_TYPE_OPTIONS = [
   'General Home Inspection',
   'Roof Inspection',
@@ -375,12 +387,15 @@ const schema = z.object({
   appraisalDeadline: z.string().optional().or(z.literal('')),
   titleDeadline: z.string().optional().or(z.literal('')),
   finalLoanCommitmentDeadline: z.string().optional().or(z.literal('')),
+  depositDeadline: z.string().optional().or(z.literal('')),
   // Preserve printed commercial agreement periods even when the agreement does
   // not provide a signed effective date for calculating calendar deadlines.
   appraisalConditioned: z.boolean().optional(),
   appraisalPeriodDays: z.coerce.number().min(0).optional().or(z.literal('')),
   depositDueDays: z.coerce.number().min(0).optional().or(z.literal('')),
   financingCommitmentDays: z.coerce.number().min(0).optional().or(z.literal('')),
+  dueDiligenceDays: z.coerce.number().min(0).optional().or(z.literal('')),
+  titleCurativeDays: z.coerce.number().min(0).optional().or(z.literal('')),
   closingDays: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // Client contact info (legacy)
@@ -982,15 +997,26 @@ export default function AddTransactionPage() {
       const setIfPresent = (key: string, val: unknown) => {
         if (val !== null && val !== undefined && val !== '') form.setValue(key as any, val as any);
       };
+      // Use a parser date when supplied; otherwise calculate only from a valid
+      // effective date and an explicitly printed calendar-day period. Title
+      // curative time is intentionally not calculated because it starts after
+      // notice of title defects, not on the contract date.
+      const effectiveDate = typeof f.contractDate === 'string' ? f.contractDate : '';
+      const inspectionDeadline = f.inspectionDeadline || calculateCommercialCalendarDeadline(effectiveDate, f.dueDiligenceDays);
+      const appraisalDeadline = f.appraisalDeadline || (f.appraisalConditioned ? calculateCommercialCalendarDeadline(effectiveDate, f.appraisalPeriodDays) : '');
+      const financingDeadline = f.financingCommitmentDeadline || calculateCommercialCalendarDeadline(effectiveDate, f.financingCommitmentDays);
+      const depositDeadline = calculateCommercialCalendarDeadline(effectiveDate, f.depositDueDays);
+      const projectedCloseDate = f.projectedCloseDate || calculateCommercialCalendarDeadline(inspectionDeadline, f.closingDays);
       // Core fields
       setIfPresent('address', f.address);
       setIfPresent('salePrice', f.salePrice);
       setIfPresent('contractDate', f.contractDate);
-      setIfPresent('projectedCloseDate', f.projectedCloseDate);
-      setIfPresent('inspectionDeadline', f.inspectionDeadline);
-      setIfPresent('appraisalDeadline', f.appraisalDeadline);
+      setIfPresent('projectedCloseDate', projectedCloseDate);
+      setIfPresent('inspectionDeadline', inspectionDeadline);
+      setIfPresent('appraisalDeadline', appraisalDeadline);
       setIfPresent('earnestMoney', f.earnestMoney);
-      setIfPresent('finalLoanCommitmentDeadline', f.financingCommitmentDeadline);
+      setIfPresent('finalLoanCommitmentDeadline', financingDeadline);
+      setIfPresent('depositDeadline', depositDeadline);
       // Deposit holder
       if (f.depositHeldBy) {
         const dh = String(f.depositHeldBy).toLowerCase().replace(/\s+/g, '_');
@@ -1031,6 +1057,8 @@ export default function AddTransactionPage() {
       setIfPresent('appraisalPeriodDays', f.appraisalPeriodDays);
       setIfPresent('depositDueDays', f.depositDueDays);
       setIfPresent('financingCommitmentDays', f.financingCommitmentDays);
+      setIfPresent('dueDiligenceDays', f.dueDiligenceDays);
+      setIfPresent('titleCurativeDays', f.titleCurativeDays);
       setIfPresent('closingDays', f.closingDays);
       // clientName fallback
       if (!form.getValues('clientName')) {
@@ -1046,7 +1074,7 @@ export default function AddTransactionPage() {
       if (f.loanType) extraNotes.push(`Loan Type: ${f.loanType}`);
       if (f.loanAmount) extraNotes.push(`Loan Amount: $${Number(f.loanAmount).toLocaleString()}`);
       if (f.downPaymentAmount) extraNotes.push(`Down Payment: $${Number(f.downPaymentAmount).toLocaleString()}`);
-      if (f.financingCommitmentDays && !f.financingCommitmentDeadline) extraNotes.push(`Final Loan Commitment: ${f.financingCommitmentDays} days after Effective Date (calendar date requires the effective date)`);
+      if (f.financingCommitmentDays && !financingDeadline) extraNotes.push(`Final Loan Commitment: ${f.financingCommitmentDays} days after Effective Date (calendar date requires the effective date)`);
       if (f.titleCurativeDays) extraNotes.push(`Title Curative Period: ${f.titleCurativeDays} days`);
       if (f.serviceContractDisclosureDays) extraNotes.push(`Service Contract Disclosure: ${f.serviceContractDisclosureDays} days`);
       if (f.depositDueDays) extraNotes.push(`Deposit Due: ${f.depositDueDays} days after Effective Date`);
@@ -1361,6 +1389,8 @@ export default function AddTransactionPage() {
       appraisalPeriodDays: '',
       depositDueDays: '',
       financingCommitmentDays: '',
+      dueDiligenceDays: '',
+      titleCurativeDays: '',
       closingDays: '',
       inspectionTypes: [],
       sellerPayingListingAgentUnknown: false,
@@ -2173,10 +2203,13 @@ export default function AddTransactionPage() {
           titleDeadline: tx.titleDeadline || '',
           loanApplicationDeadline: tx.loanApplicationDeadline || '',
           finalLoanCommitmentDeadline: tx.finalLoanCommitmentDeadline || tx.finalLoanCommitment || '',
+          depositDeadline: tx.depositDeadline || '',
           appraisalConditioned: Boolean(tx.appraisalConditioned),
           appraisalPeriodDays: tx.appraisalPeriodDays || '',
           depositDueDays: tx.depositDueDays || '',
           financingCommitmentDays: tx.financingCommitmentDays || '',
+          dueDiligenceDays: tx.dueDiligenceDays || '',
+          titleCurativeDays: tx.titleCurativeDays || '',
           closingDays: tx.closingDays || '',
           finalLoanCommitment: tx.finalLoanCommitment || '',
           projectedCloseDate: tx.projectedCloseDate || '',
@@ -4415,6 +4448,9 @@ export default function AddTransactionPage() {
                   <FormField control={form.control} name="surveyDeadline" render={({ field }) => (
                     <FormItem><FormLabel>Survey Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
                   )} />
+                  <FormField control={form.control} name="depositDeadline" render={({ field }) => (
+                    <FormItem><FormLabel>Deposit Deadline</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                  )} />
                 </Grid3>
                 <Grid3>
                   <FormField control={form.control} name="projectedCloseDate" render={({ field }) => (
@@ -4469,6 +4505,12 @@ export default function AddTransactionPage() {
                         )} />
                       </Grid3>
                       <Grid3>
+                        <FormField control={form.control} name="dueDiligenceDays" render={({ field }) => (
+                          <FormItem><FormLabel>Due Diligence / Inspection (days)</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                        )} />
+                        <FormField control={form.control} name="titleCurativeDays" render={({ field }) => (
+                          <FormItem><FormLabel>Title Curative Period (days)</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl><FormDescription>Starts after notice of title defects.</FormDescription></FormItem>
+                        )} />
                         <FormField control={form.control} name="closingDays" render={({ field }) => (
                           <FormItem><FormLabel>Close After Due Diligence (days)</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
                         )} />

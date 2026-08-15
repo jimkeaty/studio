@@ -53,7 +53,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'optionExpiration', 'inspectionDeadline', 'projectedCloseDate',
   'appraisalDeadline', 'surveyDeadline', 'titleDeadline',
   'finalLoanCommitmentDeadline', 'loanApplicationDeadline',
-  'appraisalConditioned', 'appraisalPeriodDays', 'depositDueDays', 'financingCommitmentDays', 'closingDays',
+  'appraisalConditioned', 'appraisalPeriodDays', 'depositDueDays', 'depositDeadline', 'financingCommitmentDays', 'dueDiligenceDays', 'titleCurativeDays', 'closingDays',
   // Financial
   'earnestMoney', 'depositHolder', 'depositHolderOther',
   'buyerClosingCostTotal', 'buyerBringToClosing',

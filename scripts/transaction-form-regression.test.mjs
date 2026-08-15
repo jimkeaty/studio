@@ -147,7 +147,7 @@ test('commercial agreement extraction preserves the selected side and never turn
 });
 
 test('commercial agreements capture printed appraisal, deposit, financing, and closing periods and persist them on new and edited files', () => {
-  for (const term of ['appraisalConditioned', 'appraisalPeriodDays', 'depositDueDays', 'financingCommitmentDays', 'closingDays']) {
+  for (const term of ['appraisalConditioned', 'appraisalPeriodDays', 'depositDueDays', 'financingCommitmentDays', 'dueDiligenceDays', 'titleCurativeDays', 'closingDays']) {
     assert.match(commercialParserSource, new RegExp(`"${term}"`));
     assert.match(formSource, new RegExp(`${term}:`));
     assert.match(adminRouteSource, new RegExp(`'${term}'`));
@@ -157,6 +157,21 @@ test('commercial agreements capture printed appraisal, deposit, financing, and c
   assert.match(formSource, /Commercial Agreement Terms/);
   assert.match(formSource, /Sale is conditioned on appraisal/);
   assert.match(formSource, /Final Loan Commitment \(days\)/);
+});
+
+test('commercial agreements calculate only unambiguous effective-date deadlines and preserve an editable deposit deadline', () => {
+  assert.match(formSource, /function calculateCommercialCalendarDeadline\(effectiveDate: unknown, periodDays: unknown\): string/);
+  assert.match(formSource, /const inspectionDeadline = f\.inspectionDeadline \|\| calculateCommercialCalendarDeadline\(effectiveDate, f\.dueDiligenceDays\)/);
+  assert.match(formSource, /const appraisalDeadline = f\.appraisalDeadline \|\| \(f\.appraisalConditioned \? calculateCommercialCalendarDeadline\(effectiveDate, f\.appraisalPeriodDays\) : ''\)/);
+  assert.match(formSource, /const financingDeadline = f\.financingCommitmentDeadline \|\| calculateCommercialCalendarDeadline\(effectiveDate, f\.financingCommitmentDays\)/);
+  assert.match(formSource, /const depositDeadline = calculateCommercialCalendarDeadline\(effectiveDate, f\.depositDueDays\)/);
+  assert.match(formSource, /const projectedCloseDate = f\.projectedCloseDate \|\| calculateCommercialCalendarDeadline\(inspectionDeadline, f\.closingDays\)/);
+  assert.match(formSource, /name="depositDeadline"/);
+  assert.match(adminRouteSource, /'depositDeadline'/);
+  assert.match(agentRouteSource, /'depositDeadline'/);
+  assert.match(createTransactionSource, /depositDeadline: toStr\(body\.depositDeadline\)/);
+  assert.doesNotMatch(formSource, /calculateCommercialCalendarDeadline\(effectiveDate, f\.titleCurativeDays\)/,
+    'Title curative time begins after a future defect notice and must not become a guessed title deadline');
 });
 
 test('new files use only the initial transaction choice while edit-side corrections stay in the open form', () => {

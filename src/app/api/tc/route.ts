@@ -165,7 +165,10 @@ export async function POST(req: NextRequest) {
       appraisalConditioned: Boolean(body.appraisalConditioned),
       appraisalPeriodDays: toNum(body.appraisalPeriodDays),
       depositDueDays: toNum(body.depositDueDays),
+      depositDeadline: toStr(body.depositDeadline),
       financingCommitmentDays: toNum(body.financingCommitmentDays),
+      dueDiligenceDays: toNum(body.dueDiligenceDays),
+      titleCurativeDays: toNum(body.titleCurativeDays),
       closingDays: toNum(body.closingDays),
 
       // Client contacts
