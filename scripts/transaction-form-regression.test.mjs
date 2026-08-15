@@ -9,6 +9,7 @@ const agentRouteSource = readFileSync(resolve(root, 'src/app/api/agent/transacti
 const adminRouteSource = readFileSync(resolve(root, 'src/app/api/admin/transactions/route.ts'), 'utf8');
 const brokerFeeSettingsSource = readFileSync(resolve(root, 'src/app/api/admin/transaction-fee-settings/route.ts'), 'utf8');
 const createTransactionSource = readFileSync(resolve(root, 'src/app/api/tc/route.ts'), 'utf8');
+const commercialParserSource = readFileSync(resolve(root, 'src/app/api/agent/parse-commercial-agreement/route.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -130,4 +131,33 @@ test('referrals keep address optional while persisting optional contacts, key da
   assert.match(agentRouteSource, /'outboundReferralFeePercent', 'outboundReferralFeeDollar'/);
   assert.match(agentRouteSource, /'outboundReferralEmail', 'outboundReferralPhone'/);
   assert.match(adminRouteSource, /'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar'/);
+});
+
+test('commercial agreement extraction preserves the selected side and never turns opposing contract agents into dual agency or internal co-agents', () => {
+  assert.match(commercialParserSource, /Always return closingType: "" and clientType: ""/);
+  assert.match(commercialParserSource, /Do NOT infer dual agency from the commission clause/);
+  assert.match(commercialParserSource, /Do NOT create, infer, or populate an internal co-agent/);
+  assert.match(formSource, /const selectedSide = form\.getValues\('closingType'\)/);
+  assert.match(formSource, /const isListingSide = selectedSide === 'listing' \|\| selectedSide === 'dual'/);
+  assert.doesNotMatch(formSource, /if \(f\.closingType && \['buyer', 'listing', 'dual'\]\.includes\(f\.closingType as string\)\)[\s\S]{0,160}form\.setValue\('closingType'/);
+});
+
+test('commercial agreements capture printed appraisal, deposit, financing, and closing periods and persist them on new and edited files', () => {
+  for (const term of ['appraisalConditioned', 'appraisalPeriodDays', 'depositDueDays', 'financingCommitmentDays', 'closingDays']) {
+    assert.match(commercialParserSource, new RegExp(`"${term}"`));
+    assert.match(formSource, new RegExp(`${term}:`));
+    assert.match(adminRouteSource, new RegExp(`'${term}'`));
+    assert.match(agentRouteSource, new RegExp(`'${term}'`));
+    assert.match(createTransactionSource, new RegExp(`${term}:`));
+  }
+  assert.match(formSource, /Commercial Agreement Terms/);
+  assert.match(formSource, /Sale is conditioned on appraisal/);
+  assert.match(formSource, /Final Loan Commitment \(days\)/);
+});
+
+test('new files use only the initial transaction choice while edit-side corrections stay in the open form', () => {
+  assert.match(formSource, /const applyRepresentationSide = \(side: TransactionSide\) => \{/);
+  assert.match(formSource, /form\.setValue\('clientType', side === 'listing' \? 'seller' : side === 'dual' \? 'dual' : side === 'buyer' \? 'buyer' : ''\)/);
+  assert.match(formSource, /\{editMode && \([\s\S]*Representation Side/);
+  assert.doesNotMatch(formSource, /onClick=\{\(\) => setPdfStep\('type'\)\}/);
 });

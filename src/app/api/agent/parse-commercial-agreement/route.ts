@@ -113,7 +113,11 @@ Return this exact JSON shape:
     "closingDays": 0.0,
     "additionalTerms": 0.0,
     "commissionNotes": 0.0,
-    "financingCommitmentDeadline": 0.0
+    "financingCommitmentDeadline": 0.0,
+    "financingCommitmentDays": 0.0,
+    "appraisalPeriodDays": 0.0,
+    "depositDueDays": 0.0,
+    "closingDays": 0.0
   }
 }
 
@@ -130,17 +134,20 @@ PAGE 1 — AGENT HEADER BLOCK:
 - Line 15: SALE PRICE: $ blank → salePrice (number only, no $ or commas)
 - Lines 17–24: TERMS OF SALE
   - Line 18 checkbox "All cash at closing" → if checked: loanType: "cash", loanAmount: null, downPaymentAmount: null
-  - Lines 19–23 "New financing with $__ down payment with the balance of $__ upon terms and conditions acceptable to the Buyer" → downPaymentAmount, loanAmount (numbers only)
-  - Line 22: "within ___ calendar days after the Effective Date" → financingCommitmentDays: [the number]
+- Lines 19–23 "New financing with $__ down payment with the balance of $__ upon terms and conditions acceptable to the Buyer" → downPaymentAmount, loanAmount (numbers only)
+- Line 22: "within ___ calendar days after the Effective Date" → financingCommitmentDays: [the number]
+- When a number is visibly entered on Line 22, extract it even if the contract date is unavailable. It is the final written loan commitment period, not a loan-application period.
   - If neither checkbox is clearly checked, leave loanType: "" and set confidence to 0.0
 - Lines 26–38: APPRAISAL
   - Line 26 "This sale is NOT conditioned upon appraisal" checkbox → if checked: appraisalConditioned: false
-  - Lines 27–28 "This sale IS conditioned on appraisal. Buyer shall have ___ calendar days commencing on the day after the Effective Date" → appraisalConditioned: true, appraisalPeriodDays: [the number]
+- Lines 27–28 "This sale IS conditioned on appraisal. Buyer shall have ___ calendar days commencing on the day after the Effective Date" → appraisalConditioned: true, appraisalPeriodDays: [the number]
+- If the "sale is conditioned on appraisal" checkbox is visibly checked, set appraisalConditioned to true and extract the printed period. Do not return false merely because the final calendar date cannot be calculated.
   - If neither is clearly checked, leave appraisalConditioned: false and appraisalPeriodDays: null
 - Lines 40–44: DEPOSIT
   - Line 41: "Buyer agrees to deposit the sum of $___" → earnestMoney (number only)
-  - Line 41: "within ___ calendar days" → depositDueDays: [the number]
-  - Line 41: "with ___" → depositHeldBy: the name/party written in the blank
+- Line 41: "within ___ calendar days" → depositDueDays: [the number]
+- Line 41: "with ___" → depositHeldBy: the name/party written in the blank
+- When the printed deposit period is visible, always extract it even if the effective date is unavailable.
 
 PAGE 2 — CONTRACT BODY:
 - Lines 55–69: DUE DILIGENCE — "Buyer shall have ___ calendar days commencing on the day after the Effective Date" → dueDiligenceDays: [the number]
@@ -154,6 +161,7 @@ PAGE 3 — CONTRACT BODY (continued):
   - If blank or unclear → mineralRights: ""
 - Lines 106–113: TITLE — "Buyer's title examination shall disclose defects in the title, Seller shall have ___ (___ ) calendar days from receipt of notice" → titleCurativeDays: [the number]
 - Lines 115–120: CLOSING DATE AND COSTS — "The sale shall take place before Buyer's closing agent within ___ calendar days after expiration of the Due Diligence Period" → closingDays: [the number]
+- Extract the printed closing period even if a projected calendar date cannot be calculated.
 - Lines 122–125: COMMISSION — "no real estate agent or broker is entitled to any fees or commissions...except ___ and ___, which commissions shall be paid by ___ at Closing" → commissionNotes: copy the filled-in text verbatim (broker/agent names and payment terms)
 - Lines 127–142: NOTICES — Seller and Buyer contact blocks
   - Seller Fax → sellerFax
@@ -220,14 +228,13 @@ These are the ONLY calculations you are permitted to perform. All other fields m
    - Return in YYYY-MM-DD format.
    - If loanType = "cash" OR financingCommitmentDays is blank, return financingCommitmentDeadline: "" with confidence 0.0.
 
-=== CLOSING TYPE AND CLIENT TYPE RULES ===
+=== REPRESENTATION-SIDE AND CO-AGENT RULES ===
 
-- closingType: Infer from which side our agent (the submitting agent) is on.
-  - If our agent is in the "Listing Firm / Seller's Agent" header row → closingType: "listing"
-  - If our agent is in the "Selling Firm / Buyer's Agent" header row → closingType: "buyer"
-  - If the same agent appears in both rows → closingType: "dual"
-  - If you cannot determine which side → closingType: "" (leave blank)
-- clientType: "seller" if closingType = "listing", "buyer" if closingType = "buyer", "dual" if closingType = "dual", "" if unknown.
+- The two header rows identify OPPOSING sides of one deal: Listing Firm / Seller's Agent versus Selling Firm / Buyer's Agent. They are never co-agents solely because both are named in the agreement.
+- Do NOT infer which side the submitting Keaty user represents. The application already knows the representation side selected by the user before upload.
+- Always return closingType: "" and clientType: "". The application—not the document model—will retain the user’s chosen buyer, listing, or dual side.
+- Do NOT infer dual agency from the commission clause, from a designated-agent date, or from two different firms being named. The agreement must explicitly show the SAME named agent representing both sides before dual agency can be considered, and the application will require a human selection before assigning it.
+- Do NOT create, infer, or populate an internal co-agent from the listing-agent or buyer-agent header fields. A co-agent is a separate internal shared-representation relationship, not the agent on the opposite side of the contract.
 - dealType: ALWAYS "commercial_sale" for this document type. Never change this.
 
 === MINERAL RIGHTS RULES ===

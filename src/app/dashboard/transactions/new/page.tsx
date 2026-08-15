@@ -375,6 +375,13 @@ const schema = z.object({
   appraisalDeadline: z.string().optional().or(z.literal('')),
   titleDeadline: z.string().optional().or(z.literal('')),
   finalLoanCommitmentDeadline: z.string().optional().or(z.literal('')),
+  // Preserve printed commercial agreement periods even when the agreement does
+  // not provide a signed effective date for calculating calendar deadlines.
+  appraisalConditioned: z.boolean().optional(),
+  appraisalPeriodDays: z.coerce.number().min(0).optional().or(z.literal('')),
+  depositDueDays: z.coerce.number().min(0).optional().or(z.literal('')),
+  financingCommitmentDays: z.coerce.number().min(0).optional().or(z.literal('')),
+  closingDays: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // Client contact info (legacy)
   clientEmail: z.string().email().optional().or(z.literal('')),
@@ -983,6 +990,7 @@ export default function AddTransactionPage() {
       setIfPresent('inspectionDeadline', f.inspectionDeadline);
       setIfPresent('appraisalDeadline', f.appraisalDeadline);
       setIfPresent('earnestMoney', f.earnestMoney);
+      setIfPresent('finalLoanCommitmentDeadline', f.financingCommitmentDeadline);
       // Deposit holder
       if (f.depositHeldBy) {
         const dh = String(f.depositHeldBy).toLowerCase().replace(/\s+/g, '_');
@@ -995,8 +1003,10 @@ export default function AddTransactionPage() {
       setIfPresent('buyer2Name', f.buyer2Name);
       setIfPresent('sellerName', f.sellerName);
       setIfPresent('seller2Name', f.seller2Name);
-      // Agent info — map based on closing type
-      const isListingSide = f.closingType === 'listing' || f.closingType === 'dual';
+      // The header names agents on opposite sides of the deal. Keep the
+      // representation side selected by the user; never infer dual agency.
+      const selectedSide = form.getValues('closingType');
+      const isListingSide = selectedSide === 'listing' || selectedSide === 'dual';
       if (isListingSide) {
         setIfPresent('otherAgentName', f.buyerAgentName);
         setIfPresent('otherAgentPhone', f.buyerAgentPhone);
@@ -1006,18 +1016,19 @@ export default function AddTransactionPage() {
         setIfPresent('otherAgentPhone', f.listingAgentPhone);
         setIfPresent('otherBrokerage', f.listingBrokerage);
       }
-      // closingType / dealType / clientType
-      if (f.closingType && ['buyer', 'listing', 'dual'].includes(f.closingType as string)) {
-        form.setValue('closingType', f.closingType as any);
-      }
       // Always set dealType to commercial_sale
       form.setValue('dealType', 'commercial_sale' as any);
-      if (f.clientType && ['buyer', 'seller', 'dual'].includes(f.clientType as string)) {
-        form.setValue('clientType', f.clientType as any);
+      if (!form.getValues('clientType')) {
+        form.setValue('clientType', selectedSide === 'listing' ? 'seller' : selectedSide === 'dual' ? 'dual' : 'buyer');
       }
+      setIfPresent('appraisalConditioned', f.appraisalConditioned);
+      setIfPresent('appraisalPeriodDays', f.appraisalPeriodDays);
+      setIfPresent('depositDueDays', f.depositDueDays);
+      setIfPresent('financingCommitmentDays', f.financingCommitmentDays);
+      setIfPresent('closingDays', f.closingDays);
       // clientName fallback
       if (!form.getValues('clientName')) {
-        const cn = (f.closingType === 'listing' ? f.sellerName : f.buyerName) || f.buyerName || f.sellerName || '';
+        const cn = (selectedSide === 'listing' ? f.sellerName : f.buyerName) || f.buyerName || f.sellerName || '';
         if (cn) form.setValue('clientName', cn as string);
       }
       // Extra notes — commercial-specific fields
@@ -1029,9 +1040,7 @@ export default function AddTransactionPage() {
       if (f.loanType) extraNotes.push(`Loan Type: ${f.loanType}`);
       if (f.loanAmount) extraNotes.push(`Loan Amount: $${Number(f.loanAmount).toLocaleString()}`);
       if (f.downPaymentAmount) extraNotes.push(`Down Payment: $${Number(f.downPaymentAmount).toLocaleString()}`);
-      // financingCommitmentDeadline → finalLoanCommitmentDeadline form field
-      setIfPresent('finalLoanCommitmentDeadline', f.financingCommitmentDeadline);
-      if (f.financingCommitmentDays && !f.financingCommitmentDeadline) extraNotes.push(`Financing Commitment Period: ${f.financingCommitmentDays} days after Effective Date (deadline not calculated — contract date missing)`);
+      if (f.financingCommitmentDays && !f.financingCommitmentDeadline) extraNotes.push(`Final Loan Commitment: ${f.financingCommitmentDays} days after Effective Date (calendar date requires the effective date)`);
       if (f.titleCurativeDays) extraNotes.push(`Title Curative Period: ${f.titleCurativeDays} days`);
       if (f.serviceContractDisclosureDays) extraNotes.push(`Service Contract Disclosure: ${f.serviceContractDisclosureDays} days`);
       if (f.depositDueDays) extraNotes.push(`Deposit Due: ${f.depositDueDays} days after Effective Date`);
@@ -1342,6 +1351,11 @@ export default function AddTransactionPage() {
       clientName: '',
       dealSource: '',
       contractDate: '',
+      appraisalConditioned: false,
+      appraisalPeriodDays: '',
+      depositDueDays: '',
+      financingCommitmentDays: '',
+      closingDays: '',
       inspectionTypes: [],
       sellerPayingListingAgentUnknown: false,
       tcWorking: 'yes',
@@ -2152,6 +2166,12 @@ export default function AddTransactionPage() {
           appraisalDeadline: tx.appraisalDeadline || '',
           titleDeadline: tx.titleDeadline || '',
           loanApplicationDeadline: tx.loanApplicationDeadline || '',
+          finalLoanCommitmentDeadline: tx.finalLoanCommitmentDeadline || tx.finalLoanCommitment || '',
+          appraisalConditioned: Boolean(tx.appraisalConditioned),
+          appraisalPeriodDays: tx.appraisalPeriodDays || '',
+          depositDueDays: tx.depositDueDays || '',
+          financingCommitmentDays: tx.financingCommitmentDays || '',
+          closingDays: tx.closingDays || '',
           finalLoanCommitment: tx.finalLoanCommitment || '',
           projectedCloseDate: tx.projectedCloseDate || '',
           closedDate: resolvedClosedDate,
@@ -3018,13 +3038,18 @@ export default function AddTransactionPage() {
     form.setValue(field, value as any, { shouldDirty: true, shouldValidate: true });
   };
 
-  const chooseTransactionType = (side: TransactionSide) => {
+  const applyRepresentationSide = (side: TransactionSide) => {
     form.setValue('closingType', side);
+    form.setValue('clientType', side === 'listing' ? 'seller' : side === 'dual' ? 'dual' : side === 'buyer' ? 'buyer' : '');
     // This is a deliberate human selection. It is allowed to persist on the
     // next normal save; simply loading an inferred legacy side is not.
     legacySideResolutionRef.current = { preventsAutomaticPersistence: false };
     setLegacySideNeedsReview(false);
     if (!editMode && side === 'listing') form.setValue('status', 'active');
+  };
+
+  const chooseTransactionType = (side: TransactionSide) => {
+    applyRepresentationSide(side);
     setPdfStep(editMode || side === 'referral' ? 'form' : 'upload');
   };
 
@@ -3653,32 +3678,23 @@ export default function AddTransactionPage() {
             )}
 
             <Grid2>
-              {/* Transaction type — read-only badge (set on type selection screen); change button goes back */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Transaction Type</label>
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${
-                    watchedClosingType === 'buyer' ? 'bg-blue-100 text-blue-800' :
-                    watchedClosingType === 'listing' ? 'bg-green-100 text-green-800' :
-                    watchedClosingType === 'dual' ? 'bg-purple-100 text-purple-800' :
-                    'bg-amber-100 text-amber-800'
-                  }`}>
-                    {watchedClosingType === 'buyer' ? '🏠 Buyer Transaction' :
-                     watchedClosingType === 'listing' ? '📋 New Listing' :
-                     watchedClosingType === 'dual' ? '🤝 Dual Agency' :
-                     '➡️ Outbound Referral'}
-                  </span>
-                  {!typeParam && (
-                    <button
-                      type="button"
-                      onClick={() => setPdfStep('type')}
-                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                    >
-                      Change
-                    </button>
-                  )}
+              {/* The initial selection is authoritative for a new transaction,
+                  so do not ask again. Existing files retain an in-form
+                  correction control without returning to the add-flow start. */}
+              {editMode && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium">Representation Side</label>
+                  <Select value={watchedClosingType} onValueChange={(value) => applyRepresentationSide(value as TransactionSide)}>
+                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="buyer">Buyer — you represent the buyer</SelectItem>
+                      <SelectItem value="listing">Listing — you represent the seller</SelectItem>
+                      <SelectItem value="dual">Dual — you represent both sides</SelectItem>
+                      <SelectItem value="referral">Outbound referral</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
+              )}
 
               <FormField control={form.control} name="dealType" render={({ field }) => (
                 <FormItem>
@@ -4422,6 +4438,38 @@ export default function AddTransactionPage() {
                     </FormItem>
                   )} />
                 </Grid3>
+                {(form.watch('dealType') === 'commercial_sale' || form.watch('dealType') === 'commercial_lease') && (
+                  <Card className="border-slate-200 bg-slate-50/60">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Commercial Agreement Terms</CardTitle>
+                      <CardDescription>These printed periods remain visible even when the agreement does not provide an effective date for calculating a calendar deadline.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField control={form.control} name="appraisalConditioned" render={({ field }) => (
+                        <FormItem className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+                          <div><FormLabel>Sale is conditioned on appraisal</FormLabel><FormDescription>Commercial agreement appraisal contingency.</FormDescription></div>
+                          <FormControl><Switch checked={Boolean(field.value)} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )} />
+                      <Grid3>
+                        <FormField control={form.control} name="appraisalPeriodDays" render={({ field }) => (
+                          <FormItem><FormLabel>Appraisal Period (days)</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                        )} />
+                        <FormField control={form.control} name="depositDueDays" render={({ field }) => (
+                          <FormItem><FormLabel>Deposit Due (days)</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                        )} />
+                        <FormField control={form.control} name="financingCommitmentDays" render={({ field }) => (
+                          <FormItem><FormLabel>Final Loan Commitment (days)</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                        )} />
+                      </Grid3>
+                      <Grid3>
+                        <FormField control={form.control} name="closingDays" render={({ field }) => (
+                          <FormItem><FormLabel>Close After Due Diligence (days)</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                        )} />
+                      </Grid3>
+                    </CardContent>
+                  </Card>
+                )}
               </>
             )}
             {/* For listing-only: show close date only when NOT active (pending/closed) */}

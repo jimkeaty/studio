@@ -309,6 +309,7 @@ const UPDATABLE_FIELDS = new Set([
   'mlsDescription', 'listingExpirationDate',
   // Additional deadline fields
   'appraisalDeadline', 'titleDeadline', 'loanApplicationDeadline', 'finalLoanCommitmentDeadline',
+  'appraisalConditioned', 'appraisalPeriodDays', 'depositDueDays', 'financingCommitmentDays', 'closingDays',
   // Inbound referral
   'hasInboundReferral', 'inboundReferralAgentName', 'inboundReferralFeePercent', 'inboundReferralFeeDollar',
   // MLS number

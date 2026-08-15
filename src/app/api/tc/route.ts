@@ -162,6 +162,11 @@ export async function POST(req: NextRequest) {
       titleDeadline: toStr(body.titleDeadline) || null,
       loanApplicationDeadline: toStr(body.loanApplicationDeadline) || null,
       finalLoanCommitmentDeadline: toStr(body.finalLoanCommitmentDeadline) || null,
+      appraisalConditioned: Boolean(body.appraisalConditioned),
+      appraisalPeriodDays: toNum(body.appraisalPeriodDays),
+      depositDueDays: toNum(body.depositDueDays),
+      financingCommitmentDays: toNum(body.financingCommitmentDays),
+      closingDays: toNum(body.closingDays),
 
       // Client contacts
       clientType: toStr(body.clientType) || null,
