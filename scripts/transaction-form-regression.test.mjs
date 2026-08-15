@@ -10,6 +10,8 @@ const adminRouteSource = readFileSync(resolve(root, 'src/app/api/admin/transacti
 const brokerFeeSettingsSource = readFileSync(resolve(root, 'src/app/api/admin/transaction-fee-settings/route.ts'), 'utf8');
 const createTransactionSource = readFileSync(resolve(root, 'src/app/api/tc/route.ts'), 'utf8');
 const commercialParserSource = readFileSync(resolve(root, 'src/app/api/agent/parse-commercial-agreement/route.ts'), 'utf8');
+const inspectionRequestSource = readFileSync(resolve(root, 'src/app/api/agent/inspection-request/route.ts'), 'utf8');
+const transactionSectionsSource = readFileSync(resolve(root, 'src/components/transactions/TransactionFormSections.tsx'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -179,4 +181,19 @@ test('new files use only the initial transaction choice while edit-side correcti
   assert.match(formSource, /form\.setValue\('clientType', side === 'listing' \? 'seller' : side === 'dual' \? 'dual' : side === 'buyer' \? 'buyer' : ''\)/);
   assert.match(formSource, /\{editMode && \([\s\S]*Representation Side/);
   assert.doesNotMatch(formSource, /onClick=\{\(\) => setPdfStep\('type'\)\}/);
+});
+
+test('inspection requests use the supported JSON API and can deliver by vendor email or text', () => {
+  assert.doesNotMatch(formSource, /\/api\/agent\/send-inspection-request/);
+  assert.doesNotMatch(transactionSectionsSource, /\/api\/agent\/send-inspection-request/);
+  assert.match(formSource, /\/api\/agent\/inspection-request/);
+  assert.match(transactionSectionsSource, /\/api\/agent\/inspection-request/);
+  assert.match(formSource, /inspectionCategory: key/);
+  assert.match(transactionSectionsSource, /inspectionCategory: key/);
+  assert.match(formSource, /const responseText = await res\.text\(\);/);
+  assert.match(transactionSectionsSource, /const responseText = await res\.text\(\);/);
+  assert.match(inspectionRequestSource, /Selected vendor has no email address or mobile number/);
+  assert.match(inspectionRequestSource, /No active vendors with an email address or mobile number found/);
+  assert.match(inspectionRequestSource, /smsSent/);
+  assert.match(inspectionRequestSource, /TWILIO_ACCOUNT_SID/);
 });

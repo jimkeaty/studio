@@ -210,13 +210,13 @@ export async function POST(req: NextRequest) {
     if (sendMode === 'selected' && !vendorId) return jsonError(400, 'vendorId is required for selected mode');
 
     // Resolve vendor(s) to email
-    let vendors: Array<{ id: string; name: string; email: string }> = [];
+    let vendors: Array<{ id: string; name: string; email?: string; phone?: string }> = [];
     if (sendMode === 'selected') {
       const vDoc = await adminDb.collection('vendors').doc(vendorId).get();
       if (!vDoc.exists) return jsonError(404, 'Vendor not found');
       const vd = vDoc.data()!;
-      if (!vd.email) return jsonError(400, 'Selected vendor has no email address');
-      vendors = [{ id: vDoc.id, name: vd.name, email: vd.email }];
+      if (!vd.email && !vd.phone) return jsonError(400, 'Selected vendor has no email address or mobile number');
+      vendors = [{ id: vDoc.id, name: vd.name, email: vd.email || undefined, phone: vd.phone || undefined }];
     } else {
       // blast all active vendors in that category
       const snap = await adminDb.collection('vendors')
@@ -224,9 +224,9 @@ export async function POST(req: NextRequest) {
         .where('active', '==', true)
         .get();
       vendors = snap.docs
-        .filter(d => d.data().email)
-        .map(d => ({ id: d.id, name: d.data().name, email: d.data().email }));
-      if (vendors.length === 0) return jsonError(404, 'No active vendors with email found for this category');
+        .filter(d => d.data().email || d.data().phone)
+        .map(d => ({ id: d.id, name: d.data().name, email: d.data().email || undefined, phone: d.data().phone || undefined }));
+      if (vendors.length === 0) return jsonError(404, 'No active vendors with an email address or mobile number found for this category');
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa-next--smart-broker-usa.us-central1.hosted.app';
@@ -238,7 +238,7 @@ export async function POST(req: NextRequest) {
 
     // Create one request document per vendor
     const requestIds: string[] = [];
-    const emailResults: Array<{ vendorId: string; vendorName: string; emailSent: boolean }> = [];
+    const emailResults: Array<{ vendorId: string; vendorName: string; emailSent: boolean; smsSent: boolean }> = [];
 
     for (const vendor of vendors) {
       // Generate a secure token for the scheduling link
@@ -277,7 +277,7 @@ export async function POST(req: NextRequest) {
 
       requestIds.push(requestRef.id);
 
-      // Send email
+      // Send email and text to the vendor contacts stored in the vendor record.
       let emailSent = false;
       if (resendApiKey && vendor.email) {
         try {
@@ -319,7 +319,34 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      emailResults.push({ vendorId: vendor.id, vendorName: vendor.name, emailSent });
+      let smsSent = false;
+      if (vendor.phone) {
+        try {
+          const accountSid = process.env.TWILIO_ACCOUNT_SID;
+          const authToken = process.env.TWILIO_AUTH_TOKEN;
+          const twilioSettings = await adminDb.collection('settings').doc('twilio').get();
+          const fromNumber = twilioSettings.data()?.fromNumber || process.env.TWILIO_FROM_NUMBER;
+          const phoneDigits = String(vendor.phone).replace(/\D/g, '');
+          const toNumber = String(vendor.phone).startsWith('+')
+            ? String(vendor.phone)
+            : phoneDigits.length === 10 ? `+1${phoneDigits}` : phoneDigits.length === 11 && phoneDigits.startsWith('1') ? `+${phoneDigits}` : '';
+          if (accountSid && authToken && fromNumber && toNumber) {
+            const twilio = (await import('twilio')).default;
+            const client = twilio(accountSid, authToken);
+            const scheduleLink = `${appUrl}/inspect/${token}`;
+            await client.messages.create({
+              from: fromNumber,
+              to: toNumber,
+              body: `${appName}: ${getCategoryLabel(inspectionCategory)} request for ${propertyAddress}. Preferred ${formatDate(preferredDate)} ${formatTime(preferredTimeStart)}-${formatTime(preferredTimeEnd)}. Confirm: ${scheduleLink}`.slice(0, 1600),
+            });
+            smsSent = true;
+          }
+        } catch (err) {
+          console.error('[inspection-request] SMS error:', err);
+        }
+      }
+
+      emailResults.push({ vendorId: vendor.id, vendorName: vendor.name, emailSent, smsSent });
     }
 
     return NextResponse.json({
@@ -327,6 +354,8 @@ export async function POST(req: NextRequest) {
       requestIds,
       emailResults,
       vendorCount: vendors.length,
+      emailCount: emailResults.filter(result => result.emailSent).length,
+      smsCount: emailResults.filter(result => result.smsSent).length,
     });
   } catch (err: any) {
     console.error('[inspection-request] Error:', err);

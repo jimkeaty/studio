@@ -6456,13 +6456,15 @@ export default function AddTransactionPage() {
                                     const token = await user.getIdToken();
                                     const formVals = form.getValues();
                                     const effectiveVendorId = row.vendorId === 'USE_GENERAL' ? generalVendorId : row.vendorId;
-                                    const res = await fetch('/api/agent/send-inspection-request', {
+                                    const res = await fetch('/api/agent/inspection-request', {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                                       body: JSON.stringify({
-                                        vendorId: effectiveVendorId,
+                                        transactionId: null,
+                                        transactionType: 'buyer',
+                                        inspectionCategory: key,
+                                        vendorId: effectiveVendorId || undefined,
                                         sendMode: row.sendMode,
-                                        inspectionType: label,
                                         preferredDate: row.preferredDate,
                                         preferredTimeStart: row.preferredTimeStart,
                                         preferredTimeEnd: row.preferredTimeEnd,
@@ -6479,7 +6481,10 @@ export default function AddTransactionPage() {
                                         accessNotes: formVals.showingAccessNotes || '',
                                       }),
                                     });
-                                    const data = await res.json();
+                                    const responseText = await res.text();
+                                    let data: any;
+                                    try { data = JSON.parse(responseText); }
+                                    catch { throw new Error(`Inspection request service returned ${res.status} instead of a valid response. Please try again or contact support.`); }
                                     if (data.ok) {
                                       updateInspRow(key, { sent: true, sending: false });
                                       toast({ title: 'Request sent!', description: `Inspection request sent to ${data.vendorCount} inspector(s).` });
