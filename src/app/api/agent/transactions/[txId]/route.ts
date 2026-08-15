@@ -357,6 +357,8 @@ export async function PATCH(
       }
     }
 
+    const manualGciOverride = updates.manualGciOverride === true || txData.manualGciOverride === true;
+    const manualDollarSplitOverride = updates.commissionOverridden === true || txData.commissionOverridden === true;
     if (commissionFieldsChanged) {
       try {
         const mergedForCalc = { ...txData, ...updates };
@@ -367,7 +369,9 @@ export async function PATCH(
           listPrice: mergedForCalc.listPrice ?? null,
           status: effectiveStatus,
           commissionPercent: mergedForCalc.commissionPercent ?? null,
-          gci: mergedForCalc.gci ?? null,
+          // A saved operational GCI override remains authoritative when an agent
+          // later updates an unrelated commission-relevant field.
+          gci: manualGciOverride ? (txData.gci ?? mergedForCalc.gci ?? null) : (mergedForCalc.gci ?? null),
         });
         // Tag the GCI as estimated when it's based on list price (active listing, no sale price)
         const { isEstimatedCommission } = await import('@/lib/commissions');
@@ -383,22 +387,24 @@ export async function PATCH(
           const agentIdForCalc = String(txData.agentId || uid);
           const agentDisplayNameForCalc = String(txData.agentDisplayName || '');
           const txDate = mergedForCalc.closedDate || mergedForCalc.contractDate || null;
-          try {
-            const calc = await resolveTransactionCalculation({
-              agentId: agentIdForCalc,
-              agentDisplayName: agentDisplayNameForCalc,
-              commission: rawGci,
-              transactionDate: txDate,
-            });
-            updates.splitSnapshot = calc.splitSnapshot;
-            updates.creditSnapshot = calc.creditSnapshot;
-            // Store top-level convenience fields so the ledger can sort/filter by them
-            updates.grossCommission = calc.splitSnapshot.grossCommission ?? rawGci;
-            updates.agentNetCommission = calc.splitSnapshot.agentNetCommission ?? null;
-            updates.companyRetained = calc.splitSnapshot.companyRetained ?? null;
-          } catch (calcErr: any) {
-            // Non-fatal: commission profile may not exist yet — save GCI but skip split
-            console.warn('[agent PATCH] resolveTransactionCalculation failed (non-fatal):', calcErr?.message);
+          if (!manualDollarSplitOverride) {
+            try {
+              const calc = await resolveTransactionCalculation({
+                agentId: agentIdForCalc,
+                agentDisplayName: agentDisplayNameForCalc,
+                commission: rawGci,
+                transactionDate: txDate,
+              });
+              updates.splitSnapshot = calc.splitSnapshot;
+              updates.creditSnapshot = calc.creditSnapshot;
+              // Store top-level convenience fields so the ledger can sort/filter by them
+              updates.grossCommission = calc.splitSnapshot.grossCommission ?? rawGci;
+              updates.agentNetCommission = calc.splitSnapshot.agentNetCommission ?? null;
+              updates.companyRetained = calc.splitSnapshot.companyRetained ?? null;
+            } catch (calcErr: any) {
+              // Non-fatal: commission profile may not exist yet — save GCI but skip split
+              console.warn('[agent PATCH] resolveTransactionCalculation failed (non-fatal):', calcErr?.message);
+            }
           }
         }
       } catch (gciErr: any) {

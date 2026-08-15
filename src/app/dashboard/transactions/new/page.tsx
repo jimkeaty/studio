@@ -1209,6 +1209,9 @@ export default function AddTransactionPage() {
   const commissionManualOverride = useRef(false);
   // Saved transaction-specific overrides must survive the profile lookup in edit mode.
   const editCommissionOverride = useRef(false);
+  // Tracks a newly entered manual percentage split for the current save attempt.
+  // It is intentionally separate from a manual-dollar override, which clears both %s.
+  const manualPercentageSplitEdited = useRef(false);
 
   // Commission mode toggle: 'percent' = % of sale price, 'flat' = flat dollar amount
   const [commissionMode, setCommissionMode] = useState<'percent' | 'flat'>('percent');
@@ -1219,8 +1222,9 @@ export default function AddTransactionPage() {
     // Clear seller-paying fields when switching modes to avoid misinterpretation
     form.setValue('sellerPayingListingAgent', '' as any);
     form.setValue('sellerPayingBuyerAgent', '' as any);
-        commPctManuallyEdited.current = false;
+    commPctManuallyEdited.current = false;
     gciManuallyEdited.current = false;
+    manualPercentageSplitEdited.current = false;
   };
   // Extra buyer/seller visibility state
   const [showBuyer3, setShowBuyer3] = useState(false);
@@ -2000,9 +2004,12 @@ export default function AddTransactionPage() {
         // form values load so the profile-tier effect cannot replace it with 70/30.
         editCommissionOverride.current = Boolean(tx.commissionOverridden);
         commissionManualOverride.current = editCommissionOverride.current;
-        // A transaction-level override may include a manually entered GCI amount.
-        // Keep that saved amount authoritative instead of recomputing CBP × % on load.
-        gciManuallyEdited.current = editCommissionOverride.current;
+        manualPercentageSplitEdited.current = false;
+        // Manual GCI and gross-rate decisions have their own durable flags. Keep
+        // legacy broad overrides compatible, but do not let a profile lookup or
+        // seller-paid percentage overwrite a saved operational decision on reload.
+        gciManuallyEdited.current = Boolean(tx.manualGciOverride || editCommissionOverride.current);
+        commPctManuallyEdited.current = Boolean(tx.manualCommissionPercentOverride || editCommissionOverride.current);
         // Pre-fill all form fields from the transaction document
         // Helper: if a Firestore value is an array (legacy data), take the first element
         // This prevents z.enum() and z.string() validation failures when old data has arrays
@@ -2647,6 +2654,25 @@ export default function AddTransactionPage() {
       ...values,
       workingWithTc: values.tcWorking === 'yes' || values.workingWithTc === true,
     };
+    // An operational user may intentionally use a manual percentage split, but
+    // both sides must be present and total 100%. Dollar overrides clear both
+    // fields and bypass this check because their entered dollars are authoritative.
+    if (hasOperationalEditAuthority && manualPercentageSplitEdited.current) {
+      const hasBrokerPct = values.brokerPct !== '' && values.brokerPct !== null && values.brokerPct !== undefined;
+      const hasAgentPct = values.agentPct !== '' && values.agentPct !== null && values.agentPct !== undefined;
+      if (hasBrokerPct || hasAgentPct) {
+        const brokerPct = Number(values.brokerPct);
+        const agentPct = Number(values.agentPct);
+        if (!hasBrokerPct || !hasAgentPct || !Number.isFinite(brokerPct) || !Number.isFinite(agentPct) || Math.abs((brokerPct + agentPct) - 100) > 0.01) {
+          toast({
+            title: 'Commission split must equal 100%',
+            description: 'Enter both Broker % and Agent % so they total exactly 100%, or clear both percentages and use a manual dollar override.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+    }
     // ── Edit mode: PATCH the existing transaction ─────────────────────────
     if (editMode && editTxId) {
       if (isClosedAgentView) {
@@ -2762,6 +2788,17 @@ export default function AddTransactionPage() {
               commissionOverriddenBy: user!.uid,
               commissionOverriddenAt: new Date().toISOString(),
             } : {}),
+            ...(gciManuallyEdited.current ? {
+              manualGciOverride: true,
+              manualGciOverriddenBy: user!.uid,
+              manualGciOverriddenAt: new Date().toISOString(),
+            } : {}),
+            ...(commPctManuallyEdited.current ? {
+              manualCommissionPercentOverride: true,
+              manualCommissionPercentOverriddenBy: user!.uid,
+              manualCommissionPercentOverriddenAt: new Date().toISOString(),
+            } : {}),
+            ...(manualPercentageSplitEdited.current ? { validateManualPercentageSplit: true } : {}),
           };
         } else {
           // Agent edit (or admin impersonating an agent)
@@ -2873,6 +2910,16 @@ export default function AddTransactionPage() {
         body: JSON.stringify({
           ...values,
           clientName: resolvedClientName,
+          ...(hasOperationalEditAuthority && gciManuallyEdited.current ? {
+            manualGciOverride: true,
+            manualGciOverriddenBy: user.uid,
+            manualGciOverriddenAt: new Date().toISOString(),
+          } : {}),
+          ...(hasOperationalEditAuthority && commPctManuallyEdited.current ? {
+            manualCommissionPercentOverride: true,
+            manualCommissionPercentOverriddenBy: user.uid,
+            manualCommissionPercentOverriddenAt: new Date().toISOString(),
+          } : {}),
           documents: uploadedDocs,
           // Inspection row data — per-type inspector details with resolved vendor names
           inspectionRowData: Object.fromEntries(
@@ -6904,7 +6951,7 @@ export default function AddTransactionPage() {
                           }}
                         />
                       </FormControl>
-                      <FormDescription>Auto-filled from seller-paying % above</FormDescription>
+                      <FormDescription>{commPctManuallyEdited.current ? 'Manual rate override — saved as entered until staff changes it.' : 'Auto-filled from seller-paying % above'}</FormDescription>
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="gci" render={({ field }) => (
@@ -6921,7 +6968,7 @@ export default function AddTransactionPage() {
                           placeholder="0"
                         />
                       </FormControl>
-                      <FormDescription>Gross Commission Income — type to override auto-calc</FormDescription>
+                      <FormDescription>{gciManuallyEdited.current ? 'Manual GCI override — saved as entered until staff changes it.' : 'Gross Commission Income — type to override auto-calc'}</FormDescription>
                     </FormItem>
                   )} />
                 </Grid3>
@@ -7038,7 +7085,7 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="30"
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                          onChange={(e) => { commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
                         />
                       </FormControl>
                     </FormItem>
@@ -7062,7 +7109,7 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="70"
-                          onChange={(e) => { commissionManualOverride.current = true; field.onChange(e); }}
+                          onChange={(e) => { commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
                         />
                       </FormControl>
                     </FormItem>

@@ -275,6 +275,10 @@ const UPDATABLE_FIELDS = new Set([
   // When commissionOverridden=true, rollup engine and TC approval skip
   // profile-based recalculation and use the saved split values directly.
   'commissionOverridden', 'commissionOverriddenBy', 'commissionOverriddenAt',
+  // Independent durable overrides for GCI and gross commission rate. These retain
+  // an operational decision without disabling the normal automatic split engine.
+  'manualGciOverride', 'manualGciOverriddenBy', 'manualGciOverriddenAt',
+  'manualCommissionPercentOverride', 'manualCommissionPercentOverriddenBy', 'manualCommissionPercentOverriddenAt',
   // Extra buyers/sellers (3rd and 4th parties)
   'buyer3Name', 'buyer3Email', 'buyer3Phone',
   'buyer4Name', 'buyer4Email', 'buyer4Phone',
@@ -353,6 +357,19 @@ export async function PATCH(req: NextRequest) {
       if (key === 'id') continue;
       if (UPDATABLE_FIELDS.has(key)) {
         updates[key] = value;
+      }
+    }
+
+    // Direct API callers receive the same guard as the unified form: a manual
+    // percentage split must include both values and total 100%. Empty percentage
+    // fields remain valid for an authorized manual-dollar override.
+    const hasBrokerPct = Object.prototype.hasOwnProperty.call(updates, 'brokerPct') && updates.brokerPct !== '' && updates.brokerPct !== null;
+    const hasAgentPct = Object.prototype.hasOwnProperty.call(updates, 'agentPct') && updates.agentPct !== '' && updates.agentPct !== null;
+    if (body.validateManualPercentageSplit === true && (hasBrokerPct || hasAgentPct)) {
+      const brokerPct = Number(updates.brokerPct);
+      const agentPct = Number(updates.agentPct);
+      if (!hasBrokerPct || !hasAgentPct || !Number.isFinite(brokerPct) || !Number.isFinite(agentPct) || Math.abs((brokerPct + agentPct) - 100) > 0.01) {
+        return jsonError(400, 'Broker % and Agent % must both be provided and total 100%, or clear both values for a manual dollar override');
       }
     }
 

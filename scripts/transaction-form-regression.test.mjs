@@ -95,6 +95,29 @@ test('manual broker or agent dollar overrides clear split percentages and persis
   assert.match(adminRouteSource, /body\.brokerPct !== undefined \? \{ companySplitPercent: Number\(body\.brokerPct\) \} : \{\}/);
 });
 
+test('manual GCI and gross commission rate overrides survive save and reopen independently of dollar splits', () => {
+  assert.match(formSource, /gciManuallyEdited\.current = Boolean\(tx\.manualGciOverride \|\| editCommissionOverride\.current\)/);
+  assert.match(formSource, /commPctManuallyEdited\.current = Boolean\(tx\.manualCommissionPercentOverride \|\| editCommissionOverride\.current\)/);
+  assert.match(formSource, /manualGciOverride: true/);
+  assert.match(formSource, /manualCommissionPercentOverride: true/);
+  assert.match(formSource, /Manual GCI override — saved as entered until staff changes it/);
+  assert.match(formSource, /Manual rate override — saved as entered until staff changes it/);
+  assert.match(adminRouteSource, /'manualGciOverride', 'manualGciOverriddenBy', 'manualGciOverriddenAt'/);
+  assert.match(adminRouteSource, /'manualCommissionPercentOverride', 'manualCommissionPercentOverriddenBy', 'manualCommissionPercentOverriddenAt'/);
+  assert.match(createTransactionSource, /manualGciOverride: toBool\(body\.manualGciOverride\)/);
+  assert.match(createTransactionSource, /manualCommissionPercentOverride: toBool\(body\.manualCommissionPercentOverride\)/);
+  assert.match(agentRouteSource, /const manualGciOverride = updates\.manualGciOverride === true \|\| txData\.manualGciOverride === true/);
+});
+
+test('a newly edited manual percentage split must include both values and total 100%', () => {
+  assert.match(formSource, /const manualPercentageSplitEdited = useRef\(false\)/);
+  assert.match(formSource, /manualPercentageSplitEdited\.current = true/);
+  assert.match(formSource, /Math\.abs\(\(brokerPct \+ agentPct\) - 100\) > 0\.01/);
+  assert.match(formSource, /validateManualPercentageSplit: true/);
+  assert.match(adminRouteSource, /body\.validateManualPercentageSplit === true/);
+  assert.match(adminRouteSource, /Broker % and Agent % must both be provided and total 100%/);
+});
+
 test('referrals keep address optional while persisting optional contacts, key dates, and referral fee details', () => {
   assert.match(formSource, /address: z\.string\(\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
   assert.match(formSource, /data\.closingType === 'referral' \|\| String\(data\.address \|\| ''\)\.trim\(\)\.length >= 5/);
