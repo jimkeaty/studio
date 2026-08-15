@@ -421,6 +421,59 @@ export const ARTICLES: Article[] = [
     `,
   },
 
+  // ── MANUAL COMMISSION OVERRIDES (STAFF) ─────────────────────────────────────
+  {
+    id: 'staff-manual-commission-overrides',
+    title: 'Staff: Testing & Saving Manual Commission Overrides',
+    description:
+      'How authorized staff, TCs, and admins can test and save manual GCI, commission rate, split percentage, and split dollar corrections safely.',
+    category: 'Team & Commission',
+    audience: 'staff',
+    readingTimeMinutes: 4,
+    publishedAt: '2026-08-15',
+    content: `
+<h2>Purpose</h2>
+<p>Use this guide when an authorized <strong>Admin</strong>, <strong>Staff</strong>, or <strong>Transaction Coordinator (TC)</strong> needs to correct commission information on one transaction. Always test changes on a designated test file first when possible.</p>
+<blockquote>Agents can review closed transactions but cannot make commission corrections after closing. Admin, Staff, and TC users can make authorized operational corrections.</blockquote>
+
+<h2>Choose One Commission Method</h2>
+<p>Use either the normal automatic calculation, a percentage-based split, or a manual dollar split. Do not try to use conflicting methods at the same time.</p>
+<table>
+  <thead><tr><th>Method</th><th>When to Use It</th><th>What the System Does</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Automatic calculation</strong></td><td>The transaction should follow the saved sale price, commission rate, and agent profile.</td><td>Calculates the GCI and split automatically.</td></tr>
+    <tr><td><strong>Manual GCI or Gross Commission %</strong></td><td>An authorized person needs to correct the overall commission amount or rate for this one file.</td><td>Saves the entered amount or rate as the transaction’s authority when reopened.</td></tr>
+    <tr><td><strong>Manual Broker / Agent %</strong></td><td>The Broker and Agent should use a specific percentage split for this file.</td><td>Requires both percentages and requires the total to equal 100%.</td></tr>
+    <tr><td><strong>Manual Broker / Agent $</strong></td><td>The actual broker and agent payout amounts are known and should not be calculated from percentages.</td><td>Clears both split percentages and saves the entered dollar amounts as the authority.</td></tr>
+  </tbody>
+</table>
+
+<h2>Required Test Sequence</h2>
+<ol>
+  <li>Open a <strong>test transaction</strong> from the Transaction Ledger, Staff Queue, or TC Queue as an Admin, Staff user, or TC.</li>
+  <li>In the Commission section, enter a new number in <strong>GCI ($)</strong>. Select <strong>Save Changes</strong>, close the transaction, and reopen it. Confirm the exact GCI is still present.</li>
+  <li>Enter a new value in <strong>Gross Commission %</strong>. Save, close, and reopen. Confirm the exact percentage is still present.</li>
+  <li>Enter <strong>Broker % = 25</strong> and <strong>Agent % = 75</strong>. Save the transaction. Confirm it saves because the total is 100%.</li>
+  <li>Enter <strong>Broker % = 25</strong> and <strong>Agent % = 70</strong>. Try to save. Confirm the system blocks the save and explains that the two percentages must total 100%. Restore a valid split before leaving the file.</li>
+  <li>Enter a dollar amount in <strong>Broker GCI ($)</strong> or <strong>Agent Net ($)</strong>. Confirm both Broker % and Agent % clear automatically. Save, close, and reopen; confirm the manual dollar amount remains.</li>
+</ol>
+
+<h2>Expected Results</h2>
+<table>
+  <thead><tr><th>Test</th><th>Expected Result</th></tr></thead>
+  <tbody>
+    <tr><td>Manual GCI</td><td>The exact dollar amount stays saved after reopening.</td></tr>
+    <tr><td>Manual Gross Commission %</td><td>The exact percentage stays saved after reopening.</td></tr>
+    <tr><td>Valid percentage split</td><td>The transaction saves only when Broker % plus Agent % equals 100%.</td></tr>
+    <tr><td>Manual dollar split</td><td>Both percentage fields clear, and the entered Broker/Agent dollars stay saved.</td></tr>
+  </tbody>
+</table>
+
+<h2>If a Test Fails</h2>
+<p>Stop editing the file. Record the property address, the role used (Admin, Staff, or TC), the exact values entered, and a screenshot of the save message or reopened commission section. Send those details to the system administrator so the transaction can be reviewed without further changing its numbers.</p>
+    `,
+  },
+
   // ── TEAM COMMISSION MODEL (ADMIN/STAFF) ─────────────────────────────────────
   {
     id: 'admin-team-commission-model',
