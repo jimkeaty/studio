@@ -1463,6 +1463,13 @@ export default function AddTransactionPage() {
   const inspectionTypes = form.watch('inspectionTypes') || [];
   const watchedStatus = form.watch('status');
   const watchedDealType = form.watch('dealType');
+  const watchedContractDate = form.watch('contractDate');
+  const watchedCommercialDueDiligenceDays = form.watch('dueDiligenceDays');
+  const watchedCommercialAppraisalConditioned = form.watch('appraisalConditioned');
+  const watchedCommercialAppraisalPeriodDays = form.watch('appraisalPeriodDays');
+  const watchedCommercialFinancingDays = form.watch('financingCommitmentDays');
+  const watchedCommercialDepositDays = form.watch('depositDueDays');
+  const watchedCommercialClosingDays = form.watch('closingDays');
   // Agents may review closed files, but only admin, staff, and TC users may
   // correct them. An impersonated admin is intentionally treated as an agent
   // here so the agent view cannot bypass the same permission rule.
@@ -1494,6 +1501,43 @@ export default function AddTransactionPage() {
     if (derived) form.setValue('clientType', derived);
     // For referral, leave clientType blank — buyer/seller section is hidden
   }, [watchedClosingType]);
+
+  // Commercial agreements often reveal the printed periods before an agent
+  // confirms the effective date. Once a valid effective date is entered, fill
+  // only blank milestones from the agreement terms. Existing dates are treated
+  // as manual decisions and are never overwritten by this helper.
+  useEffect(() => {
+    if (!String(watchedDealType || '').startsWith('commercial')) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(watchedContractDate || ''))) return;
+
+    const inspectionDeadline = calculateCommercialCalendarDeadline(watchedContractDate, watchedCommercialDueDiligenceDays);
+    const appraisalDeadline = watchedCommercialAppraisalConditioned
+      ? calculateCommercialCalendarDeadline(watchedContractDate, watchedCommercialAppraisalPeriodDays)
+      : '';
+    const finalLoanCommitmentDeadline = calculateCommercialCalendarDeadline(watchedContractDate, watchedCommercialFinancingDays);
+    const depositDeadline = calculateCommercialCalendarDeadline(watchedContractDate, watchedCommercialDepositDays);
+    const projectedCloseDate = calculateCommercialCalendarDeadline(
+      form.getValues('inspectionDeadline') || inspectionDeadline,
+      watchedCommercialClosingDays,
+    );
+
+    if (inspectionDeadline && !form.getValues('inspectionDeadline')) form.setValue('inspectionDeadline', inspectionDeadline);
+    if (appraisalDeadline && !form.getValues('appraisalDeadline')) form.setValue('appraisalDeadline', appraisalDeadline);
+    if (finalLoanCommitmentDeadline && !form.getValues('finalLoanCommitmentDeadline')) {
+      form.setValue('finalLoanCommitmentDeadline', finalLoanCommitmentDeadline);
+    }
+    if (depositDeadline && !form.getValues('depositDeadline')) form.setValue('depositDeadline', depositDeadline);
+    if (projectedCloseDate && !form.getValues('projectedCloseDate')) form.setValue('projectedCloseDate', projectedCloseDate);
+  }, [
+    watchedDealType,
+    watchedContractDate,
+    watchedCommercialDueDiligenceDays,
+    watchedCommercialAppraisalConditioned,
+    watchedCommercialAppraisalPeriodDays,
+    watchedCommercialFinancingDays,
+    watchedCommercialDepositDays,
+    watchedCommercialClosingDays,
+  ]);
 
   // Seller info is only relevant when NOT purely buyer-side and NOT referral
   // closingType: 'buyer' → hide seller; 'listing' | 'dual' → show seller; 'referral' → hide all

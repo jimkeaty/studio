@@ -176,6 +176,18 @@ test('commercial agreements calculate only unambiguous effective-date deadlines 
     'Title curative time begins after a future defect notice and must not become a guessed title deadline');
 });
 
+test('commercial agreement milestones populate when a verified effective date is entered after upload without overwriting manual deadlines', () => {
+  assert.match(formSource, /const watchedContractDate = form\.watch\('contractDate'\)/);
+  assert.match(formSource, /Commercial agreements often reveal the printed periods before an agent[\s\S]*confirms the effective date/);
+  assert.match(formSource, /if \(!String\(watchedDealType \|\| ''\)\.startsWith\('commercial'\)\) return/);
+  assert.match(formSource, /const inspectionDeadline = calculateCommercialCalendarDeadline\(watchedContractDate, watchedCommercialDueDiligenceDays\)/);
+  assert.match(formSource, /const appraisalDeadline = watchedCommercialAppraisalConditioned[\s\S]*watchedCommercialAppraisalPeriodDays/);
+  assert.match(formSource, /const finalLoanCommitmentDeadline = calculateCommercialCalendarDeadline\(watchedContractDate, watchedCommercialFinancingDays\)/);
+  assert.match(formSource, /if \(inspectionDeadline && !form\.getValues\('inspectionDeadline'\)\)/);
+  assert.match(formSource, /if \(appraisalDeadline && !form\.getValues\('appraisalDeadline'\)\)/);
+  assert.match(formSource, /if \(finalLoanCommitmentDeadline && !form\.getValues\('finalLoanCommitmentDeadline'\)\)/);
+});
+
 test('new files use only the initial transaction choice while edit-side corrections stay in the open form', () => {
   assert.match(formSource, /const applyRepresentationSide = \(side: TransactionSide\) => \{/);
   assert.match(formSource, /form\.setValue\('clientType', side === 'listing' \? 'seller' : side === 'dual' \? 'dual' : side === 'buyer' \? 'buyer' : ''\)/);
