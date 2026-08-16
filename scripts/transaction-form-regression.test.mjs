@@ -238,3 +238,8 @@ test('transaction-entered contacts upsert after both creates and edits for the o
   assert.match(contactsRouteSource, /where\('createdBy', '==', effectiveCreatedBy\)/);
   assert.match(contactsRouteSource, /contact\.specialties = \(fields\.specialties \|\| fields\.specialty \|\| ''\)\.trim\(\)/);
 });
+
+test('Contact Book retrieval keeps newly saved contacts searchable beyond 200 records', () => {
+  assert.match(contactsRouteSource, /url\.searchParams\.get\('limit'\) \|\| '500'/);
+  assert.match(contactsRouteSource, /Math\.min\(Math\.max\(requestedLimit, 1\), 1000\)/);
+});

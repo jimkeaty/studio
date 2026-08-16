@@ -41,7 +41,13 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const type = url.searchParams.get('type') as ContactType | null;
     const q = (url.searchParams.get('q') || '').toLowerCase().trim();
-    const limitN = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
+    // The Contact Book page loads up to 500 records and performs its live search
+    // client-side. The former 200-record cap meant a newly saved contact could
+    // exist but never appear in search once the book passed that threshold.
+    const requestedLimit = parseInt(url.searchParams.get('limit') || '500');
+    const limitN = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 1000)
+      : 500;
 
     // Staff (admin, TC, office staff) see ALL contacts.
     // Agents only see contacts they personally created (createdBy == their uid).

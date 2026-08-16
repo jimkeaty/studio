@@ -2837,7 +2837,16 @@ export default function AddTransactionPage() {
         }));
       }
 
-      await Promise.allSettled(contactSaves);
+      const contactResults = await Promise.allSettled(contactSaves);
+      const failedContactSaves = contactResults.filter((result) => result.status === 'rejected');
+      if (failedContactSaves.length > 0) {
+        console.warn('One or more Contact Book upserts failed after transaction save', failedContactSaves);
+        toast({
+          title: 'Transaction saved, but a contact was not saved',
+          description: 'Please retry Save Changes or add the contact from Contacts Book.',
+          variant: 'destructive',
+        });
+      }
     };
     // Keep the visible Yes/No selector and the canonical routing field in lockstep.
     // Existing queue and notification routes depend on workingWithTc, while older
