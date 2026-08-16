@@ -229,6 +229,10 @@ test('inspector communications contain client contact details and confirmed-insp
   assert.match(inspectionSchedulingPageSource, /label="Client Email"/);
   assert.match(inspectionSchedulingPageSource, /label="Agent Phone"/);
   assert.match(inspectionSchedulingPageSource, /label="Agent Email"/);
+  assert.match(inspectionSchedulingPageSource, /href=\{`tel:\$\{data\.agentPhone\}`\}/);
+  assert.match(inspectionSchedulingPageSource, /href=\{`sms:\$\{data\.agentPhone\}`\}/);
+  assert.match(inspectionSchedulingPageSource, /href=\{`mailto:\$\{data\.agentEmail\}`\}/);
+  assert.match(inspectionSchedulingPageSource, /Text Agent/);
 });
 
 test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {

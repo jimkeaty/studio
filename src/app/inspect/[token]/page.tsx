@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { CheckCircle2, Clock, AlertTriangle, CalendarCheck, Home, User, Ruler, Phone, Mail } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, CalendarCheck, Home, User, Ruler, Phone, Mail, MessageSquare } from 'lucide-react';
 
 type RequestData = {
   status: 'pending' | 'confirmed' | 'taken' | 'expired';
@@ -256,6 +256,42 @@ export default function InspectSchedulingPage() {
             )}
           </div>
         </div>
+
+        {/* Requesting-agent actions */}
+        {(data.agentName || data.agentPhone || data.agentEmail) && (
+          <div className="bg-blue-50 rounded-2xl border border-blue-100 px-6 py-5 mb-4">
+            <p className="text-sm font-semibold text-blue-950">Contact Requesting Agent</p>
+            <p className="text-sm text-blue-800 mt-1">
+              {data.agentName || 'The requesting agent'} can help with access, client coordination, or transaction questions.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+              {data.agentPhone && (
+                <a
+                  href={`tel:${data.agentPhone}`}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-blue-200 px-3 py-2.5 text-sm font-medium text-blue-800"
+                >
+                  <Phone className="h-4 w-4" /> Call Agent
+                </a>
+              )}
+              {data.agentPhone && (
+                <a
+                  href={`sms:${data.agentPhone}`}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-blue-200 px-3 py-2.5 text-sm font-medium text-blue-800"
+                >
+                  <MessageSquare className="h-4 w-4" /> Text Agent
+                </a>
+              )}
+              {data.agentEmail && (
+                <a
+                  href={`mailto:${data.agentEmail}`}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-blue-200 px-3 py-2.5 text-sm font-medium text-blue-800"
+                >
+                  <Mail className="h-4 w-4" /> Email Agent
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Preferred schedule */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5 mb-4">
