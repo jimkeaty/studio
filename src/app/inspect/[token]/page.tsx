@@ -246,6 +246,9 @@ export default function InspectSchedulingPage() {
             {data.clientName && <InfoRow icon={<User className="h-4 w-4" />} label="Client" value={data.clientName} />}
             {data.clientPhone && <InfoRow icon={<Phone className="h-4 w-4" />} label="Client Phone" value={data.clientPhone} />}
             {data.clientEmail && <InfoRow icon={<Mail className="h-4 w-4" />} label="Client Email" value={data.clientEmail} />}
+            {data.agentName && <InfoRow icon={<User className="h-4 w-4" />} label="Agent" value={data.agentName} />}
+            {data.agentPhone && <InfoRow icon={<Phone className="h-4 w-4" />} label="Agent Phone" value={data.agentPhone} />}
+            {data.agentEmail && <InfoRow icon={<Mail className="h-4 w-4" />} label="Agent Email" value={data.agentEmail} />}
             {data.accessNotes && (
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
                 <strong>Access Notes:</strong> {data.accessNotes}

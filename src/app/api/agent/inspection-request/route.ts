@@ -339,10 +339,15 @@ export async function POST(req: NextRequest) {
               clientPhone ? `Phone: ${clientPhone}` : '',
               clientEmail ? `Email: ${clientEmail}` : '',
             ].filter(Boolean).join(' | ');
+            const agentContact = [
+              agentName ? `Agent: ${agentName}` : '',
+              agentPhone ? `Agent Phone: ${agentPhone}` : '',
+              agentEmail ? `Agent Email: ${agentEmail}` : '',
+            ].filter(Boolean).join(' | ');
             await client.messages.create({
               from: fromNumber,
               to: toNumber,
-              body: `${appName}: ${getCategoryLabel(inspectionCategory)} request for ${propertyAddress}. Preferred ${formatDate(preferredDate)} ${formatTime(preferredTimeStart)}-${formatTime(preferredTimeEnd)}. ${clientContact ? `${clientContact}. ` : ''}Confirm: ${scheduleLink}`.slice(0, 1600),
+              body: `${appName}: ${getCategoryLabel(inspectionCategory)} request for ${propertyAddress}. Preferred ${formatDate(preferredDate)} ${formatTime(preferredTimeStart)}-${formatTime(preferredTimeEnd)}. ${clientContact ? `${clientContact}. ` : ''}${agentContact ? `${agentContact}. ` : ''}Confirm: ${scheduleLink}`.slice(0, 1600),
             });
             smsSent = true;
           }

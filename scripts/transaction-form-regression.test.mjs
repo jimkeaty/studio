@@ -218,12 +218,17 @@ test('inspector communications contain client contact details and confirmed-insp
   assert.match(inspectionRequestSource, /Client: \$\{clientName\}/);
   assert.match(inspectionRequestSource, /Phone: \$\{clientPhone\}/);
   assert.match(inspectionRequestSource, /Email: \$\{clientEmail\}/);
+  assert.match(inspectionRequestSource, /Agent: \$\{agentName\}/);
+  assert.match(inspectionRequestSource, /Agent Phone: \$\{agentPhone\}/);
+  assert.match(inspectionRequestSource, /Agent Email: \$\{agentEmail\}/);
   assert.match(inspectionConfirmSource, /\/dashboard\/transactions\/new\?edit=\$\{request\.transactionId\}/);
   assert.doesNotMatch(inspectionConfirmSource, /\/dashboard\/transactions\/\$\{request\.transactionId\}/);
   assert.match(inspectionConfirmSource, /clientPhone: request\.clientPhone/);
   assert.match(inspectionConfirmSource, /clientEmail: request\.clientEmail/);
   assert.match(inspectionSchedulingPageSource, /label="Client Phone"/);
   assert.match(inspectionSchedulingPageSource, /label="Client Email"/);
+  assert.match(inspectionSchedulingPageSource, /label="Agent Phone"/);
+  assert.match(inspectionSchedulingPageSource, /label="Agent Email"/);
 });
 
 test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {
