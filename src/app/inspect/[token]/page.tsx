@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { CheckCircle2, Clock, AlertTriangle, CalendarCheck, Home, User, Ruler } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, CalendarCheck, Home, User, Ruler, Phone, Mail } from 'lucide-react';
 
 type RequestData = {
   status: 'pending' | 'confirmed' | 'taken' | 'expired';
   inspectionType?: string;
   propertyAddress?: string;
   clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
   agentName?: string;
   agentPhone?: string;
   agentEmail?: string;
@@ -242,6 +244,8 @@ export default function InspectSchedulingPage() {
             <InfoRow icon={<Home className="h-4 w-4" />} label="Property" value={data.propertyAddress || '—'} />
             {data.sqft && <InfoRow icon={<Ruler className="h-4 w-4" />} label="Sq Ft" value={data.sqft} />}
             {data.clientName && <InfoRow icon={<User className="h-4 w-4" />} label="Client" value={data.clientName} />}
+            {data.clientPhone && <InfoRow icon={<Phone className="h-4 w-4" />} label="Client Phone" value={data.clientPhone} />}
+            {data.clientEmail && <InfoRow icon={<Mail className="h-4 w-4" />} label="Client Email" value={data.clientEmail} />}
             {data.accessNotes && (
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
                 <strong>Access Notes:</strong> {data.accessNotes}

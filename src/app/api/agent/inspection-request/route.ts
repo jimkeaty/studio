@@ -334,10 +334,15 @@ export async function POST(req: NextRequest) {
             const twilio = (await import('twilio')).default;
             const client = twilio(accountSid, authToken);
             const scheduleLink = `${appUrl}/inspect/${token}`;
+            const clientContact = [
+              clientName ? `Client: ${clientName}` : '',
+              clientPhone ? `Phone: ${clientPhone}` : '',
+              clientEmail ? `Email: ${clientEmail}` : '',
+            ].filter(Boolean).join(' | ');
             await client.messages.create({
               from: fromNumber,
               to: toNumber,
-              body: `${appName}: ${getCategoryLabel(inspectionCategory)} request for ${propertyAddress}. Preferred ${formatDate(preferredDate)} ${formatTime(preferredTimeStart)}-${formatTime(preferredTimeEnd)}. Confirm: ${scheduleLink}`.slice(0, 1600),
+              body: `${appName}: ${getCategoryLabel(inspectionCategory)} request for ${propertyAddress}. Preferred ${formatDate(preferredDate)} ${formatTime(preferredTimeStart)}-${formatTime(preferredTimeEnd)}. ${clientContact ? `${clientContact}. ` : ''}Confirm: ${scheduleLink}`.slice(0, 1600),
             });
             smsSent = true;
           }

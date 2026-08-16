@@ -11,6 +11,8 @@ const brokerFeeSettingsSource = readFileSync(resolve(root, 'src/app/api/admin/tr
 const createTransactionSource = readFileSync(resolve(root, 'src/app/api/tc/route.ts'), 'utf8');
 const commercialParserSource = readFileSync(resolve(root, 'src/app/api/agent/parse-commercial-agreement/route.ts'), 'utf8');
 const inspectionRequestSource = readFileSync(resolve(root, 'src/app/api/agent/inspection-request/route.ts'), 'utf8');
+const inspectionConfirmSource = readFileSync(resolve(root, 'src/app/api/agent/inspection-request/confirm/route.ts'), 'utf8');
+const inspectionSchedulingPageSource = readFileSync(resolve(root, 'src/app/inspect/[token]/page.tsx'), 'utf8');
 const transactionSectionsSource = readFileSync(resolve(root, 'src/components/transactions/TransactionFormSections.tsx'), 'utf8');
 const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/transaction-reminders/route.ts'), 'utf8');
 const contactsRouteSource = readFileSync(resolve(root, 'src/app/api/contacts/route.ts'), 'utf8');
@@ -210,6 +212,18 @@ test('inspection requests use the supported JSON API and can deliver by vendor e
   assert.match(inspectionRequestSource, /No active vendors with an email address or mobile number found/);
   assert.match(inspectionRequestSource, /smsSent/);
   assert.match(inspectionRequestSource, /TWILIO_ACCOUNT_SID/);
+});
+
+test('inspector communications contain client contact details and confirmed-inspection links open the unified transaction form', () => {
+  assert.match(inspectionRequestSource, /Client: \$\{clientName\}/);
+  assert.match(inspectionRequestSource, /Phone: \$\{clientPhone\}/);
+  assert.match(inspectionRequestSource, /Email: \$\{clientEmail\}/);
+  assert.match(inspectionConfirmSource, /\/dashboard\/transactions\/new\?edit=\$\{request\.transactionId\}/);
+  assert.doesNotMatch(inspectionConfirmSource, /\/dashboard\/transactions\/\$\{request\.transactionId\}/);
+  assert.match(inspectionConfirmSource, /clientPhone: request\.clientPhone/);
+  assert.match(inspectionConfirmSource, /clientEmail: request\.clientEmail/);
+  assert.match(inspectionSchedulingPageSource, /label="Client Phone"/);
+  assert.match(inspectionSchedulingPageSource, /label="Client Email"/);
 });
 
 test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {

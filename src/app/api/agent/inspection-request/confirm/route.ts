@@ -163,8 +163,8 @@ export async function POST(req: NextRequest) {
         title: `Inspection Confirmed — ${inspectionType}`,
         body: `${request.vendorName} confirmed ${inspectionType} at ${address} on ${confirmedDateStr} at ${confirmedTimeStr}.`,
         url: request.transactionId
-          ? `/dashboard/transactions/${request.transactionId}`
-          : '/dashboard/transactions',
+          ? `/dashboard/transactions/new?edit=${request.transactionId}`
+          : '/dashboard/my-transactions',
         data: {
           transactionId: request.transactionId || '',
           inspectionCategory: request.inspectionCategory,
@@ -252,6 +252,8 @@ export async function GET(req: NextRequest) {
       inspectionType: getCategoryLabel(request.inspectionCategory),
       propertyAddress: request.propertyAddress,
       clientName: request.clientName,
+      clientPhone: request.clientPhone,
+      clientEmail: request.clientEmail,
       agentName: request.agentName,
       agentPhone: request.agentPhone,
       agentEmail: request.agentEmail,
