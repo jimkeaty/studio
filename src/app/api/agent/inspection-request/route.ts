@@ -306,11 +306,17 @@ export async function POST(req: NextRequest) {
             scheduleLink,
             isBlast,
           });
+          // Keep the branded inspection sender while routing a normal email reply
+          // directly to the requesting agent when the transaction has a valid email.
+          const replyTo = typeof agentEmail === 'string' && /^\S+@\S+\.\S+$/.test(agentEmail.trim())
+            ? agentEmail.trim()
+            : undefined;
           const { error: sendError } = await resend.emails.send({
             from: fromEmail,
             to: [vendor.email],
             subject: `Inspection Request — ${getCategoryLabel(inspectionCategory)} at ${propertyAddress}`,
             html,
+            ...(replyTo ? { replyTo } : {}),
           });
           if (!sendError) emailSent = true;
           else console.error('[inspection-request] Resend error:', sendError);

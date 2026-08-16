@@ -235,6 +235,13 @@ test('inspector communications contain client contact details and confirmed-insp
   assert.match(inspectionSchedulingPageSource, /Text Agent/);
 });
 
+test('inspection emails retain the branded sender while replying directly to a valid requesting-agent email', () => {
+  assert.match(inspectionRequestSource, /const replyTo = typeof agentEmail === 'string'/);
+  assert.match(inspectionRequestSource, /\^\\S\+@\\S\+\\\.\\S\+\$/);
+  assert.match(inspectionRequestSource, /from: fromEmail/);
+  assert.match(inspectionRequestSource, /\.\.\.\(replyTo \? \{ replyTo \} : \{\}\)/);
+});
+
 test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {
   assert.match(transactionReminderSource, /const MILESTONE_REMINDER_DAYS = \[3, 1\] as const/);
   for (const field of ['inspectionDeadline', 'appraisalDeadline', 'finalLoanCommitmentDeadline', 'depositDeadline', 'projectedCloseDate']) {
