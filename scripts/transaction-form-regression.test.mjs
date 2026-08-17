@@ -242,6 +242,11 @@ test('inspection emails retain the branded sender while replying directly to a v
   assert.match(inspectionRequestSource, /\.\.\.\(replyTo \? \{ replyTo \} : \{\}\)/);
 });
 
+test('automated inspector SMS directs replies to the secure Text Agent action', () => {
+  assert.match(inspectionRequestSource, /Please do not reply to this automated text/);
+  assert.match(inspectionRequestSource, /use Text Agent, Call Agent, or Email Agent/);
+});
+
 test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {
   assert.match(transactionReminderSource, /const MILESTONE_REMINDER_DAYS = \[3, 1\] as const/);
   for (const field of ['inspectionDeadline', 'appraisalDeadline', 'finalLoanCommitmentDeadline', 'depositDeadline', 'projectedCloseDate']) {

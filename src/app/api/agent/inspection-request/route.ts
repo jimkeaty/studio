@@ -353,7 +353,7 @@ export async function POST(req: NextRequest) {
             await client.messages.create({
               from: fromNumber,
               to: toNumber,
-              body: `${appName}: ${getCategoryLabel(inspectionCategory)} request for ${propertyAddress}. Preferred ${formatDate(preferredDate)} ${formatTime(preferredTimeStart)}-${formatTime(preferredTimeEnd)}. ${clientContact ? `${clientContact}. ` : ''}${agentContact ? `${agentContact}. ` : ''}Confirm: ${scheduleLink}`.slice(0, 1600),
+              body: `${appName}: ${getCategoryLabel(inspectionCategory)} request for ${propertyAddress}. Preferred ${formatDate(preferredDate)} ${formatTime(preferredTimeStart)}-${formatTime(preferredTimeEnd)}. ${clientContact ? `${clientContact}. ` : ''}${agentContact ? `${agentContact}. ` : ''}Confirm and contact the agent: ${scheduleLink} Please do not reply to this automated text; open the link and use Text Agent, Call Agent, or Email Agent.`.slice(0, 1600),
             });
             smsSent = true;
           }
