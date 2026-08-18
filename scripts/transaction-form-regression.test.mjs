@@ -256,6 +256,15 @@ test('TC edits and approval preserve canonical documents when intake wrappers ar
   assert.match(tcApprovalSource, /preserve every existing canonical document/);
 });
 
+test('admin document recovery diagnostic is read-only and compares canonical, intake, and storage metadata', () => {
+  const recoverySource = readFileSync(resolve(root, 'src/app/api/admin/diagnostics/document-recovery/route.ts'), 'utf8');
+  assert.match(recoverySource, /isAdminLike/);
+  assert.match(recoverySource, /canonicalDocuments/);
+  assert.match(recoverySource, /intakeRecords/);
+  assert.match(recoverySource, /storageCandidates/);
+  assert.match(recoverySource, /Read-only metadata only/);
+});
+
 test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {
   assert.match(transactionReminderSource, /const MILESTONE_REMINDER_DAYS = \[3, 1\] as const/);
   for (const field of ['inspectionDeadline', 'appraisalDeadline', 'finalLoanCommitmentDeadline', 'depositDeadline', 'projectedCloseDate']) {
