@@ -16,6 +16,7 @@ const inspectionSchedulingPageSource = readFileSync(resolve(root, 'src/app/inspe
 const transactionSectionsSource = readFileSync(resolve(root, 'src/components/transactions/TransactionFormSections.tsx'), 'utf8');
 const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/transaction-reminders/route.ts'), 'utf8');
 const contactsRouteSource = readFileSync(resolve(root, 'src/app/api/contacts/route.ts'), 'utf8');
+const tcApprovalSource = readFileSync(resolve(root, 'src/app/api/admin/tc/[id]/route.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -245,6 +246,14 @@ test('inspection emails retain the branded sender while replying directly to a v
 test('automated inspector SMS directs replies to the secure Text Agent action', () => {
   assert.match(inspectionRequestSource, /Please do not reply to this automated text/);
   assert.match(inspectionRequestSource, /use Text Agent, Call Agent, or Email Agent/);
+});
+
+test('TC edits and approval preserve canonical documents when intake wrappers are empty or partial', () => {
+  assert.match(tcApprovalSource, /function mergeDocuments/);
+  assert.match(tcApprovalSource, /updates\.documents = mergeDocuments/);
+  assert.match(tcApprovalSource, /txSyncUpdate\.documents = mergeDocuments/);
+  assert.match(tcApprovalSource, /mergedPayload\.documents = mergeDocuments/);
+  assert.match(tcApprovalSource, /preserve every existing canonical document/);
 });
 
 test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {

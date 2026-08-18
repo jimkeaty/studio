@@ -62,6 +62,29 @@ function sanitizeForFirestore(obj: Record<string, any>): Record<string, any> {
   return out;
 }
 
+/**
+ * Documents are append-only business records. TC intake wrappers can be sparse,
+ * so an empty or partial wrapper list must never erase documents already stored
+ * on the canonical transaction. De-duplicate using the durable storage identity.
+ */
+function mergeDocuments(...sources: unknown[][]): any[] {
+  const merged: any[] = [];
+  const seen = new Set<string>();
+  for (const source of sources) {
+    for (const document of Array.isArray(source) ? source : []) {
+      if (!document || typeof document !== 'object') continue;
+      const doc = document as Record<string, any>;
+      const key = String(
+        doc.storagePath || doc.path || doc.storageKey || doc.url || doc.downloadURL || doc.name || doc.fileName || ''
+      ).trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(doc);
+    }
+  }
+  return merged;
+}
+
 type Params = { params: Promise<{ id: string }> };
 
 // ── Helper: check both collections for the intake ─────────────────────────
@@ -422,7 +445,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       for (const field of editableFields) {
         if (field in body) {
           const val = body[field];
-          updates[field] = val === '' || val === null ? null : val;
+          if (field === 'documents') {
+            // Never let an empty/partial TC form document list delete document
+            // references already carried by the intake.
+            updates.documents = mergeDocuments(
+              Array.isArray(intake.documents) ? intake.documents : [],
+              Array.isArray(val) ? val : []
+            );
+          } else {
+            updates[field] = val === '' || val === null ? null : val;
+          }
         }
       }
       await docRef.update(updates);
@@ -498,6 +530,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             else if (f === 'otherBrokerage') txSyncUpdate.otherAgentBrokerage = updates[f];
             else txSyncUpdate[f] = updates[f];
           }
+        }
+        if ('documents' in txSyncUpdate) {
+          const currentTxForDocuments = await adminDb.collection('transactions').doc(linkedTxId).get();
+          const existingTransactionDocuments = currentTxForDocuments.exists && Array.isArray(currentTxForDocuments.data()?.documents)
+            ? currentTxForDocuments.data()!.documents
+            : [];
+          txSyncUpdate.documents = mergeDocuments(existingTransactionDocuments, txSyncUpdate.documents);
         }
         // Also sync address to propertyAddress
         if (updates.address) txSyncUpdate.propertyAddress = updates.address;
@@ -1037,7 +1076,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         isPassThrough: !!intake.isPassThrough,
 
         // Uploaded documents — carry over from intake to transaction
-        documents: Array.isArray(intake.documents) ? intake.documents : [],
+        documents: mergeDocuments(Array.isArray(intake.documents) ? intake.documents : []),
 
         splitSnapshot,
         creditSnapshot,
@@ -1095,7 +1134,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ]);
           const mergedPayload: Record<string, any> = { ...existingData };
           for (const [k, v] of Object.entries(txPayload)) {
-            if (TC_ALWAYS_WIN.has(k)) {
+            if (k === 'documents') {
+              // An approval must preserve every existing canonical document even
+              // when the lightweight TC intake has an empty documents array.
+              mergedPayload.documents = mergeDocuments(
+                Array.isArray(existingData.documents) ? existingData.documents : [],
+                Array.isArray(v) ? v : []
+              );
+            } else if (TC_ALWAYS_WIN.has(k)) {
               // TC-controlled fields always win
               mergedPayload[k] = v;
             } else if (v !== null && v !== undefined && v !== '') {
