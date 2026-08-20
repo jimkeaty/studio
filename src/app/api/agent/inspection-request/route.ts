@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
       transactionType,
       inspectionCategory,
       vendorId,
-      sendMode,
+      sendMode: requestedSendMode,
       preferredDate,
       preferredTimeStart,
       preferredTimeEnd,
@@ -205,7 +205,10 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!inspectionCategory) return jsonError(400, 'inspectionCategory is required');
-    if (!sendMode) return jsonError(400, 'sendMode is required');
+    // Older saved inspection rows did not persist a sendMode. Treat them as the
+    // visible default, "Selected inspector only," instead of rejecting an otherwise
+    // complete agent request while the transaction is still unsaved.
+    const sendMode = requestedSendMode === 'all' ? 'all' : 'selected';
     if (!preferredDate) return jsonError(400, 'preferredDate is required');
     if (sendMode === 'selected' && !vendorId) return jsonError(400, 'vendorId is required for selected mode');
 

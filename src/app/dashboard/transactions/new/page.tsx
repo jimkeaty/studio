@@ -1354,7 +1354,17 @@ export default function AddTransactionPage() {
     () => Object.fromEntries(INSP_TYPES.map(t => [t.key, makeDefaultInspRow()]))
   );
   const updateInspRow = useCallback((key: string, patch: Partial<InspRowState>) => {
-    setInspRows(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setInspRows(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        // Older saved inspection rows did not always carry this field. The UI
+        // visibly defaults to Selected inspector only, so persist that same
+        // safe default before any request is sent.
+        sendMode: prev[key]?.sendMode || 'selected',
+        ...patch,
+      },
+    }));
   }, []);
 
   const { isAdmin: isAdminUser, loading: adminLoading } = useIsAdminLike();

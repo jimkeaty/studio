@@ -207,6 +207,8 @@ test('inspection requests use the supported JSON API and can deliver by vendor e
   assert.match(transactionSectionsSource, /\/api\/agent\/inspection-request/);
   assert.match(formSource, /inspectionCategory: key/);
   assert.match(transactionSectionsSource, /inspectionCategory: key/);
+  assert.match(formSource, /sendMode: prev\[key\]\?\.sendMode \|\| 'selected'/);
+  assert.match(inspectionRequestSource, /const sendMode = requestedSendMode === 'all' \? 'all' : 'selected'/);
   assert.match(formSource, /const responseText = await res\.text\(\);/);
   assert.match(transactionSectionsSource, /const responseText = await res\.text\(\);/);
   assert.match(inspectionRequestSource, /Selected vendor has no email address or mobile number/);
