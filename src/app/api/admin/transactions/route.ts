@@ -300,11 +300,16 @@ const UPDATABLE_FIELDS = new Set([
   'signAdditionalOptions', 'signOwnerName', 'signSpecialRequests',
   // ShowingTime
   'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
-  'showingApptOverlaps', 'showingAccessType', 'showingLockboxCode', 'showingAlarmCode',
-  'showingDisarmCode', 'showingLeadTime', 'showingMaxApptLength', 'showingNoSameDayAppts',
-  'showingShareAgentInfo', 'showingNotesToAgent', 'showingNotesToStaff',
-  'showingCallOrder2Name', 'showingCallOrder2Mobile', 'showingCallOrder2Email',
-  'showingCallOrder3Name', 'showingCallOrder3Mobile', 'showingCallOrder3Email',
+  'showingApptOverlaps', 'showingVirtualPreference', 'showingAccessType', 'showingAccessNotes', 'showingAccessDoor',
+  'showingLockboxCode', 'showingLockboxType', 'showingLockboxLocation',
+  'showingAlarmCode', 'showingDisarmCode', 'showingArmCode', 'showingPasscode', 'showingAlarmNotes',
+  'showingAlarmDisarm', 'showingAlarmArm',
+  'showingLeadTime', 'showingLeadTimeRequired', 'showingLeadTimeSuggested', 'showingMaxApptLength', 'showingNoSameDayAppts',
+  'showingShareAgentInfo', 'showingNotesToAgent', 'showingNotesToAgentOther', 'showingNotesToStaff',
+  'showingCallOrder2Name', 'showingCallOrder2Phone', 'showingCallOrder2Mobile', 'showingCallOrder2AltPhone',
+  'showingCallOrder2Email', 'showingCallOrder2Type', 'showingCallOrder2Confirm', 'showingCallOrder2Notify',
+  'showingCallOrder3Name', 'showingCallOrder3Phone', 'showingCallOrder3Mobile', 'showingCallOrder3AltPhone',
+  'showingCallOrder3Email', 'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
   // MLS / listing
   'mlsDescription', 'listingExpirationDate',
   // Additional deadline fields

@@ -250,6 +250,25 @@ test('automated inspector SMS directs replies to the secure Text Agent action', 
   assert.match(inspectionRequestSource, /use Text Agent, Call Agent, or Email Agent/);
 });
 
+test('ShowingTime information saves and reopens through the unified Staff Queue form without silently dropping current fields', () => {
+  const currentShowingFields = [
+    'showingNewOrChange', 'showingMaxApptLength', 'showingApptOverlaps', 'showingVirtualPreference',
+    'showingNoSameDayAppts', 'showingLeadTimeRequired', 'showingLeadTimeSuggested', 'showingShareAgentInfo',
+    'showingAccessType', 'showingAccessNotes', 'showingAccessDoor', 'showingDisarmCode', 'showingArmCode',
+    'showingPasscode', 'showingAlarmNotes', 'showingNotesToStaff', 'showingCallOrder2AltPhone',
+    'showingCallOrder2Type', 'showingCallOrder2Confirm', 'showingCallOrder2Notify', 'showingCallOrder3AltPhone',
+    'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
+  ];
+  for (const field of currentShowingFields) {
+    assert.match(formSource, new RegExp(`${field}: (?:tx\\.${field}|Array\\.isArray\\(tx\\.${field}\\))`), `${field} must hydrate when a transaction reopens`);
+    assert.match(adminRouteSource, new RegExp(`'${field}'`), `${field} must persist through operational Staff Queue saves`);
+    assert.match(agentRouteSource, new RegExp(`'${field}'`), `${field} must persist through agent saves`);
+  }
+  assert.match(formSource, /showingCallOrder2Mobile: tx\.showingCallOrder2Mobile \|\| tx\.showingCallOrder2Phone/);
+  assert.match(formSource, /showingCallOrder3Mobile: tx\.showingCallOrder3Mobile \|\| tx\.showingCallOrder3Phone/);
+  assert.match(formSource, /showingNotesToAgent: Array\.isArray\(tx\.showingNotesToAgent\)/);
+});
+
 test('confirmed inspectors receive a dated receipt and can revisit or add their appointment to a calendar', () => {
   assert.match(inspectionRequestSource, /vendorPhone: vendor\.phone/);
   assert.match(inspectionConfirmSource, /function buildInspectorConfirmationEmail/);
