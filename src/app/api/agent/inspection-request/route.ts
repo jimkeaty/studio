@@ -256,6 +256,7 @@ export async function POST(req: NextRequest) {
         vendorId: vendor.id,
         vendorName: vendor.name,
         vendorEmail: vendor.email,
+        vendorPhone: vendor.phone,
         sendMode,
         isBlast,
         status: 'pending',  // pending | confirmed | expired | taken

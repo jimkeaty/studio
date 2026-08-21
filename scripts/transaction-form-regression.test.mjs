@@ -250,6 +250,23 @@ test('automated inspector SMS directs replies to the secure Text Agent action', 
   assert.match(inspectionRequestSource, /use Text Agent, Call Agent, or Email Agent/);
 });
 
+test('confirmed inspectors receive a dated receipt and can revisit or add their appointment to a calendar', () => {
+  assert.match(inspectionRequestSource, /vendorPhone: vendor\.phone/);
+  assert.match(inspectionConfirmSource, /function buildInspectorConfirmationEmail/);
+  assert.match(inspectionConfirmSource, /function sendInspectorConfirmationReceipt/);
+  assert.match(inspectionConfirmSource, /Inspector confirmation SMS error/);
+  assert.match(inspectionConfirmSource, /Add to Calendar/);
+  assert.match(inspectionConfirmSource, /ctz: 'America\/Chicago'/);
+  assert.match(inspectionConfirmSource, /confirmedDate: request\.confirmedDate/);
+  assert.match(inspectionConfirmSource, /confirmedTime: request\.confirmedTime/);
+  assert.match(inspectionSchedulingPageSource, /confirmedDate\?: string/);
+  assert.match(inspectionSchedulingPageSource, /confirmedTime\?: string/);
+  assert.match(inspectionSchedulingPageSource, /function ConfirmedScheduleDetails/);
+  assert.match(inspectionSchedulingPageSource, /Inspection Scheduled/);
+  assert.match(inspectionSchedulingPageSource, /Add to Calendar/);
+  assert.match(inspectionSchedulingPageSource, /ctz: 'America\/Chicago'/);
+});
+
 test('TC edits and approval preserve canonical documents when intake wrappers are empty or partial', () => {
   assert.match(tcApprovalSource, /function mergeDocuments/);
   assert.match(tcApprovalSource, /updates\.documents = mergeDocuments/);

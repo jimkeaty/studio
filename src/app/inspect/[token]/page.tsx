@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { CheckCircle2, Clock, AlertTriangle, CalendarCheck, Home, User, Ruler, Phone, Mail, MessageSquare } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, CalendarCheck, CalendarPlus, Home, User, Ruler, Phone, Mail, MessageSquare } from 'lucide-react';
 
 type RequestData = {
   status: 'pending' | 'confirmed' | 'taken' | 'expired';
@@ -21,6 +21,8 @@ type RequestData = {
   preferredTimeEnd?: string;
   fallbackDateStart?: string;
   fallbackDateEnd?: string;
+  confirmedDate?: string;
+  confirmedTime?: string;
   isBlast?: boolean;
   alreadyConfirmed?: boolean;
   taken?: boolean;
@@ -42,6 +44,36 @@ function formatDate(d: string) {
 function formatDateShort(d: string) {
   const dt = new Date(d + 'T12:00:00');
   return dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function buildGoogleCalendarUrl(opts: {
+  inspectionType?: string;
+  propertyAddress?: string;
+  confirmedDate: string;
+  confirmedTime: string;
+  agentName?: string;
+}) {
+  const [year, month, day] = opts.confirmedDate.split('-').map(Number);
+  const [hour, minute] = opts.confirmedTime.split(':').map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return '';
+
+  const start = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  const toGoogleDate = (date: Date) => [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0'),
+  ].join('') + `T${String(date.getUTCHours()).padStart(2, '0')}${String(date.getUTCMinutes()).padStart(2, '0')}00`;
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `${opts.inspectionType || 'Inspection'} at ${opts.propertyAddress || 'the property'}`,
+    dates: `${toGoogleDate(start)}/${toGoogleDate(end)}`,
+    details: `Inspection scheduled with ${opts.agentName || 'the requesting agent'}.`,
+    location: opts.propertyAddress || '',
+    ctz: 'America/Chicago',
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 // Generate 30-minute time slots from 7am to 7pm
@@ -73,7 +105,7 @@ export default function InspectSchedulingPage() {
   const [selectedTime, setSelectedTime] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [submitResult, setSubmitResult] = useState<{ ok: boolean; message: string; taken?: boolean } | null>(null);
+  const [submitResult, setSubmitResult] = useState<{ ok: boolean; message: string; taken?: boolean; confirmedDate?: string; confirmedTime?: string } | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -136,13 +168,25 @@ export default function InspectSchedulingPage() {
 
   // ── Already confirmed ──────────────────────────────────────────────────────
   if (data.status === 'confirmed' || data.alreadyConfirmed) {
+    const hasSavedSchedule = Boolean(data.confirmedDate && data.confirmedTime);
     return (
       <PageShell>
         <StatusCard
           icon={<CheckCircle2 className="h-12 w-12 text-green-500" />}
-          title="Already Confirmed"
-          message="This inspection has already been scheduled. Thank you!"
+          title="Inspection Scheduled"
+          message={hasSavedSchedule
+            ? 'Your confirmed appointment details are below.'
+            : 'This inspection has already been scheduled. Please contact the requesting agent for the appointment time.'}
           color="green"
+          extra={hasSavedSchedule ? (
+            <ConfirmedScheduleDetails
+              inspectionType={data.inspectionType}
+              propertyAddress={data.propertyAddress}
+              confirmedDate={data.confirmedDate!}
+              confirmedTime={data.confirmedTime!}
+              agentName={data.agentName}
+            />
+          ) : undefined}
         />
       </PageShell>
     );
@@ -183,15 +227,17 @@ export default function InspectSchedulingPage() {
         <PageShell>
           <StatusCard
             icon={<CalendarCheck className="h-12 w-12 text-green-500" />}
-            title="Availability Confirmed!"
-            message={submitResult.message}
+            title="Inspection Scheduled!"
+            message="Your appointment is confirmed. A confirmation with the exact date and time has been sent to you."
             color="green"
             extra={
-              <div className="mt-4 p-4 bg-green-50 rounded-lg text-sm text-green-800 space-y-1">
-                <p><strong>Date:</strong> {formatDate(selectedDate)}</p>
-                <p><strong>Time:</strong> {formatTime(selectedTime)}</p>
-                <p><strong>Property:</strong> {data.propertyAddress}</p>
-              </div>
+              <ConfirmedScheduleDetails
+                inspectionType={data.inspectionType}
+                propertyAddress={data.propertyAddress}
+                confirmedDate={submitResult.confirmedDate || selectedDate}
+                confirmedTime={submitResult.confirmedTime || selectedTime}
+                agentName={data.agentName}
+              />
             }
           />
         </PageShell>
@@ -412,6 +458,42 @@ function StatusCard({
       <h2 className="text-xl font-bold text-gray-900 mb-2">{title}</h2>
       <p className="text-gray-600 text-sm">{message}</p>
       {extra}
+    </div>
+  );
+}
+
+function ConfirmedScheduleDetails({
+  inspectionType, propertyAddress, confirmedDate, confirmedTime, agentName,
+}: {
+  inspectionType?: string;
+  propertyAddress?: string;
+  confirmedDate: string;
+  confirmedTime: string;
+  agentName?: string;
+}) {
+  const calendarUrl = buildGoogleCalendarUrl({
+    inspectionType,
+    propertyAddress,
+    confirmedDate,
+    confirmedTime,
+    agentName,
+  });
+  return (
+    <div className="mt-4 p-4 bg-white rounded-lg text-left text-sm text-green-900 space-y-2">
+      {inspectionType && <p><strong>Inspection:</strong> {inspectionType}</p>}
+      <p><strong>Date:</strong> {formatDate(confirmedDate)}</p>
+      <p><strong>Time:</strong> {formatTime(confirmedTime)} Central Time</p>
+      {propertyAddress && <p><strong>Property:</strong> {propertyAddress}</p>}
+      {calendarUrl && (
+        <a
+          href={calendarUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 font-semibold text-white"
+        >
+          <CalendarPlus className="h-4 w-4" /> Add to Calendar
+        </a>
+      )}
     </div>
   );
 }
