@@ -1651,6 +1651,45 @@ export default function AddTransactionPage() {
   const watchedSellerPayingBuyer = form.watch('sellerPayingBuyerAgent');
   const watchedListPrice = form.watch('listPrice');
 
+  // ShowingTime owner contacts should reuse the sellers already entered above.
+  // The selected seller is only copied into an empty call-order field, so choosing
+  // Owner never overwrites a contact that an agent or staff member typed manually.
+  const populateShowingOwnerContact = useCallback((callOrder: 2 | 3) => {
+    const sellerContacts = [
+      { name: form.getValues('sellerName'), mobile: form.getValues('sellerPhone'), email: form.getValues('sellerEmail') },
+      { name: form.getValues('seller2Name'), mobile: form.getValues('seller2Phone'), email: form.getValues('seller2Email') },
+      { name: form.getValues('seller3Name'), mobile: form.getValues('seller3Phone'), email: form.getValues('seller3Email') },
+      { name: form.getValues('seller4Name'), mobile: form.getValues('seller4Phone'), email: form.getValues('seller4Email') },
+    ].filter((seller) => seller.name || seller.mobile || seller.email);
+    const seller = sellerContacts[callOrder - 2];
+    if (!seller) {
+      toast({
+        title: 'No seller contact available',
+        description: `Enter seller ${callOrder === 2 ? 'information' : 'information for a second seller'} above before selecting Owner for Call Order #${callOrder}.`,
+      });
+      return;
+    }
+
+    const fields = [
+      { field: `showingCallOrder${callOrder}Name`, value: seller.name },
+      { field: `showingCallOrder${callOrder}Mobile`, value: seller.mobile },
+      { field: `showingCallOrder${callOrder}Email`, value: seller.email },
+    ] as const;
+    const populated: string[] = [];
+    for (const { field, value } of fields) {
+      if (value && !String(form.getValues(field as any) || '').trim()) {
+        form.setValue(field as any, value as any, { shouldDirty: true, shouldValidate: true });
+        populated.push(field);
+      }
+    }
+    if (populated.length > 0) {
+      toast({
+        title: `Seller added to Call Order #${callOrder}`,
+        description: 'Existing call-order entries were kept unchanged.',
+      });
+    }
+  }, [form, toast]);
+
   const cbpManuallyEdited = useRef(false);
   const commPctManuallyEdited = useRef(false);
   // When the user types a GCI value directly, lock it so CBP×pct auto-calc won't overwrite it.
@@ -6144,7 +6183,10 @@ export default function AddTransactionPage() {
                   <FormField control={form.control} name="showingCallOrder2Type" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Call Order #2 — Contact Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={(value) => {
+                        field.onChange(value);
+                        if (value === 'owner') populateShowingOwnerContact(2);
+                      }} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                         <SelectContent>
                           <SelectItem value="agent">Agent</SelectItem>
@@ -6152,6 +6194,7 @@ export default function AddTransactionPage() {
                           <SelectItem value="occupant">Occupant</SelectItem>
                         </SelectContent>
                       </Select>
+                      <FormDescription>Selecting Owner fills empty contact fields from the first seller above.</FormDescription>
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="showingCallOrder2Confirm" render={({ field }) => (
@@ -6206,7 +6249,10 @@ export default function AddTransactionPage() {
                   <FormField control={form.control} name="showingCallOrder3Type" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={(value) => {
+                        field.onChange(value);
+                        if (value === 'owner') populateShowingOwnerContact(3);
+                      }} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                         <SelectContent>
                           <SelectItem value="agent">Agent</SelectItem>
@@ -6214,6 +6260,7 @@ export default function AddTransactionPage() {
                           <SelectItem value="occupant">Occupant</SelectItem>
                         </SelectContent>
                       </Select>
+                      <FormDescription>Selecting Owner fills empty contact fields from the next seller above.</FormDescription>
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="showingCallOrder3Confirm" render={({ field }) => (

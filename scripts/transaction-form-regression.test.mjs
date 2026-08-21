@@ -269,6 +269,18 @@ test('ShowingTime information saves and reopens through the unified Staff Queue 
   assert.match(formSource, /showingNotesToAgent: Array\.isArray\(tx\.showingNotesToAgent\)/);
 });
 
+test('ShowingTime owner call orders reuse saved seller contacts without replacing manual call-order entries', () => {
+  assert.match(formSource, /const populateShowingOwnerContact = useCallback\(\(callOrder: 2 \| 3\)/);
+  assert.match(formSource, /sellerName.*sellerPhone.*sellerEmail/);
+  assert.match(formSource, /seller2Name.*seller2Phone.*seller2Email/);
+  assert.match(formSource, /const seller = sellerContacts\[callOrder - 2\]/);
+  assert.match(formSource, /!String\(form\.getValues\(field as any\) \|\| ''\)\.trim\(\)/);
+  assert.match(formSource, /if \(value === 'owner'\) populateShowingOwnerContact\(2\)/);
+  assert.match(formSource, /if \(value === 'owner'\) populateShowingOwnerContact\(3\)/);
+  assert.match(formSource, /first seller above/);
+  assert.match(formSource, /next seller above/);
+});
+
 test('confirmed inspectors receive a dated receipt and can revisit or add their appointment to a calendar', () => {
   assert.match(inspectionRequestSource, /vendorPhone: vendor\.phone/);
   assert.match(inspectionConfirmSource, /function buildInspectorConfirmationEmail/);
