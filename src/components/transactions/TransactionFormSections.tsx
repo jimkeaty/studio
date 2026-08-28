@@ -910,10 +910,6 @@ export function SignOrderSection({ form }: TransactionFormSectionProps) {
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="space-y-5 pt-0">
-            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 p-4 text-sm text-amber-800 dark:text-amber-300">
-              <p className="font-semibold mb-1">Sign orders are sent to staff for review.</p>
-              <p>Staff will add your personalized QR code or text rider number before forwarding to J Allen / PostMan337. You can also order directly at <a href="https://www.PostMan337.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">PostMan337.com</a>.</p>
-            </div>
             <div>
               <p className="text-sm font-medium mb-2">Type of Service:</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
