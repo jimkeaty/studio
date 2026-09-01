@@ -5498,7 +5498,7 @@ export default function AddTransactionPage() {
                   <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
                     <div>
                       <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
-                      <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form. Staff will follow up to confirm scheduling.</p>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form.</p>
                     </div>
                     <a
                       href="https://mediaengagellc.com/order/"
@@ -5529,7 +5529,7 @@ export default function AddTransactionPage() {
                         MLS Description Builder
                         <Badge className="bg-violet-100 text-violet-700 text-xs font-medium border-0">AI</Badge>
                       </CardTitle>
-                      <CardDescription>Brain-dump your property features and let AI craft a polished, fair-housing-compliant MLS description.</CardDescription>
+                      <CardDescription>Use AI to draft a polished MLS description. Review and edit it before use.</CardDescription>
                     </div>
                     <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${mlsDescriptionOpen ? 'rotate-180' : ''}`} />
                   </div>
@@ -5541,7 +5541,7 @@ export default function AddTransactionPage() {
                       <WandSparkles className="h-5 w-5 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
                       <div className="text-sm text-violet-800 dark:text-violet-300">
                         <p className="font-semibold mb-1">How it works</p>
-                        <p>Type anything — features, upgrades, neighborhood highlights, lot details, unique selling points. Don&apos;t worry about grammar or order. The AI will organize it into a compelling, fair-housing-compliant MLS description ready to copy into ROAM.</p>
+                        <p>Type anything — features, upgrades, neighborhood highlights, lot details, or unique selling points. The AI can organize your notes into a polished MLS description. Review and edit every detail for accuracy and applicable advertising requirements before copying it to ROAM.</p>
                       </div>
                     </div>
 
@@ -5661,7 +5661,7 @@ export default function AddTransactionPage() {
                           />
                         </FormControl>
                         <FormDescription>
-                          Review and edit the description as needed. This will be saved with your listing submission.
+                          Review and edit the description as needed before copying it to ROAM.
                         </FormDescription>
                       </FormItem>
                     )} />
@@ -5682,7 +5682,7 @@ export default function AddTransactionPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base">Sign Order</CardTitle>
-                      <CardDescription>Order a sign post for this listing. Leave blank and staff will handle the order.</CardDescription>
+                      <CardDescription>Request sign installation, removal, or repair.</CardDescription>
                     </div>
                     <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${signOrderOpen ? 'rotate-180' : ''}`} />
                   </div>
