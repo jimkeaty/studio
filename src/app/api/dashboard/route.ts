@@ -5,6 +5,7 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getAnniversaryCycle, isInCycle, formatCycleLabel } from '@/lib/agents/anniversaryCycle';
 import type { AgentDashboardData, BusinessPlan } from "@/lib/types";
 import { todayUtcInCompanyTz } from '@/lib/config';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -489,6 +490,7 @@ export async function GET(req: NextRequest) {
       // toward volume, unit count, or GCI — same treatment as broker recruiting incentives.
       const closingType = String((t as any).closingType || "").toLowerCase();
       const isReferralClosing = closingType === "referral";
+      const isPassThrough = isPassThroughTransaction(t);
          // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = closingType === "dual";
       const sideCount = isDual ? 2 : 1;
@@ -497,16 +499,16 @@ export async function GET(req: NextRequest) {
         if (!d) continue;
         const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const monthIndex = dUtc.getUTCMonth();
-        monthlyBuckets[monthIndex].closed += net;
+        if (!isPassThrough) monthlyBuckets[monthIndex].closed += net;
         if (
           dUtc.getTime() >= effectiveStart.getTime() &&
           dUtc.getTime() <= asOf.getTime()
         ) {
-          netEarned += net;
+          if (!isPassThrough) netEarned += net;
           if (!isReferralClosing) {
             closedUnits += sideCount;
             closedVolume += dealValue;
-            totalGCI += gci;
+            if (!isPassThrough) totalGCI += gci;
           }
           // grossGCIYTD is accumulated below using anniversary cycle filter
         }
@@ -517,7 +519,7 @@ export async function GET(req: NextRequest) {
         const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const monthIndex = dUtc.getUTCMonth();
 
-        monthlyBuckets[monthIndex].pending += net;
+        if (!isPassThrough) monthlyBuckets[monthIndex].pending += net;
 
         // Track expected close date for projection grading
         const expectedCloseDate = toDate(
@@ -547,14 +549,16 @@ export async function GET(req: NextRequest) {
           pendingIncludeDate.getTime() >= financialEffectiveStart.getTime() &&
           pendingIncludeDate.getTime() <= financialWindowEnd.getTime()
         ) {
-          netPending += net;
+          if (!isPassThrough) netPending += net;
           if (!isReferralClosing) {
             pendingUnits += sideCount;
             pendingVolume += dealValue;
-            pendingGrossGCI += asNumber(
-              t.splitSnapshot?.grossCommission
-              || t.commission
-            );
+            if (!isPassThrough) {
+              pendingGrossGCI += asNumber(
+                t.splitSnapshot?.grossCommission
+                || t.commission
+              );
+            }
           }
         }
       }
@@ -1099,6 +1103,7 @@ export async function GET(req: NextRequest) {
     // Accumulate grossGCIYTD within the anniversary cycle (not calendar year)
     for (const t of txDocs) {
       if (String(t.status || '').trim() !== 'closed') continue;
+      if (isPassThroughTransaction(t)) continue;
       const d = getTransactionDateForEarned(t);
       if (!d) continue;
       const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -1241,10 +1246,11 @@ export async function GET(req: NextRequest) {
         const d = getTransactionDateForEarned(t);
         if (!d) continue;
         const prevIsReferral = String(t.closingType || "").toLowerCase() === "referral";
-        prevNetEarned += getTransactionNet(t);
+        const prevIsPassThrough = isPassThroughTransaction(t);
+        if (!prevIsPassThrough) prevNetEarned += getTransactionNet(t);
         if (!prevIsReferral) {
           prevClosedVolume += asNumber(t.salePrice ?? t.listPrice);
-          prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
+          if (!prevIsPassThrough) prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
           prevClosedUnits += 1;
         }
       }

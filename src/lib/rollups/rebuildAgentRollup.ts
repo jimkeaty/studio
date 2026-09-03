@@ -35,6 +35,7 @@
 import 'server-only';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getAnniversaryCycle, isInCycle } from '@/lib/agents/anniversaryCycle';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -169,6 +170,7 @@ export async function rebuildAgentRollup(
     const status = String(t.status || '').toLowerCase();
     const txType = String(t.transactionType || '').toLowerCase();
     const isDual = String(t.closingType || '').toLowerCase() === 'dual';
+    const isPassThrough = isPassThroughTransaction(t);
 
     // ── Co-agent side credit ─────────────────────────────────────────────
     // Determine whether this agent is the primary or the co-agent on this tx.
@@ -208,10 +210,10 @@ export async function rebuildAgentRollup(
         // A co-agent close is one completed unit for each participating agent.
         // Only volume and commission are divided by the participant percentage.
         closed += t.hasCoAgent ? 1 : sideCredit;
-        // Pass-through: agent personal property — count the close but exclude
-        // volume, GCI, and broker commission from leaderboard and tier totals.
-        if (!t.isPassThrough) {
-          closedVolume += volumeCredit;
+        // Pass-throughs receive production recognition for the completed sale
+        // and their allocated sale-price volume, but never income or tier credit.
+        closedVolume += volumeCredit;
+        if (!isPassThrough) {
           totalGCI += num(activeSplitSnapshot?.grossCommission ?? t.commission);
           agentNetCommission += num(activeSplitSnapshot?.agentNetCommission ?? t.commission);
           companyDollar += num(activeSplitSnapshot?.companyRetained ?? 0);
@@ -241,8 +243,8 @@ export async function rebuildAgentRollup(
       if (txDateUtc && isInCycle(txDateUtc, cycle)) {
         const personalGci = num(activeSplitSnapshot?.grossCommission ?? t.commission ?? 0);
         const personalCompanyDollar = num(activeSplitSnapshot?.companyRetained ?? 0);
-        // Pass-through transactions do not count toward tier progression
-        if (!t.isPassThrough) {
+        // Pass-through transactions do not count toward tier progression.
+        if (!isPassThrough) {
           tierProgressionGci += personalGci;
           tierProgressionCompanyDollar += personalCompanyDollar;
         }
@@ -271,6 +273,7 @@ export async function rebuildAgentRollup(
         (num(t.year) || null);
       const status = String(t.status || '').toLowerCase();
       const isDual = String(t.closingType || '').toLowerCase() === 'dual';
+      const isPassThrough = isPassThroughTransaction(t);
       const coSideCredit = num(t.coAgent?.sideCredit ?? 0.5) * (isDual ? 2 : 1);
       const coTxSalePrice = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
       const coVolumeCredit = coTxSalePrice * num(t.coAgent?.sideCredit ?? 0.5);
@@ -279,8 +282,8 @@ export async function rebuildAgentRollup(
       if (txYear === year) {
         if (status === 'closed') {
           closed += coSideCredit;
-          if (!t.isPassThrough) {
-            closedVolume += coVolumeCredit;
+          closedVolume += coVolumeCredit;
+          if (!isPassThrough) {
             totalGCI += num(coSplitSnapshot?.grossCommission ?? 0);
             agentNetCommission += num(coSplitSnapshot?.agentNetCommission ?? 0);
             companyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
@@ -294,7 +297,7 @@ export async function rebuildAgentRollup(
       if (status === 'closed') {
         const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
         if (txDateUtc && isInCycle(txDateUtc, cycle)) {
-          if (!t.isPassThrough) {
+          if (!isPassThrough) {
             tierProgressionGci += num(coSplitSnapshot?.grossCommission ?? 0);
             tierProgressionCompanyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
           }
@@ -339,7 +342,7 @@ export async function rebuildAgentRollup(
         t.splitSnapshot?.companyRetained ?? 0
       );
       // Pass-through: skip tier credit for personal property transactions
-      if (t.isPassThrough) continue;
+      if (isPassThroughTransaction(t)) continue;
       tierProgressionGci += gciCredit;
       tierProgressionCompanyDollar += companyCredit;
     }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { getEffectiveRollups } from "@/lib/rollupsService";
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 
 function titleCaseWords(s: string) {
   return s
@@ -342,19 +343,20 @@ async function handlePeriod(
     // Referral closings count toward net commission but NOT toward volume, unit count, or GCI.
     const txClosingType = String(t.closingType || "").toLowerCase();
     const isReferralClosing = txClosingType === "referral";
+    const isPassThrough = isPassThroughTransaction(t);
     // Dual Agent counts as 2 sides (1 buyer + 1 listing)
     const isDual = txClosingType === "dual";
     const sideCount = isDual ? 2 : 1;
 
     if (status === "closed") {
-      agg.agentNetCommission += num(
-        t.splitSnapshot?.agentNetCommission ?? t.commission
-      );
       if (!isReferralClosing) {
         agg.closed += sideCount;
-        // Pass-through: count the close but exclude volume, GCI, and broker commission
-        if (!t.isPassThrough) {
-          agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
+        // Pass-throughs count as sales and sale-price volume, but never income.
+        agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
+        if (!isPassThrough) {
+          agg.agentNetCommission += num(
+            t.splitSnapshot?.agentNetCommission ?? t.commission
+          );
           agg.totalGCI += num(t.commission);
           agg.companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
         }

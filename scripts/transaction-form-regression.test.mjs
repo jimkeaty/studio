@@ -17,6 +17,11 @@ const transactionSectionsSource = readFileSync(resolve(root, 'src/components/tra
 const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/transaction-reminders/route.ts'), 'utf8');
 const contactsRouteSource = readFileSync(resolve(root, 'src/app/api/contacts/route.ts'), 'utf8');
 const tcApprovalSource = readFileSync(resolve(root, 'src/app/api/admin/tc/[id]/route.ts'), 'utf8');
+const agentRollupSource = readFileSync(resolve(root, 'src/lib/rollups/rebuildAgentRollup.ts'), 'utf8');
+const leaderboardRouteSource = readFileSync(resolve(root, 'src/app/api/rollups/leaderboard/route.ts'), 'utf8');
+const agentDashboardSource = readFileSync(resolve(root, 'src/app/api/dashboard/route.ts'), 'utf8');
+const brokerCommandMetricsSource = readFileSync(resolve(root, 'src/app/api/broker/command-metrics/route.ts'), 'utf8');
+const passThroughHelperSource = readFileSync(resolve(root, 'src/lib/transactions/isPassThroughTransaction.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -77,6 +82,19 @@ test('a legacy zero GCI is recalculated from saved commission base and rate befo
   assert.match(formSource, /resolveGCI\(\{ commissionBasePrice: Number\(resolvedCommissionBasePrice\), commissionPercent: Number\(resolvedCommissionPercent\) \}\)/);
   assert.match(formSource, /const inferredLegacyGci = !isPassThroughTransaction && Number\(explicitGci\) <= 0 && calculatedLegacyGci <= 0/);
   assert.match(formSource, /const resolvedGci = Number\(explicitGci\) > 0 \? explicitGci : \(calculatedLegacyGci \|\| inferredLegacyGci \|\| ''\)/);
+});
+
+test('pass-throughs receive sale and volume recognition but no income, company-dollar, or tier credit', () => {
+  assert.match(passThroughHelperSource, /normalizeDealSource\(String\(tx\.dealSource \?\? ''\)\) === 'pass_through'/);
+  assert.match(agentRollupSource, /closedVolume \+= volumeCredit;[\s\S]*?if \(!isPassThrough\) \{[\s\S]*?totalGCI \+=/);
+  assert.match(agentRollupSource, /if \(!isPassThrough\) \{[\s\S]*?tierProgressionGci \+=/);
+  assert.match(leaderboardRouteSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
+  assert.match(leaderboardRouteSource, /agg\.closedVolume \+=[\s\S]*?if \(!isPassThrough\) \{[\s\S]*?agg\.agentNetCommission/);
+  assert.match(agentDashboardSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
+  assert.match(agentDashboardSource, /closedUnits \+= sideCount;[\s\S]*?closedVolume \+= dealValue;[\s\S]*?if \(!isPassThrough\) totalGCI \+= gci/);
+  assert.match(agentDashboardSource, /if \(isPassThroughTransaction\(t\)\) continue;[\s\S]*?grossGCIYTD \+= tierGCI/);
+  assert.match(brokerCommandMetricsSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
+  assert.match(formSource, /counts as a closed sale and sale-price volume,[\s\S]*?does not count toward agent GCI, agent net, brokerage\/company dollar, or tier advancement/);
 });
 
 test('operational staff can override closed-file GCI while agents remain read-only', () => {

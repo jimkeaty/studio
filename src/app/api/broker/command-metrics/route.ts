@@ -4,6 +4,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import type admin from 'firebase-admin';
 import { format } from 'date-fns';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import type {
   BrokerCommandMetrics,
   BrokerCommandOverview,
@@ -356,8 +357,10 @@ export async function GET(req: NextRequest) {
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = String((t as any).closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
-      // Pass-through transactions: count volume/count but exclude from GCI & commission % calculation
-      const isPassThrough = srcKey === 'pass_through';
+      // Pass-through transactions count sales and sale-price volume, but never
+      // generate GCI, agent net, brokerage margin, or commission-tier credit.
+      const isPassThrough = isPassThroughTransaction(t);
+      const incomeCredit = isPassThrough ? 0 : companyRetained;
 
       // ── Contracts written by month (contractDate bucket) ──────────────
       // Count every transaction (any status) that has a contractDate in the selected year.
@@ -423,11 +426,11 @@ export async function GET(req: NextRequest) {
 
         // Category
         categoryBreakdown.closed[catKey].count += sideCount;
-        categoryBreakdown.closed[catKey].netRevenue += companyRetained;
+        categoryBreakdown.closed[catKey].netRevenue += incomeCredit;
         categoryBreakdown.closed[catKey].volume += dealValue;
 
         // Source
-        addToSource(sourceBreakdown.closed, srcKey, dealValue, companyRetained);
+        addToSource(sourceBreakdown.closed, srcKey, dealValue, incomeCredit);
 
         // ── Fees collected aggregation ──────────────────────────────────
         // txComplianceFee: the compliance/transaction fee (new schema)
@@ -506,10 +509,10 @@ export async function GET(req: NextRequest) {
         }
         // Category
         categoryBreakdown.pending[catKey].count += sideCount;
-        categoryBreakdown.pending[catKey].netRevenue += companyRetained;
+        categoryBreakdown.pending[catKey].netRevenue += incomeCredit;
         categoryBreakdown.pending[catKey].volume += dealValue;
         // Source
-        addToSource(sourceBreakdown.pending, srcKey, dealValue, companyRetained);
+        addToSource(sourceBreakdown.pending, srcKey, dealValue, incomeCredit);
       }
     }
 
@@ -546,7 +549,7 @@ export async function GET(req: NextRequest) {
       const margin = t.splitSnapshot?.companyRetained ?? t.brokerProfit ?? 0;
       // salePrice is always authoritative; listPrice is the only fallback
       const vol = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
-      const isPrevPassThrough = ((t.dealSource || '').toLowerCase()) === 'pass_through';
+      const isPrevPassThrough = isPassThroughTransaction(t);
 
       prevMonthly[m].closedVolume += vol;
       prevMonthly[m].closedCount += 1;

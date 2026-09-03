@@ -2248,7 +2248,7 @@ export default function AddTransactionPage() {
         const resolvedBrokerGci = tx.brokerGci || tx.splitSnapshot?.companyRetained || tx.companyRetained || '';
         const resolvedAgentDollar = tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.splitSnapshot?.agentDollar || tx.agentNetCommission || tx.agentCommission || '';
         const explicitGci = tx.gci || tx.splitSnapshot?.grossCommission || tx.splitSnapshot?.grossCommissionAmount || tx.grossCommission || tx.commission || tx.commissionAmount || tx.grossCommissionIncome || '';
-        const isPassThroughTransaction = Boolean(tx.passThrough || tx.isPassThrough);
+        const isPassThroughTransaction = Boolean(tx.passThrough || tx.isPassThrough || String(tx.dealSource || '').toLowerCase() === 'pass_through');
         const calculatedLegacyGci = !isPassThroughTransaction && Number(explicitGci) <= 0 && Number(resolvedCommissionBasePrice) > 0 && Number(resolvedCommissionPercent) > 0
           ? resolveGCI({ commissionBasePrice: Number(resolvedCommissionBasePrice), commissionPercent: Number(resolvedCommissionPercent) })
           : 0;
@@ -7634,8 +7634,8 @@ export default function AddTransactionPage() {
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Pass-Through Transaction</p>
                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                      Agent is buying/selling personal property. No broker commission collected.
-                      This transaction will count as a closed unit but will NOT count toward leaderboard volume, tier advancement, or broker GCI.
+                      Agent is buying/selling personal property. It counts as a closed sale and sale-price volume,
+                      but does not count toward agent GCI, agent net, brokerage/company dollar, or tier advancement.
                     </p>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 mt-0.5">

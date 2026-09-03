@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 
 
 function getBearerToken(req: NextRequest) {
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest) {
 
       const isDual = String(d.closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
-      const isPassThrough = String(d.dealSource || '').toLowerCase() === 'pass_through';
+      const isPassThrough = isPassThroughTransaction(d);
       const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.listPrice) || 0);
 
       // ── contractsWritten: bucket by contractDate (any status) ──────────
