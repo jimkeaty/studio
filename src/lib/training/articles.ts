@@ -48,7 +48,7 @@ export const ARTICLES: Article[] = [
 <p>The request is an educational service, not a commitment to purchase. It can be helpful when a buyer is considering coverage, already expects a warranty, or needs help understanding how to use one. For sellers, it explains seller coverage during the listing period and the potential value of offering a warranty to the buyer.</p>
 
 <h2>How to Request the Call</h2>
-<p>In <strong>Additional Info</strong>, use the buyer or seller <strong>Home Warranty Education</strong> selector. Choose <strong>Yes</strong> only after confirming you have permission to share that client’s contact information with America’s Preferred Home Warranty (APHW). The office team receives an internal alert and coordinates the next step.</p>
+<p>In <strong>Additional Info</strong>, use the buyer or seller <strong>Home Warranty Education</strong> selector. Choose <strong>Yes</strong> only after confirming you have permission to share that client’s contact information with America’s Preferred Home Warranty (APHW). Saving the transaction sends the relevant client a Keaty Real Estate email with APHW’s consultation calendar link and alerts the office team to follow up.</p>
 
 <h2>Buyer Call and Follow-Up</h2>
 <p>APHW can explain buyer coverage, exclusions, claims, and how to use a warranty after closing. If the buyer purchases a qualifying APHW warranty, the program may provide a 12-month nurture experience with care, resources, and reminders about available coverage.</p>
@@ -63,11 +63,11 @@ export const ARTICLES: Article[] = [
 
 <h2>Agent Follow-Up Email Template</h2>
 <p><strong>Subject:</strong> Your Home Warranty Education Request</p>
-<p>We received your request to arrange an America’s Preferred Home Warranty educational call for your client. The call will review the applicable coverage, exclusions, claims process, and how the warranty works. Our office team will coordinate the next step. Please make sure your client knows APHW may contact them to schedule the educational conversation.</p>
+<p>We received your request to arrange an America’s Preferred Home Warranty educational call for your client. Keaty Real Estate has sent the client APHW’s consultation calendar link. The call will review the applicable coverage, exclusions, claims process, and how the warranty works. Our office team will follow up to make sure the client has what they need to schedule.</p>
 
 <h2>Quick FAQ</h2>
 <table><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody>
-<tr><td>Does selecting Yes mean the client must buy a warranty?</td><td>No. The request is for an educational call only.</td></tr>
+<tr><td>Does selecting Yes mean the client must buy a warranty?</td><td>No. The request is for an educational call only. It sends the relevant client an APHW consultation-calendar invitation.</td></tr>
 <tr><td>What does the buyer call cover?</td><td>Buyer coverage, exclusions, claims, and how to use a warranty after closing.</td></tr>
 <tr><td>What does the seller call cover?</td><td>Seller listing-period coverage, claims, and the potential benefits of offering a warranty to the buyer.</td></tr>
 <tr><td>When does the 12-month nurture program apply?</td><td>Only after a buyer purchases a qualifying APHW warranty.</td></tr>

@@ -18,6 +18,7 @@ const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/t
 const contactsRouteSource = readFileSync(resolve(root, 'src/app/api/contacts/route.ts'), 'utf8');
 const tcApprovalSource = readFileSync(resolve(root, 'src/app/api/admin/tc/[id]/route.ts'), 'utf8');
 const trainingArticlesSource = readFileSync(resolve(root, 'src/lib/training/articles.ts'), 'utf8');
+const aphwInvitationSource = readFileSync(resolve(root, 'src/lib/home-warranty/sendAphwEducationInvite.ts'), 'utf8');
 const agentRollupSource = readFileSync(resolve(root, 'src/lib/rollups/rebuildAgentRollup.ts'), 'utf8');
 const leaderboardRouteSource = readFileSync(resolve(root, 'src/app/api/rollups/leaderboard/route.ts'), 'utf8');
 const agentDashboardSource = readFileSync(resolve(root, 'src/app/api/dashboard/route.ts'), 'utf8');
@@ -44,11 +45,18 @@ test('APHW education requests retain buyer and seller distinctions, consent, ale
   assert.match(transactionSectionsSource, /<Info className=/);
   assert.match(createTransactionSource, /buyerWarrantyEducationRequested: toStr\(body\.buyerWarrantyEducationRequested\)/);
   assert.match(createTransactionSource, /Home Warranty Education Request/);
+  assert.match(createTransactionSource, /sendAphwEducationInvitations/);
   assert.match(agentRouteSource, /'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested'/);
   assert.match(agentRouteSource, /Home Warranty Education Request Received/);
+  assert.match(agentRouteSource, /sendAphwEducationInvitations/);
   assert.match(adminRouteSource, /'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested'/);
+  assert.match(adminRouteSource, /sendAphwEducationInvitations/);
   assert.match(trainingArticlesSource, /home-warranty-education-calls/);
   assert.match(trainingArticlesSource, /12-month nurture experience/);
+  assert.match(trainingArticlesSource, /consultation calendar link/);
+  assert.match(aphwInvitationSource, /https:\/\/www\.aphw\.com\/consultation\//);
+  assert.match(aphwInvitationSource, /Your Home Warranty Education Call/);
+  assert.match(aphwInvitationSource, /Your Seller Home Warranty Coverage/);
 });
 
 test('reopened shared transaction forms hydrate and submit their document list', () => {

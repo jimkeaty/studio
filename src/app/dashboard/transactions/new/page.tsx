@@ -6759,6 +6759,7 @@ export default function AddTransactionPage() {
                         <DialogDescription>America&apos;s Preferred Home Warranty can explain coverage, exclusions, claims, and how a buyer can use a warranty after closing.</DialogDescription>
                       </DialogHeader>
                       <div className="space-y-3 text-sm text-muted-foreground">
+                        <p>When you save a Yes selection, Keaty Real Estate sends the buyer a branded email with APHW&apos;s consultation calendar link. Staff will follow up to see whether the buyer would like help scheduling.</p>
                         <p>When a buyer purchases a qualifying APHW warranty, the program can provide a 12-month nurture experience with care, resources, and reminders about using available coverage.</p>
                         <p>APHW program materials also describe up to $5,000 in E&amp;O deductible coverage for qualifying claims. Coverage, eligibility, exclusions, and claim procedures are governed by APHW&apos;s current written program terms.</p>
                         <p className="font-medium text-foreground">Selecting Yes confirms that you have permission to share the buyer&apos;s contact information with APHW to arrange this educational call.</p>
@@ -6773,7 +6774,7 @@ export default function AddTransactionPage() {
                       <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
                       <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
                     </Select>
-                    <FormDescription>APHW will review buyer coverage, claims, exclusions, and warranty use. A qualifying buyer warranty may include a 12-month nurture program and up to $5,000 in E&amp;O deductible coverage for qualifying claims, subject to current APHW terms. Selecting Yes confirms you have permission to share the buyer&apos;s contact information.</FormDescription>
+                    <FormDescription>Saving Yes sends the buyer APHW&apos;s calendar link and alerts staff for follow-up. APHW will review buyer coverage, claims, exclusions, and warranty use. A qualifying buyer warranty may include a 12-month nurture program and up to $5,000 in E&amp;O deductible coverage for qualifying claims, subject to current APHW terms.</FormDescription>
                   </FormItem>
                 )} />
               </div>
@@ -6798,6 +6799,7 @@ export default function AddTransactionPage() {
                         <DialogDescription>America&apos;s Preferred Home Warranty can explain seller coverage, claims, and the potential value of offering a warranty to the buyer.</DialogDescription>
                       </DialogHeader>
                       <div className="space-y-3 text-sm text-muted-foreground">
+                        <p>When you save a Yes selection, Keaty Real Estate sends the seller a branded email with APHW&apos;s consultation calendar link. Staff will follow up to see whether the seller would like help scheduling.</p>
                         <p>APHW program materials describe free listing coverage, with an expectation that the buyer will purchase the warranty at closing. The call helps the seller understand how coverage and claims work during the listing period.</p>
                         <p>The program materials also describe up to $2,500 in post-legal coverage for qualifying matters. Coverage, eligibility, exclusions, and claim procedures are governed by APHW&apos;s current written program terms.</p>
                         <p className="font-medium text-foreground">Selecting Yes confirms that you have permission to share the seller&apos;s contact information with APHW to arrange this educational call.</p>
@@ -6812,7 +6814,7 @@ export default function AddTransactionPage() {
                       <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
                       <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
                     </Select>
-                    <FormDescription>APHW will review seller coverage, claims, and the potential benefits of offering a warranty to the buyer. Its program materials describe up to $2,500 in post-legal coverage for qualifying matters, subject to current APHW terms. Selecting Yes confirms you have permission to share the seller&apos;s contact information.</FormDescription>
+                    <FormDescription>Saving Yes sends the seller APHW&apos;s calendar link and alerts staff for follow-up. APHW will review seller coverage, claims, and the potential benefits of offering a warranty to the buyer. Its program materials describe up to $2,500 in post-legal coverage for qualifying matters, subject to current APHW terms.</FormDescription>
                   </FormItem>
                 )} />
               </div>

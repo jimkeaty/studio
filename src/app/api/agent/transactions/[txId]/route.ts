@@ -12,6 +12,7 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
+import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -732,22 +733,37 @@ export async function PATCH(
           updates.sellerWarrantyEducationRequested === 'yes' && txData.sellerWarrantyEducationRequested !== 'yes' ? 'Seller' : null,
         ].filter(Boolean) as string[];
         if (warrantyEducationSides.length > 0) {
+          const invitation = await sendAphwEducationInvitations({ ...txData, ...updates }, warrantyEducationSides.map(side => side.toLowerCase() as 'buyer' | 'seller'));
+          const deliveryStatus = invitation.sentTo.length > 0
+            ? `Client invitation email sent to ${invitation.sentTo.join(', ')}.`
+            : 'No client invitation email was sent.';
+          const followUpStatus = invitation.missingEmailSides.length > 0 || invitation.failedSides.length > 0
+            ? ' Please call the client directly because an email address is missing or delivery failed.'
+            : ' Please follow up with the client to confirm whether they scheduled the consultation.';
+          const agentConfirmation = invitation.sentTo.length > 0
+            ? `We sent the America’s Preferred Home Warranty consultation invitation for the ${warrantyEducationSides.join(' and ').toLowerCase()} on ${txAddress}. The office team will also follow up.`
+            : `We received your America’s Preferred Home Warranty education request for the ${warrantyEducationSides.join(' and ').toLowerCase()} on ${txAddress}. The office team will contact the client directly because the invitation email could not be sent.`;
+          await txRef.update({
+            homeWarrantyEducationLastInviteAt: new Date().toISOString(),
+            homeWarrantyEducationLastInviteRecipients: invitation.sentTo,
+            homeWarrantyEducationInviteNeedsStaffFollowUp: true,
+          });
           const staffUids = await getAllStaffUids(adminDb);
           if (staffUids.length > 0) {
             await sendNotification(adminDb, {
-              type: 'staff_queue_new',
+              type: 'home_warranty_education',
               recipientUids: staffUids,
               title: `Home Warranty Education Request — ${txAddress}`,
-              body: `Agent: ${agentName}\nRequested client: ${warrantyEducationSides.join(' and ')}\nPlease coordinate an America’s Preferred Home Warranty educational call. Client contact details are in the transaction.`,
+              body: `Agent: ${agentName}\nRequested client: ${warrantyEducationSides.join(' and ')}\n${deliveryStatus}${followUpStatus}\nClient contact details are in the transaction.`,
               url: '/dashboard/admin/transactions',
               data: { transactionId: txId, requestSides: warrantyEducationSides.join(',') },
             });
           }
           await sendNotification(adminDb, {
-            type: 'system',
+            type: 'home_warranty_education',
             recipientUids: [uid],
             title: 'Home Warranty Education Request Received',
-            body: `We received your request for an America’s Preferred Home Warranty educational call for the ${warrantyEducationSides.join(' and ').toLowerCase()} on ${txAddress}. The office team will coordinate the next step.`,
+            body: agentConfirmation,
             url: '/dashboard/my-transactions',
             data: { transactionId: txId, requestSides: warrantyEducationSides.join(',') },
           });

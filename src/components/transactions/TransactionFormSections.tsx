@@ -803,7 +803,7 @@ export function AdditionalInfoSection({ form }: TransactionFormSectionProps) {
                 <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
                 <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
               </Select>
-              <FormDescription>APHW can explain coverage, claims, exclusions, and warranty use. A qualifying buyer warranty may include a 12-month nurture program and up to $5,000 in E&amp;O deductible coverage for qualifying claims, subject to current APHW terms. Selecting Yes confirms permission to share the buyer&apos;s contact information.</FormDescription>
+              <FormDescription>Saving Yes sends the buyer APHW&apos;s calendar link and alerts staff for follow-up. APHW can explain coverage, claims, exclusions, and warranty use. A qualifying buyer warranty may include a 12-month nurture program and up to $5,000 in E&amp;O deductible coverage for qualifying claims, subject to current APHW terms.</FormDescription>
             </FormItem>
           )} />
         </div>
@@ -825,7 +825,7 @@ export function AdditionalInfoSection({ form }: TransactionFormSectionProps) {
                 <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
                 <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
               </Select>
-              <FormDescription>APHW can explain seller coverage, claims, and buyer-warranty benefits. APHW program materials describe up to $2,500 in post-legal coverage for qualifying matters, subject to current APHW terms. Selecting Yes confirms permission to share the seller&apos;s contact information.</FormDescription>
+              <FormDescription>Saving Yes sends the seller APHW&apos;s calendar link and alerts staff for follow-up. APHW can explain seller coverage, claims, and buyer-warranty benefits. APHW program materials describe up to $2,500 in post-legal coverage for qualifying matters, subject to current APHW terms.</FormDescription>
             </FormItem>
           )} />
         </div>
