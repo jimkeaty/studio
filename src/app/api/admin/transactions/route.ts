@@ -345,6 +345,7 @@ const UPDATABLE_FIELDS = new Set([
   'showingNotesToAgentOther', 'showingTimeId',
   'signNotes', 'signRequestedDate', 'signRiderExt',
   'titleOfficerStreet', 'warrantyAmount', 'workingWithTc',
+  'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested',
   'inspectionRowData',
 ]);
 
@@ -787,6 +788,33 @@ export async function PATCH(req: NextRequest) {
       }
       // Resolve the agent's Firebase UID from the agentId slug
       const agentUid = agentIdSlug ? (await getAgentUid(adminDb, agentIdSlug)) : null;
+      const warrantyEducationSides = [
+        updates.buyerWarrantyEducationRequested === 'yes' && existingData?.buyerWarrantyEducationRequested !== 'yes' ? 'Buyer' : null,
+        updates.sellerWarrantyEducationRequested === 'yes' && existingData?.sellerWarrantyEducationRequested !== 'yes' ? 'Seller' : null,
+      ].filter(Boolean) as string[];
+      if (warrantyEducationSides.length > 0) {
+        const allStaffUids = await getAllStaffUids(adminDb);
+        if (allStaffUids.length > 0) {
+          await sendNotification(adminDb, {
+            type: 'staff_queue_new',
+            recipientUids: allStaffUids,
+            title: `Home Warranty Education Request — ${address}`,
+            body: `Agent: ${txData?.agentDisplayName || agentIdSlug || 'Agent'}\nRequested client: ${warrantyEducationSides.join(' and ')}\nPlease coordinate an America’s Preferred Home Warranty educational call. Client contact details are in the transaction.`,
+            url: '/dashboard/admin/transactions',
+            data: { transactionId: id, requestSides: warrantyEducationSides.join(',') },
+          });
+        }
+        if (agentUid) {
+          await sendNotification(adminDb, {
+            type: 'system',
+            recipientUids: [agentUid],
+            title: 'Home Warranty Education Request Received',
+            body: `We received your request for an America’s Preferred Home Warranty educational call for the ${warrantyEducationSides.join(' and ').toLowerCase()} on ${address}. The office team will coordinate the next step.`,
+            url: '/dashboard/my-transactions',
+            data: { transactionId: id, requestSides: warrantyEducationSides.join(',') },
+          });
+        }
+      }
       // Determine who made this edit (TC/staff vs agent)
       const callerUid = decoded.uid;
       const callerRole = await getStaffRole(callerUid);

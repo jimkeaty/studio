@@ -268,6 +268,8 @@ export async function POST(req: NextRequest) {
       warrantyAtClosing: toStr(body.warrantyAtClosing) || null,
       warrantyAmount: toNum(body.warrantyAmount) || null,
       warrantyPaidBy: toStr(body.warrantyPaidBy) || null,
+      buyerWarrantyEducationRequested: toStr(body.buyerWarrantyEducationRequested) || null,
+      sellerWarrantyEducationRequested: toStr(body.sellerWarrantyEducationRequested) || null,
       txComplianceFee: toStr(body.txComplianceFee) || null,
       txComplianceFeeAmount: toNum(body.txComplianceFeeAmount) || null,
       txComplianceFeePaidBy: toStr(body.txComplianceFeePaidBy) || null,
@@ -642,6 +644,31 @@ export async function POST(req: NextRequest) {
               url: staffQueueRef ? `/dashboard/admin/staff-queue/${staffQueueRef.id}` : '/dashboard/admin/staff-queue',
             });
           }
+        }
+        const warrantyEducationSides = [
+          (toStr(body.buyerWarrantyEducationRequested) || '').toLowerCase() === 'yes' ? 'Buyer' : null,
+          (toStr(body.sellerWarrantyEducationRequested) || '').toLowerCase() === 'yes' ? 'Seller' : null,
+        ].filter(Boolean) as string[];
+        if (warrantyEducationSides.length > 0) {
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: `Home Warranty Education Request — ${address}`,
+              body: `Agent: ${agentDisplayName}\nRequested client: ${warrantyEducationSides.join(' and ')}\nPlease coordinate an America’s Preferred Home Warranty educational call. Client contact details are in the transaction.`,
+              url: isListingType && staffQueueRef ? `/dashboard/admin/staff-queue/${staffQueueRef.id}` : '/dashboard/admin/transactions',
+              data: { transactionId: txRef.id, requestSides: warrantyEducationSides.join(',') },
+            });
+          }
+          await sendNotification(adminDb, {
+            type: 'system',
+            recipientUids: [uid],
+            title: 'Home Warranty Education Request Received',
+            body: `We received your request for an America’s Preferred Home Warranty educational call for the ${warrantyEducationSides.join(' and ').toLowerCase()} on ${address}. The office team will coordinate the next step.`,
+            url: '/dashboard/my-transactions',
+            data: { transactionId: txRef.id, requestSides: warrantyEducationSides.join(',') },
+          });
         }
       } catch (notifErr) {
         console.error('[POST /api/tc] notification error:', notifErr);

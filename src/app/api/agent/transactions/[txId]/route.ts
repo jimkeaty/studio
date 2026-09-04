@@ -63,6 +63,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'sellerPayingListingAgent', 'sellerPayingBuyerAgent',
   // Additional transaction info
   'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
+  'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested',
   'shortageInCommission', 'shortageAmount', 'shortageHandledBy',
   'occupancyAgreement', 'occupancyDates',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
@@ -726,6 +727,31 @@ export async function PATCH(
         const txAddress = String(txData.propertyAddress || txData.address || 'your transaction');
         const agentName = String(txData.agentDisplayName || 'Agent');
         const agentUid = txData.agentId || uid;
+        const warrantyEducationSides = [
+          updates.buyerWarrantyEducationRequested === 'yes' && txData.buyerWarrantyEducationRequested !== 'yes' ? 'Buyer' : null,
+          updates.sellerWarrantyEducationRequested === 'yes' && txData.sellerWarrantyEducationRequested !== 'yes' ? 'Seller' : null,
+        ].filter(Boolean) as string[];
+        if (warrantyEducationSides.length > 0) {
+          const staffUids = await getAllStaffUids(adminDb);
+          if (staffUids.length > 0) {
+            await sendNotification(adminDb, {
+              type: 'staff_queue_new',
+              recipientUids: staffUids,
+              title: `Home Warranty Education Request — ${txAddress}`,
+              body: `Agent: ${agentName}\nRequested client: ${warrantyEducationSides.join(' and ')}\nPlease coordinate an America’s Preferred Home Warranty educational call. Client contact details are in the transaction.`,
+              url: '/dashboard/admin/transactions',
+              data: { transactionId: txId, requestSides: warrantyEducationSides.join(',') },
+            });
+          }
+          await sendNotification(adminDb, {
+            type: 'system',
+            recipientUids: [uid],
+            title: 'Home Warranty Education Request Received',
+            body: `We received your request for an America’s Preferred Home Warranty educational call for the ${warrantyEducationSides.join(' and ').toLowerCase()} on ${txAddress}. The office team will coordinate the next step.`,
+            url: '/dashboard/my-transactions',
+            data: { transactionId: txId, requestSides: warrantyEducationSides.join(',') },
+          });
+        }
 
         // ── Check if this transaction has a linked approved TC intake ──────────
         // Once a TC has approved a file, they stay in the loop for ALL subsequent

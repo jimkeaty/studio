@@ -17,6 +17,7 @@ const transactionSectionsSource = readFileSync(resolve(root, 'src/components/tra
 const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/transaction-reminders/route.ts'), 'utf8');
 const contactsRouteSource = readFileSync(resolve(root, 'src/app/api/contacts/route.ts'), 'utf8');
 const tcApprovalSource = readFileSync(resolve(root, 'src/app/api/admin/tc/[id]/route.ts'), 'utf8');
+const trainingArticlesSource = readFileSync(resolve(root, 'src/lib/training/articles.ts'), 'utf8');
 const agentRollupSource = readFileSync(resolve(root, 'src/lib/rollups/rebuildAgentRollup.ts'), 'utf8');
 const leaderboardRouteSource = readFileSync(resolve(root, 'src/app/api/rollups/leaderboard/route.ts'), 'utf8');
 const agentDashboardSource = readFileSync(resolve(root, 'src/app/api/dashboard/route.ts'), 'utf8');
@@ -28,6 +29,26 @@ test('new buyer transactions default to the editable $395 compliance fee', () =>
   assert.match(formSource, /txComplianceFeeAmount: initialClosingType === 'buyer' \? 395 : ''/);
   assert.match(formSource, /if \(editMode \|\| watchedClosingType !== 'buyer'\) return/);
   assert.match(formSource, /form\.setValue\('txComplianceFeeAmount', 395 as any\)/);
+});
+
+test('APHW education requests retain buyer and seller distinctions, consent, alerts, and in-form help', () => {
+  assert.match(formSource, /buyerWarrantyEducationRequested: z\.enum\(\['yes', 'no'\]\)\.optional\(\)/);
+  assert.match(formSource, /sellerWarrantyEducationRequested: z\.enum\(\['yes', 'no'\]\)\.optional\(\)/);
+  assert.match(formSource, /Buyer Home Warranty Education/);
+  assert.match(formSource, /Seller Home Warranty Education/);
+  assert.match(formSource, /\$5,000 in E&amp;O deductible coverage/);
+  assert.match(formSource, /\$2,500 in post-legal coverage/);
+  assert.match(formSource, /permission to share the buyer&apos;s contact information/);
+  assert.match(transactionSectionsSource, /buyerWarrantyEducationRequested/);
+  assert.match(transactionSectionsSource, /sellerWarrantyEducationRequested/);
+  assert.match(transactionSectionsSource, /<Info className=/);
+  assert.match(createTransactionSource, /buyerWarrantyEducationRequested: toStr\(body\.buyerWarrantyEducationRequested\)/);
+  assert.match(createTransactionSource, /Home Warranty Education Request/);
+  assert.match(agentRouteSource, /'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested'/);
+  assert.match(agentRouteSource, /Home Warranty Education Request Received/);
+  assert.match(adminRouteSource, /'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested'/);
+  assert.match(trainingArticlesSource, /home-warranty-education-calls/);
+  assert.match(trainingArticlesSource, /12-month nurture experience/);
 });
 
 test('reopened shared transaction forms hydrate and submit their document list', () => {

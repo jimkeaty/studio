@@ -28,8 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
-  ChevronDown, CheckCircle2, Send, Loader2, PlusCircle, Trash2,
+  ChevronDown, CheckCircle2, Send, Loader2, PlusCircle, Trash2, Info,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -743,6 +744,9 @@ export function ReferralSection({ form }: TransactionFormSectionProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 export function AdditionalInfoSection({ form }: TransactionFormSectionProps) {
   const warrantyAtClosing = form.watch('warrantyAtClosing');
+  const closingType = String(form.watch('closingType') || '').toLowerCase();
+  const showBuyerWarrantyEducation = closingType === 'buyer' || closingType === 'dual';
+  const showSellerWarrantyEducation = closingType === 'listing' || closingType === 'dual';
   const txComplianceFee = form.watch('txComplianceFee');
   const occupancyAgreement = form.watch('occupancyAgreement');
   const shortageInCommission = form.watch('shortageInCommission');
@@ -781,6 +785,50 @@ export function AdditionalInfoSection({ form }: TransactionFormSectionProps) {
             </FormItem>
           )} />
         </Grid2>
+      )}
+
+      {showBuyerWarrantyEducation && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <FormLabel>Buyer Home Warranty Education</FormLabel>
+            <Dialog>
+              <DialogTrigger asChild><Button type="button" size="sm" variant="outline" className="bg-white"><Info className="mr-1 h-4 w-4" />Info</Button></DialogTrigger>
+              <DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Buyer Home Warranty Education</DialogTitle><DialogDescription>APHW can explain buyer coverage, claims, exclusions, and how to use a warranty after closing.</DialogDescription></DialogHeader><p className="text-sm text-muted-foreground">Qualifying APHW buyers may receive a 12-month nurture experience. APHW program materials describe up to $5,000 in E&amp;O deductible coverage for qualifying claims; terms, eligibility, exclusions, and procedures apply.</p></DialogContent>
+            </Dialog>
+          </div>
+          <FormField control={form.control} name="buyerWarrantyEducationRequested" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Arrange an educational call for your buyer?</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
+                <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
+              </Select>
+              <FormDescription>APHW can explain coverage, claims, exclusions, and warranty use. A qualifying buyer warranty may include a 12-month nurture program and up to $5,000 in E&amp;O deductible coverage for qualifying claims, subject to current APHW terms. Selecting Yes confirms permission to share the buyer&apos;s contact information.</FormDescription>
+            </FormItem>
+          )} />
+        </div>
+      )}
+
+      {showSellerWarrantyEducation && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <FormLabel>Seller Home Warranty Education</FormLabel>
+            <Dialog>
+              <DialogTrigger asChild><Button type="button" size="sm" variant="outline" className="bg-white"><Info className="mr-1 h-4 w-4" />Info</Button></DialogTrigger>
+              <DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Seller Home Warranty Education</DialogTitle><DialogDescription>APHW can explain seller coverage, claims, and the potential benefits of offering a warranty to the buyer.</DialogDescription></DialogHeader><p className="text-sm text-muted-foreground">APHW program materials describe free listing coverage with an expectation of buyer purchase, plus up to $2,500 in post-legal coverage for qualifying matters; terms, eligibility, exclusions, and procedures apply.</p></DialogContent>
+            </Dialog>
+          </div>
+          <FormField control={form.control} name="sellerWarrantyEducationRequested" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Arrange an educational call for your seller?</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
+                <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
+              </Select>
+              <FormDescription>APHW can explain seller coverage, claims, and buyer-warranty benefits. APHW program materials describe up to $2,500 in post-legal coverage for qualifying matters, subject to current APHW terms. Selecting Yes confirms permission to share the seller&apos;s contact information.</FormDescription>
+            </FormItem>
+          )} />
+        </div>
       )}
 
       <Separator />

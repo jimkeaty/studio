@@ -35,6 +35,46 @@ export type Category = (typeof CATEGORIES)[number];
 
 // ─── Article library ──────────────────────────────────────────────────────────
 export const ARTICLES: Article[] = [
+  {
+    id: 'home-warranty-education-calls',
+    title: 'Home Warranty Education Calls: APHW Overview',
+    description: 'Learn when to request an America’s Preferred Home Warranty educational call, what is covered in the conversation, and how the follow-up program works.',
+    category: 'Transactions',
+    audience: 'agent',
+    readingTimeMinutes: 3,
+    publishedAt: '2026-09-04',
+    content: `
+<h2>Why Request a Home Warranty Education Call?</h2>
+<p>The request is an educational service, not a commitment to purchase. It can be helpful when a buyer is considering coverage, already expects a warranty, or needs help understanding how to use one. For sellers, it explains seller coverage during the listing period and the potential value of offering a warranty to the buyer.</p>
+
+<h2>How to Request the Call</h2>
+<p>In <strong>Additional Info</strong>, use the buyer or seller <strong>Home Warranty Education</strong> selector. Choose <strong>Yes</strong> only after confirming you have permission to share that client’s contact information with America’s Preferred Home Warranty (APHW). The office team receives an internal alert and coordinates the next step.</p>
+
+<h2>Buyer Call and Follow-Up</h2>
+<p>APHW can explain buyer coverage, exclusions, claims, and how to use a warranty after closing. If the buyer purchases a qualifying APHW warranty, the program may provide a 12-month nurture experience with care, resources, and reminders about available coverage.</p>
+<p>APHW program materials describe up to <strong>$5,000</strong> in E&amp;O deductible coverage for qualifying claims. This is a program benefit for the agent; it is not insurance advice and does not replace the brokerage’s E&amp;O policy.</p>
+
+<h2>Seller Call and Listing Coverage</h2>
+<p>APHW can explain seller coverage, how claims work during the listing period, and the potential benefits of offering a warranty to the buyer. APHW program materials describe free listing coverage with an expectation that the buyer will purchase the warranty at closing.</p>
+<p>The same materials describe up to <strong>$2,500</strong> in post-legal coverage for qualifying matters. This benefit is not a guarantee of attorney-fee payment and does not replace legal advice.</p>
+
+<h2>Important Terms</h2>
+<blockquote><p>Coverage, eligibility, exclusions, claim procedures, and benefit limits are governed by America’s Preferred Home Warranty’s current written program terms. Do not promise coverage or give legal or insurance advice. Direct specific coverage questions to APHW.</p></blockquote>
+
+<h2>Agent Follow-Up Email Template</h2>
+<p><strong>Subject:</strong> Your Home Warranty Education Request</p>
+<p>We received your request to arrange an America’s Preferred Home Warranty educational call for your client. The call will review the applicable coverage, exclusions, claims process, and how the warranty works. Our office team will coordinate the next step. Please make sure your client knows APHW may contact them to schedule the educational conversation.</p>
+
+<h2>Quick FAQ</h2>
+<table><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody>
+<tr><td>Does selecting Yes mean the client must buy a warranty?</td><td>No. The request is for an educational call only.</td></tr>
+<tr><td>What does the buyer call cover?</td><td>Buyer coverage, exclusions, claims, and how to use a warranty after closing.</td></tr>
+<tr><td>What does the seller call cover?</td><td>Seller listing-period coverage, claims, and the potential benefits of offering a warranty to the buyer.</td></tr>
+<tr><td>When does the 12-month nurture program apply?</td><td>Only after a buyer purchases a qualifying APHW warranty.</td></tr>
+<tr><td>What are the agent and seller protection benefits?</td><td>APHW program materials describe up to $5,000 in qualifying E&amp;O deductible coverage and up to $2,500 in qualifying post-legal coverage. Written program terms control.</td></tr>
+</tbody></table>
+`,
+  },
   // ── STAFF QUEUE ─────────────────────────────────────────────────────────────
   {
     id: 'staff-queue-overview',

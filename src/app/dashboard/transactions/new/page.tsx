@@ -550,6 +550,8 @@ const schema = z.object({
   warrantyAtClosing: z.enum(['yes', 'no']).optional(),
   warrantyAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   warrantyPaidBy: z.string().optional(),
+  buyerWarrantyEducationRequested: z.enum(['yes', 'no']).optional(),
+  sellerWarrantyEducationRequested: z.enum(['yes', 'no']).optional(),
   txComplianceFee: z.enum(['yes', 'no']).optional(),
   txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   txComplianceFeePaidBy: z.string().optional(),
@@ -1420,6 +1422,8 @@ export default function AddTransactionPage() {
       txComplianceFeeAgentAllocation: 'primary_agent',
       txComplianceFeePrimaryAgentAmount: '',
       txComplianceFeeCoAgentAmount: '',
+      buyerWarrantyEducationRequested: '',
+      sellerWarrantyEducationRequested: '',
       hasOutboundReferral: false,
     },
   });
@@ -2389,6 +2393,8 @@ export default function AddTransactionPage() {
           warrantyAtClosing: safeEnum(tx.warrantyAtClosing, ''),
           warrantyAmount: tx.warrantyAmount || '',
           warrantyPaidBy: tx.warrantyPaidBy || '',
+          buyerWarrantyEducationRequested: safeEnum(tx.buyerWarrantyEducationRequested, ''),
+          sellerWarrantyEducationRequested: safeEnum(tx.sellerWarrantyEducationRequested, ''),
           txComplianceFee: resolvedComplianceFee,
           txComplianceFeeAmount: resolvedComplianceFee === 'yes' ? (resolvedFeeAmount || resolvedRecordedFee || resolvedLegacyListingFee || '') : '',
           txComplianceFeePaidBy: resolvedComplianceFee === 'yes' ? resolvedFeePayer : '',
@@ -6731,6 +6737,84 @@ export default function AddTransactionPage() {
                     </FormItem>
                   )} />
                 </div>
+              </div>
+            )}
+
+            {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-sky-950">Buyer Home Warranty Education</h4>
+                    <p className="text-xs text-sky-900">Arrange an educational APHW call for the buyer.</p>
+                  </div>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button type="button" variant="outline" size="sm" className="bg-white">
+                        <Info className="mr-1 h-4 w-4" /> Info
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-xl">
+                      <DialogHeader>
+                        <DialogTitle>Buyer Home Warranty Education</DialogTitle>
+                        <DialogDescription>America&apos;s Preferred Home Warranty can explain coverage, exclusions, claims, and how a buyer can use a warranty after closing.</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3 text-sm text-muted-foreground">
+                        <p>When a buyer purchases a qualifying APHW warranty, the program can provide a 12-month nurture experience with care, resources, and reminders about using available coverage.</p>
+                        <p>APHW program materials also describe up to $5,000 in E&amp;O deductible coverage for qualifying claims. Coverage, eligibility, exclusions, and claim procedures are governed by APHW&apos;s current written program terms.</p>
+                        <p className="font-medium text-foreground">Selecting Yes confirms that you have permission to share the buyer&apos;s contact information with APHW to arrange this educational call.</p>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                <FormField control={form.control} name="buyerWarrantyEducationRequested" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Would you like us to arrange an educational call between your buyer and America&apos;s Preferred Home Warranty?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
+                      <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
+                    </Select>
+                    <FormDescription>APHW will review buyer coverage, claims, exclusions, and warranty use. A qualifying buyer warranty may include a 12-month nurture program and up to $5,000 in E&amp;O deductible coverage for qualifying claims, subject to current APHW terms. Selecting Yes confirms you have permission to share the buyer&apos;s contact information.</FormDescription>
+                  </FormItem>
+                )} />
+              </div>
+            )}
+
+            {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-sky-950">Seller Home Warranty Education</h4>
+                    <p className="text-xs text-sky-900">Arrange an educational APHW call for the seller.</p>
+                  </div>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button type="button" variant="outline" size="sm" className="bg-white">
+                        <Info className="mr-1 h-4 w-4" /> Info
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-xl">
+                      <DialogHeader>
+                        <DialogTitle>Seller Home Warranty Education</DialogTitle>
+                        <DialogDescription>America&apos;s Preferred Home Warranty can explain seller coverage, claims, and the potential value of offering a warranty to the buyer.</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3 text-sm text-muted-foreground">
+                        <p>APHW program materials describe free listing coverage, with an expectation that the buyer will purchase the warranty at closing. The call helps the seller understand how coverage and claims work during the listing period.</p>
+                        <p>The program materials also describe up to $2,500 in post-legal coverage for qualifying matters. Coverage, eligibility, exclusions, and claim procedures are governed by APHW&apos;s current written program terms.</p>
+                        <p className="font-medium text-foreground">Selecting Yes confirms that you have permission to share the seller&apos;s contact information with APHW to arrange this educational call.</p>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                <FormField control={form.control} name="sellerWarrantyEducationRequested" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Would you like us to arrange an educational call between your seller and America&apos;s Preferred Home Warranty?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select Yes or No..." /></SelectTrigger></FormControl>
+                      <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
+                    </Select>
+                    <FormDescription>APHW will review seller coverage, claims, and the potential benefits of offering a warranty to the buyer. Its program materials describe up to $2,500 in post-legal coverage for qualifying matters, subject to current APHW terms. Selecting Yes confirms you have permission to share the seller&apos;s contact information.</FormDescription>
+                  </FormItem>
+                )} />
               </div>
             )}
 
