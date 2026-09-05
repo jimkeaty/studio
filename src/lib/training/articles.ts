@@ -36,6 +36,70 @@ export type Category = (typeof CATEGORIES)[number];
 // ─── Article library ──────────────────────────────────────────────────────────
 export const ARTICLES: Article[] = [
   {
+    id: 'agent-bonus-pass-throughs',
+    title: 'Agent Bonus Pass-Throughs: How Bonuses Are Applied',
+    description:
+      'How to enter an agent bonus, how shared-file bonuses are divided, what appears in payout, and which commission and production metrics do not change.',
+    category: 'Team & Commission',
+    audience: 'both',
+    readingTimeMinutes: 4,
+    publishedAt: '2026-09-05',
+    content: `
+<h2>Purpose</h2>
+<p>Use <strong>Agent Bonus Pass-Through</strong> when a bonus is paid in addition to a transaction’s normal commission. A bonus is a 100% pass-through benefit for the assigned agent or agents. It is kept separate from the transaction’s normal commission calculation so the brokerage does not take a commission split on the bonus.</p>
+
+<blockquote><p>A bonus is not a replacement for normal commission. Enter the normal commission and any approved bonus separately. The form will show <strong>Agent Net Commission</strong>, <strong>Agent Bonus Pass-Through</strong>, and <strong>Total Agent Payout</strong>.</p></blockquote>
+
+<h2>When and Where to Enter a Bonus</h2>
+<p>In the unified <strong>Add Transaction</strong> or <strong>Edit Transaction</strong> form, enter the total bonus for the transaction in the field labeled <strong>Agent Bonus Pass-Through</strong>. A bonus can be entered when the file is first created, while it is pending, or after it has closed if the bonus is not known until payout.</p>
+<ol>
+  <li>Open the existing transaction; do not create a second transaction for the bonus.</li>
+  <li>Enter the total approved bonus amount in <strong>Agent Bonus Pass-Through</strong>.</li>
+  <li>Review the separate bonus line and the resulting <strong>Total Agent Payout</strong>.</li>
+  <li>Select <strong>Save Changes</strong>.</li>
+</ol>
+<p>Agents can enter a bonus while their transaction is editable. After closing, agents are read-only; authorized <strong>Admin</strong>, <strong>Staff</strong>, and <strong>TC</strong> users can enter or correct the bonus on the same closed file.</p>
+
+<h2>How the Payout Is Calculated</h2>
+<p>The normal commission calculation does not change. The bonus is then added as a distinct payout amount.</p>
+<table><thead><tr><th>Display line</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><strong>Agent Net Commission</strong></td><td>The agent’s normal transaction payout after the usual commission, split, and applicable fee rules.</td></tr>
+<tr><td><strong>Agent Bonus Pass-Through</strong></td><td>The approved bonus paid directly through to the applicable internal agent or agents.</td></tr>
+<tr><td><strong>Total Agent Payout</strong></td><td>Agent Net Commission + Agent Bonus Pass-Through.</td></tr>
+</tbody></table>
+
+<h3>Example: One Internal Agent</h3>
+<p>If an agent’s normal net commission is <strong>$5,000</strong> and the transaction includes a <strong>$3,000</strong> bonus, the payout display is: Agent Net Commission = $5,000; Agent Bonus Pass-Through = $3,000; Total Agent Payout = <strong>$8,000</strong>. The normal $5,000 commission calculation is not changed by the bonus.</p>
+
+<h2>Bonuses on Shared Co-Agent Transactions</h2>
+<p>Keep one shared transaction file for two internal co-agents. When exactly two internal agents are assigned to that file, the total bonus is divided equally: <strong>50% to each agent</strong>. A $3,000 bonus therefore displays as $1,500 for each internal co-agent.</p>
+<p>The automatic 50/50 bonus division is separate from the normal commission and representation-side allocation. Do not change the normal commission split merely to make a bonus divide correctly. The normal commission remains governed by the transaction’s existing allocation and split rules.</p>
+
+<h2>What the Bonus Does Not Affect</h2>
+<p>The bonus is deliberately excluded from the brokerage and production measurements below. The transaction itself may still receive its ordinary production credit under the normal transaction rules; the <em>bonus amount</em> does not create extra credit.</p>
+<table><thead><tr><th>Metric or calculation</th><th>Does the bonus change it?</th></tr></thead><tbody>
+<tr><td>Total GCI / normal commission</td><td><strong>No.</strong> The bonus stays separate from normal commission and GCI.</td></tr>
+<tr><td>Company dollar, broker revenue, or broker net</td><td><strong>No.</strong> The bonus is not brokerage revenue.</td></tr>
+<tr><td>Commission tier progression</td><td><strong>No.</strong> The bonus does not help an agent advance a commission tier.</td></tr>
+<tr><td>Transaction fees, margin, or fee responsibility</td><td><strong>No.</strong> Existing fee rules stay tied to the normal transaction commission.</td></tr>
+<tr><td>Top Producer / leaderboard results</td><td><strong>No.</strong> The bonus does not add sides, sales, or volume.</td></tr>
+<tr><td>Representation-side production credit</td><td><strong>No.</strong> Bonus dollars never create additional production volume or sides.</td></tr>
+</tbody></table>
+
+<h2>Correcting a Bonus</h2>
+<p>If an approved bonus changes or was entered in error, correct the value on the original transaction and save the file again. If no bonus is payable, clear the amount or set it to zero and save. Do not create a duplicate transaction, a separate commission record, or a second shared file to record or reverse a bonus.</p>
+
+<h2>Quick Answers</h2>
+<table><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody>
+<tr><td>Can a bonus be entered before closing?</td><td>Yes. It can be recorded whenever the amount is known, including before closing.</td></tr>
+<tr><td>Can we add it at payout after closing?</td><td>Yes. Authorized Admin, Staff, and TC users can correct a closed file; agents remain read-only after close.</td></tr>
+<tr><td>Does the brokerage take a split of the bonus?</td><td>No. The bonus is a 100% agent pass-through and does not increase broker revenue or company dollar.</td></tr>
+<tr><td>Does the bonus raise GCI, tier progress, volume, or leaderboard results?</td><td>No. Those measurements are based on normal transaction rules, not the bonus amount.</td></tr>
+<tr><td>How are two internal co-agents paid?</td><td>The bonus is divided 50/50: each receives one-half of the total bonus in their separate payout.</td></tr>
+</tbody></table>
+`,
+  },
+  {
     id: 'home-warranty-education-calls',
     title: 'Home Warranty Education Calls: APHW Overview',
     description: 'Learn when to request an America’s Preferred Home Warranty educational call, what is covered in the conversation, and how the follow-up program works.',
