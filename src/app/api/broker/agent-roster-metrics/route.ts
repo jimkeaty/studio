@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
 
 
 function getBearerToken(req: NextRequest) {
@@ -229,14 +230,16 @@ export async function GET(req: NextRequest) {
       .where('year', '==', yearNum)
       .get();
 
-    // Group transactions by agentId
+    // Group each one-file transaction by its participating internal agents.
     const txByAgent = new Map<string, any[]>();
     for (const doc of txSnap.docs) {
       const t = doc.data();
       const aid = t.agentId;
-      if (!aid) continue;
-      if (!txByAgent.has(aid)) txByAgent.set(aid, []);
-      txByAgent.get(aid)!.push(t);
+      const coAgentId = t.coAgent?.agentId;
+      for (const participantId of new Set([aid, coAgentId].filter(Boolean).map(String))) {
+        if (!txByAgent.has(participantId)) txByAgent.set(participantId, []);
+        txByAgent.get(participantId)!.push(t);
+      }
     }
 
     // ── 4. Batch-fetch all daily_activity for the year ────────────────────
@@ -383,11 +386,12 @@ export async function GET(req: NextRequest) {
 
       for (const t of transactions) {
         const status = String(t.status || '').trim();
-        const net = getTransactionNet(t);
+        const isCoAgentView = String(t.coAgent?.agentId || '') === String(uid) && String(t.agentId || '') !== String(uid);
+        const participantSnapshot = isCoAgentView ? t.coAgent?.splitSnapshot : t.splitSnapshot;
+        const net = isCoAgentView ? asNumber(participantSnapshot?.agentNetCommission ?? t.commission) : getTransactionNet(t);
         const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
-        // Dual Agent counts as 2 sides (1 buyer + 1 listing)
-        const isDual = String((t as any).closingType || '').toLowerCase() === 'dual';
-        const sideCount = isDual ? 2 : 1;
+        const productionCredit = getAgentProductionCredit(t, String(uid));
+        const productionVolume = dealValue * productionCredit.volumeMultiplier;
 
         if (status === 'closed') {
           const d = toDate(t.closedDate || t.closingDate);
@@ -395,8 +399,8 @@ export async function GET(req: NextRequest) {
           const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
           if (dUtc.getTime() >= effectiveStart.getTime() && dUtc.getTime() <= asOf.getTime()) {
             netEarned += net;
-            closedUnits += sideCount;
-            closedVolume += dealValue;
+            closedUnits += productionCredit.closedSides;
+            closedVolume += productionVolume;
           }
         } else if (status === 'pending' || status === 'under_contract') {
           const d = toDate(t.contractDate || t.pendingDate || t.underContractDate);
@@ -404,8 +408,8 @@ export async function GET(req: NextRequest) {
           const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
           if (dUtc.getTime() >= effectiveStart.getTime() && dUtc.getTime() <= asOf.getTime()) {
             netPending += net;
-            pendingUnits += sideCount;
-            pendingVolume += dealValue;
+            pendingUnits += productionCredit.pendingSides;
+            pendingVolume += productionVolume;
           }
         }
       }

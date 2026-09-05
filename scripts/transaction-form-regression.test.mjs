@@ -24,6 +24,8 @@ const leaderboardRouteSource = readFileSync(resolve(root, 'src/app/api/rollups/l
 const agentDashboardSource = readFileSync(resolve(root, 'src/app/api/dashboard/route.ts'), 'utf8');
 const brokerCommandMetricsSource = readFileSync(resolve(root, 'src/app/api/broker/command-metrics/route.ts'), 'utf8');
 const passThroughHelperSource = readFileSync(resolve(root, 'src/lib/transactions/isPassThroughTransaction.ts'), 'utf8');
+const historicalRollupRouteSource = readFileSync(resolve(root, 'src/app/api/cron/rebuild-historical-rollups/route.ts'), 'utf8');
+const productionCreditSource = readFileSync(resolve(root, 'src/lib/transactions/resolveProductionCredit.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -120,12 +122,35 @@ test('pass-throughs receive sale and volume recognition but no income, company-d
   assert.match(leaderboardRouteSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
   assert.match(leaderboardRouteSource, /agg\.closedVolume \+=[\s\S]*?if \(!isPassThrough\) \{[\s\S]*?agg\.agentNetCommission/);
   assert.match(agentDashboardSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
-  assert.match(agentDashboardSource, /closedUnits \+= sideCount;[\s\S]*?closedVolume \+= dealValue;[\s\S]*?if \(!isPassThrough\) totalGCI \+= gci/);
+  assert.match(agentDashboardSource, /closedUnits \+= sideCount;[\s\S]*?closedVolume \+= productionVolume;[\s\S]*?if \(!isPassThrough\) totalGCI \+= gci/);
   assert.match(agentDashboardSource, /if \(isPassThroughTransaction\(t\)\) continue;[\s\S]*?grossGCIYTD \+= tierGCI/);
   assert.match(brokerCommandMetricsSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
   assert.match(formSource, /counts as a closed sale and sale-price volume,[\s\S]*?does not count toward agent GCI, agent net, brokerage\/company dollar, or tier advancement/);
 });
 
+test('historical rollup rebuild is a secured, confirmed maintenance action that rebuilds every ledger year', () => {
+  assert.match(historicalRollupRouteSource, /const CRON_SECRET = process\.env\.CRON_SECRET \|\| ''/);
+  assert.match(historicalRollupRouteSource, /const CONFIRMATION = 'rebuild_all_historical_rollups'/);
+  assert.match(historicalRollupRouteSource, /secret !== CRON_SECRET/);
+  assert.match(historicalRollupRouteSource, /body\?\.confirm !== CONFIRMATION/);
+  assert.match(historicalRollupRouteSource, /transactionYear\(doc\.data\(\) as Record<string, unknown>\)/);
+  assert.match(historicalRollupRouteSource, /for \(const year of years\) \{[\s\S]*?rebuildAllRollupsForYear\(adminDb, year\)/);
+  assert.match(historicalRollupRouteSource, /systemMaintenance'\)\.doc\('historicalRollupRebuild'/);
+});
+
+test('dual and co-agent production credit follows explicitly assigned representation sides', () => {
+  assert.match(productionCreditSource, /export function getTotalSideMultiplier[\s\S]*?return isDual\(tx\) \? 2 : 1/);
+  assert.match(productionCreditSource, /role === 'co_list' \|\| role === 'co_buyer' \|\| role === 'co_both'/);
+  assert.match(productionCreditSource, /if \(role === 'co_both'\)[\s\S]*?const credit = share \* 2/);
+  assert.match(productionCreditSource, /const primaryCredit = 1 \+ primaryShare/);
+  assert.match(formSource, /coAgentRole: z\.enum\(\['co_list', 'co_buyer', 'co_both', 'referral', 'other'\]\)/);
+  assert.match(formSource, /<SelectItem value="co_both">Co-Agent on Both Sides<\/SelectItem>/);
+  assert.match(agentRollupSource, /getAgentProductionCredit\(t, agentId\)/);
+  assert.match(leaderboardRouteSource, /getAgentProductionCredit\(t, participantId\)/);
+  assert.match(agentDashboardSource, /const productionCredit = getAgentProductionCredit\(t, reportingAgentId\)/);
+  assert.match(agentDashboardSource, /const productionVolume = dealValue \* productionCredit\.volumeMultiplier/);
+  assert.match(brokerCommandMetricsSource, /const productionVolume = dealValue \* getTotalSideMultiplier\(t as Record<string, any>\)/);
+});
 test('operational staff can override closed-file GCI while agents remain read-only', () => {
   assert.match(formSource, /const isClosedAgentView = editMode && persistedEditStatus === 'closed' && !hasOperationalEditAuthority/);
   assert.match(formSource, /\{hasOperationalEditAuthority && \(/);

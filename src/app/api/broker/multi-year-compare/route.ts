@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { getTotalSideMultiplier } from '@/lib/transactions/resolveProductionCredit';
 
 
 function getBearerToken(req: NextRequest) {
@@ -113,6 +114,7 @@ export async function GET(req: NextRequest) {
       const sideCount = isDual ? 2 : 1;
       const isPassThrough = isPassThroughTransaction(d);
       const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.listPrice) || 0);
+      const productionVolume = dealValue * getTotalSideMultiplier(d as Record<string, any>);
 
       // ── contractsWritten: bucket by contractDate (any status) ──────────
       // Apply partial-month cap: if contractDate falls in the current calendar month,
@@ -147,7 +149,7 @@ export async function GET(req: NextRequest) {
       const grossMargin = companyRetained > 0 ? companyRetained : Math.max(0, gci - agentNet);
 
       if (!isPassThrough) bucket.grossMargin += grossMargin;
-      bucket.volume += dealValue;
+      bucket.volume += productionVolume;
       bucket.sales += sideCount;
       if (!isPassThrough) bucket.gci += gci;
     }
@@ -169,8 +171,9 @@ export async function GET(req: NextRequest) {
       const gci = Number(split.grossCommission) || Number(d.commission) || 0;
       const isDual = String(d.closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
+      const productionVolume = dealValue * getTotalSideMultiplier(d as Record<string, any>);
 
-      bucket.pendingVolume += dealValue;
+      bucket.pendingVolume += productionVolume;
       bucket.pendingSales += sideCount;
       bucket.pendingGci += gci;
     }

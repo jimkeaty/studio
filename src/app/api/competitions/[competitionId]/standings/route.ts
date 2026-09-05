@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { getTotalSideMultiplier } from '@/lib/transactions/resolveProductionCredit';
 import type {
   CompetitionConfig,
   ThresholdRule,
@@ -494,8 +495,9 @@ async function scorePoints(
       const dateStr = txDate ? txDate.toISOString().slice(0, 10) : '';
 
       if (status === 'closed') {
-        closedDeals += 1;
-        closedVolume += dealValue;
+        const productionSides = getTotalSideMultiplier(t as Record<string, any>);
+        closedDeals += productionSides;
+        closedVolume += dealValue * productionSides;
         points += rules.closedDeal;
 
         if (closedDate) {

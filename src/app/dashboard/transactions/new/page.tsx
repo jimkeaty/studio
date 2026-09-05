@@ -587,7 +587,7 @@ const schema = z.object({
   hasCoAgent: z.boolean().optional(),
   coAgentId: z.string().optional(),
   coAgentDisplayName: z.string().optional(),
-  coAgentRole: z.enum(['co_list', 'co_buyer', 'referral', 'other']).optional(),
+  coAgentRole: z.enum(['co_list', 'co_buyer', 'co_both', 'referral', 'other']).optional(),
   primaryAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   coAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
 }).refine(
@@ -4367,11 +4367,12 @@ export default function AddTransactionPage() {
                       <FormLabel>Co-Agent Role</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="co_list">Co-Listing Agent</SelectItem>
-                          <SelectItem value="co_buyer">Co-Buyer Agent</SelectItem>
-                          <SelectItem value="referral">Referral</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          <SelectContent>
+                            <SelectItem value="co_list">Co-Listing Agent</SelectItem>
+                            <SelectItem value="co_buyer">Co-Buyer Agent</SelectItem>
+                            <SelectItem value="co_both">Co-Agent on Both Sides</SelectItem>
+                            <SelectItem value="referral">Referral</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

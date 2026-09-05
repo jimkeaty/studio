@@ -36,6 +36,7 @@ import 'server-only';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getAnniversaryCycle, isInCycle } from '@/lib/agents/anniversaryCycle';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,9 +137,8 @@ export async function rebuildAgentRollup(
     .get();
 
   // ── 2. Process transactions ───────────────────────────────────────────────
-  // NOTE: Dual Agent transactions count as 2 sides (1 buyer + 1 listing).
-  // Volume and commission are NOT doubled — the dollar amounts are already
-  // the full deal total. Only the side/unit count is doubled.
+  // Representation-side production recognizes every buyer and listing side.
+  // Commission and tier calculations remain separate from this volume credit.
 
   // Calendar-year stats (leaderboard / dashboard performance tracking)
   let closed = 0;
@@ -169,7 +169,6 @@ export async function rebuildAgentRollup(
 
     const status = String(t.status || '').toLowerCase();
     const txType = String(t.transactionType || '').toLowerCase();
-    const isDual = String(t.closingType || '').toLowerCase() === 'dual';
     const isPassThrough = isPassThroughTransaction(t);
 
     // ── Co-agent side credit ─────────────────────────────────────────────
@@ -180,36 +179,15 @@ export async function rebuildAgentRollup(
     const isCoAgentOnTx = t.hasCoAgent && t.coAgent?.agentId === agentId;
     const activeSplitSnapshot = isCoAgentOnTx ? t.coAgent.splitSnapshot : t.splitSnapshot;
 
-    // Side credit: fractional for co-agent transactions, 2 for dual agent, 1 otherwise.
-    // Co-agent side credit = coAgent.sideCredit (e.g. 0.4 for a 40% split).
-    // Primary agent side credit = primaryAgentSideCredit (e.g. 0.6 for a 60% split).
-    let sideCredit: number;
-    if (t.hasCoAgent) {
-      if (isCoAgentOnTx) {
-        sideCredit = num(t.coAgent?.sideCredit ?? 0.5);
-      } else {
-        sideCredit = num(t.primaryAgentSideCredit ?? 0.5);
-      }
-      if (isDual) sideCredit *= 2;
-    } else {
-      sideCredit = isDual ? 2 : 1;
-    }
-
-    // Volume credit: proportional to side credit for co-agent transactions
-    // salePrice is always authoritative; listPrice is the only fallback.
+    const productionCredit = getAgentProductionCredit(t, agentId);
+    // Sale price is authoritative; list price is the only fallback.
     const txSalePrice = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
-    const volumeCredit = t.hasCoAgent
-      ? txSalePrice * (isCoAgentOnTx
-          ? num(t.coAgent?.sideCredit ?? 0.5)
-          : num(t.primaryAgentSideCredit ?? 0.5))
-      : txSalePrice;
+    const volumeCredit = txSalePrice * productionCredit.volumeMultiplier;
 
     if (txYear === year) {
       // Closed transactions — calendar year
       if (status === 'closed') {
-        // A co-agent close is one completed unit for each participating agent.
-        // Only volume and commission are divided by the participant percentage.
-        closed += t.hasCoAgent ? 1 : sideCredit;
+        closed += productionCredit.closedSides;
         // Pass-throughs receive production recognition for the completed sale
         // and their allocated sale-price volume, but never income or tier credit.
         closedVolume += volumeCredit;
@@ -222,7 +200,7 @@ export async function rebuildAgentRollup(
 
       // Pending / under contract — calendar year
       if (status === 'pending' || status === 'under_contract') {
-        pending += sideCredit;
+        pending += productionCredit.pendingSides;
       }
 
       // Listings (active, canceled, expired) — calendar year
@@ -272,16 +250,15 @@ export async function rebuildAgentRollup(
         toYear(t.contractDate) ??
         (num(t.year) || null);
       const status = String(t.status || '').toLowerCase();
-      const isDual = String(t.closingType || '').toLowerCase() === 'dual';
       const isPassThrough = isPassThroughTransaction(t);
-      const coSideCredit = num(t.coAgent?.sideCredit ?? 0.5) * (isDual ? 2 : 1);
+      const productionCredit = getAgentProductionCredit(t, agentId);
       const coTxSalePrice = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
-      const coVolumeCredit = coTxSalePrice * num(t.coAgent?.sideCredit ?? 0.5);
+      const coVolumeCredit = coTxSalePrice * productionCredit.volumeMultiplier;
       const coSplitSnapshot = t.coAgent?.splitSnapshot;
 
       if (txYear === year) {
         if (status === 'closed') {
-          closed += coSideCredit;
+          closed += productionCredit.closedSides;
           closedVolume += coVolumeCredit;
           if (!isPassThrough) {
             totalGCI += num(coSplitSnapshot?.grossCommission ?? 0);
@@ -290,7 +267,7 @@ export async function rebuildAgentRollup(
           }
         }
         if (status === 'pending' || status === 'under_contract') {
-          pending += coSideCredit;
+          pending += productionCredit.pendingSides;
         }
       }
 

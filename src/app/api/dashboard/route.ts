@@ -6,6 +6,7 @@ import { getAnniversaryCycle, isInCycle, formatCycleLabel } from '@/lib/agents/a
 import type { AgentDashboardData, BusinessPlan } from "@/lib/types";
 import { todayUtcInCompanyTz } from '@/lib/config';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -445,11 +446,13 @@ export async function GET(req: NextRequest) {
     await Promise.all(
       txQueryIdList.map(async (agentIdVal) => {
         try {
-          const [yearSnap, openSnap] = await Promise.all([
+          const [yearSnap, openSnap, coYearSnap, coOpenSnap] = await Promise.all([
             adminDb.collection("transactions").where("agentId","==",agentIdVal).where("year","==",yearNum).get(),
             adminDb.collection("transactions").where("agentId","==",agentIdVal).where("status","in",OPEN_STATUSES).get(),
+            adminDb.collection("transactions").where("coAgent.agentId","==",agentIdVal).where("year","==",yearNum).get(),
+            adminDb.collection("transactions").where("coAgent.agentId","==",agentIdVal).where("status","in",OPEN_STATUSES).get(),
           ]);
-          for (const d of [...yearSnap.docs, ...openSnap.docs]) {
+          for (const d of [...yearSnap.docs, ...openSnap.docs, ...coYearSnap.docs, ...coOpenSnap.docs]) {
             if (!txDocMap.has(d.id)) txDocMap.set(d.id, d.data() || {});
           }
         } catch(e) { console.warn('[dashboard] tx query failed for '+agentIdVal, e); }
@@ -483,17 +486,23 @@ export async function GET(req: NextRequest) {
 
     for (const t of txDocs) {
       const status = String(t.status || "").trim();
-      const net = getTransactionNet(t);
+      const primaryAgentId = String(t.agentId || '').trim();
+      const coAgentId = String(t.coAgent?.agentId || '').trim();
+      const isCoAgentView = Boolean(coAgentId && txQueryIds.has(coAgentId) && !txQueryIds.has(primaryAgentId));
+      const reportingAgentId = isCoAgentView ? coAgentId : primaryAgentId;
+      const participantSnapshot = isCoAgentView ? t.coAgent?.splitSnapshot : t.splitSnapshot;
+      const net = isCoAgentView ? asNumber(participantSnapshot?.agentNetCommission ?? t.commission) : getTransactionNet(t);
       const dealValue = asNumber(t.salePrice ?? t.listPrice);
-      const gci = asNumber(t.splitSnapshot?.grossCommission || t.commission);
+      const gci = asNumber(participantSnapshot?.grossCommission || t.commission);
       // Referral closings (closingType='referral') count toward net income but NOT
       // toward volume, unit count, or GCI — same treatment as broker recruiting incentives.
       const closingType = String((t as any).closingType || "").toLowerCase();
       const isReferralClosing = closingType === "referral";
       const isPassThrough = isPassThroughTransaction(t);
          // Dual Agent counts as 2 sides (1 buyer + 1 listing)
-      const isDual = closingType === "dual";
-      const sideCount = isDual ? 2 : 1;
+      const productionCredit = getAgentProductionCredit(t, reportingAgentId);
+      const sideCount = productionCredit.closedSides;
+      const productionVolume = dealValue * productionCredit.volumeMultiplier;
       if (status === "closed") {
         const d = getTransactionDateForEarned(t);
         if (!d) continue;
@@ -507,7 +516,7 @@ export async function GET(req: NextRequest) {
           if (!isPassThrough) netEarned += net;
           if (!isReferralClosing) {
             closedUnits += sideCount;
-            closedVolume += dealValue;
+            closedVolume += productionVolume;
             if (!isPassThrough) totalGCI += gci;
           }
           // grossGCIYTD is accumulated below using anniversary cycle filter
@@ -551,8 +560,8 @@ export async function GET(req: NextRequest) {
         ) {
           if (!isPassThrough) netPending += net;
           if (!isReferralClosing) {
-            pendingUnits += sideCount;
-            pendingVolume += dealValue;
+            pendingUnits += productionCredit.pendingSides;
+            pendingVolume += productionVolume;
             if (!isPassThrough) {
               pendingGrossGCI += asNumber(
                 t.splitSnapshot?.grossCommission

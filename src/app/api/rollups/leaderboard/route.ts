@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { getEffectiveRollups } from "@/lib/rollupsService";
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
 
 function titleCaseWords(s: string) {
   return s
@@ -309,6 +310,20 @@ async function handlePeriod(
     }
   >();
 
+  const ensureAggregate = (agentId: string) => {
+    if (!agentMap.has(agentId)) {
+      agentMap.set(agentId, {
+        closed: 0,
+        pending: 0,
+        closedVolume: 0,
+        totalGCI: 0,
+        agentNetCommission: 0,
+        companyDollar: 0,
+      });
+    }
+    return agentMap.get(agentId)!;
+  };
+
   for (const doc of snap.docs) {
     const t = doc.data() as any;
     const status = String(t.status || "").toLowerCase();
@@ -329,40 +344,36 @@ async function handlePeriod(
     // Check if within range
     if (txDate < rangeStart || txDate > rangeEnd) continue;
 
-    if (!agentMap.has(agentId)) {
-      agentMap.set(agentId, {
-        closed: 0,
-        pending: 0,
-        closedVolume: 0,
-        totalGCI: 0,
-        agentNetCommission: 0,
-        companyDollar: 0,
-      });
-    }
-    const agg = agentMap.get(agentId)!;
     // Referral closings count toward net commission but NOT toward volume, unit count, or GCI.
     const txClosingType = String(t.closingType || "").toLowerCase();
     const isReferralClosing = txClosingType === "referral";
     const isPassThrough = isPassThroughTransaction(t);
-    // Dual Agent counts as 2 sides (1 buyer + 1 listing)
-    const isDual = txClosingType === "dual";
-    const sideCount = isDual ? 2 : 1;
+    const salePrice = (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
+    const participants = [
+      { agentId, splitSnapshot: t.splitSnapshot, commission: t.commission },
+      ...(t.hasCoAgent && t.coAgent?.agentId ? [{ agentId: String(t.coAgent.agentId), splitSnapshot: t.coAgent.splitSnapshot, commission: t.coAgent?.splitSnapshot?.grossCommission ?? 0 }] : []),
+    ];
 
-    if (status === "closed") {
-      if (!isReferralClosing) {
-        agg.closed += sideCount;
-        // Pass-throughs count as sales and sale-price volume, but never income.
-        agg.closedVolume += (t.salePrice && num(t.salePrice) > 0 ? num(t.salePrice) : null) ?? (t.listPrice && num(t.listPrice) > 0 ? num(t.listPrice) : 0);
-        if (!isPassThrough) {
-          agg.agentNetCommission += num(
-            t.splitSnapshot?.agentNetCommission ?? t.commission
-          );
-          agg.totalGCI += num(t.commission);
-          agg.companyDollar += num(t.splitSnapshot?.companyRetained ?? 0);
+    for (const participant of participants) {
+      const participantId = String(participant.agentId || '').trim();
+      if (!participantId || (demoAgentIds.size > 0 && demoAgentIds.has(participantId))) continue;
+      const agg = ensureAggregate(participantId);
+      const credit = getAgentProductionCredit(t, participantId);
+
+      if (status === "closed") {
+        if (!isReferralClosing) {
+          agg.closed += credit.closedSides;
+          // Production volume is credited once per represented side; income stays split.
+          agg.closedVolume += salePrice * credit.volumeMultiplier;
+          if (!isPassThrough) {
+            agg.agentNetCommission += num(participant.splitSnapshot?.agentNetCommission ?? participant.commission);
+            agg.totalGCI += num(participant.splitSnapshot?.grossCommission ?? participant.commission);
+            agg.companyDollar += num(participant.splitSnapshot?.companyRetained ?? 0);
+          }
         }
+      } else if (status === "pending" || status === "under_contract") {
+        if (!isReferralClosing) agg.pending += credit.pendingSides;
       }
-    } else if (status === "pending" || status === "under_contract") {
-      if (!isReferralClosing) agg.pending += sideCount;
     }
   }
 

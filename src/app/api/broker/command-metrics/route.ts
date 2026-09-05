@@ -5,6 +5,7 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import type admin from 'firebase-admin';
 import { format } from 'date-fns';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { getTotalSideMultiplier } from '@/lib/transactions/resolveProductionCredit';
 import type {
   BrokerCommandMetrics,
   BrokerCommandOverview,
@@ -357,6 +358,7 @@ export async function GET(req: NextRequest) {
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = String((t as any).closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
+      const productionVolume = dealValue * getTotalSideMultiplier(t as Record<string, any>);
       // Pass-through transactions count sales and sale-price volume, but never
       // generate GCI, agent net, brokerage margin, or commission-tier credit.
       const isPassThrough = isPassThroughTransaction(t);
@@ -369,7 +371,7 @@ export async function GET(req: NextRequest) {
       if (contractDateParsed && contractDateParsed.getFullYear() === year) {
         const cmi = contractDateParsed.getMonth(); // 0-based
         contractsByMonthMap[cmi].count += sideCount;
-        contractsByMonthMap[cmi].volume += dealValue;
+        contractsByMonthMap[cmi].volume += productionVolume;
       }
 
       // ── Pending-to-close ratio ──────────────────────────────────────────
@@ -412,7 +414,7 @@ export async function GET(req: NextRequest) {
         if (!isPassThrough) md.totalGCI += gci;
         if (!isPassThrough) md.grossMargin += companyRetained;
         md.transactionFees += txFee;
-        md.closedVolume += dealValue;
+        md.closedVolume += productionVolume;
         md.closedCount += sideCount;
 
         // Yearly totals — same rule
@@ -421,13 +423,13 @@ export async function GET(req: NextRequest) {
         if (!isPassThrough) totals.agentNetCommission += Math.max(0, gci - companyRetained);
         if (!isPassThrough) totals.commissionVolume += dealValue;
         totals.transactionFees += txFee;
-        totals.closedVolume += dealValue;
+        totals.closedVolume += productionVolume;
         totals.closedCount += sideCount;
 
         // Category
         categoryBreakdown.closed[catKey].count += sideCount;
         categoryBreakdown.closed[catKey].netRevenue += incomeCredit;
-        categoryBreakdown.closed[catKey].volume += dealValue;
+        categoryBreakdown.closed[catKey].volume += productionVolume;
 
         // Source
         addToSource(sourceBreakdown.closed, srcKey, dealValue, incomeCredit);
@@ -486,11 +488,11 @@ export async function GET(req: NextRequest) {
           parseDate(t.projectedClose);
         const txMonth = projectedDate ? projectedDate.getMonth() : null;
         // Pending totals always count for the year
-        totals.pendingVolume += dealValue;
+        totals.pendingVolume += productionVolume;
         totals.pendingCount += sideCount;
         // Monthly (use projected close month — skip if no projected date)
         if (txMonth !== null && projectedDate && projectedDate.getFullYear() === year) {
-          months[txMonth].pendingVolume += dealValue;
+          months[txMonth].pendingVolume += productionVolume;
           months[txMonth].pendingCount += sideCount;
           if (!isPassThrough) months[txMonth].pendingGci += companyRetained;
         }
@@ -510,7 +512,7 @@ export async function GET(req: NextRequest) {
         // Category
         categoryBreakdown.pending[catKey].count += sideCount;
         categoryBreakdown.pending[catKey].netRevenue += incomeCredit;
-        categoryBreakdown.pending[catKey].volume += dealValue;
+        categoryBreakdown.pending[catKey].volume += productionVolume;
         // Source
         addToSource(sourceBreakdown.pending, srcKey, dealValue, incomeCredit);
       }
@@ -753,7 +755,7 @@ export async function GET(req: NextRequest) {
         const dv = (tx.salePrice && Number(tx.salePrice) > 0 ? Number(tx.salePrice) : null) ?? (tx.listPrice && Number(tx.listPrice) > 0 ? Number(tx.listPrice) : 0);
         const isDualC = String((tx as any).closingType || '').toLowerCase() === 'dual';
         cMonths[mi].count += isDualC ? 2 : 1;
-        cMonths[mi].volume += dv;
+        cMonths[mi].volume += dv * getTotalSideMultiplier(tx as Record<string, any>);
       }
       return { year: y, months: cMonths };
     });

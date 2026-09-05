@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { getTotalSideMultiplier } from '@/lib/transactions/resolveProductionCredit';
 import type admin from 'firebase-admin';
 import { format } from 'date-fns';
 import type {
@@ -575,13 +576,14 @@ export async function GET(req: NextRequest) {
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = txClosingType === 'dual';
       const sideCount = isDual ? 2 : 1;
+      const productionVolume = dealValue * getTotalSideMultiplier(t as Record<string, any>);
 
       // ── Contracts written by month (contractDate bucket) ──────────────
       const contractDateParsed = parseDate(t.contractDate);
       if (!isReferralClosing && !isAllYears && contractDateParsed && contractDateParsed.getFullYear() === year) {
         const cmi = contractDateParsed.getMonth();
         contractsByMonthMap[cmi].count += sideCount;
-        contractsByMonthMap[cmi].volume += dealValue;
+        contractsByMonthMap[cmi].volume += productionVolume;
       }
 
       // ── Pending-to-close ratio ──────────────────────────────────────────
@@ -618,7 +620,7 @@ export async function GET(req: NextRequest) {
             months[mi].totalGCI += gci;
             months[mi].grossMargin += companyRetained;
             months[mi].transactionFees += txFee;
-            months[mi].closedVolume += dealValue;
+            months[mi].closedVolume += productionVolume;
             months[mi].closedCount += sideCount;
           }
           monthlyNetIncome[mi] += agentNet;
@@ -631,17 +633,17 @@ export async function GET(req: NextRequest) {
           totals.totalGCI += gci;
           totals.grossMargin += companyRetained;
           totals.transactionFees += txFee;
-          totals.closedVolume += dealValue;
+          totals.closedVolume += productionVolume;
           totals.closedCount += sideCount;
         }
 
         categoryBreakdown.closed[catKey].count += isReferralClosing ? 0 : sideCount;
         categoryBreakdown.closed[catKey].netRevenue += agentNet;
-        addToSource(sourceBreakdown.closed, srcKey, isReferralClosing ? 0 : dealValue, agentNet);
+        addToSource(sourceBreakdown.closed, srcKey, isReferralClosing ? 0 : productionVolume, agentNet);
         // For dual agent, split into buyer + seller sides (1 each) instead of a single 'dual' bucket
         if (isDual) {
-          addToSide(sideBreakdown.closed, 'buyer', dealValue / 2, agentNet / 2);
-          addToSide(sideBreakdown.closed, 'seller', dealValue / 2, agentNet / 2);
+          addToSide(sideBreakdown.closed, 'buyer', dealValue, agentNet / 2);
+          addToSide(sideBreakdown.closed, 'seller', dealValue, agentNet / 2);
         } else {
           // Referral side: pass dealValue=0 so it doesn't inflate volume in side breakdown
           addToSide(sideBreakdown.closed, getSideKey(t), isReferralClosing ? 0 : dealValue, agentNet);
@@ -676,19 +678,19 @@ export async function GET(req: NextRequest) {
         totals.pendingNetIncome += agentNet;
         monthlyPendingNetIncome[mi] += agentNet;
         if (!isReferralClosing) {
-          totals.pendingVolume += dealValue;
+          totals.pendingVolume += productionVolume;
           totals.pendingCount += sideCount;
-          months[mi].pendingVolume += dealValue;
+          months[mi].pendingVolume += productionVolume;
           months[mi].pendingCount += sideCount;
         }
 
         categoryBreakdown.pending[catKey].count += isReferralClosing ? 0 : sideCount;
         categoryBreakdown.pending[catKey].netRevenue += agentNet;
-        addToSource(sourceBreakdown.pending, srcKey, isReferralClosing ? 0 : dealValue, agentNet);
+        addToSource(sourceBreakdown.pending, srcKey, isReferralClosing ? 0 : productionVolume, agentNet);
         // For dual agent, split into buyer + seller sides (1 each) instead of a single 'dual' bucket
         if (isDual) {
-          addToSide(sideBreakdown.pending, 'buyer', dealValue / 2, agentNet / 2);
-          addToSide(sideBreakdown.pending, 'seller', dealValue / 2, agentNet / 2);
+          addToSide(sideBreakdown.pending, 'buyer', dealValue, agentNet / 2);
+          addToSide(sideBreakdown.pending, 'seller', dealValue, agentNet / 2);
         } else {
           addToSide(sideBreakdown.pending, getSideKey(t), isReferralClosing ? 0 : dealValue, agentNet);
         }
@@ -721,13 +723,13 @@ export async function GET(req: NextRequest) {
       const dealValue = (t.salePrice && Number(t.salePrice) > 0 ? Number(t.salePrice) : null) ?? (t.listPrice && Number(t.listPrice) > 0 ? Number(t.listPrice) : 0);
       const isAllTimeDual = String(t.closingType || '').toLowerCase() === 'dual';
       if (isAllTimeDual) {
-        addToSide(allTimeSideBreakdown.closed, 'buyer', dealValue / 2, agentNet / 2);
-        addToSide(allTimeSideBreakdown.closed, 'seller', dealValue / 2, agentNet / 2);
+        addToSide(allTimeSideBreakdown.closed, 'buyer', dealValue, agentNet / 2);
+        addToSide(allTimeSideBreakdown.closed, 'seller', dealValue, agentNet / 2);
       } else {
         addToSide(allTimeSideBreakdown.closed, getSideKey(t), dealValue, agentNet);
       }
       const srcKey = (t.dealSource || 'other').toLowerCase();
-      addToSource(allTimeSourceBreakdown.closed, srcKey, dealValue, agentNet);
+      addToSource(allTimeSourceBreakdown.closed, srcKey, dealValue * getTotalSideMultiplier(t as Record<string, any>), agentNet);
     }
 
     // ── Previous year stats ───────────────────────────────────────────────
@@ -933,8 +935,9 @@ export async function GET(req: NextRequest) {
           });
         }
         const entry = memberMap.get(agentKey)!;
-        entry.closedCount += 1;
-        entry.closedVolume += dealValue;
+        const productionCredit = getTotalSideMultiplier(t as Record<string, any>);
+        entry.closedCount += productionCredit;
+        entry.closedVolume += dealValue * productionCredit;
         entry.totalGCI += gci;
         entry.memberPaid += memberPaid;
         entry.leaderRetained += leaderRetained;

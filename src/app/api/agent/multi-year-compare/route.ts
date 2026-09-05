@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
-
+import { getTotalSideMultiplier } from '@/lib/transactions/resolveProductionCredit';
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function getBearerToken(req: NextRequest): string | null {
@@ -187,10 +187,12 @@ export async function GET(req: NextRequest) {
       // agentNetCommission from snapshot is most accurate; fall back to gci - companyRetained
       const agentNet = Number(split.agentNetCommission) || Math.max(0, gci - companyRetained);
       const dealValue = (d.salePrice && Number(d.salePrice) > 0 ? Number(d.salePrice) : null) ?? (Number(d.listPrice) || 0);
+      const sideCount = getTotalSideMultiplier(d as Record<string, any>);
+      const productionVolume = dealValue * sideCount;
 
       bucket.netIncome += agentNet;
-      bucket.volume += dealValue;
-      bucket.sales += 1;
+      bucket.volume += productionVolume;
+      bucket.sales += sideCount;
       bucket.gci += gci;
 
             // Track contractsWritten — bucket by contractDate (when the deal went under contract)
@@ -209,7 +211,7 @@ export async function GET(req: NextRequest) {
           if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
           const cMonthMap = yearMap.get(cyr)!;
           if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
-          cMonthMap.get(cmo)!.contractsWritten += 1;
+          cMonthMap.get(cmo)!.contractsWritten += sideCount;
         }
       }
     }
@@ -234,8 +236,9 @@ export async function GET(req: NextRequest) {
       const agentNet = Number(split.agentNetCommission) || Math.max(0, gci - companyRetained);
       const isDual = String(d.closingType || '').toLowerCase() === 'dual';
       const sideCount = isDual ? 2 : 1;
+      const productionVolume = dealValue * getTotalSideMultiplier(d as Record<string, any>);
 
-      bucket.pendingVolume += dealValue;
+      bucket.pendingVolume += productionVolume;
       bucket.pendingSales += sideCount;
       bucket.pendingNetIncome += agentNet;
 
@@ -249,7 +252,7 @@ export async function GET(req: NextRequest) {
           if (!yearMap.has(cyr)) yearMap.set(cyr, new Map());
           const cMonthMap = yearMap.get(cyr)!;
           if (!cMonthMap.has(cmo)) cMonthMap.set(cmo, { netIncome: 0, volume: 0, sales: 0, gci: 0, pendingVolume: 0, pendingSales: 0, pendingNetIncome: 0, contractsWritten: 0 });
-          cMonthMap.get(cmo)!.contractsWritten += 1;
+          cMonthMap.get(cmo)!.contractsWritten += sideCount;
         }
       }
     }
