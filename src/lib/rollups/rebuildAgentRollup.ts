@@ -37,6 +37,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { getAnniversaryCycle, isInCycle } from '@/lib/agents/anniversaryCycle';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
+import { getAgentBonusPassThrough } from '@/lib/transactions/resolveAgentBonusPassThrough';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,7 @@ export async function rebuildAgentRollup(
   let closedVolume = 0;
   let totalGCI = 0;
   let agentNetCommission = 0;
+  let agentBonusPassThrough = 0;
   let companyDollar = 0;
 
   // Anniversary-cycle stats (tier progression)
@@ -196,6 +198,7 @@ export async function rebuildAgentRollup(
           agentNetCommission += num(activeSplitSnapshot?.agentNetCommission ?? t.commission);
           companyDollar += num(activeSplitSnapshot?.companyRetained ?? 0);
         }
+        agentBonusPassThrough += getAgentBonusPassThrough(t, agentId);
       }
 
       // Pending / under contract — calendar year
@@ -265,6 +268,7 @@ export async function rebuildAgentRollup(
             agentNetCommission += num(coSplitSnapshot?.agentNetCommission ?? 0);
             companyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
           }
+          agentBonusPassThrough += getAgentBonusPassThrough(t, agentId);
         }
         if (status === 'pending' || status === 'under_contract') {
           pending += productionCredit.pendingSides;
@@ -356,6 +360,8 @@ export async function rebuildAgentRollup(
     closedVolume,
     totalGCI,
     agentNetCommission,
+    agentBonusPassThrough,
+    totalAgentPayout: num(agentNetCommission + agentBonusPassThrough),
     companyDollar,
 
     // Anniversary-cycle tier progression stats

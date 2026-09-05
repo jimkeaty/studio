@@ -26,6 +26,8 @@ const brokerCommandMetricsSource = readFileSync(resolve(root, 'src/app/api/broke
 const passThroughHelperSource = readFileSync(resolve(root, 'src/lib/transactions/isPassThroughTransaction.ts'), 'utf8');
 const historicalRollupRouteSource = readFileSync(resolve(root, 'src/app/api/cron/rebuild-historical-rollups/route.ts'), 'utf8');
 const productionCreditSource = readFileSync(resolve(root, 'src/lib/transactions/resolveProductionCredit.ts'), 'utf8');
+const bonusHelperSource = readFileSync(resolve(root, 'src/lib/transactions/resolveAgentBonusPassThrough.ts'), 'utf8');
+const coAgentAllocationSource = readFileSync(resolve(root, 'src/lib/transactions/syncCoAgentAllocations.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -126,6 +128,27 @@ test('pass-throughs receive sale and volume recognition but no income, company-d
   assert.match(agentDashboardSource, /if \(isPassThroughTransaction\(t\)\) continue;[\s\S]*?grossGCIYTD \+= tierGCI/);
   assert.match(brokerCommandMetricsSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
   assert.match(formSource, /counts as a closed sale and sale-price volume,[\s\S]*?does not count toward agent GCI, agent net, brokerage\/company dollar, or tier advancement/);
+});
+
+test('agent bonus pass-through is separate from commission, splits evenly for co-agents, and is excluded from production and tier calculations', () => {
+  assert.match(formSource, /agentBonusPassThrough: z\.coerce\.number\(\)\.min\(0\)/);
+  assert.match(formSource, /Agent Bonus Pass-Through/);
+  assert.match(formSource, /Total Agent Payout/);
+  assert.match(formSource, /agentBonusPassThrough: tx\.agentBonusPassThrough \?\? ''/);
+  assert.match(transactionSectionsSource, /Agent Bonus Pass-Through/);
+  assert.match(createTransactionSource, /agentBonusPassThrough: toNum\(body\.agentBonusPassThrough\)/);
+  assert.match(agentRouteSource, /'agentBonusPassThrough'/);
+  assert.match(adminRouteSource, /'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested', 'agentBonusPassThrough'/);
+  assert.match(bonusHelperSource, /getAgentBonusPassThrough/);
+  assert.match(bonusHelperSource, /const coAgentShare = money\(totalBonus \/ 2\)/);
+  assert.match(coAgentAllocationSource, /agentBonusPassThrough: primaryAgentBonus/);
+  assert.match(coAgentAllocationSource, /agentBonusPassThrough: coAgentBonus/);
+  assert.match(agentRollupSource, /agentBonusPassThrough \+= getAgentBonusPassThrough\(t, agentId\)/);
+  assert.match(agentRollupSource, /totalAgentPayout: num\(agentNetCommission \+ agentBonusPassThrough\)/);
+  assert.match(agentDashboardSource, /agentBonusPassThrough \+= bonusForAgent/);
+  assert.match(agentDashboardSource, /netEarned \+= agentBonusPassThrough/);
+  assert.doesNotMatch(agentRollupSource, /totalGCI \+= getAgentBonusPassThrough/);
+  assert.doesNotMatch(agentRollupSource, /tierProgressionGci \+= getAgentBonusPassThrough/);
 });
 
 test('historical rollup rebuild is a secured, confirmed maintenance action that rebuilds every ledger year', () => {

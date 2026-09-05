@@ -201,6 +201,8 @@ export interface Transaction {
   // Additional info
   warrantyAtClosing?: string;
   warrantyPaidBy?: string | null;
+  /** Direct-to-agent bonus, excluded from commission and production calculations. */
+  agentBonusPassThrough?: number | null;
   txComplianceFee?: string;
   txComplianceFeeAmount?: number | null;
   txComplianceFeePaidBy?: string | null;
@@ -279,6 +281,10 @@ export interface AgentDashboardData {
   };
   netEarned: number;
   netPending: number;
+  /** Direct bonus amount included in agent take-home but excluded from production and tier metrics. */
+  agentBonusPassThrough?: number;
+  /** Net commission before the separate bonus pass-through is added. */
+  netCommissionEarned?: number;
 
   monthlyIncome: { month: string; closed: number; pending: number; goal: number }[];
   totalClosedIncomeForYear: number;

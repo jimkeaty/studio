@@ -44,6 +44,8 @@ export function AgentIncomeByMonthCard({
   // Safe defaults from the dashboard data
   const ytdGoal = dashboard?.expectedYTDIncomeGoal ?? 0;
   const ytdClosed = dashboard?.totalClosedIncomeForYear ?? 0;
+  const ytdBonus = dashboard?.agentBonusPassThrough ?? 0;
+  const ytdCommission = dashboard?.netCommissionEarned ?? Math.max(0, ytdClosed - ytdBonus);
   const ytdPending = dashboard?.totalPendingIncomeForYear ?? 0;
   const ytdPotential = dashboard?.totalIncomeWithPipelineForYear ?? 0;
 
@@ -77,9 +79,11 @@ export function AgentIncomeByMonthCard({
       </CardContent>
       <CardFooter className="flex-col items-start gap-4 border-t pt-6">
         <p className="font-semibold">Year-to-Date Summary</p>
-        <div className="grid w-full grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid w-full grid-cols-2 lg:grid-cols-5 gap-4">
              <SummaryStat title="YTD Goal" value={formatCurrency(ytdGoal)} icon={Target} />
-             <SummaryStat title="YTD Closed" value={formatCurrency(ytdClosed)} icon={DollarSign} />
+             <SummaryStat title="Net Commission" value={formatCurrency(ytdCommission)} icon={DollarSign} />
+             <SummaryStat title="Bonus Pass-Through" value={formatCurrency(ytdBonus)} icon={DollarSign} />
+             <SummaryStat title="Total Agent Payout" value={formatCurrency(ytdClosed)} icon={DollarSign} />
              <SummaryStat title="YTD Pending" value={formatCurrency(ytdPending)} icon={TrendingUp} />
              <SummaryStat title="Total Potential" value={formatCurrency(ytdPotential)} icon={CheckCircle} />
         </div>

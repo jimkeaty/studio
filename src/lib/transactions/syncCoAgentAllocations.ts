@@ -38,6 +38,11 @@ export async function buildCoAgentAllocationUpdate(
   );
   const totalGci = money(transaction.gci ?? transaction.commission);
   const salePrice = money(transaction.salePrice ?? transaction.listPrice);
+  // This is a separate pass-through amount. It must never be folded into GCI,
+  // split snapshots, company retained, or transaction-fee calculations.
+  const totalAgentBonus = money(transaction.agentBonusPassThrough);
+  const coAgentBonus = money(totalAgentBonus / 2);
+  const primaryAgentBonus = money(totalAgentBonus - coAgentBonus);
 
   const feeAmount = transaction.txComplianceFee === 'yes'
     ? money(transaction.txComplianceFeeAmount)
@@ -116,6 +121,8 @@ export async function buildCoAgentAllocationUpdate(
         grossCommission: primaryGci,
         transactionFeeDeduction: primaryFee,
         netCommission: primarySnapshot?.agentNetCommission ?? 0,
+        agentBonusPassThrough: primaryAgentBonus,
+        totalAgentPayout: money(Number(primarySnapshot?.agentNetCommission ?? 0) + primaryAgentBonus),
       },
       coAgent: {
         agentId: coAgentId,
@@ -126,6 +133,8 @@ export async function buildCoAgentAllocationUpdate(
         grossCommission: coGci,
         transactionFeeDeduction: coFee,
         netCommission: coSnapshot?.agentNetCommission ?? 0,
+        agentBonusPassThrough: coAgentBonus,
+        totalAgentPayout: money(Number(coSnapshot?.agentNetCommission ?? 0) + coAgentBonus),
       },
       transactionFee: {
         amount: feeAmount,

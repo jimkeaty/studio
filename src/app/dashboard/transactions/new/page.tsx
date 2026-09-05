@@ -356,6 +356,8 @@ const schema = z.object({
   // status save merely because the agent owes more in allocated fees than this
   // transaction pays; staff can correct the underlying allocation afterward.
   agentDollar: z.coerce.number().optional().or(z.literal('')),
+  // A direct-to-agent bonus. This is deliberately not part of GCI or commission.
+  agentBonusPassThrough: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // MLS Number
   mlsNumber: z.string().optional(),
@@ -1422,6 +1424,7 @@ export default function AddTransactionPage() {
       txComplianceFeeAgentAllocation: 'primary_agent',
       txComplianceFeePrimaryAgentAmount: '',
       txComplianceFeeCoAgentAmount: '',
+      agentBonusPassThrough: '',
       buyerWarrantyEducationRequested: '',
       sellerWarrantyEducationRequested: '',
       hasOutboundReferral: false,
@@ -1447,6 +1450,7 @@ export default function AddTransactionPage() {
   const showingNoSameDayAppts = form.watch('showingNoSameDayAppts');
   const inspectionOrdered = form.watch('inspectionOrdered');
   const warrantyAtClosing = form.watch('warrantyAtClosing');
+  const agentBonusPassThrough = Number(form.watch('agentBonusPassThrough')) || 0;
   const txComplianceFee = form.watch('txComplianceFee');
   const txComplianceFeeAmount = Number(form.watch('txComplianceFeeAmount')) || 0;
   const txComplianceFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
@@ -2393,6 +2397,7 @@ export default function AddTransactionPage() {
           warrantyAtClosing: safeEnum(tx.warrantyAtClosing, ''),
           warrantyAmount: tx.warrantyAmount || '',
           warrantyPaidBy: tx.warrantyPaidBy || '',
+          agentBonusPassThrough: tx.agentBonusPassThrough ?? '',
           buyerWarrantyEducationRequested: safeEnum(tx.buyerWarrantyEducationRequested, ''),
           sellerWarrantyEducationRequested: safeEnum(tx.sellerWarrantyEducationRequested, ''),
           txComplianceFee: resolvedComplianceFee,
@@ -6741,6 +6746,20 @@ export default function AddTransactionPage() {
               </div>
             )}
 
+            <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 space-y-2">
+              <div>
+                <h4 className="text-sm font-semibold text-violet-950">Agent Bonus Pass-Through</h4>
+                <p className="text-xs text-violet-900">A direct-to-agent bonus that stays separate from commission. It does not affect GCI, production, company revenue, fees, or tier progress.</p>
+              </div>
+              <FormField control={form.control} name="agentBonusPassThrough" render={({ field }) => (
+                <FormItem className="max-w-xs">
+                  <FormLabel>Total Bonus ($)</FormLabel>
+                  <FormControl><CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" /></FormControl>
+                  <FormDescription>{hasCoAgent ? 'The total bonus is split 50/50 between the primary agent and internal co-agent.' : 'The total bonus is paid 100% to the transaction agent.'}</FormDescription>
+                </FormItem>
+              )} />
+            </div>
+
             {(watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
               <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -7221,6 +7240,10 @@ export default function AddTransactionPage() {
                   const agentNet = hasParticipantAllocation
                     ? Number(participantAllocation?.netCommission || 0)
                     : agentDollar - feeDeduction; // only tx fee deducted after split
+                  const agentBonus = hasParticipantAllocation
+                    ? Number(participantAllocation?.agentBonusPassThrough || 0)
+                    : (hasCoAgent ? agentBonusPassThrough / 2 : agentBonusPassThrough);
+                  const totalAgentPayout = agentNet + agentBonus;
                   // Split % is relative to netGci (after referral), not gross GCI
                   const splitBase = hasParticipantAllocation
                     ? Number(participantAllocation?.grossCommission || 0)
@@ -7228,7 +7251,7 @@ export default function AddTransactionPage() {
                   const splitPct = splitBase > 0 ? Math.round((agentDollar / splitBase) * 100) : (activeTier?.agentSplitPercent ?? 0);
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-                  if (agentDollar <= 0 && !activeTier && !hasParticipantAllocation) return (
+                  if (agentDollar <= 0 && !activeTier && !hasParticipantAllocation && agentBonus <= 0) return (
                     <div className="max-w-xs">
                       <FormField control={form.control} name="agentDollar" render={({ field }) => (
                         <FormItem>
@@ -7254,6 +7277,18 @@ export default function AddTransactionPage() {
                           <p className="text-xl font-black text-green-700 dark:text-green-300">{fmtExact(agentNet)}</p>
                         </div>
                       </div>
+                      {agentBonus > 0 && (
+                        <div className="mt-3 grid grid-cols-2 gap-3 border-t border-green-200 pt-3 dark:border-green-800">
+                          <div className="text-center">
+                            <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">Agent Bonus Pass-Through</p>
+                            <p className="text-lg font-black text-violet-700 dark:text-violet-300">+{fmtExact(agentBonus)}</p>
+                          </div>
+                          <div className="rounded-lg bg-violet-100 p-2 text-center dark:bg-violet-900/40">
+                            <p className="text-xs font-bold text-violet-700 dark:text-violet-300">Total Agent Payout</p>
+                            <p className="text-xl font-black text-violet-700 dark:text-violet-200">{fmtExact(totalAgentPayout)}</p>
+                          </div>
+                        </div>
+                      )}
                       {previewRefFee > 0 && (
                         <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 text-xs text-amber-800 dark:text-amber-300 space-y-0.5">
                           <p className="font-semibold">Referral Fee Breakdown</p>
@@ -7504,7 +7539,7 @@ export default function AddTransactionPage() {
                   const watchedTxCompFee = form.watch('txComplianceFee');
                   const watchedTxCompFeeAmt = Number(form.watch('txComplianceFeeAmount')) || 0;
                   const watchedTxCompFeePaidBy = form.watch('txComplianceFeePaidBy') || '';
-                  if (gci <= 0) return null;
+                  if (gci <= 0 && agentBonusPassThrough <= 0) return null;
                   const coAgentGci = Number((gci * (watchedCoPct / 100)).toFixed(2));
                   const coAgentYtd = coAgentViewerCommission?.ytdTierProgressionGci
                     ?? coAgentViewerCommission?.ytdTierProgressionCompanyDollar
@@ -7544,6 +7579,10 @@ export default function AddTransactionPage() {
                   const agentNet = hasParticipantPreview && payoutAllocation
                     ? Number(payoutAllocation.netCommission || 0)
                     : displayedAgentDollar - feeDeduction;
+                  const agentBonus = hasParticipantPreview
+                    ? Number(payoutAllocation?.agentBonusPassThrough || 0)
+                    : (hasCoAgent ? agentBonusPassThrough / 2 : agentBonusPassThrough);
+                  const totalAgentPayout = agentNet + agentBonus;
                   const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
                   const fmtExact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
                   const feeLabel: Record<string, string> = {
@@ -7706,6 +7745,18 @@ export default function AddTransactionPage() {
                             <p className="text-xs text-blue-600 mt-2 font-medium">Transaction fee is not deducted from your commission — collect {fmt(watchedTxCompFeeAmt)} separately at closing.</p>
                           )}
                         </>
+                      )}
+                      {agentBonus > 0 && (
+                        <div className="mt-3 grid grid-cols-2 gap-3 border-t border-green-200 pt-3 dark:border-green-800">
+                          <div className="text-center">
+                            <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">Agent Bonus Pass-Through</p>
+                            <p className="text-lg font-black text-violet-700 dark:text-violet-300">+{fmtExact(agentBonus)}</p>
+                          </div>
+                          <div className="rounded-lg bg-violet-100 p-2 text-center dark:bg-violet-900/40">
+                            <p className="text-xs font-bold text-violet-700 dark:text-violet-300">Total Agent Payout</p>
+                            <p className="text-xl font-black text-violet-700 dark:text-violet-200">{fmtExact(totalAgentPayout)}</p>
+                          </div>
+                        </div>
                       )}
                     </div>
                   );

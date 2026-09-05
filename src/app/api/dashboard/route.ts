@@ -7,6 +7,7 @@ import type { AgentDashboardData, BusinessPlan } from "@/lib/types";
 import { todayUtcInCompanyTz } from '@/lib/config';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
+import { getAgentBonusPassThrough } from '@/lib/transactions/resolveAgentBonusPassThrough';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -462,6 +463,7 @@ export async function GET(req: NextRequest) {
 
     let netEarned = 0;
     let netPending = 0;
+    let agentBonusPassThrough = 0;
 
     const monthlyBuckets = Array.from({ length: 12 }, (_, idx) => ({
       month: monthLabel(idx),
@@ -503,17 +505,20 @@ export async function GET(req: NextRequest) {
       const productionCredit = getAgentProductionCredit(t, reportingAgentId);
       const sideCount = productionCredit.closedSides;
       const productionVolume = dealValue * productionCredit.volumeMultiplier;
+      const bonusForAgent = getAgentBonusPassThrough(t, reportingAgentId);
       if (status === "closed") {
         const d = getTransactionDateForEarned(t);
         if (!d) continue;
         const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const monthIndex = dUtc.getUTCMonth();
         if (!isPassThrough) monthlyBuckets[monthIndex].closed += net;
+        monthlyBuckets[monthIndex].closed += bonusForAgent;
         if (
           dUtc.getTime() >= effectiveStart.getTime() &&
           dUtc.getTime() <= asOf.getTime()
         ) {
           if (!isPassThrough) netEarned += net;
+          agentBonusPassThrough += bonusForAgent;
           if (!isReferralClosing) {
             closedUnits += sideCount;
             closedVolume += productionVolume;
@@ -627,6 +632,9 @@ export async function GET(req: NextRequest) {
       // Non-fatal — fall back to daily_activity totals only
     }
 
+    // Bonus pass-through is part of the agent's take-home income, but does not
+    // enter GCI, volume, company, or tier accumulators above.
+    netEarned += agentBonusPassThrough;
     const ytdTotalPotential = Number((netEarned + netPending).toFixed(2));
     const incomePerformance = performance(netEarned, expectedYTDIncomeGoal);
     const pipelinePerformance = performance(ytdTotalPotential, expectedYTDIncomeGoal);
@@ -741,6 +749,8 @@ export async function GET(req: NextRequest) {
       },
 
       netEarned: Number(netEarned.toFixed(2)),
+      agentBonusPassThrough: Number(agentBonusPassThrough.toFixed(2)),
+      netCommissionEarned: Number((netEarned - agentBonusPassThrough).toFixed(2)),
       netPending: Number(netPending.toFixed(2)),
 
       monthlyIncome: monthlyBuckets.map((m) => ({

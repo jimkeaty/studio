@@ -346,7 +346,7 @@ const UPDATABLE_FIELDS = new Set([
   'showingNotesToAgentOther', 'showingTimeId',
   'signNotes', 'signRequestedDate', 'signRiderExt',
   'titleOfficerStreet', 'warrantyAmount', 'workingWithTc',
-  'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested',
+  'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested', 'agentBonusPassThrough',
   'inspectionRowData',
 ]);
 

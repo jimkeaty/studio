@@ -269,6 +269,7 @@ export async function POST(req: NextRequest) {
       warrantyAtClosing: toStr(body.warrantyAtClosing) || null,
       warrantyAmount: toNum(body.warrantyAmount) || null,
       warrantyPaidBy: toStr(body.warrantyPaidBy) || null,
+      agentBonusPassThrough: toNum(body.agentBonusPassThrough) || null,
       buyerWarrantyEducationRequested: toStr(body.buyerWarrantyEducationRequested) || null,
       sellerWarrantyEducationRequested: toStr(body.sellerWarrantyEducationRequested) || null,
       txComplianceFee: toStr(body.txComplianceFee) || null,

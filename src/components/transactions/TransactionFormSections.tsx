@@ -744,6 +744,7 @@ export function ReferralSection({ form }: TransactionFormSectionProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 export function AdditionalInfoSection({ form }: TransactionFormSectionProps) {
   const warrantyAtClosing = form.watch('warrantyAtClosing');
+  const hasCoAgent = Boolean(form.watch('hasCoAgent'));
   const closingType = String(form.watch('closingType') || '').toLowerCase();
   const showBuyerWarrantyEducation = closingType === 'buyer' || closingType === 'dual';
   const showSellerWarrantyEducation = closingType === 'listing' || closingType === 'dual';
@@ -830,6 +831,20 @@ export function AdditionalInfoSection({ form }: TransactionFormSectionProps) {
           )} />
         </div>
       )}
+
+      <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 space-y-2">
+        <div>
+          <h4 className="text-sm font-semibold text-violet-950">Agent Bonus Pass-Through</h4>
+          <p className="text-xs text-violet-900">A direct-to-agent bonus that is separate from commission and excluded from GCI, production, company revenue, fees, and tier progress.</p>
+        </div>
+        <FormField control={form.control} name="agentBonusPassThrough" render={({ field }) => (
+          <FormItem className="max-w-xs">
+            <FormLabel>Total Bonus ($)</FormLabel>
+            <FormControl><CurrencyInput value={field.value as any} onChange={(val) => field.onChange(val)} placeholder="0" /></FormControl>
+            <FormDescription>{hasCoAgent ? 'The total is split 50/50 between the primary agent and internal co-agent.' : 'The total is paid 100% to the transaction agent.'}</FormDescription>
+          </FormItem>
+        )} />
+      </div>
 
       <Separator />
 
