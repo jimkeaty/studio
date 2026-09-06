@@ -34,7 +34,8 @@ function toYmd(value: any): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-function gradeFromPerformance(perf: number): 'A' | 'B' | 'C' | 'D' | 'F' {
+function gradeFromPerformance(perf: number | null): 'A' | 'B' | 'C' | 'D' | 'F' | 'N/A' {
+  if (perf === null) return 'N/A';
   if (perf >= 90) return 'A';
   if (perf >= 80) return 'B';
   if (perf >= 70) return 'C';
@@ -42,8 +43,17 @@ function gradeFromPerformance(perf: number): 'A' | 'B' | 'C' | 'D' | 'F' {
   return 'F';
 }
 
-function perf(actual: number, target: number): number {
-  if (target <= 0) return actual > 0 ? 100 : 0;
+function configuredNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function perf(actual: number, target: number | null): number | null {
+  if (target === null) return null;
+  // An explicit numeric zero is a configured goal, not a missing goal. It is
+  // treated as achieved so the UI can distinguish it from Goal Not Set.
+  if (target === 0) return 100;
   return Number(((actual / target) * 100).toFixed(1));
 }
 
@@ -92,28 +102,32 @@ export interface AgentRosterRow {
 
   // Engagement
   engagementsActual: number;
-  engagementsGoal: number;
-  engagementsDelta: number;
-  engagementsPerf: number;
+  engagementsGoal: number | null;
+  engagementsGoalConfigured: boolean;
+  engagementsDelta: number | null;
+  engagementsPerf: number | null;
   engagementsGrade: string;
 
   // Appointments Held
   appointmentsHeldActual: number;
-  appointmentsHeldGoal: number;
-  appointmentsDelta: number;
-  appointmentsPerf: number;
+  appointmentsHeldGoal: number | null;
+  appointmentsHeldGoalConfigured: boolean;
+  appointmentsDelta: number | null;
+  appointmentsPerf: number | null;
   appointmentsGrade: string;
 
   // Income (closed only)
   incomeActual: number;
-  incomeGoal: number;
-  incomeDelta: number;
-  incomePerf: number;
+  incomeGoal: number | null;
+  incomeGoalConfigured: boolean;
+  incomeDelta: number | null;
+  incomePerf: number | null;
   incomeGrade: string;
 
   // Income with pendings
   incomePipelineActual: number;
-  incomePipelinePerf: number;
+  incomePipelineGoal: number | null;
+  incomePipelinePerf: number | null;
   incomePipelineGrade: string;
 
   // Extra context
@@ -282,7 +296,13 @@ export async function GET(req: NextRequest) {
       planPromises.push(
         agentDoc.ref.collection('plans').doc('plan').get().then(planDoc => {
           if (planDoc.exists) {
-            planByAgent.set(agentDoc.id, planDoc.data());
+            const planData = planDoc.data() || {};
+            // The canonical API saves plans beneath the agent-profile document
+            // ID. Preserve compatibility with older plan payloads that stored
+            // a userId or agentId in the document body as well.
+            planByAgent.set(agentDoc.id, planData);
+            if (planData.userId) planByAgent.set(String(planData.userId), planData);
+            if (planData.agentId) planByAgent.set(String(planData.agentId), planData);
           }
         })
       );
@@ -311,7 +331,9 @@ export async function GET(req: NextRequest) {
 
     for (const agent of agents) {
       const uid = agent.agentId || agent.id;
-      const plan = planByAgent.get(uid) || {};
+      // The profile doc ID is canonical. `agentId` may be a legacy slug, so it
+      // is retained only as a backward-compatible fallback.
+      const plan = planByAgent.get(agent.id) || planByAgent.get(uid) || {};
       const activity = actByAgent.get(uid) || { calls: 0, engagements: 0, apptSet: 0, apptHeld: 0, contracts: 0, lastActivityDate: null as string | null };
       const transactions = txByAgent.get(uid) || [];
 
@@ -362,16 +384,16 @@ export async function GET(req: NextRequest) {
         : countWeekdaysInclusive(kpiEffectiveStart, asOf);
 
       // Engagement & appointment targets use KPI clock
-      const dailyEngTarget = asNumber(plan.calculatedTargets?.engagements?.daily);
-      const dailyApptHeldTarget = asNumber(plan.calculatedTargets?.appointmentsHeld?.daily);
-      const engTarget = Number((dailyEngTarget * kpiElapsed).toFixed(2));
-      const apptHeldTarget = Number((dailyApptHeldTarget * kpiElapsed).toFixed(2));
+      const dailyEngTarget = configuredNumber(plan.calculatedTargets?.engagements?.daily);
+      const dailyApptHeldTarget = configuredNumber(plan.calculatedTargets?.appointmentsHeld?.daily);
+      const engTarget = dailyEngTarget === null ? null : Number((dailyEngTarget * kpiElapsed).toFixed(2));
+      const apptHeldTarget = dailyApptHeldTarget === null ? null : Number((dailyApptHeldTarget * kpiElapsed).toFixed(2));
 
       // Income goals use financial clock
-      const annualIncomeGoal = asNumber(plan.annualIncomeGoal);
-      const expectedYTDIncome = totalWorkdaysInRolling12 > 0
+      const annualIncomeGoal = configuredNumber(plan.annualIncomeGoal);
+      const expectedYTDIncome = annualIncomeGoal === null ? null : totalWorkdaysInRolling12 > 0
         ? Number(((annualIncomeGoal * financialElapsed) / totalWorkdaysInRolling12).toFixed(2))
-        : 0;
+        : null;
 
       // Legacy: effectiveStart = financialEffectiveStart (for transaction filtering)
       const effectiveStart = financialEffectiveStart;
@@ -486,32 +508,36 @@ export async function GET(req: NextRequest) {
         graceStatus,
 
         engagementsActual: activity.engagements,
-        engagementsGoal: Number(engTarget.toFixed(0)),
-        engagementsDelta: Number((activity.engagements - engTarget).toFixed(0)),
+        engagementsGoal: engTarget === null ? null : Number(engTarget.toFixed(0)),
+        engagementsGoalConfigured: engTarget !== null,
+        engagementsDelta: engTarget === null ? null : Number((activity.engagements - engTarget).toFixed(0)),
         engagementsPerf: engPerf,
-        engagementsGrade: isGracePeriod ? 'A' : gradeFromPerformance(engPerf),
+        engagementsGrade: engPerf === null ? 'N/A' : (isGracePeriod ? 'A' : gradeFromPerformance(engPerf)),
 
         appointmentsHeldActual: activity.apptHeld,
-        appointmentsHeldGoal: Number(apptHeldTarget.toFixed(0)),
-        appointmentsDelta: Number((activity.apptHeld - apptHeldTarget).toFixed(0)),
+        appointmentsHeldGoal: apptHeldTarget === null ? null : Number(apptHeldTarget.toFixed(0)),
+        appointmentsHeldGoalConfigured: apptHeldTarget !== null,
+        appointmentsDelta: apptHeldTarget === null ? null : Number((activity.apptHeld - apptHeldTarget).toFixed(0)),
         appointmentsPerf: apptPerf,
-        appointmentsGrade: isGracePeriod ? 'A' : gradeFromPerformance(apptPerf),
+        appointmentsGrade: apptPerf === null ? 'N/A' : (isGracePeriod ? 'A' : gradeFromPerformance(apptPerf)),
 
         incomeActual: Number(netEarned.toFixed(2)),
-        incomeGoal: Number(expectedYTDIncome.toFixed(2)),
-        incomeDelta: Number((netEarned - expectedYTDIncome).toFixed(2)),
+        incomeGoal: expectedYTDIncome === null ? null : Number(expectedYTDIncome.toFixed(2)),
+        incomeGoalConfigured: expectedYTDIncome !== null,
+        incomeDelta: expectedYTDIncome === null ? null : Number((netEarned - expectedYTDIncome).toFixed(2)),
         incomePerf: incPerf,
-        incomeGrade: isGracePeriod ? 'A' : gradeFromPerformance(incPerf),
+        incomeGrade: incPerf === null ? 'N/A' : (isGracePeriod ? 'A' : gradeFromPerformance(incPerf)),
 
         incomePipelineActual: Number(pipeline.toFixed(2)),
+        incomePipelineGoal: expectedYTDIncome === null ? null : Number(expectedYTDIncome.toFixed(2)),
         incomePipelinePerf: pipePerf,
-        incomePipelineGrade: isGracePeriod ? 'A' : gradeFromPerformance(pipePerf),
+        incomePipelineGrade: pipePerf === null ? 'N/A' : (isGracePeriod ? 'A' : gradeFromPerformance(pipePerf)),
 
         closedDeals: closedUnits,
         pendingDeals: pendingUnits,
         closedVolume: Number(closedVolume.toFixed(2)),
         pendingVolume: Number(pendingVolume.toFixed(2)),
-        annualIncomeGoal,
+        annualIncomeGoal: annualIncomeGoal ?? 0,
 
         isFirstYearAgent,
         daysSinceStart,
@@ -528,7 +554,8 @@ export async function GET(req: NextRequest) {
         })(),
         // Retention risk: D/F grade AND no activity logged in 30+ days
         retentionRisk: (() => {
-          const grade = isGracePeriod ? 'A' : gradeFromPerformance(perf(netEarned, expectedYTDIncome));
+          const computedGrade = gradeFromPerformance(perf(netEarned, expectedYTDIncome));
+          const grade = computedGrade === 'N/A' ? 'N/A' : (isGracePeriod ? 'A' : computedGrade);
           const daysInactive = activity.lastActivityDate
             ? Math.floor((todayUtc.getTime() - new Date(activity.lastActivityDate + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24))
             : null;
@@ -538,12 +565,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Sort by engagement grade (worst first so admin sees struggling agents)
-    const gradeOrder: Record<string, number> = { F: 0, D: 1, C: 2, B: 3, A: 4 };
+    const gradeOrder: Record<string, number> = { F: 0, D: 1, C: 2, B: 3, A: 4, 'N/A': 5 };
     rows.sort((a, b) => (gradeOrder[a.engagementsGrade] ?? 5) - (gradeOrder[b.engagementsGrade] ?? 5));
 
     // ── 8. Summary stats ──────────────────────────────────────────────────
     const totalAgents = rows.length;
-    const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+    const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0, 'N/A': 0 };
     for (const r of rows) {
       gradeDistribution[r.incomeGrade as keyof typeof gradeDistribution] =
         (gradeDistribution[r.incomeGrade as keyof typeof gradeDistribution] || 0) + 1;
@@ -551,6 +578,7 @@ export async function GET(req: NextRequest) {
 
     const struggling = rows.filter(r => r.incomeGrade === 'D' || r.incomeGrade === 'F').length;
     const onTrack = rows.filter(r => r.incomeGrade === 'A' || r.incomeGrade === 'B').length;
+    const goalNotSet = rows.filter(r => r.incomeGrade === 'N/A').length;
 
     // Grace period summary
     const inGrace = rows.filter(r => r.isGracePeriod);
@@ -591,8 +619,9 @@ export async function GET(req: NextRequest) {
         gradeDistribution,
         struggling,
         onTrack,
-        avgEngagementPerf: totalAgents > 0 ? Number((rows.reduce((s, r) => s + r.engagementsPerf, 0) / totalAgents).toFixed(1)) : 0,
-        avgIncomePerf: totalAgents > 0 ? Number((rows.reduce((s, r) => s + r.incomePerf, 0) / totalAgents).toFixed(1)) : 0,
+        avgEngagementPerf: rows.filter(r => r.engagementsPerf !== null).length > 0 ? Number((rows.filter(r => r.engagementsPerf !== null).reduce((s, r) => s + (r.engagementsPerf ?? 0), 0) / rows.filter(r => r.engagementsPerf !== null).length).toFixed(1)) : null,
+        avgIncomePerf: rows.filter(r => r.incomePerf !== null).length > 0 ? Number((rows.filter(r => r.incomePerf !== null).reduce((s, r) => s + (r.incomePerf ?? 0), 0) / rows.filter(r => r.incomePerf !== null).length).toFixed(1)) : null,
+        goalNotSet,
         // Grace period summary
         totalInGrace: inGrace.length,
         graceOnTrack,

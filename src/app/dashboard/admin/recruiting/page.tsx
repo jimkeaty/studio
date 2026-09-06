@@ -536,6 +536,7 @@ function GradeBadge({ grade, size = 'sm' }: { grade: string; size?: 'sm' | 'lg' 
     C: 'bg-yellow-100 text-yellow-800 border-yellow-300',
     D: 'bg-orange-100 text-orange-800 border-orange-300',
     F: 'bg-red-100 text-red-800 border-red-300',
+    'N/A': 'bg-slate-100 text-slate-600 border-slate-300',
   };
   const cls = colors[grade] || 'bg-gray-100 text-gray-800 border-gray-300';
   return (
@@ -547,7 +548,8 @@ function GradeBadge({ grade, size = 'sm' }: { grade: string; size?: 'sm' | 'lg' 
 
 // ── Delta Display ───────────────────────────────────────────────────────────
 
-function Delta({ value, isCurrency = false }: { value: number; isCurrency?: boolean }) {
+function Delta({ value, isCurrency = false }: { value: number | null; isCurrency?: boolean }) {
+  if (value === null) return <span className="text-[10px] text-muted-foreground">Goal Not Set</span>;
   if (value === 0) return <span className="text-muted-foreground text-xs">—</span>;
   const positive = value > 0;
   const display = isCurrency
@@ -632,7 +634,7 @@ function AgentStatusBadge({ status }: { status: string | null }) {
 type SortField = 'name' | 'teamGroup' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual' | 'graceStatus';
 type SortDir = 'asc' | 'desc';
 
-const GRADE_ORDER: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 };
+const GRADE_ORDER: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0, 'N/A': -1 };
 
 function AgentPerformanceRoster({ year }: { year: number }) {
   const { user } = useUser();
@@ -1156,6 +1158,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
               <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">C {summary.gradeDistribution['C'] || 0}</Badge>
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">B {summary.gradeDistribution['B'] || 0}</Badge>
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">A {summary.gradeDistribution['A'] || 0}</Badge>
+              <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">N/A {summary.gradeDistribution['N/A'] || 0}</Badge>
             </div>
           </div>
           <CardDescription>
@@ -1167,7 +1170,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
       {/* Grade Distribution Bar */}
       <div className="flex items-center gap-2 text-sm">
         <span className="text-muted-foreground font-medium">Grade Distribution:</span>
-        {(['A', 'B', 'C', 'D', 'F'] as const).map(g => (
+        {(['A', 'B', 'C', 'D', 'F', 'N/A'] as const).map(g => (
           <button key={g} onClick={() => setFilterGrade(filterGrade === g ? 'all' : g)}
             className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${filterGrade === g ? 'ring-2 ring-offset-1 ring-blue-500' : 'hover:bg-muted'}`}>
             <GradeBadge grade={g} />
@@ -1282,7 +1285,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                       <TableCell className="text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           <GradeBadge grade={a.engagementsGrade} />
-                          <span className="text-xs">{a.engagementsActual} / {a.engagementsGoal}</span>
+                          <span className="text-xs">{a.engagementsActual} / {a.engagementsGoalConfigured ? a.engagementsGoal : 'Goal Not Set'}</span>
                           <Delta value={a.engagementsDelta} />
                         </div>
                       </TableCell>
@@ -1291,7 +1294,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                       <TableCell className="text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           <GradeBadge grade={a.appointmentsGrade} />
-                          <span className="text-xs">{a.appointmentsHeldActual} / {a.appointmentsHeldGoal}</span>
+                          <span className="text-xs">{a.appointmentsHeldActual} / {a.appointmentsHeldGoalConfigured ? a.appointmentsHeldGoal : 'Goal Not Set'}</span>
                           <Delta value={a.appointmentsDelta} />
                         </div>
                       </TableCell>
@@ -1300,7 +1303,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                       <TableCell className="text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           <GradeBadge grade={a.incomeGrade} />
-                          <span className="text-xs">{fmtCurrency(a.incomeActual)} / {fmtCurrency(a.incomeGoal)}</span>
+                          <span className="text-xs">{fmtCurrency(a.incomeActual)} / {a.incomeGoalConfigured ? fmtCurrency(a.incomeGoal ?? 0) : 'Goal Not Set'}</span>
                           <Delta value={a.incomeDelta} isCurrency />
                         </div>
                       </TableCell>
@@ -1310,7 +1313,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                         <div className="flex flex-col items-center gap-0.5">
                           <GradeBadge grade={a.incomePipelineGrade} />
                           <span className="text-xs">{fmtCurrency(a.incomePipelineActual)}</span>
-                          <span className="text-[10px] text-muted-foreground">{a.incomePipelinePerf}%</span>
+                          <span className="text-[10px] text-muted-foreground">{a.incomeGoalConfigured ? `${a.incomePipelinePerf}%` : 'Goal Not Set'}</span>
                         </div>
                       </TableCell>
 
