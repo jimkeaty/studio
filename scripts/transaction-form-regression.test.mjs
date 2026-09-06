@@ -432,9 +432,10 @@ test('transaction-entered contacts upsert after both creates and edits for the o
   assert.match(formSource, /if \(!res\.ok \|\| !data\.ok\) throw new Error\(data\.error \|\| 'Submission failed'\);[\s\S]*await syncContactsToBook\(token\);/);
   assert.match(formSource, /if \(contact\.name \|\| contact\.email \|\| contact\.phone\)/);
   assert.match(formSource, /Add every selected inspection vendor to this agent's Contact Book/);
-  assert.match(contactsRouteSource, /const effectiveCreatedBy = \(callerIsStaff && postViewAs\) \? postViewAs : uid/);
+  assert.match(contactsRouteSource, /let effectiveCreatedBy = \(callerIsStaff && postViewAs\) \? String\(postViewAs\) : uid/);
+  assert.match(contactsRouteSource, /ownerAgentId && !postViewAs/);
   assert.match(contactsRouteSource, /where\('createdBy', '==', effectiveCreatedBy\)/);
-  assert.match(contactsRouteSource, /contact\.specialties = \(fields\.specialties \|\| fields\.specialty \|\| ''\)\.trim\(\)/);
+  assert.match(contactsRouteSource, /contact\.specialties = clean\(fields\.specialties \|\| fields\.specialty\)/);
 });
 
 test('Contact Book retrieval keeps newly saved contacts searchable beyond 200 records', () => {

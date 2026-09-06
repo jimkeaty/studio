@@ -28,8 +28,16 @@ function serialize(val: any): any {
 }
 
 // Valid contact types
-const VALID_TYPES = ['client', 'lender', 'title', 'other_agent', 'inspector'] as const;
+const VALID_TYPES = ['client', 'lender', 'title', 'other_agent', 'inspector', 'insurance', 'vendor', 'attorney'] as const;
 type ContactType = typeof VALID_TYPES[number];
+const DEFAULT_TENANT_ID = 'smart-broker-usa';
+
+function clean(value: unknown) { return String(value || '').trim(); }
+function normalized(value: unknown) { return clean(value).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function tenantId(decoded: any) { return String(decoded?.tenantId || decoded?.brokerageId || DEFAULT_TENANT_ID); }
+function companyDocumentId(scope: string, type: string, companyName: string) {
+  return `company_${normalized(scope)}_${type}_${normalized(companyName)}`.slice(0, 140);
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,14 +73,19 @@ export async function GET(req: NextRequest) {
     }
 
     const snap = await query.get();
-    let contacts = snap.docs.map((d) => ({ id: d.id, ...serialize(d.data()) }));
+    const scope = tenantId(decoded);
+    let contacts = snap.docs
+      .map((d) => ({ id: d.id, ...serialize(d.data()) }))
+      // Older SmartBroker contacts predate tenantId; they belong to the original
+      // Smart Broker USA tenant. New documents always carry an explicit scope.
+      .filter((contact: any) => (contact.tenantId || DEFAULT_TENANT_ID) === scope);
 
     // Client-side text filter (Firestore doesn't support full-text search)
     if (q) {
       contacts = contacts.filter((c: any) => {
         const searchable = [
           c.name, c.companyName, c.email, c.phone,
-          c.officerName, c.officerEmail, c.brokerage,
+          c.officerName, c.officerEmail, c.brokerage, c.attorney, c.specialties,
         ].filter(Boolean).join(' ').toLowerCase();
         return searchable.includes(q);
       });
@@ -102,14 +115,18 @@ export async function POST(req: NextRequest) {
     const callerIsStaff = await isStaff(uid);
 
     const body = await req.json();
-    const { type, upsert = false, viewAs: postViewAs, ...fields } = body;
+    const { type, upsert = false, viewAs: postViewAs, ownerAgentId, ...fields } = body;
 
     if (!type || !VALID_TYPES.includes(type as ContactType)) {
       return jsonError(400, `type must be one of: ${VALID_TYPES.join(', ')}`);
     }
 
     // When admin is saving on behalf of an agent (viewAs), use the agent's UID as createdBy
-    const effectiveCreatedBy = (callerIsStaff && postViewAs) ? postViewAs : uid;
+    let effectiveCreatedBy = (callerIsStaff && postViewAs) ? String(postViewAs) : uid;
+    if (callerIsStaff && ownerAgentId && !postViewAs) {
+      const profile = await adminDb.collection('agentProfiles').doc(String(ownerAgentId)).get();
+      effectiveCreatedBy = String(profile.data()?.firebaseUid || profile.data()?.uid || ownerAgentId);
+    }
 
     const now = new Date().toISOString();
 
@@ -118,42 +135,54 @@ export async function POST(req: NextRequest) {
       type,
       updatedAt: now,
       updatedBy: uid,
+      tenantId: tenantId(decoded),
+      recordKind: 'individual',
     };
 
     // Map fields by type
     if (type === 'client') {
-      contact.name = (fields.name || fields.clientName || '').trim();
-      contact.email = (fields.email || fields.clientEmail || '').trim().toLowerCase();
-      contact.phone = (fields.phone || fields.clientPhone || '').trim();
-      contact.newAddress = (fields.newAddress || fields.clientNewAddress || '').trim();
+      contact.name = clean(fields.name || fields.clientName);
+      contact.email = clean(fields.email || fields.clientEmail).toLowerCase();
+      contact.phone = clean(fields.phone || fields.clientPhone);
+      contact.newAddress = clean(fields.newAddress || fields.clientNewAddress);
     } else if (type === 'lender') {
-      contact.companyName = (fields.companyName || fields.mortgageCompany || '').trim();
-      contact.officerName = (fields.officerName || fields.loanOfficer || '').trim();
-      contact.email = (fields.email || fields.loanOfficerEmail || '').trim().toLowerCase();
-      contact.phone = (fields.phone || fields.loanOfficerPhone || '').trim();
-      contact.office = (fields.office || fields.lenderOffice || '').trim();
-      // Primary display name is company
-      contact.name = contact.companyName || contact.officerName;
+      contact.companyName = clean(fields.companyName || fields.mortgageCompany);
+      contact.officerName = clean(fields.officerName || fields.loanOfficer);
+      contact.email = clean(fields.email || fields.loanOfficerEmail).toLowerCase();
+      contact.phone = clean(fields.phone || fields.loanOfficerPhone);
+      contact.office = clean(fields.office || fields.lenderOffice);
+      contact.name = contact.officerName || contact.companyName;
     } else if (type === 'title') {
-      contact.companyName = (fields.companyName || fields.titleCompany || '').trim();
-      contact.officerName = (fields.officerName || fields.titleOfficer || '').trim();
-      contact.email = (fields.email || fields.titleOfficerEmail || '').trim().toLowerCase();
-      contact.phone = (fields.phone || fields.titleOfficerPhone || '').trim();
-      contact.attorney = (fields.attorney || fields.titleAttorney || '').trim();
-      contact.office = (fields.office || fields.titleOffice || '').trim();
-      contact.name = contact.companyName || contact.officerName;
+      contact.companyName = clean(fields.companyName || fields.titleCompany);
+      contact.officerName = clean(fields.officerName || fields.titleOfficer);
+      contact.email = clean(fields.email || fields.titleOfficerEmail).toLowerCase();
+      contact.phone = clean(fields.phone || fields.titleOfficerPhone);
+      contact.attorney = clean(fields.attorney || fields.titleAttorney);
+      contact.office = clean(fields.office || fields.titleOffice);
+      contact.name = contact.officerName || contact.companyName;
     } else if (type === 'other_agent') {
-      contact.name = (fields.name || fields.otherAgentName || '').trim();
-      contact.email = (fields.email || fields.otherAgentEmail || '').trim().toLowerCase();
-      contact.phone = (fields.phone || fields.otherAgentPhone || '').trim();
-      contact.brokerage = (fields.brokerage || fields.otherBrokerage || '').trim();
+      contact.name = clean(fields.name || fields.otherAgentName);
+      contact.email = clean(fields.email || fields.otherAgentEmail).toLowerCase();
+      contact.phone = clean(fields.phone || fields.otherAgentPhone);
+      contact.brokerage = clean(fields.brokerage || fields.otherBrokerage);
     } else if (type === 'inspector') {
-      contact.companyName = (fields.companyName || fields.inspectorCompany || '').trim();
-      contact.name = (fields.name || fields.inspectorName || contact.companyName || '').trim();
-      contact.email = (fields.email || '').trim().toLowerCase();
-      contact.phone = (fields.phone || '').trim();
-      contact.specialties = (fields.specialties || fields.specialty || '').trim();
+      contact.companyName = clean(fields.companyName || fields.inspectorCompany);
+      contact.name = clean(fields.name || fields.inspectorName || contact.companyName);
+      contact.email = clean(fields.email).toLowerCase();
+      contact.phone = clean(fields.phone);
+      contact.specialties = clean(fields.specialties || fields.specialty);
+    } else if (type === 'insurance' || type === 'vendor' || type === 'attorney') {
+      contact.companyName = clean(fields.companyName || fields.company);
+      contact.name = clean(fields.name || fields.contactName || contact.companyName);
+      contact.email = clean(fields.email).toLowerCase();
+      contact.phone = clean(fields.phone);
+      contact.specialties = clean(fields.specialties || fields.practiceArea || fields.service);
     }
+
+    contact.normalizedEmail = normalized(contact.email);
+    contact.normalizedPhone = normalized(contact.phone);
+    contact.normalizedName = normalized(contact.name);
+    contact.normalizedCompanyName = normalized(contact.companyName);
 
     // Skip if no meaningful data
     const hasData = contact.name || contact.companyName || contact.email;
@@ -161,7 +190,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'No meaningful data to save' });
     }
 
-    // Upsert: find existing by email or name+type
+    // Companies remain first-class records in the same canonical contacts collection.
+    // A lender/title company can therefore have many separate officer records without
+    // one officer overwriting another during a transaction contact upsert.
+    const personName = type === 'lender' || type === 'title' ? contact.officerName : contact.name;
+    if (contact.companyName) {
+      const companyId = companyDocumentId(contact.tenantId, type, contact.companyName);
+      contact.companyContactId = companyId;
+      await adminDb.collection('contacts').doc(companyId).set({
+        type, recordKind: 'company', tenantId: contact.tenantId, name: contact.companyName,
+        companyName: contact.companyName, normalizedCompanyName: contact.normalizedCompanyName,
+        createdBy: effectiveCreatedBy, createdAt: now, updatedBy: uid, updatedAt: now,
+      }, { merge: true });
+      if (!personName) {
+        return NextResponse.json({ ok: true, id: companyId, upserted: true, contact: { id: companyId, type, recordKind: 'company', companyName: contact.companyName } });
+      }
+    }
+
+    // Upsert: prefer a stable individual email, then individual name within the
+    // same type, owner, and tenant. Company name alone never merges two officers.
     if (upsert) {
       let existingId: string | null = null;
       // Always scope upsert lookups to the same owner so each agent gets their
@@ -169,28 +216,41 @@ export async function POST(req: NextRequest) {
       if (contact.email) {
         const emailSnap = await adminDb.collection('contacts')
           .where('type', '==', type)
+          .where('normalizedEmail', '==', contact.normalizedEmail)
+          .where('createdBy', '==', effectiveCreatedBy)
+          .limit(10).get();
+        const matching = emailSnap.docs.find((doc) => (doc.data().tenantId || DEFAULT_TENANT_ID) === contact.tenantId && doc.data().recordKind !== 'company');
+        if (matching) existingId = matching.id;
+      }
+      // Legacy contacts created before normalized fields were introduced should
+      // still be reused rather than duplicated on the next transaction save.
+      if (!existingId && contact.email) {
+        const legacyEmailSnap = await adminDb.collection('contacts')
+          .where('type', '==', type)
           .where('email', '==', contact.email)
           .where('createdBy', '==', effectiveCreatedBy)
-          .limit(1).get();
-        if (!emailSnap.empty) existingId = emailSnap.docs[0].id;
+          .limit(10).get();
+        const matching = legacyEmailSnap.docs.find((doc) => (doc.data().tenantId || DEFAULT_TENANT_ID) === contact.tenantId && doc.data().recordKind !== 'company');
+        if (matching) existingId = matching.id;
+      }
+      if (!existingId && contact.normalizedName) {
+        const nameSnap = await adminDb.collection('contacts')
+          .where('type', '==', type)
+          .where('normalizedName', '==', contact.normalizedName)
+          .where('createdBy', '==', effectiveCreatedBy)
+          .limit(10).get();
+        const matching = nameSnap.docs.find((doc) => (doc.data().tenantId || DEFAULT_TENANT_ID) === contact.tenantId && doc.data().recordKind !== 'company');
+        if (matching) existingId = matching.id;
       }
       if (!existingId && contact.name) {
-        const nameSnap = await adminDb.collection('contacts')
+        const legacyNameSnap = await adminDb.collection('contacts')
           .where('type', '==', type)
           .where('name', '==', contact.name)
           .where('createdBy', '==', effectiveCreatedBy)
-          .limit(1).get();
-        if (!nameSnap.empty) existingId = nameSnap.docs[0].id;
+          .limit(10).get();
+        const matching = legacyNameSnap.docs.find((doc) => (doc.data().tenantId || DEFAULT_TENANT_ID) === contact.tenantId && doc.data().recordKind !== 'company');
+        if (matching) existingId = matching.id;
       }
-      if (!existingId && contact.companyName) {
-        const coSnap = await adminDb.collection('contacts')
-          .where('type', '==', type)
-          .where('companyName', '==', contact.companyName)
-          .where('createdBy', '==', effectiveCreatedBy)
-          .limit(1).get();
-        if (!coSnap.empty) existingId = coSnap.docs[0].id;
-      }
-
       if (existingId) {
         await adminDb.collection('contacts').doc(existingId).update({
           ...contact,

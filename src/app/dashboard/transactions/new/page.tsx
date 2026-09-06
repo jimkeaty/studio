@@ -2854,6 +2854,7 @@ export default function AddTransactionPage() {
               type,
               upsert: true,
               ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}),
+              ...(!isImpersonating && isAdmin && values.agentId ? { ownerAgentId: values.agentId } : {}),
               ...fields,
             }),
           });
@@ -4740,7 +4741,7 @@ export default function AddTransactionPage() {
                 <p className="text-sm font-semibold text-primary">Buyer Information</p>
                 <Grid3>
                   <FormField control={form.control} name="buyerName" render={({ field }) => (
-                    <FormItem><FormLabel>Buyer Name</FormLabel><FormControl><Input placeholder="Primary buyer" {...field} /></FormControl></FormItem>
+                    <FormItem><FormLabel>Buyer Name</FormLabel><FormControl><ContactAutocomplete type="client" placeholder="Primary buyer" value={field.value || ''} onChange={field.onChange} onSelect={(contact: SavedContact) => { form.setValue('buyerName', contact.name || ''); form.setValue('buyerEmail', contact.email || ''); form.setValue('buyerPhone', contact.phone || ''); }} /></FormControl></FormItem>
                   )} />
                   <FormField control={form.control} name="buyerEmail" render={({ field }) => (
                     <FormItem><FormLabel>Buyer Email</FormLabel><FormControl><Input type="email" placeholder="buyer@email.com" {...field} /></FormControl><FormMessage /></FormItem>
@@ -4815,7 +4816,7 @@ export default function AddTransactionPage() {
                 <p className="text-sm font-semibold text-primary">Seller Information</p>
                 <Grid3>
                   <FormField control={form.control} name="sellerName" render={({ field }) => (
-                    <FormItem><FormLabel>Seller Name</FormLabel><FormControl><Input placeholder="Primary seller" {...field} /></FormControl></FormItem>
+                    <FormItem><FormLabel>Seller Name</FormLabel><FormControl><ContactAutocomplete type="client" placeholder="Primary seller" value={field.value || ''} onChange={field.onChange} onSelect={(contact: SavedContact) => { form.setValue('sellerName', contact.name || ''); form.setValue('sellerEmail', contact.email || ''); form.setValue('sellerPhone', contact.phone || ''); }} /></FormControl></FormItem>
                   )} />
                   <FormField control={form.control} name="sellerEmail" render={({ field }) => (
                     <FormItem><FormLabel>Seller Email</FormLabel><FormControl><Input type="email" placeholder="seller@email.com" {...field} /></FormControl><FormMessage /></FormItem>
@@ -5064,7 +5065,7 @@ export default function AddTransactionPage() {
             <Section title="Outbound Referral Details" description="All referral details are optional. Capture what is known so the referral can be followed through completion.">
               <Grid2>
                 <FormField control={form.control} name="clientName" render={({ field }) => (
-                  <FormItem><FormLabel>Client Name <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input placeholder="Client being referred" {...field} /></FormControl></FormItem>
+                  <FormItem><FormLabel>Client Name <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><ContactAutocomplete type="client" placeholder="Client being referred" value={field.value || ''} onChange={field.onChange} onSelect={(contact: SavedContact) => { form.setValue('clientName', contact.name || ''); form.setValue('clientEmail', contact.email || ''); form.setValue('clientPhone', contact.phone || ''); form.setValue('clientNewAddress', contact.newAddress || ''); }} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="clientEmail" render={({ field }) => (
                   <FormItem><FormLabel>Client Email <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input type="email" placeholder="client@email.com" {...field} /></FormControl><FormMessage /></FormItem>
@@ -5080,7 +5081,7 @@ export default function AddTransactionPage() {
               </Grid2>
               <Grid2>
                 <FormField control={form.control} name="outboundReferralAgentName" render={({ field }) => (
-                  <FormItem><FormLabel>Referred-To Agent Name</FormLabel><FormControl><Input placeholder="Agent receiving the referral" {...field} /></FormControl></FormItem>
+                  <FormItem><FormLabel>Referred-To Agent Name</FormLabel><FormControl><ContactAutocomplete type="other_agent" placeholder="Agent receiving the referral" value={field.value || ''} onChange={field.onChange} onSelect={(contact: SavedContact) => { form.setValue('outboundReferralAgentName', contact.name || ''); form.setValue('outboundReferralEmail', contact.email || ''); form.setValue('outboundReferralPhone', contact.phone || ''); form.setValue('outboundReferralBrokerage', contact.brokerage || ''); }} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="outboundReferralBrokerage" render={({ field }) => (
                   <FormItem><FormLabel>Their Brokerage</FormLabel><FormControl><Input placeholder="Receiving brokerage" {...field} /></FormControl></FormItem>

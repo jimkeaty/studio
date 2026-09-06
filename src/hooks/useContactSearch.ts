@@ -2,7 +2,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useUser } from '@/firebase';
 
-export type ContactType = 'client' | 'lender' | 'title' | 'other_agent' | 'inspector';
+export type ContactType = 'client' | 'lender' | 'title' | 'other_agent' | 'inspector' | 'insurance' | 'vendor' | 'attorney';
 
 export type SavedContact = {
   id: string;
@@ -17,6 +17,9 @@ export type SavedContact = {
   brokerage?: string;
   newAddress?: string;
   usageCount?: number;
+  recordKind?: 'company' | 'individual';
+  companyContactId?: string;
+  specialties?: string;
 };
 
 export function useContactSearch(type: ContactType) {

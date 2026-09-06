@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ContactType = 'client' | 'lender' | 'title' | 'other_agent' | 'inspector';
+type ContactType = 'client' | 'lender' | 'title' | 'other_agent' | 'inspector' | 'insurance' | 'vendor' | 'attorney';
 
 interface Contact {
   id: string;
@@ -36,6 +36,9 @@ interface Contact {
   usageCount?: number;
   createdAt?: string;
   updatedAt?: string;
+  recordKind?: 'company' | 'individual';
+  companyContactId?: string;
+  specialties?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -45,6 +48,9 @@ const TYPE_LABELS: Record<ContactType, string> = {
   title: 'Title Company',
   other_agent: 'Cooperating Agent',
   inspector: 'Inspector',
+  insurance: 'Insurance',
+  vendor: 'Vendor / Service Provider',
+  attorney: 'Attorney',
 };
 
 const TYPE_ICONS: Record<ContactType, React.ElementType> = {
@@ -53,6 +59,9 @@ const TYPE_ICONS: Record<ContactType, React.ElementType> = {
   title: Home,
   other_agent: Users2,
   inspector: HardHat,
+  insurance: Building2,
+  vendor: HardHat,
+  attorney: User,
 };
 
 const TYPE_COLORS: Record<ContactType, string> = {
@@ -61,6 +70,9 @@ const TYPE_COLORS: Record<ContactType, string> = {
   title: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
   other_agent: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
   inspector: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300',
+  insurance: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+  vendor: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  attorney: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
 };
 
 function displayName(c: Contact): string {
@@ -95,7 +107,7 @@ function ContactFormFields({ form, onChange }: { form: Partial<Contact>; onChang
 
   return (
     <div className="space-y-3">
-      {(type === 'lender' || type === 'title') && (
+      {(type === 'lender' || type === 'title' || type === 'insurance' || type === 'vendor' || type === 'attorney') && (
         <div>
           <label className="text-sm font-medium">Company Name</label>
           <Input value={form.companyName || ''} onChange={(e) => set('companyName', e.target.value)} placeholder="Company name" className="mt-1" />
@@ -107,7 +119,7 @@ function ContactFormFields({ form, onChange }: { form: Partial<Contact>; onChang
           <Input value={form.officerName || ''} onChange={(e) => set('officerName', e.target.value)} placeholder="Officer name" className="mt-1" />
         </div>
       )}
-      {(type === 'client' || type === 'other_agent' || type === 'inspector') && (
+      {(type === 'client' || type === 'other_agent' || type === 'inspector' || type === 'insurance' || type === 'vendor' || type === 'attorney') && (
         <div>
           <label className="text-sm font-medium">Name</label>
           <Input value={form.name || ''} onChange={(e) => set('name', e.target.value)} placeholder="Full name" className="mt-1" />
@@ -143,6 +155,12 @@ function ContactFormFields({ form, onChange }: { form: Partial<Contact>; onChang
         <div>
           <label className="text-sm font-medium">Brokerage</label>
           <Input value={form.brokerage || ''} onChange={(e) => set('brokerage', e.target.value)} placeholder="Their brokerage" className="mt-1" />
+        </div>
+      )}
+      {(type === 'insurance' || type === 'vendor' || type === 'attorney' || type === 'inspector') && (
+        <div>
+          <label className="text-sm font-medium">Service / Specialty</label>
+          <Input value={form.specialties || ''} onChange={(e) => set('specialties', e.target.value)} placeholder="Insurance, repair service, practice area, inspection specialty…" className="mt-1" />
         </div>
       )}
       {type === 'client' && (
@@ -285,7 +303,7 @@ export default function ContactsPage() {
             <BookUser className="h-7 w-7 text-primary" /> Contacts Book
           </h1>
           <p className="text-muted-foreground mt-1">
-            Saved contacts auto-fill into new transactions. Contacts are shared across the brokerage.
+            Save people and companies once, then reuse them in transactions. Your contact list remains scoped to your SmartBroker access.
           </p>
         </div>
         <Button onClick={openAdd} className="shrink-0">

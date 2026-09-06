@@ -2,6 +2,10 @@
 // DELETE /api/contacts/[contactId]  — delete a contact
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { isStaff } from '@/lib/auth/staffAccess';
+
+const DEFAULT_TENANT_ID = 'smart-broker-usa';
+function currentTenant(decoded: any) { return String(decoded?.tenantId || decoded?.brokerageId || DEFAULT_TENANT_ID); }
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -26,6 +30,10 @@ export async function PATCH(
 
     const doc = await adminDb.collection('contacts').doc(contactId).get();
     if (!doc.exists) return jsonError(404, 'Contact not found');
+    const existing = doc.data() || {};
+    const callerIsStaff = await isStaff(decoded.uid);
+    if ((existing.tenantId || DEFAULT_TENANT_ID) !== currentTenant(decoded)) return jsonError(403, 'Contact belongs to a different brokerage');
+    if (!callerIsStaff && existing.createdBy !== decoded.uid) return jsonError(403, 'You can only update your own contacts');
 
     const updates: Record<string, any> = {
       ...body,
@@ -37,6 +45,9 @@ export async function PATCH(
     delete updates.createdAt;
     delete updates.createdBy;
     delete updates.usageCount;
+    delete updates.tenantId;
+    delete updates.recordKind;
+    delete updates.companyContactId;
 
     await adminDb.collection('contacts').doc(contactId).update(updates);
     return NextResponse.json({ ok: true, id: contactId });
@@ -52,11 +63,15 @@ export async function DELETE(
   try {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
-    await adminAuth.verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
 
     const { contactId } = await context.params;
     const doc = await adminDb.collection('contacts').doc(contactId).get();
     if (!doc.exists) return jsonError(404, 'Contact not found');
+    const existing = doc.data() || {};
+    const callerIsStaff = await isStaff(decoded.uid);
+    if ((existing.tenantId || DEFAULT_TENANT_ID) !== currentTenant(decoded)) return jsonError(403, 'Contact belongs to a different brokerage');
+    if (!callerIsStaff && existing.createdBy !== decoded.uid) return jsonError(403, 'You can only delete your own contacts');
 
     await adminDb.collection('contacts').doc(contactId).delete();
     return NextResponse.json({ ok: true });
