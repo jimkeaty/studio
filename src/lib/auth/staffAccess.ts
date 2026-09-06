@@ -1,7 +1,7 @@
 import 'server-only';
 import { adminDb } from '@/lib/firebase/admin';
 
-export type StaffRole = 'office_admin' | 'tc_admin' | 'tc' | 'staff';
+export type StaffRole = 'office_admin' | 'tc_admin' | 'tc' | 'staff' | 'accounting';
 
 export interface StaffUser {
   id: string;
@@ -73,4 +73,10 @@ export async function isAdminLike(uid: string): Promise<boolean> {
 export async function isStaff(uid: string): Promise<boolean> {
   const role = await getStaffRole(uid);
   return role !== null;
+}
+
+/** Returns true when a user may process Accounting closeout records. */
+export async function isAccountingUser(uid: string): Promise<boolean> {
+  const role = await getStaffRole(uid);
+  return role === 'office_admin' || role === 'accounting';
 }

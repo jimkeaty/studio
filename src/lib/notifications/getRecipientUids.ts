@@ -19,6 +19,15 @@ export async function getTcUids(db: Firestore): Promise<string[]> {
   return resolveStaffUids(db, snap.docs);
 }
 
+/** Get UIDs of Accounting users and office administrators for closeout handoffs. */
+export async function getAccountingUids(db: Firestore): Promise<string[]> {
+  const snap = await db
+    .collection('staffUsers')
+    .where('role', 'in', ['accounting', 'office_admin'])
+    .get();
+  return resolveStaffUids(db, snap.docs);
+}
+
 /** Get UIDs of all staff users (role = 'office_admin', 'tc_admin', 'tc', or 'staff') */
 export async function getAllStaffUids(db: Firestore): Promise<string[]> {
   const snap = await db.collection('staffUsers').get();

@@ -195,6 +195,7 @@ const adminMenuGroups = [
     items: [
       { href: '/dashboard/admin/tc', label: 'TC Queue', icon: ClipboardList },
       { href: '/dashboard/admin/staff-queue', label: 'Staff Queue', icon: MapPin },
+      { href: '/dashboard/admin/accounting', label: 'Accounting Queue', icon: Receipt },
       { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
       { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
       { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
@@ -243,8 +244,9 @@ export function SidebarNav() {
   const pathname = usePathname();
   const { user } = useUser();
   const { isAdmin: showAdminMenu } = useIsAdminLike();
-  const { isStaff } = useIsStaff();
-  const isTcOnly = isStaff && !showAdminMenu; // tc role only — no full admin menu
+  const { isStaff, role } = useIsStaff();
+  const isTcOnly = isStaff && !showAdminMenu && role === 'tc';
+  const isAccountingOnly = isStaff && !showAdminMenu && role === 'accounting';
   const { isImpersonating } = useImpersonation();
   const { plugins: agentPlugins } = useAgentPlugins();
   const [branding, setBranding] = useState<BrandingData | null>(null);
@@ -463,6 +465,26 @@ export function SidebarNav() {
                   >
                     <Users className="h-4 w-4" />
                     <span>View Agent Dashboard</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </>
+        )}
+        {!isImpersonating && isAccountingOnly && (
+          <>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Transactions</p>
+              <SidebarMenuItem>
+                <Link href="/dashboard/admin/accounting">
+                  <SidebarMenuButton
+                    isActive={pathname.startsWith('/dashboard/admin/accounting')}
+                    tooltip="Accounting Queue"
+                    className="justify-start"
+                  >
+                    <Receipt className="h-4 w-4" />
+                    <span>Accounting Queue</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>

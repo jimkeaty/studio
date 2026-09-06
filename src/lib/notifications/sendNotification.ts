@@ -33,6 +33,9 @@ export type NotificationType =
   | 'staff_queue_new'       // new item added to staff queue
   | 'staff_queue_resolved'  // staff queue item resolved → agent notified
   | 'staff_queue_attention' // staff queue item needs agent attention
+  | 'accounting_closeout_new' // closed transaction handed to Accounting
+  | 'accounting_closeout_attention' // Accounting requested additional information
+  | 'accounting_closeout_completed' // Accounting closeout completed
   | 'tx_status_change'      // transaction status changed → agent notified
   | 'tx_new_agent'          // new transaction added by agent → TC/staff notified
   | 'co_agent_split'        // co-agent transaction split on close → both agents notified
@@ -310,6 +313,9 @@ function buildEmailHtml(
     staff_queue_new:       'Staff Queue',
     staff_queue_resolved:  'Resolved',
     staff_queue_attention: 'Action Required',
+    accounting_closeout_new:       'Accounting Closeout',
+    accounting_closeout_attention: 'Accounting Action Required',
+    accounting_closeout_completed: 'Accounting Complete',
     tx_status_change:      'Status Update',
     tx_new_agent:          'New Transaction',
     co_agent_split:        'Transaction Split',
