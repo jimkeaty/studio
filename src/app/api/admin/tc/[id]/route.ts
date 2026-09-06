@@ -431,6 +431,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'buyerBringToClosing',
         // Compliance / warranty
         'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
+        // Separate pass-through bonus; never a GCI/recalculation trigger.
+        'agentBonusPassThrough',
         'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
         'occupancyAgreement', 'occupancyDates',
         'shortageInCommission', 'shortageAmount', 'shortageHandledBy',
@@ -518,6 +520,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           'buyerClosingCostTotal', 'buyerClosingCostAgentCommission',
           'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther', 'buyerBringToClosing',
           'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
+          // Separate pass-through bonus; never a GCI/recalculation trigger.
+          'agentBonusPassThrough',
           'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
           'occupancyAgreement', 'occupancyDates', 'shortageInCommission', 'shortageAmount', 'shortageHandledBy',
           'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',

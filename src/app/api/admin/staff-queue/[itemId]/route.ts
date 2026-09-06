@@ -94,6 +94,8 @@ const EDITABLE_TX_FIELDS = new Set([
   'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther', 'buyerBringToClosing',
   // Compliance / warranty
   'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
+  // Separate pass-through bonus; never a GCI/recalculation trigger.
+  'agentBonusPassThrough',
   'txComplianceFee', 'txComplianceFeeAmount', 'txComplianceFeePaidBy',
   'occupancyAgreement', 'occupancyDates', 'shortageInCommission', 'shortageAmount',
   // Referrals
