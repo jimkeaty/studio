@@ -37,7 +37,7 @@ type OneOnOneItem = {
   agentId: string;
   scheduledDate: string;
   scheduledTime?: string;
-  type: 'weekly_90day' | 'monthly_cgl' | 'adhoc';
+  type: 'weekly_90day' | 'monthly_cgl' | 'monthly_no_production' | 'quarterly_strategy' | 'adhoc';
   notes?: string;
   isOverdue: boolean;
   isToday: boolean;
@@ -76,9 +76,11 @@ export function RecruiterTodoBoard() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     agentId: '', agentName: '', scheduledDate: todayStr(), scheduledTime: '10:00',
-    type: 'adhoc' as 'weekly_90day' | 'monthly_cgl' | 'adhoc',
+    type: 'adhoc' as 'weekly_90day' | 'monthly_cgl' | 'monthly_no_production' | 'quarterly_strategy' | 'adhoc',
     notes: '',
   });
+  const [completeTarget, setCompleteTarget] = useState<OneOnOneItem | null>(null);
+  const [completionNotes, setCompletionNotes] = useState('');
   const [agentList, setAgentList] = useState<{ id: string; name: string }[]>([]);
   const [scheduling, setScheduling] = useState(false);
 
@@ -136,7 +138,7 @@ export function RecruiterTodoBoard() {
             notes: o.notes,
             isOverdue: isOverdue(o.scheduledDate),
             isToday: isToday(o.scheduledDate),
-            completed: o.completed || false,
+            completed: Boolean(o.completed || o.completedAt || o.status === 'completed'),
           }))
           .sort((a: OneOnOneItem, b: OneOnOneItem) => a.scheduledDate.localeCompare(b.scheduledDate));
         setOneOnOnes(items);
@@ -159,15 +161,18 @@ export function RecruiterTodoBoard() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleCompleteOneOnOne = async (id: string) => {
+  const handleCompleteOneOnOne = async () => {
+    if (!completeTarget) return;
     try {
       const token = await getToken();
       await fetch('/api/agent/one-on-ones', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id, completed: true }),
+        body: JSON.stringify({ id: completeTarget.id, status: 'completed', completionNotes }),
       });
-      setOneOnOnes(prev => prev.filter(o => o.id !== id));
+      setOneOnOnes(prev => prev.filter(o => o.id !== completeTarget.id));
+      setCompleteTarget(null);
+      setCompletionNotes('');
     } catch (e) {
       console.error(e);
     }
@@ -310,7 +315,7 @@ export function RecruiterTodoBoard() {
                         variant="ghost"
                         size="sm"
                         className="h-6 text-xs mt-1.5 text-green-700 hover:text-green-800 hover:bg-green-100 p-1"
-                        onClick={() => handleCompleteOneOnOne(item.id)}
+                        onClick={() => { setCompleteTarget(item); setCompletionNotes(''); }}
                       >
                         <CheckCircle2 className="h-3 w-3 mr-1" />Mark Complete
                       </Button>
@@ -375,6 +380,8 @@ export function RecruiterTodoBoard() {
                 <SelectContent>
                   <SelectItem value="weekly_90day">Weekly — New Agent (90-Day)</SelectItem>
                   <SelectItem value="monthly_cgl">Monthly — CGL Agent</SelectItem>
+                  <SelectItem value="monthly_no_production">Monthly — No Production / Pending</SelectItem>
+                  <SelectItem value="quarterly_strategy">Quarterly — Strategy & Plan</SelectItem>
                   <SelectItem value="adhoc">Ad Hoc / Special</SelectItem>
                 </SelectContent>
               </Select>
@@ -397,6 +404,20 @@ export function RecruiterTodoBoard() {
             >
               {scheduling ? 'Scheduling…' : 'Schedule & Notify Agent'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(completeTarget)} onOpenChange={open => { if (!open) { setCompleteTarget(null); setCompletionNotes(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete 1:1 — {completeTarget?.agentName}</DialogTitle>
+            <p className="text-sm text-muted-foreground">Add notes, commitments, and next steps. Quarterly strategy 1:1s require a documented strategic plan to count on the Director report card.</p>
+          </DialogHeader>
+          <Textarea value={completionNotes} onChange={event => setCompletionNotes(event.target.value)} placeholder="Meeting notes, action items, strategic plan, and next steps..." rows={5} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCompleteTarget(null); setCompletionNotes(''); }}>Cancel</Button>
+            <Button onClick={handleCompleteOneOnOne}><CheckCircle2 className="mr-1.5 h-4 w-4" />Mark Complete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

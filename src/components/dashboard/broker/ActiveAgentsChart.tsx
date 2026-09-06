@@ -134,7 +134,13 @@ function GoalEditor({
 }
 
 // ── Grace Period Projection Block ─────────────────────────────────────────────
-function GraceProjectionBlock({ graceProjection }: { graceProjection: any[] }) {
+function GraceProjectionBlock({
+  graceProjection,
+  currentGraceAgents,
+}: {
+  graceProjection: any[];
+  currentGraceAgents: any[];
+}) {
   if (!graceProjection || graceProjection.length === 0) return null;
   const hasGraduating = graceProjection.some((g: any) => g.graduatingCount > 0);
   return (
@@ -143,6 +149,18 @@ function GraceProjectionBlock({ graceProjection }: { graceProjection: any[] }) {
         <GraduationCap className="h-4 w-4" />
         Grace Period Graduation Forecast — Next 3 Months
       </div>
+      {currentGraceAgents.length > 0 && (
+        <div className="rounded-md border border-blue-200 bg-white p-3">
+          <div className="text-xs font-semibold text-blue-800">Currently in Grace Period ({currentGraceAgents.length})</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {currentGraceAgents.map((agent: any) => (
+              <span key={agent.agentId} className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-800">
+                {agent.name} · graduates {agent.graceEndMonth}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {!hasGraduating && (
         <p className="text-xs text-blue-600">No agents are scheduled to complete their grace period in the next 3 months.</p>
       )}
@@ -158,6 +176,11 @@ function GraceProjectionBlock({ graceProjection }: { graceProjection: any[] }) {
               <span className="text-xs font-semibold">{g.projectedTotal}</span>
               <span className="text-[10px] text-muted-foreground ml-1">projected total</span>
             </div>
+            {g.agents?.length > 0 && (
+              <div className="mt-2 text-[10px] leading-4 text-blue-700">
+                {g.agents.map((agent: any) => agent.name).join(', ')}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -315,6 +338,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
     return Array.from({ length: 5 }, (_, i) => currentCalYear - 1 - i);
   })();
   const graceProjection: any[] = data?.graceProjection ?? [];
+  const currentGraceAgents: any[] = data?.kpi?.currentGraceAgents ?? [];
   const selectedTeamLabel = TEAM_GROUP_OPTIONS.find(t => t.value === teamGroup)?.label ?? 'All Teams';
 
   return (
@@ -529,7 +553,7 @@ export function ActiveAgentsChart({ showGoalEdit = false, initialYear }: ActiveA
 
         {/* Grace Period Graduation Projection */}
         {!loading && !error && (
-          <GraceProjectionBlock graceProjection={graceProjection} />
+          <GraceProjectionBlock graceProjection={graceProjection} currentGraceAgents={currentGraceAgents} />
         )}
 
         {/* Year Scorecard — past years only */}

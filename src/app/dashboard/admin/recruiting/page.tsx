@@ -12,6 +12,7 @@ import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsCha
 import { RecruitingPipelinePanel } from '@/components/dashboard/broker/RecruitingPipelinePanel';
 import { RecruitingOperationsListView } from '@/components/dashboard/broker/RecruitingOperationsListView';
 import { UnifiedRecruitingReportCard } from '@/components/dashboard/broker/UnifiedRecruitingReportCard';
+import { DirectorDevelopmentReportCard } from '@/components/dashboard/broker/DirectorDevelopmentReportCard';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
 import { RecruitingGoalsSummary } from '@/components/dashboard/broker/RecruitingGoalsSummary';
@@ -1750,11 +1751,9 @@ export default function RecruitingDashboardPage() {
         </a>
       </div>
 
-      <RecruiterTodoBoard />
-
-      <Tabs defaultValue="recruiting" className="w-full">
+      <Tabs defaultValue="admin-report-cards" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="recruiting">Recruiting Pipeline</TabsTrigger>
+          <TabsTrigger value="admin-report-cards">Admin Report Cards</TabsTrigger>
           <TabsTrigger value="operations">Staff List View</TabsTrigger>
           <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
           <TabsTrigger value="incentive">Incentive Program Config</TabsTrigger>
@@ -1781,8 +1780,10 @@ export default function RecruitingDashboardPage() {
           <RecruitingPipelinePanel initialViewMode="table" compact />
         </TabsContent>
 
-        {/* ── TAB 3: Recruiting Pipeline (existing content) ───────────────── */}
-        <TabsContent value="recruiting" className="space-y-8 mt-6">
+        {/* ── TAB 3: Admin Report Cards and recruiting controls ───────────── */}
+        <TabsContent value="admin-report-cards" className="space-y-8 mt-6">
+      <DirectorDevelopmentReportCard year={year} />
+      <RecruiterTodoBoard />
       {/* ── Unified Recruiting & Agent KPI Report Card ─────────────────────── */}
       <UnifiedRecruitingReportCard year={year} />
 

@@ -189,8 +189,10 @@ export async function GET(req: NextRequest) {
       return null;
     }
     const agentSnap = await adminDb.collection('agentProfiles').get();
-    const INACTIVE_STATUSES_RM = new Set(['inactive', 'out', 'terminated', 'churned']);
-    // Monthly departure counts: month 1-12 → count of agents whose endDate falls in that month of `year`
+    const DEPARTURE_STATUSES_RM = new Set(['out', 'terminated', 'churned']);
+    // Monthly departure counts: only confirmed departure statuses with an endDate.
+    // Inactive-but-licensed profiles never become departures merely because they
+    // are inactive or have a legacy end date recorded.
     const monthlyDepartures: number[] = new Array(12).fill(0);
     // Monthly in-training counts: agents in grace period (startDate + 3 months > today) for each month
     const monthlyInTraining: number[] = new Array(12).fill(0);
@@ -199,22 +201,19 @@ export async function GET(req: NextRequest) {
       const a = doc.data() as any;
       if (a.isDemoAccount) continue;
 
-      // Departures: use endDate field
+      const profileStatus = String(a.status || a.agentStatus || '').toLowerCase();
       const endDate = parseAgentDate(a.endDate);
-      if (endDate && endDate.getFullYear() === year) {
+      if (DEPARTURE_STATUSES_RM.has(profileStatus) && endDate && endDate.getFullYear() === year) {
         const m = endDate.getMonth(); // 0-indexed
         monthlyDepartures[m] += 1;
-      } else if (!endDate && INACTIVE_STATUSES_RM.has(String(a.status || a.agentStatus || '').toLowerCase())) {
-        // No endDate but marked inactive — count in current month of current year
-        const now = new Date();
-        if (now.getFullYear() === year) {
-          monthlyDepartures[now.getMonth()] += 1;
-        }
       }
 
-      // In-training: agents whose grace period (startDate + 3 months) hasn't ended yet for that month
+      // In-training: only profiles explicitly flagged for the 90-day new-agent
+      // grace period. Inactive profiles are excluded from all active/training counts.
       const startDate = parseAgentDate(a.startDate);
-      if (startDate) {
+      const graceEnabled = a.gracePeriodEnabled === true || profileStatus === 'grace_period';
+      const inactive = ['inactive', 'out', 'terminated', 'churned'].includes(profileStatus);
+      if (startDate && graceEnabled && !inactive) {
         const graceEnd = addMonths(startDate, 3);
         const startYM = toYM(startDate);
         const graceEndYM = toYM(graceEnd);

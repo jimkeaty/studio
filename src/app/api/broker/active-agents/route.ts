@@ -218,6 +218,7 @@ export async function GET(req: NextRequest) {
       endDate: string | null;
       status: string;
       teamGroup: string | null;
+      gracePeriodEnabled: boolean;
       graceEndMonth: string | null; // YYYY-MM when 90-day grace ends
     };
 
@@ -235,7 +236,8 @@ export async function GET(req: NextRequest) {
       const endDate = a.endDate || null;
       const profileStatus = String(a.status || a.agentStatus || '').toLowerCase();
       const firstDeal = firstDealMap.get(agentId) || null;
-      // Agents are active from their startDate — no grace period delay for counting purposes
+      // Start date determines when the person joins the brokerage; qualifying new
+      // agents remain in the separate 90-day grace roster before becoming established.
       const activationMonth = getActivationMonth(startDate, firstDeal);
 
       let endMonth: string | null = null;
@@ -258,10 +260,14 @@ export async function GET(req: NextRequest) {
         endMonth = null;
       }
 
-      // No grace period for active agent counting — graceEndMonth is always null.
-      // (gracePeriodEnabled on the agent profile still controls the agent's own
-      // KPI dashboard grade suppression, but does not affect active agent counts.)
-      const graceEndMonth: string | null = null;
+      const gracePeriodEnabled = a.gracePeriodEnabled === true || profileStatus === 'grace_period';
+      const start = parseDate(startDate);
+      // A start in November with a three-month grace period has grace months
+      // Nov/Dec/Jan and becomes established in February.
+      const graceEndMonth: string | null =
+        !excludeFromActiveCount && gracePeriodEnabled && start
+          ? toYearMonth(addMonths(start, 3))
+          : null;
       return {
         agentId,
         name,
@@ -275,6 +281,7 @@ export async function GET(req: NextRequest) {
         endDate,
         status: profileStatus,
         teamGroup: a.teamGroup || null,
+        gracePeriodEnabled,
         graceEndMonth,
       };
     });
@@ -289,7 +296,7 @@ export async function GET(req: NextRequest) {
 
       let activeClosed = 0;   // active agents with ≥1 closed deal
       let activeNoDeal = 0;   // active agents with no closed deal yet
-      const inGrace = 0;      // always 0 — grace period removed from active agent counting
+      let inGrace = 0;
       // Team breakdown
       const teamCounts: Record<string, number> = {};
       for (const ar of agentRecords) {
@@ -299,6 +306,12 @@ export async function GET(req: NextRequest) {
         // Agent must have an activationMonth (startDate or first deal) on or before this month
         if (!ar.activationMonth) continue;
         if (ar.activationMonth > ym) continue;
+        // Grace-period agents are shown separately and are not part of the
+        // established active-agent count, deals-per-agent, or goal pacing.
+        if (ar.graceEndMonth && ar.graceEndMonth > ym) {
+          inGrace++;
+          continue;
+        }
         const tg = ar.teamGroup || 'unknown';
         teamCounts[tg] = (teamCounts[tg] || 0) + 1;
         if (ar.firstDealMonth && ar.firstDealMonth <= ym) {
@@ -325,6 +338,7 @@ export async function GET(req: NextRequest) {
         if (ar.excludeFromActiveCount) continue;
         if (!ar.activationMonth || ar.activationMonth > ym) continue;
         if (ar.endMonth && ar.endMonth <= ym) continue;
+        if (ar.graceEndMonth && ar.graceEndMonth > ym) continue;
         const monthMap = dealCountMap.get(ar.agentId);
         if (monthMap) dealsInMonth += monthMap.get(ym) ?? 0;
       }
@@ -537,6 +551,22 @@ export async function GET(req: NextRequest) {
       return true;
     }).length;
 
+    const currentGraceAgents = agentRecords
+      .filter(ar =>
+        !ar.excludeFromActiveCount &&
+        Boolean(ar.graceEndMonth) &&
+        ar.graceEndMonth! > currentYM &&
+        (!ar.endMonth || ar.endMonth > currentYM)
+      )
+      .sort((a, b) => (a.graceEndMonth ?? '').localeCompare(b.graceEndMonth ?? ''))
+      .map(ar => ({
+        agentId: ar.agentId,
+        name: ar.name,
+        startDate: ar.startDate,
+        graceEndMonth: ar.graceEndMonth,
+        teamGroup: ar.teamGroup,
+      }));
+
     // ── 10. Grace period graduation projection ───────────────────────────────
     // For the next 3 months: how many grace-period agents will graduate (complete 90 days)?
     // These agents are currently in grace period (graceEndMonth > currentYM)
@@ -546,6 +576,12 @@ export async function GET(req: NextRequest) {
       label: string;
       graduatingCount: number;
       projectedTotal: number;
+      agents: Array<{
+        agentId: string;
+        name: string;
+        startDate: string | null;
+        graceEndMonth: string | null;
+      }>;
     }> = [];
 
     for (let offset = 1; offset <= 3; offset++) {
@@ -555,10 +591,11 @@ export async function GET(req: NextRequest) {
 
       // Agents graduating in this specific month
       const graduating = agentRecords.filter(ar => {
+        if (ar.excludeFromActiveCount) return false;
         if (!ar.graceEndMonth) return false;
         if (ar.endMonth && ar.endMonth <= projYM) return false;
         return ar.graceEndMonth === projYM;
-      }).length;
+      });
 
       // Total projected active agents in that month (current actives + pipeline joining by then)
       const currentActives = currentMonthData.totalActive;
@@ -569,10 +606,27 @@ export async function GET(req: NextRequest) {
         const startYM = toYearMonth(sd);
         return startYM > currentYM && startYM <= projYM;
       }).length;
-      // Estimate departures as 0 for simplicity
-      const projectedTotal = currentActives + pipelineJoining;
+      const graceGraduatingByProjection = agentRecords.filter(ar =>
+        !ar.excludeFromActiveCount &&
+        Boolean(ar.graceEndMonth) &&
+        ar.graceEndMonth! > currentYM &&
+        ar.graceEndMonth! <= projYM &&
+        (!ar.endMonth || ar.endMonth > projYM)
+      ).length;
+      const projectedTotal = currentActives + pipelineJoining + graceGraduatingByProjection;
 
-      graceProjection.push({ ym: projYM, label: projLabel, graduatingCount: graduating, projectedTotal });
+      graceProjection.push({
+        ym: projYM,
+        label: projLabel,
+        graduatingCount: graduating.length,
+        projectedTotal,
+        agents: graduating.map(ar => ({
+          agentId: ar.agentId,
+          name: ar.name,
+          startDate: ar.startDate,
+          graceEndMonth: ar.graceEndMonth,
+        })),
+      });
     }
 
     // ── 11. Available years for compare selector ─────────────────────────────
@@ -646,6 +700,7 @@ export async function GET(req: NextRequest) {
         ytdDeals,
         noDealsYetCount,
         inGraceCount: currentMonthData.inGrace ?? 0,
+        currentGraceAgents,
         // Recruiting plan goals (for grading New Hires and Net Agents Added)
         yearlyNewHiresGoal,
         netGainGoal,

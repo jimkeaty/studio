@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       scheduledTime, // e.g. "10:00 AM"
       withWhom,      // "dad" | "broker"
       withName,      // display name of DAD or broker
+      type,          // weekly_90day | monthly_cgl | quarterly_strategy | ad_hoc
       notes,
       requestedByAgent, // true if agent is requesting the 1:1
     } = body;
@@ -112,6 +113,7 @@ export async function POST(req: NextRequest) {
       scheduledTime: scheduledTime?.trim() || null,
       withWhom: withWhom || 'dad',
       withName: withName?.trim() || 'Director of Agent Development',
+      type: type || 'ad_hoc',
       notes: notes?.trim() || null,
       requestedByAgent: requestedByAgent === true,
       completedAt: null,
@@ -182,8 +184,8 @@ export async function PATCH(req: NextRequest) {
     if (!snap.exists) return jsonError(404, '1:1 not found');
 
     const allowed = [
-      'scheduledDate', 'scheduledTime', 'withWhom', 'withName',
-      'notes', 'completedAt', 'completionNotes', 'nextScheduledDate',
+      'scheduledDate', 'scheduledTime', 'withWhom', 'withName', 'type',
+      'status', 'notes', 'completedAt', 'completionNotes', 'nextScheduledDate',
     ];
     const cleaned: Record<string, any> = { updatedAt: new Date().toISOString() };
     for (const key of allowed) {
@@ -191,7 +193,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     // If marking complete, set completedAt to now if not provided
-    if (updates.completed === true && !updates.completedAt) {
+    if ((updates.completed === true || updates.status === 'completed') && !updates.completedAt) {
       cleaned.completedAt = new Date().toISOString();
     }
 
