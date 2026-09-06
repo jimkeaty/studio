@@ -47,6 +47,7 @@ export type NotificationType =
   | 'inspection_request_sent'         // inspection request sent to inspector(s)
   | 'checklist_item_completed'        // staff/TC completed a checklist item → agent notified
   | 'checklist_note_added'            // staff/TC added a note to checklist item → agent notified
+  | 'transaction_activity_digest'     // routine Staff/TC activity grouped into one daily agent email
   | 'agent_tx_updated'                // agent updated transaction → staff/TC notified
   | 'commission_summary_prepare'      // 5 days before closing → TC/Staff to prepare summary
   | 'commission_summary_send'         // 3 days before closing → TC/Staff to send summary to agent
@@ -84,6 +85,53 @@ const DEFAULT_PREFS: NotificationPrefs = {
   email: true,
   sms: false, // SMS off by default — user must opt in
 };
+
+/**
+ * Sends one routine-activity digest only when the recipient's normal email
+ * preference (and any event override) permits it. Unlike general immediate
+ * notifications, it returns a delivery result so scheduled jobs never mark a
+ * digest delivered when email is disabled, unconfigured, rejected, or fails.
+ */
+export async function sendDailyTransactionActivityDigest(
+  db: Firestore,
+  payload: Omit<NotificationPayload, 'type' | 'recipientUids'> & { recipientUid: string },
+): Promise<{ delivered: boolean; reason?: 'preference_disabled' | 'missing_email' | 'email_unconfigured' | 'delivery_failed' }> {
+  const userDoc = await db.collection('users').doc(payload.recipientUid).get();
+  const userData = userDoc.exists ? (userDoc.data() as Record<string, any>) : {};
+  const storedPrefs = userData.notificationPrefs as Record<string, any> | undefined;
+  const prefs = storedPrefs
+    ? { email: storedPrefs.email ?? DEFAULT_PREFS.email, events: storedPrefs.events ?? {} }
+    : { email: DEFAULT_PREFS.email, events: {} };
+  const digestEmailEnabled = prefs.events?.transaction_activity_digest?.email ?? prefs.email;
+  if (!digestEmailEnabled) return { delivered: false, reason: 'preference_disabled' };
+
+  let recipientEmail = String(userData.email || '').trim();
+  let recipientName = String(userData.displayName || userData.name || '').trim();
+  if (!recipientEmail) {
+    const profileSnap = await db.collection('agentProfiles')
+      .where('firebaseUid', '==', payload.recipientUid)
+      .limit(1)
+      .get()
+      .catch(() => null);
+    if (profileSnap && !profileSnap.empty) {
+      const profile = profileSnap.docs[0].data() as Record<string, any>;
+      recipientEmail = String(profile.email || '').trim();
+      recipientName = recipientName || String(profile.displayName || profile.agentName || profile.name || '').trim();
+    }
+  }
+  if (!recipientEmail) return { delivered: false, reason: 'missing_email' };
+  if (!process.env.RESEND_API_KEY) return { delivered: false, reason: 'email_unconfigured' };
+
+  const delivered = await sendEmail(
+    recipientEmail,
+    recipientName || 'Agent',
+    payload.title,
+    payload.body,
+    payload.url || '/dashboard/transactions',
+    'transaction_activity_digest',
+  );
+  return delivered ? { delivered: true } : { delivered: false, reason: 'delivery_failed' };
+}
 
 // ─── Main dispatcher ─────────────────────────────────────────────────────────
 
@@ -199,7 +247,7 @@ async function dispatchToUser(
 
   // ── Email (Resend) ────────────────────────────────────────────────────────
   if (channels.email && resolvedEmail) {
-    tasks.push(sendEmail(resolvedEmail, resolvedName || 'User', title, body, url, type));
+    tasks.push(sendEmail(resolvedEmail, resolvedName || 'User', title, body, url, type).then(() => undefined));
   }
 
   // ── SMS (Twilio) ──────────────────────────────────────────────────────────
@@ -272,9 +320,9 @@ async function sendEmail(
   body: string,
   url: string,
   type: NotificationType,
-): Promise<void> {
+): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return; // Resend not configured — skip silently
+  if (!apiKey) return false;
 
   try {
     const { Resend } = await import('resend');
@@ -284,14 +332,20 @@ async function sendEmail(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa.web.app';
     const fullUrl = url.startsWith('http') ? url : `${appUrl}${url}`;
 
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: `${appName} <notifications@${process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com'}>`,
       to: [toEmail],
       subject: title,
       html: buildEmailHtml(appName, toName, title, body, fullUrl, type),
     });
+    if (result.error) {
+      console.error(`[sendNotification] Resend email failed for ${toEmail}:`, result.error);
+      return false;
+    }
+    return Boolean(result.data?.id);
   } catch (err) {
     console.error(`[sendNotification] Resend email failed for ${toEmail}:`, err);
+    return false;
   }
 }
 
@@ -327,6 +381,7 @@ function buildEmailHtml(
     inspection_request_sent:        'Inspection Request',
     checklist_item_completed:       'Checklist Update',
     checklist_note_added:           'Staff Note',
+    transaction_activity_digest:    'Daily Transaction Activity',
     agent_tx_updated:               'Transaction Updated',
     commission_summary_prepare:     'Commission Summary',
     commission_summary_send:        'Commission Summary',

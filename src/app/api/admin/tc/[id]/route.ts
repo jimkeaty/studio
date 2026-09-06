@@ -11,6 +11,7 @@ import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
+import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -230,14 +231,36 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Update checklist items if provided
       if (body.checklist && Array.isArray(body.checklist)) {
         const batch = adminDb.batch();
+        const canonicalTransactionId = String(intake.approvedTransactionId || intake.transactionId || '').trim();
         for (const item of body.checklist) {
           if (!item.itemId) continue;
           const itemRef = docRef.collection('checklist').doc(item.itemId);
+          const currentChecklistItem = await itemRef.get();
+          const previousCompleted = Boolean(currentChecklistItem.data()?.completed);
+          const completed = Boolean(item.completed);
           batch.update(itemRef, {
-            completed: !!item.completed,
-            completedBy: item.completed ? (item.completedBy || decoded.email || decoded.uid) : null,
-            completedAt: item.completed ? (item.completedAt ? new Date(item.completedAt) : now) : null,
+            completed,
+            completedBy: completed ? (item.completedBy || decoded.email || decoded.uid) : null,
+            completedAt: completed ? (item.completedAt ? new Date(item.completedAt) : now) : null,
           });
+          if (canonicalTransactionId && previousCompleted !== completed) {
+            batch.create(
+              adminDb.collection('transactions').doc(canonicalTransactionId).collection('activityEvents').doc(),
+              buildChecklistTransactionActivity({
+                transactionId: canonicalTransactionId,
+                agentId: intake.agentId || null,
+                submittedByUid: intake.submittedByUid || intake.submittedBy || null,
+                tenantId: intake.tenantId || null,
+                propertyAddress: intake.address || intake.propertyAddress || null,
+                checklistItemId: item.itemId,
+                checklistLabel: currentChecklistItem.data()?.label || item.label || null,
+                completed,
+                previousCompleted,
+                actor: { uid: decoded.uid, name: decoded.name || decoded.email || null, role: callerRole || 'tc' },
+                occurredAt: now,
+              }),
+            );
+          }
         }
         await batch.commit();
       }
@@ -272,26 +295,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 recipientUids: staffUids,
                 title: `TC Queue Status Updated: ${statusLabel}`,
                 body: `TC updated ${intakeAddress} to ${statusLabel}.`,
-                url: '/dashboard/admin/staff-queue',
-              });
-            }
-          } else if (body.checklist && Array.isArray(body.checklist) && body.checklist.some((c: any) => c.completed)) {
-            // Checklist task completed — notify agent and staff
-            if (agentUid) {
-              await sendNotification(adminDb, {
-                type: 'tc_approved',
-                recipientUids: [agentUid],
-                title: 'TC Checklist Updated',
-                body: `Your TC coordinator updated a checklist task for ${intakeAddress}.`,
-                url: '/dashboard/transactions',
-              });
-            }
-            if (staffUids.length > 0) {
-              await sendNotification(adminDb, {
-                type: 'tc_approved',
-                recipientUids: staffUids,
-                title: 'TC Checklist Updated',
-                body: `TC completed a checklist task for ${intakeAddress}.`,
                 url: '/dashboard/admin/staff-queue',
               });
             }

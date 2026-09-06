@@ -12,6 +12,7 @@ import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { resolveGCI } from '@/lib/commissions';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
+import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -452,11 +453,35 @@ export async function PATCH(
       for (const ci of checklist) {
         if (!ci.itemId) continue;
         const ref = itemRef.collection('checklist').doc(ci.itemId);
+        const currentChecklistItem = await ref.get();
+        const previousCompleted = Boolean(currentChecklistItem.data()?.completed);
+        const completed = Boolean(ci.completed);
         batch.update(ref, {
-          completed: ci.completed,
-          completedBy: ci.completedBy ?? null,
-          completedAt: ci.completedAt ?? null,
+          completed,
+          completedBy: completed ? (ci.completedBy || reviewerEmail) : null,
+          completedAt: completed ? (ci.completedAt || now) : null,
         });
+        // Routine checklist changes must follow the transaction, not merely the
+        // queue wrapper. Preserve both checks and later corrections for the daily
+        // agent digest and activity history.
+        if (item.transactionId && previousCompleted !== completed) {
+          batch.create(
+            adminDb.collection('transactions').doc(item.transactionId).collection('activityEvents').doc(),
+            buildChecklistTransactionActivity({
+              transactionId: item.transactionId,
+              agentId: item.agentId,
+              submittedByUid: item.submittedByUid || item.submittedBy || null,
+              tenantId: item.tenantId || null,
+              propertyAddress: item.address || item.transactionAddress || null,
+              checklistItemId: ci.itemId,
+              checklistLabel: currentChecklistItem.data()?.label || ci.label || null,
+              completed,
+              previousCompleted,
+              actor: { uid: decoded.uid, name: reviewerName, role: (await getStaffRole(decoded.uid)) || 'staff' },
+              occurredAt: now,
+            }),
+          );
+        }
       }
       await batch.commit();
     }

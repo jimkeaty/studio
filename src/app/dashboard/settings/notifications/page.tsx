@@ -37,6 +37,7 @@ type NotificationType =
   | 'staff_queue_attention'
   | 'tx_status_change'
   | 'tx_new_agent'
+  | 'transaction_activity_digest'
   | 'system';
 
 // ─── Transaction notification prefs ─────────────────────────────────────────
@@ -182,6 +183,11 @@ const EVENT_GROUPS: { label: string; description: string; events: EventMeta[] }[
         type: 'tx_new_agent',
         label: 'New Agent Transaction',
         description: 'When an agent submits a new transaction (TC/staff)',
+      },
+      {
+        type: 'transaction_activity_digest',
+        label: 'Daily Routine Activity Digest',
+        description: 'One email grouped by property when Staff or TC completes or reopens routine checklist items on your transactions',
       },
     ],
   },
