@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { CoachingNotesWidget } from '@/components/dashboard/agent/CoachingNotesWidget';
+import { AttendanceAndFloorTimePanel } from '@/components/dashboard/agent/AttendanceAndFloorTimePanel';
 import { TeamLeaderDashboard } from '@/components/dashboard/TeamLeaderDashboard';
 import { AppointmentsPipeline } from '@/components/dashboard/AppointmentsPipeline';
 import { AgentTransactionsSection } from '@/components/dashboard/AgentTransactionsSection';
@@ -562,6 +563,10 @@ function AgentDashboardPage() {
             }
           >
             <KpiSection dashboard={dashboard} plan={plan} manageMode={kpiManageMode} />
+          </DashboardSection>
+
+          <DashboardSection storageKey="dash-attendance-open" defaultOpen={true} title="Attendance & Floor Time" icon={CalendarCheck2}>
+            <AttendanceAndFloorTimePanel compact />
           </DashboardSection>
 
           {/* ════════════════════════════════════════════════════════════════

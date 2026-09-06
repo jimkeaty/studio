@@ -60,6 +60,7 @@ import {
   GitMerge,
   Sofa,
   ClipboardCheck,
+  QrCode,
   FileSignature,
   type LucideIcon,
 } from 'lucide-react';
@@ -143,6 +144,7 @@ const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/plan', label: 'Business Plan', icon: Target },
   { href: '/dashboard/tracker', label: 'Daily Tracker', icon: ClipboardPen },
+  { href: '/dashboard/attendance', label: 'Attendance & Floor Time', icon: QrCode },
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
   { href: '/dashboard/my-transactions', label: 'My Transactions', icon: ClipboardList },

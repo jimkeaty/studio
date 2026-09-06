@@ -49,7 +49,12 @@ const ACTIVITY_LABELS: Record<string, string> = {
   partner_event: 'Mortgage / Builder / RCA Event',
   team_appointments: 'Team Appointments',
   new_agent_welcome_call: 'New Agent Welcome Call',
+  new_agent_follow_up: 'New Agent Follow-Up',
   in_person_relationship_meeting: 'In-Person Coffee / Lunch Relationship Meeting',
+  sales_meeting: 'Sales Meeting',
+  huddle: 'Team Huddle',
+  role_play_ids: 'Role Play / New Agent IDS',
+  training_session: 'Training Session',
   custom: 'Custom KPI Activity',
 };
 
@@ -112,6 +117,11 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
     buyerSellerWorkshops: '1',
     networkingEvents: '1',
     ypnEventsScheduled: '0',
+    salesMeetings: '0',
+    huddles: '8',
+    rolePlaySessions: '4',
+    trainingSessions: '0',
+    newAgentFollowUps: '0',
     directorName: 'Ethan',
     customKpis: [] as Array<{ id: string; label: string; unit: string; monthlyGoal: string; active: boolean }>,
   });
@@ -146,6 +156,11 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
         buyerSellerWorkshops: String(goals.buyerSellerWorkshops ?? 1),
         networkingEvents: String(goals.networkingEvents ?? goals.partnerEvents ?? 1),
         ypnEventsScheduled: String(goals.ypnEventsScheduled ?? 0),
+        salesMeetings: String(goals.salesMeetings ?? 0),
+        huddles: String(goals.huddles ?? 8),
+        rolePlaySessions: String(goals.rolePlaySessions ?? 4),
+        trainingSessions: String(goals.trainingSessions ?? 0),
+        newAgentFollowUps: String(goals.newAgentFollowUps ?? 0),
         directorName: String(result.director?.name || result.plan?.directorName || 'Ethan'),
         customKpis: (result.plan?.customKpis || []).map((item: any) => ({ ...item, monthlyGoal: String(item.monthlyGoal ?? 0) })),
       });
@@ -315,6 +330,11 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
               ['buyerSellerWorkshops', 'Buyer & Seller Workshops / Month'],
               ['networkingEvents', 'Qualifying Events / Month (YPN, Mortgage, Builder, RCA)'],
               ['ypnEventsScheduled', 'Scheduled YPN Events / Month'],
+              ['salesMeetings', 'Sales Meetings / Month'],
+              ['huddles', 'Team Huddles / Month (Tue & Thu 8:30 AM)'],
+              ['rolePlaySessions', 'Role Play / New Agent IDS / Month (Wed 10:00 AM)'],
+              ['trainingSessions', 'Training Sessions Led / Month'],
+              ['newAgentFollowUps', 'New-Agent Follow-Ups / Month'],
             ].map(([key, label]) => <div key={key} className="space-y-1.5"><Label>{label}</Label><Input type="number" min="0" value={(goalForm as any)[key]} onChange={event => setGoalForm(form => ({ ...form, [key]: event.target.value }))} /></div>)}
           </div>
           <div className="rounded-md border bg-slate-50 p-3 text-xs text-slate-700"><strong>YPN rule:</strong> record the number of scheduled YPN events here. The scorecard then expects the Director to log attendance at every one of them.</div>
@@ -332,12 +352,12 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
             <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>Activity</Label><Select value={activityForm.activityType} onValueChange={value => setActivityForm(form => ({ ...form, activityType: value, relatedAgentId: '', customKpiId: '' }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ACTIVITY_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1.5"><Label>Date</Label><Input type="date" value={activityForm.occurredOn} onChange={event => setActivityForm(form => ({ ...form, occurredOn: event.target.value }))} /></div></div>
             {activityForm.activityType !== 'in_person_relationship_meeting' && <div className="space-y-1.5"><Label>Title / Event Name</Label><Input placeholder="Optional description" value={activityForm.title} onChange={event => setActivityForm(form => ({ ...form, title: event.target.value }))} /></div>}
             {activityForm.activityType === 'call_night' ? <div className="space-y-1.5"><Label>Completed Hours</Label><Input type="number" min="0" step="0.25" value={activityForm.durationHours} onChange={event => setActivityForm(form => ({ ...form, durationHours: event.target.value }))} /></div> : <div className="space-y-1.5"><Label>Count</Label><Input type="number" min="1" value={activityForm.count} onChange={event => setActivityForm(form => ({ ...form, count: event.target.value }))} /></div>}
-            {activityForm.activityType === 'new_agent_welcome_call' && <div className="space-y-1.5"><Label>New Agent *</Label><Select value={activityForm.relatedAgentId} onValueChange={value => setActivityForm(form => ({ ...form, relatedAgentId: value }))}><SelectTrigger><SelectValue placeholder="Select new agent" /></SelectTrigger><SelectContent>{newAgents.map((agent: any) => <SelectItem key={agent.agentId} value={agent.agentId}>{agent.name} · started {agent.startDate}</SelectItem>)}</SelectContent></Select></div>}
+            {(activityForm.activityType === 'new_agent_welcome_call' || activityForm.activityType === 'new_agent_follow_up') && <div className="space-y-1.5"><Label>New Agent *</Label><Select value={activityForm.relatedAgentId} onValueChange={value => setActivityForm(form => ({ ...form, relatedAgentId: value }))}><SelectTrigger><SelectValue placeholder="Select new agent" /></SelectTrigger><SelectContent>{newAgents.map((agent: any) => <SelectItem key={agent.agentId} value={agent.agentId}>{agent.name} · started {agent.startDate}</SelectItem>)}</SelectContent></Select></div>}
             {activityForm.activityType === 'in_person_relationship_meeting' && <><div className="space-y-1.5"><Label>Agent or Recruit Met *</Label><Input placeholder="Person's name" value={activityForm.title} onChange={event => setActivityForm(form => ({ ...form, title: event.target.value }))} /></div><div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>Organization / Brokerage</Label><Input placeholder="Brokerage or company" value={activityForm.organization} onChange={event => setActivityForm(form => ({ ...form, organization: event.target.value }))} /></div><div className="space-y-1.5"><Label>Purpose *</Label><Select value={activityForm.relationshipPurpose} onValueChange={value => setActivityForm(form => ({ ...form, relationshipPurpose: value }))}><SelectTrigger><SelectValue placeholder="Choose purpose" /></SelectTrigger><SelectContent><SelectItem value="retention">Retention — Current Keaty Agent</SelectItem><SelectItem value="recruiting">Recruiting — External Agent / Prospect</SelectItem></SelectContent></Select></div></div></>}
             {activityForm.activityType === 'custom' && <div className="space-y-1.5"><Label>Custom KPI *</Label><Select value={activityForm.customKpiId} onValueChange={value => setActivityForm(form => ({ ...form, customKpiId: value }))}><SelectTrigger><SelectValue placeholder="Select custom KPI" /></SelectTrigger><SelectContent>{customKpis.map((item: any) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent></Select></div>}
             <div className="space-y-1.5"><Label>Notes</Label><Textarea placeholder="Outcome, follow-up, or strategic context" value={activityForm.notes} onChange={event => setActivityForm(form => ({ ...form, notes: event.target.value }))} rows={3} /></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setActivityOpen(false)}>Cancel</Button><Button onClick={logActivity} disabled={saving || (activityForm.activityType === 'new_agent_welcome_call' && !activityForm.relatedAgentId) || (activityForm.activityType === 'in_person_relationship_meeting' && (!activityForm.title || !activityForm.relationshipPurpose)) || (activityForm.activityType === 'custom' && !activityForm.customKpiId)}>{saving ? 'Saving...' : <><CalendarCheck2 className="mr-1.5 h-4 w-4" />Log Completed Activity</>}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setActivityOpen(false)}>Cancel</Button><Button onClick={logActivity} disabled={saving || ((activityForm.activityType === 'new_agent_welcome_call' || activityForm.activityType === 'new_agent_follow_up') && !activityForm.relatedAgentId) || (activityForm.activityType === 'in_person_relationship_meeting' && (!activityForm.title || !activityForm.relationshipPurpose)) || (activityForm.activityType === 'custom' && !activityForm.customKpiId)}>{saving ? 'Saving...' : <><CalendarCheck2 className="mr-1.5 h-4 w-4" />Log Completed Activity</>}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

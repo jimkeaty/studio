@@ -13,6 +13,7 @@ import { RecruitingPipelinePanel } from '@/components/dashboard/broker/Recruitin
 import { RecruitingOperationsListView } from '@/components/dashboard/broker/RecruitingOperationsListView';
 import { UnifiedRecruitingReportCard } from '@/components/dashboard/broker/UnifiedRecruitingReportCard';
 import { DirectorDevelopmentReportCard } from '@/components/dashboard/broker/DirectorDevelopmentReportCard';
+import { AttendanceManagementPanel } from '@/components/dashboard/broker/AttendanceManagementPanel';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
 import { RecruitingGoalsSummary } from '@/components/dashboard/broker/RecruitingGoalsSummary';
@@ -1783,6 +1784,7 @@ export default function RecruitingDashboardPage() {
         {/* ── TAB 3: Admin Report Cards and recruiting controls ───────────── */}
         <TabsContent value="admin-report-cards" className="space-y-8 mt-6">
       <DirectorDevelopmentReportCard year={year} />
+      <AttendanceManagementPanel year={year} />
       <RecruiterTodoBoard />
       {/* ── Unified Recruiting & Agent KPI Report Card ─────────────────────── */}
       <UnifiedRecruitingReportCard year={year} />
