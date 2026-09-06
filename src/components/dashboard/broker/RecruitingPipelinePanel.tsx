@@ -30,10 +30,13 @@ const STATUSES = [
   { value: 'offer_extended',  label: 'Offer Extended',   color: 'bg-purple-100 text-purple-700', border: 'border-purple-300',  dot: 'bg-purple-500'  },
   { value: 'offer_accepted',  label: 'Offer Accepted',   color: 'bg-green-100 text-green-700',   border: 'border-green-300',   dot: 'bg-green-500'   },
   { value: 'scheduled_start', label: 'Scheduled Start',  color: 'bg-emerald-100 text-emerald-700', border: 'border-emerald-300', dot: 'bg-emerald-500' },
+  { value: 'started',         label: 'Started',          color: 'bg-teal-100 text-teal-700',      border: 'border-teal-300',   dot: 'bg-teal-500'    },
   { value: 'declined',        label: 'Declined',         color: 'bg-red-100 text-red-700',       border: 'border-red-300',     dot: 'bg-red-500'     },
 ];
 
-const ACTIVE_STATUSES = STATUSES.filter(s => s.value !== 'declined');
+// Started recruits remain available in the table and history, but leave the
+// active recruiting Kanban because recruiting is complete after their start date.
+const BOARD_STATUSES = STATUSES.filter(s => !['declined', 'started'].includes(s.value));
 
 const ACTIVITY_TYPES = [
   { value: 'call',    label: 'Call',    icon: Phone },
@@ -532,7 +535,7 @@ export function RecruitingPipelinePanel() {
             Recruiting Pipeline
           </h3>
           <p className="text-sm text-muted-foreground">
-            Track candidates from prospect to scheduled start
+            Track candidates through scheduled start; started agents leave the active board automatically.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -601,7 +604,7 @@ export function RecruitingPipelinePanel() {
         /* ── Kanban Board ─────────────────────────────────────────────────── */
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
-            {ACTIVE_STATUSES.map(stage => {
+            {BOARD_STATUSES.map(stage => {
               const cards = grouped[stage.value] || [];
               return (
                 <div key={stage.value} className="w-56 shrink-0">

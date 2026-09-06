@@ -10,6 +10,12 @@ function jsonError(s: number, e: string) {
   return NextResponse.json({ ok: false, error: e }, { status: s });
 }
 
+function isPastScheduledStart(data: Record<string, any>, todayYmd: string) {
+  if (data.status !== 'scheduled_start' || typeof data.expectedStartDate !== 'string') return false;
+  const startYmd = data.expectedStartDate.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(startYmd) && startYmd < todayYmd;
+}
+
 async function requireAdmin(req: NextRequest) {
   const h = req.headers.get('Authorization');
   if (!h?.startsWith('Bearer ')) return null;
@@ -26,7 +32,48 @@ export async function GET(req: NextRequest) {
   try {
     const snap = await adminDb.collection('recruitingPipeline')
       .orderBy('createdAt', 'desc').get();
-    const candidates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // A scheduled start belongs on the recruiting board only through the day
+    // before it begins. On the next calendar day, it is a started recruit and
+    // no longer an active recruiting-pipeline item.
+    const transitionedAt = new Date().toISOString();
+    const todayYmd = transitionedAt.slice(0, 10);
+    const scheduledToStart = snap.docs.filter(doc => isPastScheduledStart(doc.data(), todayYmd));
+    const transitionResults = await Promise.all(scheduledToStart.map(doc =>
+      adminDb.runTransaction(async transaction => {
+        const latest = await transaction.get(doc.ref);
+        if (!latest.exists || !isPastScheduledStart(latest.data() || {}, todayYmd)) return false;
+
+        transaction.update(doc.ref, {
+          status: 'started',
+          stageEnteredAt: transitionedAt,
+          autoStartedAt: transitionedAt,
+          updatedAt: transitionedAt,
+        });
+        transaction.set(adminDb.collection('recruitingPipelineActivity').doc(), {
+          candidateId: doc.id,
+          type: 'stage_change',
+          summary: 'Stage changed automatically: Scheduled Start → Started after the scheduled start date passed',
+          notes: null,
+          authorUid: null,
+          authorName: 'System',
+          followUpDate: null,
+          followUpAction: null,
+          createdAt: transitionedAt,
+        });
+        return true;
+      })
+    ));
+    const transitionedIds = new Set(
+      scheduledToStart.filter((_, index) => transitionResults[index]).map(doc => doc.id)
+    );
+    const candidates = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      ...(transitionedIds.has(d.id)
+        ? { status: 'started', stageEnteredAt: transitionedAt, autoStartedAt: transitionedAt, updatedAt: transitionedAt }
+        : {}),
+    }));
     return NextResponse.json({ ok: true, candidates });
   } catch (err: any) {
     return jsonError(500, err?.message || 'Internal Server Error');
