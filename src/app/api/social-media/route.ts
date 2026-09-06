@@ -1,0 +1,7 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { adminDb } from '@/lib/firebase/admin';
+import { appendQueueAudit, caller, groupPublicView, SOCIAL_MEDIA_COLLECTION } from '@/lib/socialMedia/queue';
+
+const error = (status: number, message: string) => NextResponse.json({ ok: false, error: message }, { status });
+export async function GET(req: NextRequest) { try { const user = await caller(req); const snapshot = await adminDb.collection(SOCIAL_MEDIA_COLLECTION).orderBy('updatedAt', 'desc').limit(100).get(); const groups = snapshot.docs.filter((doc) => user.isStaff || doc.data().agentUid === user.uid).map((doc) => groupPublicView(doc.id, doc.data())); return NextResponse.json({ ok: true, groups }); } catch (e: any) { return error(401, e.message || 'Unauthorized'); } }
+export async function POST(req: NextRequest) { try { const user = await caller(req); const body = await req.json().catch(() => ({})); const now = new Date(); const rawNotes = String(body.rawNotes || '').trim(); const group = { agentUid: user.uid, agentName: user.name, rawNotes, aiCaption: '', finalCaption: rawNotes, media: [], selectedAssetIds: [], status: 'draft', createdAt: now, updatedAt: now, source: 'smart_broker_agent_submission' }; const ref = await adminDb.collection(SOCIAL_MEDIA_COLLECTION).add(group); await appendQueueAudit(ref.id, 'created', user, { status: 'draft' }); return NextResponse.json({ ok: true, group: groupPublicView(ref.id, group) }); } catch (e: any) { return error(401, e.message || 'Unable to create media submission'); } }

@@ -1,0 +1,4 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { adminDb } from '@/lib/firebase/admin';
+import { caller, connectionConfigReady } from '@/lib/socialMedia/queue';
+export async function GET(req: NextRequest) { try { const user = await caller(req); const connection = (await adminDb.collection('facebookPageConnections').doc('default').get()).data(); return NextResponse.json({ ok: true, canManageConnection: user.isStaff, connection: connection ? { status: connection.status || 'degraded', pageId: connection.pageId || null, pageName: connection.pageName || null, connectedAt: connection.connectedAt?.toDate?.().toISOString?.() || connection.connectedAt || null, lastError: connection.lastError || null } : { status: 'not_connected', pageId: null, pageName: null, connectedAt: null }, setupReady: connectionConfigReady(), personalProfilePublishingSupported: false }); } catch { return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }); } }

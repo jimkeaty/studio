@@ -41,6 +41,9 @@ function isServerSafe(rel) {
   // Server-only notification dispatcher and recipient helpers (Admin SDK only, never imported by client)
   if (r.startsWith("src/lib/notifications/")) return true;
 
+  // Server-only social-media queue, storage, and Meta Page authorization helpers
+  if (r.startsWith("src/lib/socialMedia/")) return true;
+
   // Server-only transaction utility helpers (co-agent split, etc.)
   if (r.startsWith("src/lib/transactions/")) return true;
 

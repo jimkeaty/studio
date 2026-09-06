@@ -62,6 +62,7 @@ import {
   ClipboardCheck,
   QrCode,
   FileSignature,
+  ImageIcon,
   type LucideIcon,
 } from 'lucide-react';
 import { useAgentPlugins } from '@/hooks/useAgentPlugins';
@@ -149,6 +150,7 @@ const agentMenuItems = [
   { href: '/dashboard/projections', label: 'Projections', icon: TrendingUp },
   { href: '/dashboard/transactions/new', label: 'Add Transaction', icon: Plus },
   { href: '/dashboard/my-transactions', label: 'My Transactions', icon: ClipboardList },
+  { href: '/dashboard/social-media', label: 'Social Media', icon: ImageIcon },
   { href: '/dashboard/contacts', label: 'Contacts Book', icon: BookUser },
   { href: '/dashboard/ask-your-broker', label: 'Ask Your Broker', icon: HelpCircle },
   { href: '/dashboard/open-house', label: 'Submit Open House', icon: Home },
@@ -165,6 +167,7 @@ const communityMenuItems = [
 // Settings items shown to non-admin users only (admins get these inside their Settings group)
 const agentSettingsItems = [
   { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },
+  { href: '/dashboard/settings/social-connections', label: 'Social Connections', icon: Settings },
 ];
 
 // ── Grouped admin menu sections ───────────────────────────────────────────────
@@ -200,6 +203,8 @@ const adminMenuGroups = [
       { href: '/dashboard/admin/accounting', label: 'Accounting Queue', icon: Receipt },
       { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
       { href: '/dashboard/admin/transaction-deadlines', label: 'Transaction Deadlines', icon: CalendarDays },
+      { href: '/dashboard/admin/media-queue', label: 'Media Queue', icon: ImageIcon },
+      { href: '/dashboard/admin/social-content-library', label: 'Shared Content Library', icon: ImageIcon },
       { href: '/dashboard/admin/ask-your-broker', label: 'Broker Review', icon: HelpCircle },
       { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
       { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },
