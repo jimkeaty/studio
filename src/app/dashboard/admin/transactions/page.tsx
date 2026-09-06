@@ -437,6 +437,7 @@ export default function AdminTransactionLedgerPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           id: transferTx.id,
+          ...((transferTx as any).updatedAt ? { expectedUpdatedAt: (transferTx as any).updatedAt } : {}),
           agentId: transferAgentId,
           agentDisplayName: newName,
           // Preserve all other fields
@@ -492,7 +493,11 @@ export default function AdminTransactionLedgerPage() {
       // When changing to cancelled or expired, also clear the closedDate so the
       // transaction is no longer counted as closed in the wrong year
       const isCancelOrExpire = quickStatusValue === 'canceled' || quickStatusValue === 'cancelled' || quickStatusValue === 'expired';
-      const patchBody: Record<string, any> = { id: quickStatusTx.id, status: quickStatusValue };
+      const patchBody: Record<string, any> = {
+        id: quickStatusTx.id,
+        status: quickStatusValue,
+        ...((quickStatusTx as any).updatedAt ? { expectedUpdatedAt: (quickStatusTx as any).updatedAt } : {}),
+      };
       if (isCancelOrExpire && quickStatusTx.closedDate) {
         patchBody.closedDate = '';
       }

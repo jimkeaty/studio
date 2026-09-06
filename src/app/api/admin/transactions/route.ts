@@ -13,6 +13,7 @@ import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
+import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -358,6 +359,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const id = String(body.id || '').trim();
     if (!id) return jsonError(400, 'Transaction id is required');
+    const expectedUpdatedAt = body.expectedUpdatedAt;
 
     // Build update payload from allowed fields only
     const updates: Record<string, any> = {};
@@ -518,6 +520,9 @@ export async function PATCH(req: NextRequest) {
     const existingSnap = await adminDb.collection('transactions').doc(id).get();
     const existingData = existingSnap.data() as any;
     if (!existingSnap.exists) return jsonError(404, 'Transaction not found');
+    if (hasTransactionVersionConflict(existingData?.updatedAt, expectedUpdatedAt)) {
+      return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+    }
 
     // Preserve one shared transaction document for co-agents. The helper updates
     // participant allocations only; it never creates replacement files or deletes
@@ -571,7 +576,19 @@ export async function PATCH(req: NextRequest) {
     }
 
     updates.updatedAt = new Date();
-    await adminDb.collection('transactions').doc(id).update(updates);
+    try {
+      await adminDb.collection('transactions').doc(id).update(
+        updates,
+        expectedUpdatedAt ? { lastUpdateTime: existingSnap.updateTime } : undefined,
+      );
+    } catch (error: any) {
+      // The Firestore precondition closes the race between the comparison above
+      // and the write. A stale editor must reload instead of receiving success.
+      if (expectedUpdatedAt && error?.code === 9) {
+        return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+      }
+      throw error;
+    }
     // Fetch the updated doc to return
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
     const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });

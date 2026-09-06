@@ -10,6 +10,7 @@ import { handoffClosedTransactionToAccounting } from '@/lib/transactions/account
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { resolveGCI } from '@/lib/commissions';
+import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -287,6 +288,10 @@ export async function PATCH(
       // Fetch current transaction state for merging
       const currentTxDoc = await txRef.get();
       const currentTx = currentTxDoc.exists ? (currentTxDoc.data() as any) : {};
+      if (!currentTxDoc.exists) return jsonError(404, 'Linked transaction not found');
+      if (hasTransactionVersionConflict(currentTx.updatedAt, body.expectedTransactionUpdatedAt)) {
+        return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+      }
 
       const allowed: Record<string, any> = {};
       for (const [k, v] of Object.entries(txUpdates)) {
@@ -396,7 +401,17 @@ export async function PATCH(
             ...(_agentPaysFee && newAgentDollar != null ? { agentFeeDeduction: _feeAmt } : {}),
           };
         }
-        await txRef.update(allowed);
+        try {
+          await txRef.update(
+            allowed,
+            body.expectedTransactionUpdatedAt ? { lastUpdateTime: currentTxDoc.updateTime } : undefined,
+          );
+        } catch (error: any) {
+          if (body.expectedTransactionUpdatedAt && error?.code === 9) {
+            return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+          }
+          throw error;
+        }
 
         // Rebuild agent rollup so leaderboard and tier progression stay in sync
         try {

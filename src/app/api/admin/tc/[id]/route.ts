@@ -6,6 +6,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike, isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { resolveGCI } from '@/lib/commissions';
+import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
@@ -607,8 +608,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           }
         }
         try {
-          await adminDb.collection('transactions').doc(linkedTxId).update(txSyncUpdate);
+          const versionedTransactionRef = adminDb.collection('transactions').doc(linkedTxId);
+          const versionedTransactionSnap = await versionedTransactionRef.get();
+          if (!versionedTransactionSnap.exists) return jsonError(404, 'Linked transaction not found');
+          if (hasTransactionVersionConflict(versionedTransactionSnap.data()?.updatedAt, body.expectedTransactionUpdatedAt)) {
+            return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+          }
+          await versionedTransactionRef.update(
+            txSyncUpdate,
+            body.expectedTransactionUpdatedAt ? { lastUpdateTime: versionedTransactionSnap.updateTime } : undefined,
+          );
         } catch (syncErr: any) {
+          if (body.expectedTransactionUpdatedAt && syncErr?.code === 9) {
+            return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+          }
           console.warn('[TC update] Failed to sync to transactions doc:', syncErr.message);
         }
         // Rebuild agent rollup so leaderboard and tier stay in sync after commission change

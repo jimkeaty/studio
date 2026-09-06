@@ -36,6 +36,7 @@ import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSourc
 import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
 import { InspectionReviewPanel } from '@/components/transactions/InspectionReviewPanel';
 import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
+import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -2140,6 +2141,7 @@ export default function AddTransactionPage() {
 
   // ── Load existing transaction for edit mode (?edit=txId) ─────────────────────
   const [editLoaded, setEditLoaded] = useState(false);
+  const transactionVersionRef = useRef<string>('');
   const [legacySideNeedsReview, setLegacySideNeedsReview] = useState(false);
   const legacySideResolutionRef = useRef({ preventsAutomaticPersistence: false });
   // The form component remains mounted when an admin exits impersonation. Clear the
@@ -2152,6 +2154,7 @@ export default function AddTransactionPage() {
     setViewerAgentId('');
     setParticipantAllocations(null);
     setLegacySideNeedsReview(false);
+    transactionVersionRef.current = '';
     legacySideResolutionRef.current = { preventsAutomaticPersistence: false };
     if (editTxId) setPdfStep('loading');
   }, [editTxId, isImpersonating, effectiveUid, effectiveName]);
@@ -2173,6 +2176,7 @@ export default function AddTransactionPage() {
           return;
         }
         const tx = data.transaction;
+        transactionVersionRef.current = normalizeTransactionVersion(tx.updatedAt);
         setViewerIsCoAgent(Boolean(tx.viewerIsCoAgent));
         setViewerParticipantAllocation(tx.viewerParticipantAllocation ?? null);
         setViewerAgentId(String(tx.viewerAgentId || ''));
@@ -3094,6 +3098,7 @@ export default function AddTransactionPage() {
           apiUrl = `/api/admin/transactions`;
           apiBody = {
             id: editTxId,
+            ...(transactionVersionRef.current ? { expectedUpdatedAt: transactionVersionRef.current } : {}),
             ...valuesForSave,
             ...coAgentCompatibility,
             documents: uploadedDocs,
@@ -3125,6 +3130,7 @@ export default function AddTransactionPage() {
           const viewAsParam = isImpersonating && effectiveUid ? `?viewAs=${effectiveUid}` : '';
           apiUrl = `/api/agent/transactions/${editTxId}${viewAsParam}`;
           apiBody = {
+            ...(transactionVersionRef.current ? { expectedUpdatedAt: transactionVersionRef.current } : {}),
             ...valuesForSave,
             ...coAgentCompatibility,
             documents: uploadedDocs,
@@ -3143,9 +3149,14 @@ export default function AddTransactionPage() {
         });
         const data = await res.json();
         if (!res.ok) {
-          toast({ title: 'Save failed', description: data.error || 'Could not save changes.', variant: 'destructive' });
+          toast({
+            title: res.status === 409 ? 'Transaction changed — refresh required' : 'Save failed',
+            description: data.error || 'Could not save changes.',
+            variant: 'destructive',
+          });
           return;
         }
+        transactionVersionRef.current = normalizeTransactionVersion(data.transaction?.updatedAt);
         await syncContactsToBook(token);
         lastSaveSucceededRef.current = true;
         if (!hasOperationalEditAuthority && String(values.status || '').toLowerCase() === 'closed') {
