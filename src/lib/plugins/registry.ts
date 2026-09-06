@@ -57,12 +57,13 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
   },
   {
     id: 'smart-offer',
-    name: 'Smart Offer',
-    description: 'Streamlined offer intake tool — agents submit buyer offers with all required details, track offer status, and receive instant notifications.',
+    name: 'Smart Offer Intake',
+    description: 'External offer intake workspace. It remains a separate app and maintains its own access session until a verified SSO bridge is available.',
     iconName: 'FileSignature',
     category: 'productivity',
-    badge: 'New',
-    defaultEnabled: true, // All Keaty agents get this
+    externalUrl: 'https://smartoffer-nkbfcax4.manus.space',
+    badge: 'Suite App',
+    defaultEnabled: false,
   },
   {
     id: 'smart-project-management',
@@ -76,15 +77,32 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
     // being hard-coded as a default benefit in the product architecture.
     defaultEnabled: false,
   },
-  // Future plugins can be added here:
-  // {
-  //   id: 'market-pulse',
-  //   name: 'Market Pulse',
-  //   description: 'Real-time market analytics and neighborhood trend reports.',
-  //   iconName: 'TrendingUp',
-  //   category: 'analytics',
-  //   href: '/dashboard/apps/market-pulse',
-  // },
+  {
+    id: 'smart-inspections',
+    name: 'Smart Inspections',
+    description: 'External inspection analysis workspace. Smart Broker retains the transaction-linked review workflow.',
+    iconName: 'ClipboardCheck',
+    category: 'productivity',
+    externalUrl: 'https://smartinspct-8sbkppda.manus.space',
+    badge: 'Suite App',
+    defaultEnabled: false,
+  },
+  {
+    id: 'smart-forms',
+    name: 'Smart Forms',
+    description: 'Central rollout placeholder for a future forms module.',
+    iconName: 'FileSignature',
+    category: 'productivity',
+    defaultEnabled: false,
+  },
+  {
+    id: 'smart-property-roi',
+    name: 'Smart Property ROI',
+    description: 'Central rollout placeholder for a future property investment analysis module.',
+    iconName: 'TrendingUp',
+    category: 'analytics',
+    defaultEnabled: false,
+  },
 ];
 
 /** Quick lookup map by plugin id */

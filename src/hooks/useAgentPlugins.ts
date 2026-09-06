@@ -74,14 +74,36 @@ export function useAgentPlugins(): {
           // company plugins endpoint may not exist yet — safe to ignore
         }
 
-        // Build the final enabled set
+        // Build the final legacy entitlement set. Central rollout settings below
+        // override this only when an admin has explicitly configured the app.
         const enabledIds = new Set<string>([
           ...profilePlugins,
           ...companyPlugins,
           ...PLUGIN_REGISTRY.filter((p) => p.defaultEnabled).map((p) => p.id),
         ]);
 
-        const resolved = PLUGIN_REGISTRY.filter((p) => enabledIds.has(p.id));
+        let rolloutStates = new Map<string, 'hidden' | 'coming_soon' | 'active'>();
+        try {
+          const rolloutRes = await fetch('/api/app-management/available', { headers: { Authorization: `Bearer ${token}` } });
+          const rolloutData = await rolloutRes.json();
+          if (rolloutData?.ok && Array.isArray(rolloutData.apps)) {
+            rolloutStates = new Map(rolloutData.apps
+              .filter((app: any) => app.configured && ['hidden', 'coming_soon', 'active'].includes(app.state))
+              .map((app: any) => [app.id, app.state]));
+          }
+        } catch {
+          // Preserve established entitlement behavior when rollout settings are unavailable.
+        }
+        const resolved = PLUGIN_REGISTRY
+          .filter((plugin) => {
+            const rollout = rolloutStates.get(plugin.id);
+            if (rollout === 'hidden') return false;
+            if (rollout === 'active' || rollout === 'coming_soon') return true;
+            return enabledIds.has(plugin.id);
+          })
+          .map((plugin) => rolloutStates.get(plugin.id) === 'coming_soon'
+            ? { ...plugin, badge: 'Coming Soon' }
+            : plugin);
         setPlugins(resolved);
       } catch {
         // On error, fall back to defaultEnabled plugins only
