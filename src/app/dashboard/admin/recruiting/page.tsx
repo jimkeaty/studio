@@ -1776,6 +1776,7 @@ export default function RecruitingDashboardPage() {
             pipelineCount={realPipelineCount}
             metricMonths={months}
             activeAgentMonths={activeAgentsData?.months ?? []}
+            inactiveAgents={activeAgentsData?.kpi?.inactiveAgents ?? []}
           />
           <RecruitingPipelinePanel initialViewMode="table" compact />
         </TabsContent>

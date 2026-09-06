@@ -245,6 +245,7 @@ function normalizeInput(body: AgentProfileInput) {
         : null,
     gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
+    inactiveDate: body.inactiveDate?.trim() || null,
     endDate: body.endDate?.trim() || null,
   };
 }
@@ -465,6 +466,7 @@ export async function POST(req: NextRequest) {
       office: normalized.office,
       status: normalized.status,
       startDate: normalized.startDate,
+      inactiveDate: normalized.inactiveDate ?? null,
       endDate: normalized.endDate ?? null,
       anniversaryMonth,
       anniversaryDay,

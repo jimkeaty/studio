@@ -54,6 +54,9 @@ export type AgentProfile = {
   office: string | null;
   status: AgentProfileStatus;
   startDate: string;
+  /** Date the person became inactive while still associated or licensed with the brokerage. */
+  inactiveDate: string | null;
+  /** Confirmed date the person left the brokerage; distinct from inactive status. */
   endDate: string | null;
   anniversaryMonth: number;
   anniversaryDay: number;
@@ -97,6 +100,7 @@ export type AgentProfileInput = {
   office?: string | null;
   status: AgentProfileStatus;
   startDate: string;
+  inactiveDate?: string | null;
   endDate?: string | null;
 
   agentType: AgentType;

@@ -63,6 +63,7 @@ export default function AgentProfileEditor({
           office: agent.office || '',
           status: agent.status || 'active',
           startDate: agent.startDate || '',
+          inactiveDate: agent.inactiveDate || '',
           endDate: agent.endDate || '',
           agentType: agent.agentType || 'independent',
           progressionMetric: 'companyDollar',

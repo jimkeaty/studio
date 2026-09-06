@@ -65,6 +65,7 @@ export type AgentProfileFormValues = {
   defaultTransactionFee: number | string;
   gracePeriodEnabled: boolean;
   notes: string;
+  inactiveDate: string;
   endDate: string;
   isDemoAccount: boolean;
   tvNotificationPrefs: {
@@ -191,6 +192,7 @@ const DEFAULT_VALUES: AgentProfileFormValues = {
   gracePeriodEnabled: false,
   notes: '',
   isDemoAccount: false,
+  inactiveDate: '',
   endDate: '',
   tvNotificationPrefs: {
     buyerNeeds:    { in_app: true, email: false, sms: false },
@@ -1129,6 +1131,7 @@ export default function AgentProfileForm({
         gracePeriodEnabled: values.gracePeriodEnabled ?? false,
         notes: values.notes || null,
         isDemoAccount: values.isDemoAccount ?? false,
+        inactiveDate: values.inactiveDate || null,
         endDate: values.endDate || null,
         tvNotificationPrefs: values.tvNotificationPrefs ?? {
           buyerNeeds:    { in_app: true, email: false, sms: false },
@@ -1366,7 +1369,7 @@ export default function AgentProfileForm({
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Anniversary / Employment</h2>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-medium">Start Date</label>
             <input
@@ -1385,14 +1388,25 @@ export default function AgentProfileForm({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Termination / End Date</label>
+            <label className="mb-1 block text-sm font-medium">Inactive Date</label>
+            <input
+              className="w-full rounded-md border px-3 py-2"
+              value={values.inactiveDate}
+              onChange={(e) => updateField('inactiveDate', e.target.value)}
+              type="date"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Use when the agent remains licensed or associated but is not active. This does not count as a departure.</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">Departure / End Date</label>
             <input
               className="w-full rounded-md border px-3 py-2"
               value={values.endDate}
               onChange={(e) => updateField('endDate', e.target.value)}
               type="date"
             />
-            <p className="mt-1 text-xs text-muted-foreground">Leave blank for active agents. Set when an agent leaves the brokerage.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Set only when the agent has actually left the brokerage. Do not use this for inactive-but-licensed agents.</p>
           </div>
         </div>
 

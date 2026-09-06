@@ -214,18 +214,24 @@ export async function GET(req: NextRequest) {
       excludeFromActiveCount: boolean; // current profile status is not active
       firstDealMonth: string | null;
       startDate: string | null;
+      inactiveDate: string | null;
       endDate: string | null;
+      status: string;
       teamGroup: string | null;
       graceEndMonth: string | null; // YYYY-MM when 90-day grace ends
     };
 
     // Statuses that mean the agent is no longer active at the brokerage
     const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
+    // Inactive agents can remain licensed or associated with the brokerage.
+    // Only an explicit departure status can enter the departures report.
+    const DEPARTURE_STATUSES = new Set(['out', 'terminated', 'churned']);
 
     const agentRecords: AgentRecord[] = agents.map((a: any) => {
       const agentId = a.agentId || a.id;
       const name = String(a.displayName || a.name || a.firstName && a.lastName ? `${a.firstName || ''} ${a.lastName || ''}`.trim() : '').trim() || agentId;
       const startDate = a.startDate || null;
+      const inactiveDate = a.inactiveDate || null;
       const endDate = a.endDate || null;
       const profileStatus = String(a.status || a.agentStatus || '').toLowerCase();
       const firstDeal = firstDealMap.get(agentId) || null;
@@ -265,7 +271,9 @@ export async function GET(req: NextRequest) {
         excludeFromActiveCount,
         firstDealMonth: firstDeal,
         startDate,
+        inactiveDate,
         endDate,
+        status: profileStatus,
         teamGroup: a.teamGroup || null,
         graceEndMonth,
       };
@@ -442,8 +450,9 @@ export async function GET(req: NextRequest) {
       }));
 
     const ytdDeparturesRecords = agentRecords.filter(ar => {
-      // Only count agents with an EXPLICIT endDate set — not agents who are
-      // merely marked inactive with no date (we don't know when they left).
+      // An inactive agent remains separate from a confirmed departure, even if
+      // a legacy endDate was entered. Only explicit departure statuses count.
+      if (!DEPARTURE_STATUSES.has(ar.status)) return false;
       if (!ar.hasExplicitEndDate || !ar.endDate) return false;
       // Only count as a departure if the agent was ever actually activated.
       if (!ar.activationMonth) return false;
@@ -463,6 +472,21 @@ export async function GET(req: NextRequest) {
         agentId: ar.agentId,
         endDate: ar.endDate,
         endMonth: ar.endMonth,
+        teamGroup: ar.teamGroup,
+      }));
+
+    // Review list for profiles that are inactive but not confirmed departures.
+    // Staff/admins can record Inactive Date when known without inflating departures.
+    const inactiveAgents = agentRecords
+      .filter(ar => ar.status === 'inactive')
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(ar => ({
+        agentId: ar.agentId,
+        name: ar.name,
+        status: ar.status,
+        inactiveDate: ar.inactiveDate,
+        startDate: ar.startDate,
+        endDate: ar.endDate,
         teamGroup: ar.teamGroup,
       }));
 
@@ -615,6 +639,7 @@ export async function GET(req: NextRequest) {
         ytdDepartures,
         ytdNewHiresList,
         ytdDeparturesList,
+        inactiveAgents,
         pipelineCount: pipeline.length,
         ytdDealsPerAgent,
         avgMonthlyDealsPerAgent,

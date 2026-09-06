@@ -12,6 +12,15 @@ type RecruitingOperationsListViewProps = {
   pipelineCount: number;
   metricMonths: any[];
   activeAgentMonths: any[];
+  inactiveAgents: Array<{
+    agentId: string;
+    name: string;
+    status: string;
+    inactiveDate: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    teamGroup: string | null;
+  }>;
 };
 
 function displayNumber(value: unknown): string {
@@ -54,6 +63,7 @@ export function RecruitingOperationsListView({
   pipelineCount,
   metricMonths,
   activeAgentMonths,
+  inactiveAgents,
 }: RecruitingOperationsListViewProps) {
   const metricsByMonth = new Map(
     metricMonths.map((month: any, index: number) => [
@@ -146,6 +156,51 @@ export function RecruitingOperationsListView({
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="border-b pb-4">
+          <CardTitle>Inactive Agent Review List</CardTitle>
+          <CardDescription>
+            Inactive agents are excluded from active-agent counts and do not count as departures. Add an Inactive Date when it is known; use Departure / End Date only when someone has actually left the brokerage.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {inactiveAgents.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">No profiles are currently marked Inactive.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Team Group</TableHead>
+                    <TableHead>Inactive Date</TableHead>
+                    <TableHead>Departure Date</TableHead>
+                    <TableHead>Start Date</TableHead>
+                    <TableHead className="text-right">Review</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {inactiveAgents.map(agent => (
+                    <TableRow key={agent.agentId}>
+                      <TableCell className="font-medium">{agent.name}</TableCell>
+                      <TableCell>{agent.teamGroup || '—'}</TableCell>
+                      <TableCell>{agent.inactiveDate || 'Not recorded'}</TableCell>
+                      <TableCell>{agent.endDate || 'Not recorded'}</TableCell>
+                      <TableCell>{agent.startDate || '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <a className="text-sm font-medium text-primary hover:underline" href={`/dashboard/admin/agents/${encodeURIComponent(agent.agentId)}`}>
+                          Open profile
+                        </a>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
