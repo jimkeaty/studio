@@ -25,6 +25,8 @@ type BrandingSettings = {
   useAnimatedLogo: boolean;
   primaryColor: string | null;
   pwaIconUrl: string | null;
+  askYourBrokerName: string;
+  askYourBrokerEscalationUids: string[];
   updatedAt: string | null;
 };
 
@@ -36,6 +38,8 @@ const DEFAULT_BRANDING: BrandingSettings = {
   useAnimatedLogo: false,
   primaryColor: null,
   pwaIconUrl: null,
+  askYourBrokerName: 'Ask Your Broker',
+  askYourBrokerEscalationUids: [],
   updatedAt: null,
 };
 
@@ -703,6 +707,24 @@ export default function AdminBrandingPage() {
                     </div>
                   </>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Broker Guidance Assistant</CardTitle>
+                <CardDescription>Configure the white-label name and the Firebase user IDs that receive broker-review escalations. Leave recipients blank to prevent accidental delivery until contacts are configured.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ask-your-broker-name">Assistant name</Label>
+                  <Input id="ask-your-broker-name" value={branding.askYourBrokerName || ''} onChange={(event) => setBranding((current) => ({ ...current, askYourBrokerName: event.target.value }))} placeholder="Ask Your Broker" maxLength={80} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ask-your-broker-recipients">Escalation recipient user IDs</Label>
+                  <Input id="ask-your-broker-recipients" value={(branding.askYourBrokerEscalationUids || []).join(', ')} onChange={(event) => setBranding((current) => ({ ...current, askYourBrokerEscalationUids: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) }))} placeholder="Broker UID, Director UID" />
+                  <p className="text-xs text-muted-foreground">These are internal user IDs, not phone numbers or email addresses. Notification preferences determine permitted delivery channels.</p>
+                </div>
               </CardContent>
             </Card>
 

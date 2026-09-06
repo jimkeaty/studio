@@ -53,6 +53,8 @@ export type NotificationType =
   | 'commission_summary_send'         // 3 days before closing → TC/Staff to send summary to agent
   | 'agent_task_reminder'             // weekly hug, post-closing check-in reminders → agent
   | 'home_warranty_education'         // APHW buyer or seller consultation request
+  | 'broker_question_escalated'       // Ask Your Broker requires designated broker judgment
+  | 'broker_question_answered'        // broker response is ready for the asking agent
   | 'community_comment'               // someone commented on a TV board post → post author notified
   | 'system';                         // generic system notification
 
@@ -381,6 +383,8 @@ function buildEmailHtml(
     inspection_request_sent:        'Inspection Request',
     checklist_item_completed:       'Checklist Update',
     checklist_note_added:           'Staff Note',
+    broker_question_escalated:      'Broker Review Requested',
+    broker_question_answered:       'Broker Response',
     transaction_activity_digest:    'Daily Transaction Activity',
     agent_tx_updated:               'Transaction Updated',
     commission_summary_prepare:     'Commission Summary',

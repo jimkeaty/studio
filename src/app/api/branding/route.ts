@@ -18,6 +18,7 @@ export async function GET() {
           useAnimatedLogo: false,
           primaryColor: null,
           pwaIconUrl: null,
+          askYourBrokerName: 'Ask Your Broker',
         },
       });
     }
@@ -33,6 +34,7 @@ export async function GET() {
         useAnimatedLogo: data.useAnimatedLogo ?? false,
         primaryColor: data.primaryColor ?? null,
         pwaIconUrl: data.pwaIconUrl ?? null,
+        askYourBrokerName: data.askYourBrokerName ?? 'Ask Your Broker',
       },
     });
   } catch (err: any) {
@@ -48,6 +50,7 @@ export async function GET() {
         useAnimatedLogo: false,
         primaryColor: null,
         pwaIconUrl: null,
+        askYourBrokerName: 'Ask Your Broker',
       },
     });
   }

@@ -64,6 +64,8 @@ export async function GET(req: NextRequest) {
           useAnimatedLogo: false,
           primaryColor: null,
           pwaIconUrl: null,
+          askYourBrokerName: 'Ask Your Broker',
+          askYourBrokerEscalationUids: [],
           updatedAt: null,
         },
       });
@@ -80,6 +82,8 @@ export async function GET(req: NextRequest) {
         useAnimatedLogo: data.useAnimatedLogo ?? false,
         primaryColor: data.primaryColor ?? null,
         pwaIconUrl: data.pwaIconUrl ?? null,
+        askYourBrokerName: data.askYourBrokerName ?? 'Ask Your Broker',
+        askYourBrokerEscalationUids: Array.isArray(data.askYourBrokerEscalationUids) ? data.askYourBrokerEscalationUids : [],
         updatedAt: data.updatedAt ?? null,
       },
     });
@@ -105,6 +109,8 @@ async function upsertBranding(req: NextRequest) {
       useAnimatedLogo,
       primaryColor,
       pwaIconUrl,
+      askYourBrokerName,
+      askYourBrokerEscalationUids,
     } = body;
 
     if (!companyName || typeof companyName !== 'string' || !companyName.trim()) {
@@ -126,6 +132,10 @@ async function upsertBranding(req: NextRequest) {
       useAnimatedLogo: Boolean(useAnimatedLogo),
       primaryColor: primaryColor?.trim() || null,
       pwaIconUrl: pwaIconUrl?.trim() || null,
+      askYourBrokerName: typeof askYourBrokerName === 'string' && askYourBrokerName.trim() ? askYourBrokerName.trim().slice(0, 80) : 'Ask Your Broker',
+      askYourBrokerEscalationUids: Array.isArray(askYourBrokerEscalationUids)
+        ? [...new Set(askYourBrokerEscalationUids.filter((uid) => typeof uid === 'string' && uid.trim()).map((uid) => uid.trim()))]
+        : [],
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: decoded.uid,
     };
