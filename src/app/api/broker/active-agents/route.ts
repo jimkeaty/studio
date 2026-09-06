@@ -211,6 +211,7 @@ export async function GET(req: NextRequest) {
       activationMonth: string | null;
       endMonth: string | null;
       hasExplicitEndDate: boolean; // true only when an actual endDate field was set
+      excludeFromActiveCount: boolean; // current profile status is not active
       firstDealMonth: string | null;
       startDate: string | null;
       endDate: string | null;
@@ -233,6 +234,10 @@ export async function GET(req: NextRequest) {
 
       let endMonth: string | null = null;
       let hasExplicitEndDate = false;
+      // A profile marked inactive is not an active agent for reporting purposes,
+      // even when the person remains licensed with the brokerage or has an old
+      // endDate recorded for historical reference.
+      const excludeFromActiveCount = INACTIVE_STATUSES.has(profileStatus);
       if (endDate) {
         // Explicit end date set — use it (agent drops out the month after)
         const ed = parseDate(endDate);
@@ -240,13 +245,11 @@ export async function GET(req: NextRequest) {
           endMonth = toYearMonth(addMonths(ed, 1));
           hasExplicitEndDate = true;
         }
-      } else if (INACTIVE_STATUSES.has(profileStatus)) {
-        // Agent marked inactive/out in profile but no end date set.
-        // Treat today as their effective end so they are excluded from the
-        // current month onwards, but all historical months remain correct.
-        // NOTE: hasExplicitEndDate stays false — we don't count these as
-        // departure events because we don't know when they actually left.
-        endMonth = toYearMonth(new Date());
+      } else if (excludeFromActiveCount) {
+        // No endDate is required to remove an inactive profile from active-agent
+        // reporting. Licensing and inactive status are maintained separately.
+        // NOTE: hasExplicitEndDate stays false — they are not a dated departure.
+        endMonth = null;
       }
 
       // No grace period for active agent counting — graceEndMonth is always null.
@@ -259,6 +262,7 @@ export async function GET(req: NextRequest) {
         activationMonth,
         endMonth,
         hasExplicitEndDate,
+        excludeFromActiveCount,
         firstDealMonth: firstDeal,
         startDate,
         endDate,
@@ -281,6 +285,7 @@ export async function GET(req: NextRequest) {
       // Team breakdown
       const teamCounts: Record<string, number> = {};
       for (const ar of agentRecords) {
+        if (ar.excludeFromActiveCount) continue;
         // Skip agents who have already departed
         if (ar.endMonth && ar.endMonth <= ym) continue;
         // Agent must have an activationMonth (startDate or first deal) on or before this month
@@ -309,6 +314,7 @@ export async function GET(req: NextRequest) {
       // Deals closed in this month — count actual deal count per active agent
       let dealsInMonth = 0;
       for (const ar of agentRecords) {
+        if (ar.excludeFromActiveCount) continue;
         if (!ar.activationMonth || ar.activationMonth > ym) continue;
         if (ar.endMonth && ar.endMonth <= ym) continue;
         const monthMap = dealCountMap.get(ar.agentId);
@@ -350,6 +356,7 @@ export async function GET(req: NextRequest) {
         // Count established agents (past grace) in compare year month
         let total = 0;
         for (const ar of agentRecords) {
+          if (ar.excludeFromActiveCount) continue;
           if (!ar.activationMonth) continue;
           if (ar.activationMonth > ym) continue;
           if (ar.endMonth && ar.endMonth <= ym) continue;
@@ -361,6 +368,7 @@ export async function GET(req: NextRequest) {
         // Count actual deals (not just agent-month presence)
         let dealsInMonth = 0;
         for (const ar of agentRecords) {
+          if (ar.excludeFromActiveCount) continue;
           const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
           if (!pastGrace) continue;
           const monthMap = dealCountMap.get(ar.agentId);
@@ -464,6 +472,7 @@ export async function GET(req: NextRequest) {
     for (let m = 1; m <= currentMonthData.month; m++) {
       const ym = `${year}-${String(m).padStart(2, '0')}`;
       for (const ar of agentRecords) {
+        if (ar.excludeFromActiveCount) continue;
         // Only count deals by established agents (past grace at that month)
         const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
         if (!pastGrace) continue;
@@ -490,6 +499,7 @@ export async function GET(req: NextRequest) {
     // No Deals Yet count: established agents (past grace) with no closed AND no pending deals.
     // Grace period agents are excluded — they are not yet counted as active.
     const noDealsYetCount = agentRecords.filter(ar => {
+      if (ar.excludeFromActiveCount) return false;
       // Must be currently active (not departed)
       if (ar.endMonth && ar.endMonth <= currentYM) return false;
       // Must have been activated
