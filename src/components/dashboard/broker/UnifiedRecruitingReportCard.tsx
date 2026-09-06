@@ -201,14 +201,35 @@ function InfoCard({
   );
 }
 
-// ── Section Divider ───────────────────────────────────────────────────────────
-function SectionLabel({ label }: { label: string }) {
+// ── KPI Section ───────────────────────────────────────────────────────────────
+function DashboardSection({
+  title,
+  description,
+  icon: Icon,
+  iconClass,
+  borderClass,
+  children,
+}: {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  iconClass: string;
+  borderClass: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="col-span-full flex items-center gap-2 pt-2">
-      <div className="h-px flex-1 bg-border" />
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-2">{label}</span>
-      <div className="h-px flex-1 bg-border" />
-    </div>
+    <section className={cn('rounded-2xl border border-t-4 bg-card/70 p-4 shadow-sm md:p-5', borderClass)}>
+      <div className="mb-5 flex items-center gap-3 border-b border-border/80 pb-4">
+        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', iconClass)}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-base font-bold tracking-tight text-foreground">{title}</p>
+          <p className="pt-0.5 text-xs font-medium text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -355,154 +376,166 @@ export function UnifiedRecruitingReportCard({ year: yearProp, initialOpen = true
 
           {!loading && hasAnyData && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-
-                {/* ── SECTION: Agent Count ──────────────────────────────── */}
-                <SectionLabel label="Agent Count" />
-
-                {/* 1. Active Agents */}
-                <HeroCard
-                  title="Active Agents"
-                  grade={activeAgentsGrade}
-                  primary={fmtN(activeAgents)}
-                  secondary={
-                    currentMonthGoal != null
-                      ? paceText(activeAgents ?? 0, currentMonthGoal, 'agent goal')
-                      : 'No monthly goal set — set goals in chart below'
-                  }
-                  performancePct={activeAgentsPct ?? undefined}
-                  goalLabel={currentMonthGoal != null ? `Goal: ${currentMonthGoal} agents` : undefined}
+              <div className="space-y-7">
+                <DashboardSection
+                  title="Agent Count"
+                  description="Team size, hiring pace, net growth, and departures"
                   icon={Users}
-                />
+                  iconClass="bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                  borderClass="border-t-blue-500"
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <HeroCard
+                      title="Active Agents"
+                      grade={activeAgentsGrade}
+                      primary={fmtN(activeAgents)}
+                      secondary={
+                        currentMonthGoal != null
+                          ? paceText(activeAgents ?? 0, currentMonthGoal, 'agent goal')
+                          : 'No monthly goal set — set goals in chart below'
+                      }
+                      performancePct={activeAgentsPct ?? undefined}
+                      goalLabel={currentMonthGoal != null ? `Goal: ${currentMonthGoal} agents` : undefined}
+                      icon={Users}
+                    />
+                    <HeroCard
+                      title="New Hires YTD"
+                      grade={newHiresGrade}
+                      primary={fmtN(ytdNewHires)}
+                      secondary={
+                        ytdNewHiresGoal != null
+                          ? paceText(ytdNewHires ?? 0, ytdNewHiresGoal, 'hires YTD pace')
+                          : 'No hires goal set'
+                      }
+                      performancePct={newHiresPct ?? undefined}
+                      goalLabel={ytdNewHiresGoal != null ? `YTD pace goal: ${ytdNewHiresGoal}` : undefined}
+                      icon={UserPlus}
+                    />
+                    {netGainGrade ? (
+                      <HeroCard
+                        title="Net Agents Added YTD"
+                        grade={netGainGrade}
+                        primary={(netAgentsAdded >= 0 ? '+' : '') + netAgentsAdded}
+                        secondary={
+                          ytdNetGainGoal != null
+                            ? paceText(netAgentsAdded, ytdNetGainGoal, 'net agents YTD pace')
+                            : 'No net gain goal set'
+                        }
+                        performancePct={netGainPct != null ? Math.max(0, netGainPct) : undefined}
+                        goalLabel={ytdNetGainGoal != null ? `YTD pace goal: +${ytdNetGainGoal}` : undefined}
+                        icon={TrendingUp}
+                      />
+                    ) : (
+                      <InfoCard
+                        title="Net Agents Added YTD"
+                        value={(netAgentsAdded >= 0 ? '+' : '') + netAgentsAdded}
+                        sub={`+${ytdNewHires ?? 0} hired − ${ytdDepartures} departed · Set net gain goal to see grade`}
+                        icon={TrendingUp}
+                        colorClass={netAgentsAdded > 0 ? 'border-l-emerald-400' : netAgentsAdded < 0 ? 'border-l-red-400' : 'border-l-slate-300'}
+                        badgeClass={netAgentsAdded > 0 ? 'bg-emerald-500 text-white' : netAgentsAdded < 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
+                      />
+                    )}
+                    <InfoCard
+                      title="YTD Departures"
+                      value={fmtN(ytdDepartures)}
+                      sub={`Agents who left in ${year} — lower is better`}
+                      icon={UserMinus}
+                      colorClass={ytdDepartures > 0 ? 'border-l-red-400' : 'border-l-slate-300'}
+                      badgeClass={ytdDepartures > 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
+                    />
+                  </div>
+                </DashboardSection>
 
-                {/* 2. New Hires YTD */}
-                <HeroCard
-                  title="New Hires YTD"
-                  grade={newHiresGrade}
-                  primary={fmtN(ytdNewHires)}
-                  secondary={
-                    ytdNewHiresGoal != null
-                      ? paceText(ytdNewHires ?? 0, ytdNewHiresGoal, 'hires YTD pace')
-                      : 'No hires goal set'
-                  }
-                  performancePct={newHiresPct ?? undefined}
-                  goalLabel={ytdNewHiresGoal != null ? `YTD pace goal: ${ytdNewHiresGoal}` : undefined}
-                  icon={UserPlus}
-                />
-
-                {/* 3. Net Agents Added YTD */}
-                {netGainGrade ? (
-                  <HeroCard
-                    title="Net Agents Added YTD"
-                    grade={netGainGrade}
-                    primary={(netAgentsAdded >= 0 ? '+' : '') + netAgentsAdded}
-                    secondary={
-                      ytdNetGainGoal != null
-                        ? paceText(netAgentsAdded, ytdNetGainGoal, 'net agents YTD pace')
-                        : 'No net gain goal set'
-                    }
-                    performancePct={netGainPct != null ? Math.max(0, netGainPct) : undefined}
-                    goalLabel={ytdNetGainGoal != null ? `YTD pace goal: +${ytdNetGainGoal}` : undefined}
-                    icon={TrendingUp}
-                  />
-                ) : (
-                  <InfoCard
-                    title="Net Agents Added YTD"
-                    value={(netAgentsAdded >= 0 ? '+' : '') + netAgentsAdded}
-                    sub={`+${ytdNewHires ?? 0} hired − ${ytdDepartures} departed · Set net gain goal to see grade`}
-                    icon={TrendingUp}
-                    colorClass={netAgentsAdded > 0 ? 'border-l-emerald-400' : netAgentsAdded < 0 ? 'border-l-red-400' : 'border-l-slate-300'}
-                    badgeClass={netAgentsAdded > 0 ? 'bg-emerald-500 text-white' : netAgentsAdded < 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
-                  />
-                )}
-
-                {/* 4. YTD Departures — info only */}
-                <InfoCard
-                  title="YTD Departures"
-                  value={fmtN(ytdDepartures)}
-                  sub={`Agents who left in ${year} — lower is better`}
-                  icon={UserMinus}
-                  colorClass={ytdDepartures > 0 ? 'border-l-red-400' : 'border-l-slate-300'}
-                  badgeClass={ytdDepartures > 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}
-                />
-
-                {/* ── SECTION: Production ───────────────────────────────── */}
-                <SectionLabel label="Production" />
-
-                {/* 5. Avg Monthly Deals/Agent */}
-                <HeroCard
-                  title="Avg Monthly Deals / Agent"
-                  grade={dealsPerAgentGrade}
-                  primary={fmtDec(avgDeals)}
-                  secondary={
-                    avgDeals != null
-                      ? paceText(avgDeals, dealsGoal, 'deals/agent/mo', true)
-                      : 'No deal data yet'
-                  }
-                  performancePct={dealsPerAgentPct ?? undefined}
-                  goalLabel="Goal: 1.00 deal/agent/mo"
+                <DashboardSection
+                  title="Production"
+                  description="Current average monthly closed-deal pace per active agent"
                   icon={BarChart3}
-                />
+                  iconClass="bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
+                  borderClass="border-t-violet-500"
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="xl:col-span-2">
+                      <HeroCard
+                        title="Avg Monthly Deals / Agent"
+                        grade={dealsPerAgentGrade}
+                        primary={fmtDec(avgDeals)}
+                        secondary={
+                          avgDeals != null
+                            ? paceText(avgDeals, dealsGoal, 'deals/agent/mo', true)
+                            : 'No deal data yet'
+                        }
+                        performancePct={dealsPerAgentPct ?? undefined}
+                        goalLabel="Goal: 1.00 deal/agent/mo"
+                        icon={BarChart3}
+                      />
+                    </div>
+                  </div>
+                </DashboardSection>
 
-                {/* ── SECTION: Recruiting Activity ──────────────────────── */}
-                <SectionLabel label="Recruiting Activity" />
-
-                {/* 6. Interviews Set YTD */}
-                <HeroCard
-                  title="Interviews Set YTD"
-                  grade={interviewsSetGrade}
-                  primary={fmtN(ytdInterviewsSet)}
-                  secondary={paceText(ytdInterviewsSet ?? 0, ytdInterviewsSetGoal, 'interviews set')}
-                  performancePct={interviewsSetPct ?? undefined}
-                  goalLabel={ytdInterviewsSetGoal != null ? `YTD goal: ${ytdInterviewsSetGoal}` : undefined}
+                <DashboardSection
+                  title="Recruiting Activity"
+                  description="Funnel progress from conversations through completed interviews"
                   icon={Calendar}
-                />
+                  iconClass="bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300"
+                  borderClass="border-t-orange-500"
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <HeroCard
+                      title="Interviews Set YTD"
+                      grade={interviewsSetGrade}
+                      primary={fmtN(ytdInterviewsSet)}
+                      secondary={paceText(ytdInterviewsSet ?? 0, ytdInterviewsSetGoal, 'interviews set')}
+                      performancePct={interviewsSetPct ?? undefined}
+                      goalLabel={ytdInterviewsSetGoal != null ? `YTD goal: ${ytdInterviewsSetGoal}` : undefined}
+                      icon={Calendar}
+                    />
+                    <HeroCard
+                      title="Interviews Held YTD"
+                      grade={interviewsHeldGrade}
+                      primary={fmtN(ytdInterviewsHeld)}
+                      secondary={paceText(ytdInterviewsHeld ?? 0, ytdInterviewsHeldGoal, 'interviews held')}
+                      performancePct={interviewsHeldPct ?? undefined}
+                      goalLabel={ytdInterviewsHeldGoal != null ? `YTD goal: ${ytdInterviewsHeldGoal}` : undefined}
+                      icon={Calendar}
+                    />
+                    <HeroCard
+                      title="Prospect Calls YTD"
+                      grade={callsGrade}
+                      primary={fmtN(ytdProspectCalls)}
+                      secondary={paceText(ytdProspectCalls ?? 0, ytdCallsGoal, 'calls')}
+                      performancePct={callsPct ?? undefined}
+                      goalLabel={ytdCallsGoal != null ? `YTD goal: ${ytdCallsGoal}` : undefined}
+                      icon={Phone}
+                    />
+                  </div>
+                </DashboardSection>
 
-                {/* 7. Interviews Held YTD */}
-                <HeroCard
-                  title="Interviews Held YTD"
-                  grade={interviewsHeldGrade}
-                  primary={fmtN(ytdInterviewsHeld)}
-                  secondary={paceText(ytdInterviewsHeld ?? 0, ytdInterviewsHeldGoal, 'interviews held')}
-                  performancePct={interviewsHeldPct ?? undefined}
-                  goalLabel={ytdInterviewsHeldGoal != null ? `YTD goal: ${ytdInterviewsHeldGoal}` : undefined}
-                  icon={Calendar}
-                />
-
-                {/* 8. Prospect Calls YTD */}
-                <HeroCard
-                  title="Prospect Calls YTD"
-                  grade={callsGrade}
-                  primary={fmtN(ytdProspectCalls)}
-                  secondary={paceText(ytdProspectCalls ?? 0, ytdCallsGoal, 'calls')}
-                  performancePct={callsPct ?? undefined}
-                  goalLabel={ytdCallsGoal != null ? `YTD goal: ${ytdCallsGoal}` : undefined}
-                  icon={Phone}
-                />
-
-                {/* ── SECTION: Pipeline Health ──────────────────────────── */}
-                <SectionLabel label="Pipeline Health" />
-
-                {/* 9. Pipeline */}
-                <InfoCard
-                  title="Pipeline"
-                  value={fmtN(kpi?.pipelineCount)}
-                  sub="Recruiting candidates currently tracked"
+                <DashboardSection
+                  title="Pipeline Health"
+                  description="Current recruiting workload and established-agent attention indicators"
                   icon={TrendingUp}
-                  colorClass="border-l-blue-400"
-                  badgeClass="bg-blue-500 text-white"
-                />
-
-                {/* 10. No Deals Yet */}
-                <InfoCard
-                  title="No Deals Yet"
-                  value={fmtN(kpi?.noDealsYetCount)}
-                  sub={`Active established agents with 0 closed deals in ${year} — needs attention`}
-                  icon={AlertTriangle}
-                  colorClass={(kpi?.noDealsYetCount ?? 0) > 0 ? 'border-l-amber-400' : 'border-l-slate-300'}
-                  badgeClass={(kpi?.noDealsYetCount ?? 0) > 0 ? 'bg-amber-500 text-white' : 'bg-slate-400 text-white'}
-                />
-
+                  iconClass="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                  borderClass="border-t-emerald-500"
+                >
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <InfoCard
+                      title="Pipeline"
+                      value={fmtN(kpi?.pipelineCount)}
+                      sub="Recruiting candidates currently tracked"
+                      icon={TrendingUp}
+                      colorClass="border-l-blue-400"
+                      badgeClass="bg-blue-500 text-white"
+                    />
+                    <InfoCard
+                      title="No Deals Yet"
+                      value={fmtN(kpi?.noDealsYetCount)}
+                      sub={`Active established agents with 0 closed deals in ${year} — needs attention`}
+                      icon={AlertTriangle}
+                      colorClass={(kpi?.noDealsYetCount ?? 0) > 0 ? 'border-l-amber-400' : 'border-l-slate-300'}
+                      badgeClass={(kpi?.noDealsYetCount ?? 0) > 0 ? 'bg-amber-500 text-white' : 'bg-slate-400 text-white'}
+                    />
+                  </div>
+                </DashboardSection>
               </div>
 
               {/* ── YTD Agent Name Lists ───────────────────────────── */}
