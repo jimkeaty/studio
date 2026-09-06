@@ -1,0 +1,16 @@
+# Smart Broker USA Master Task Queue — Implementation Progress
+
+This log tracks the approved Master Task Queue processed from the project attachment. Each entry preserves the queue order, implementation checkpoint, validation result, and unresolved dependency.
+
+| Queue task | Status | Checkpoint / evidence | Notes |
+|---|---|---|---|
+| #2 — Face-to-face recruiting meetings | Completed | Git checkpoint `a64fceb` | Added a distinct Face-to-Face Meetings view, configurable recruiter goals, immutable goal snapshots, audit history, and optional canonical recruiting follow-up synchronization. |
+| #3 — Agent goals and performance grading audit | Completed | Git checkpoint `d9b0687` | Preserves canonical per-profile plan lookups, separates explicit numeric zero from a missing goal, and shows N/A instead of a false A for unconfigured targets. |
+| #4 — Accounting closeout queue and departmental handoff | Completed | Git checkpoint `301a78e` | Adds Accounting role, closeout queue, required-field review, assignment, information requests, completion controls, and notifications while retaining the transaction's Closed status. |
+| #5 — Smart Project Management integration + SSO | Partially completed | Pending checkpoint | Added a tenant-configured external launcher through the canonical plugin system. The external app uses Manus OAuth while SmartBroker uses Firebase Auth. Native SSO is blocked pending access to the Project Management source, user model, database/permissions architecture, and an agreed identity-bridge design. No iframe or duplicate app was created. |
+
+## Task 5 blocker and safe decision
+
+The public Smart Project Management application at `https://jimcommands-k9phwrqh.manus.space` exposes a Manus OAuth sign-in flow. Its source repository, data model, authorization rules, and backend integration contract are not available in the current SmartBroker workspace or connector configuration. A safe Firebase-to-Manus SSO bridge cannot be asserted or implemented without those controls.
+
+The implemented integration is therefore the least disruptive approved path: an external launcher that is **not** default-enabled. A broker administrator can grant it through the existing tenant/company or individual agent plugin entitlement lists. This allows Keaty agents to receive free access by tenant configuration rather than product-wide hard-coding.

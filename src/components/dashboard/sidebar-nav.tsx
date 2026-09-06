@@ -83,6 +83,7 @@ const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   GraduationCap,
   ClipboardCheck,
   FileSignature,
+  FolderKanban,
 };
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 

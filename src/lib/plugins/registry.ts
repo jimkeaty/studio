@@ -64,6 +64,18 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
     badge: 'New',
     defaultEnabled: true, // All Keaty agents get this
   },
+  {
+    id: 'smart-project-management',
+    name: 'Smart Project Management',
+    description: 'Project execution workspace for tasks, owners, deadlines, files, and follow-through. Enable per tenant or company plan; the external app maintains its own Manus OAuth session.',
+    iconName: 'FolderKanban',
+    category: 'productivity',
+    externalUrl: 'https://jimcommands-k9phwrqh.manus.space',
+    badge: 'Suite App',
+    // Access is configured through companyPlugins or enabledPlugins rather than
+    // being hard-coded as a default benefit in the product architecture.
+    defaultEnabled: false,
+  },
   // Future plugins can be added here:
   // {
   //   id: 'market-pulse',
