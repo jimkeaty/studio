@@ -436,10 +436,16 @@ export async function GET(req: NextRequest) {
     const ytdDeparturesRecords = agentRecords.filter(ar => {
       // Only count agents with an EXPLICIT endDate set — not agents who are
       // merely marked inactive with no date (we don't know when they left).
-      if (!ar.hasExplicitEndDate || !ar.endMonth) return false;
-      // Only count as a departure if the agent was ever actually activated
+      if (!ar.hasExplicitEndDate || !ar.endDate) return false;
+      // Only count as a departure if the agent was ever actually activated.
       if (!ar.activationMonth) return false;
-      return ar.endMonth.startsWith(String(year)) && ar.endMonth <= currentYM;
+      // endMonth is intentionally one month after endDate for active-agent
+      // counts. Departure reporting, however, must use the actual endDate so
+      // a Dec. 2025 departure never appears in the 2026 departures list.
+      const departureDate = parseDate(ar.endDate);
+      if (!departureDate) return false;
+      const departureYM = toYearMonth(departureDate);
+      return departureYM.startsWith(String(year)) && departureYM <= currentYM;
     });
     const ytdDepartures = ytdDeparturesRecords.length;
     const ytdDeparturesList = ytdDeparturesRecords
