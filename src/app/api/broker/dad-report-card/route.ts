@@ -326,7 +326,9 @@ export async function GET(req: NextRequest) {
       .map(agent => ({ agentId: agent.agentId, name: agent.name }));
 
     const relationshipMeetingsThisWeek = activities.filter(activity =>
-      activity.activityType === 'in_person_relationship_meeting' && within(isoDate(activity.occurredOn), weekStart, weekEnd)
+      activity.activityType === 'in_person_relationship_meeting'
+      && String(activity.recruiterName || plan.directorName).trim().toLowerCase() === plan.directorName.trim().toLowerCase()
+      && within(isoDate(activity.occurredOn), weekStart, weekEnd)
     );
     const currentMonthActivities = activities.filter(activity => within(isoDate(activity.occurredOn), monthStart, monthEnd));
     const currentMonthActivityTotal = (type: string) => currentMonthActivities
@@ -469,6 +471,8 @@ export async function POST(req: NextRequest) {
         durationHours,
         relatedAgentId: String(body.relatedAgentId || '').trim() || null,
         relatedAgentName: String(body.relatedAgentName || '').trim().slice(0, 120) || null,
+        recruiterName: String(body.recruiterName || DEFAULT_PLAN.directorName).trim().slice(0, 120) || DEFAULT_PLAN.directorName,
+        recruiterId: String(body.recruiterId || '').trim() || null,
         organization: String(body.organization || '').trim().slice(0, 120) || null,
         relationshipPurpose: ['retention', 'recruiting'].includes(String(body.relationshipPurpose || '')) ? body.relationshipPurpose : null,
         customKpiId: String(body.customKpiId || '').trim().slice(0, 60) || null,
