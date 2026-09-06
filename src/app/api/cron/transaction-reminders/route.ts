@@ -24,7 +24,7 @@ function jsonErr(status: number, error: string) {
 }
 
 function todayStr(): string {
-  return new Date().toISOString().split('T')[0];
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -39,15 +39,27 @@ function diffDays(a: string, b: string): number {
   return Math.round((db - da) / 86400000);
 }
 
+function centralDeadlineScheduleMatches(settings: Record<string, any>): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(new Date());
+  const number = (type: string) => Number(parts.find((part) => part.type === type)?.value || 0);
+  return number('hour') === Number(settings.reminderHour ?? 8) && number('minute') === Number(settings.reminderMinute ?? 0);
+}
+
 const MILESTONE_REMINDERS = [
   { field: 'inspectionDeadline', key: 'inspection', label: 'Inspection / Due Diligence' },
+  { field: 'dueDiligenceDeadline', key: 'due_diligence', label: 'Due Diligence' },
   { field: 'appraisalDeadline', key: 'appraisal', label: 'Appraisal' },
+  { field: 'loanApplicationDeadline', key: 'loan_application', label: 'Loan Application' },
+  { field: 'financingDeadline', key: 'financing', label: 'Financing / Application' },
+  { field: 'financingCommitmentDeadline', key: 'financing_commitment', label: 'Financing Commitment' },
   { field: 'finalLoanCommitmentDeadline', key: 'loan_commitment', label: 'Final Loan Commitment' },
-  { field: 'depositDeadline', key: 'deposit', label: 'Deposit' },
-  { field: 'projectedCloseDate', key: 'projected_close', label: 'Projected Closing' },
+  { field: 'depositDeadline', key: 'deposit', label: 'Deposit / Earnest Money' },
+  { field: 'occupancyDate', key: 'occupancy', label: 'Occupancy / Possession' },
+  { field: 'projectedCloseDate', key: 'projected_close', label: 'Closing / Act of Sale' },
+  { field: 'closedDate', key: 'closing', label: 'Closing / Act of Sale' },
 ] as const;
 
-const MILESTONE_REMINDER_DAYS = [3, 1] as const;
+const MILESTONE_REMINDER_DAYS = [1, 0] as const;
 
 function isActiveMilestoneTransaction(status: unknown): boolean {
   return !['closed', 'cancelled', 'canceled', 'withdrawn', 'archived', 'dead'].includes(String(status || '').toLowerCase());
@@ -58,6 +70,13 @@ export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret') || req.headers.get('authorization')?.replace('Bearer ', '');
   if (!CRON_SECRET || secret !== CRON_SECRET) return jsonErr(401, 'Unauthorized');
 
+  const deadlineSettings = (await adminDb.collection('transactionDeadlineSettings').doc('default').get()).data() || {};
+  if (deadlineSettings.reminderEnabled === false) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'Transaction deadline reminders are disabled by Admin settings.' });
+  }
+  if (req.nextUrl.searchParams.get('force') !== 'true' && !centralDeadlineScheduleMatches(deadlineSettings)) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'Not within the configured Central deadline-reminder schedule.' });
+  }
   const today = todayStr();
   const results = { weeklyHug: 0, commissionSummary: 0, buyerCheckin: 0, milestoneReminders: 0, errors: 0 };
 
@@ -221,12 +240,12 @@ export async function POST(req: NextRequest) {
             .filter((uid): uid is string => typeof uid === 'string' && uid.trim().length > 0))];
           if (recipientUids.length === 0) continue;
 
-          const reminderKey = `${milestone.key}_${daysBefore}_days`;
+          const reminderKey = `${milestone.key}_${daysBefore === 0 ? 'due_today' : 'due_tomorrow'}`;
           const sentMap = (tx.milestoneRemindersSent || {}) as Record<string, string>;
           if (sentMap[reminderKey] === targetDate) continue;
 
           const address = tx.address || tx.transactionAddress || 'your transaction';
-          const dayLabel = daysBefore === 1 ? 'tomorrow' : `in ${daysBefore} days`;
+          const dayLabel = daysBefore === 0 ? 'today' : 'tomorrow';
 
           try {
             await sendNotification(adminDb, {

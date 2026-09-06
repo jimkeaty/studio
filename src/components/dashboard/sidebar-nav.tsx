@@ -199,6 +199,7 @@ const adminMenuGroups = [
       { href: '/dashboard/admin/staff-queue', label: 'Staff Queue', icon: MapPin },
       { href: '/dashboard/admin/accounting', label: 'Accounting Queue', icon: Receipt },
       { href: '/dashboard/admin/transactions', label: 'Transaction Ledger', icon: Receipt },
+      { href: '/dashboard/admin/transaction-deadlines', label: 'Transaction Deadlines', icon: CalendarDays },
       { href: '/dashboard/admin/ask-your-broker', label: 'Broker Review', icon: HelpCircle },
       { href: '/dashboard/admin/import', label: 'Bulk Import', icon: Upload },
       { href: '/dashboard/admin/import-activities', label: 'Activity Import', icon: Upload },

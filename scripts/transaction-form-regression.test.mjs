@@ -410,14 +410,14 @@ test('admin document recovery diagnostic is read-only and compares canonical, in
   assert.match(recoverySource, /Read-only metadata only/);
 });
 
-test('milestone reminders notify assigned agents only at 3 and 1 days before without duplicates', () => {
-  assert.match(transactionReminderSource, /const MILESTONE_REMINDER_DAYS = \[3, 1\] as const/);
-  for (const field of ['inspectionDeadline', 'appraisalDeadline', 'finalLoanCommitmentDeadline', 'depositDeadline', 'projectedCloseDate']) {
+test('milestone reminders notify assigned agents day before and day of without duplicates', () => {
+  assert.match(transactionReminderSource, /const MILESTONE_REMINDER_DAYS = \[1, 0\] as const/);
+  for (const field of ['inspectionDeadline', 'dueDiligenceDeadline', 'appraisalDeadline', 'loanApplicationDeadline', 'financingDeadline', 'financingCommitmentDeadline', 'finalLoanCommitmentDeadline', 'depositDeadline', 'occupancyDate', 'projectedCloseDate', 'closedDate']) {
     assert.match(transactionReminderSource, new RegExp(`field: '${field}'`));
   }
   assert.match(transactionReminderSource, /recipientUids = \[\.\.\.new Set\(\[tx\.agentId, tx\.coAgentId\]/);
   assert.match(transactionReminderSource, /Notify every internal agent assigned to the transaction, but never[\s\S]*TC or staff/);
-  assert.match(transactionReminderSource, /const reminderKey = `\$\{milestone\.key\}_\$\{daysBefore\}_days`/);
+  assert.match(transactionReminderSource, /const reminderKey = `\$\{milestone\.key\}_\$\{daysBefore === 0 \? 'due_today' : 'due_tomorrow'\}`/);
   assert.match(transactionReminderSource, /if \(sentMap\[reminderKey\] === targetDate\) continue/);
   assert.match(transactionReminderSource, /milestoneRemindersSent\.\$\{reminderKey\}/);
   assert.match(transactionReminderSource, /type: 'agent_task_reminder'/);
