@@ -50,7 +50,7 @@ const EDITABLE_TX_FIELDS = new Set([
   // Other agent
   'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherBrokerage', 'otherAgentBrokerage',
   // Financial
-  'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'gci',
+  'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'commissionCalculationMethod', 'commissionFlatAmount', 'gci',
   'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
   'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
   'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
@@ -107,7 +107,7 @@ const EDITABLE_TX_FIELDS = new Set([
 
 // Fields that trigger a commission recalculation when changed
 const COMMISSION_TRIGGER_FIELDS = new Set([
-  'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice',
+  'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount',
 ]);
 // Fields that directly set split values — when ONLY these change (no GCI change),
 // merge them straight into splitSnapshot instead of running a profile recalculation.
@@ -296,6 +296,18 @@ export async function PATCH(
       if (Object.keys(allowed).length > 0) {
         allowed.updatedAt = now;
 
+        if (allowed.commissionCalculationMethod === 'flat_dollar') {
+          const exactAmount = Number(allowed.commissionFlatAmount ?? allowed.gci ?? currentTx.commissionFlatAmount ?? currentTx.gci);
+          if (Number.isFinite(exactAmount) && exactAmount >= 0) {
+            allowed.commissionFlatAmount = exactAmount;
+            allowed.gci = exactAmount;
+            allowed.manualGciOverride = true;
+          }
+        } else if (allowed.commissionCalculationMethod === 'percentage') {
+          allowed.commissionFlatAmount = null;
+          allowed.manualGciOverride = false;
+        }
+
         // ── Auto-recalculate commission when financial fields change ──────────
         // If any commission-triggering field changed, recompute the splitSnapshot
         // so agent net, company dollar, and tier are always up to date.
@@ -306,7 +318,7 @@ export async function PATCH(
             const merged = { ...currentTx, ...allowed };
             // If commissionPercent is being explicitly changed but gci is NOT,
             // clear the stored gci so resolveGCI uses the new percentage.
-            const gciForCalc = ('commissionPercent' in allowed && !('gci' in allowed))
+            const gciForCalc = ('commissionPercent' in allowed && !('gci' in allowed) && allowed.commissionCalculationMethod !== 'flat_dollar')
               ? 0
               : merged.gci;
             const newGCI = resolveGCI({
@@ -314,6 +326,8 @@ export async function PATCH(
               salePrice: merged.salePrice,
               commissionPercent: merged.commissionPercent,
               commissionBasePrice: merged.commissionBasePrice,
+              commissionCalculationMethod: merged.commissionCalculationMethod,
+              commissionFlatAmount: merged.commissionFlatAmount,
             });
 
             if (newGCI > 0) {

@@ -199,11 +199,11 @@ test('manual broker or agent dollar overrides clear split percentages and persis
 });
 
 test('manual GCI and gross commission rate overrides survive save and reopen independently of dollar splits', () => {
-  assert.match(formSource, /gciManuallyEdited\.current = Boolean\(tx\.manualGciOverride \|\| editCommissionOverride\.current\)/);
+  assert.match(formSource, /gciManuallyEdited\.current = Boolean\(savedFlatDollarMethod \|\| tx\.manualGciOverride \|\| editCommissionOverride\.current\)/);
   assert.match(formSource, /commPctManuallyEdited\.current = Boolean\(tx\.manualCommissionPercentOverride \|\| editCommissionOverride\.current\)/);
   assert.match(formSource, /manualGciOverride: true/);
   assert.match(formSource, /manualCommissionPercentOverride: true/);
-  assert.match(formSource, /Manual GCI override — saved as entered until staff changes it/);
+  assert.match(formSource, /Exact dollar override — saved as entered until an authorized user intentionally changes the commission method/);
   assert.match(formSource, /Manual rate override — saved as entered until staff changes it/);
   assert.match(adminRouteSource, /'manualGciOverride', 'manualGciOverriddenBy', 'manualGciOverriddenAt'/);
   assert.match(adminRouteSource, /'manualCommissionPercentOverride', 'manualCommissionPercentOverriddenBy', 'manualCommissionPercentOverriddenAt'/);

@@ -31,6 +31,15 @@ export interface CommissionInputs {
   commissionPercent?: number | null;
   /** Explicit GCI dollar amount — takes priority over computed value when > 0. */
   gci?: number | null;
+  /** Canonical transaction commission source. Flat-dollar overrides remain authoritative. */
+  commissionCalculationMethod?: 'percentage' | 'flat_dollar' | string | null;
+  /** Exact gross commission amount when the transaction method is flat-dollar. */
+  commissionFlatAmount?: number | null;
+}
+
+/** True only when a transaction intentionally uses a saved exact-dollar commission. */
+export function isFlatDollarCommission(inputs: CommissionInputs): boolean {
+  return String(inputs.commissionCalculationMethod || '').trim().toLowerCase() === 'flat_dollar';
 }
 
 /**
@@ -68,6 +77,17 @@ export function resolveCommissionBase(inputs: CommissionInputs): number {
  *   3. 0
  */
 export function resolveGCI(inputs: CommissionInputs): number {
+  // A flat-dollar commission is its own source of truth. Never convert the
+  // amount back into a percentage or let a later price/status edit overwrite it.
+  if (isFlatDollarCommission(inputs)) {
+    const rawFlatAmount = inputs.commissionFlatAmount;
+    if (rawFlatAmount !== null && rawFlatAmount !== undefined && String(rawFlatAmount).trim() !== '') {
+      const flatAmount = Number(rawFlatAmount);
+      if (Number.isFinite(flatAmount) && flatAmount >= 0) {
+        return Math.round(flatAmount * 100) / 100;
+      }
+    }
+  }
   const manualGCI = Number(inputs.gci) || 0;
   if (manualGCI > 0) return manualGCI;
 

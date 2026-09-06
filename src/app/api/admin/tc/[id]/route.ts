@@ -368,7 +368,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'closingType', 'dealType', 'address', 'clientName', 'dealSource', 'listingStatus',
         'status', 'mlsNumber', 'listingExpirationDate', 'mlsDescription',
         // Financial
-        'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'gci',
+        'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'commissionCalculationMethod', 'commissionFlatAmount', 'gci',
         'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
         'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
         'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
@@ -470,7 +470,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const txSyncFields = [
           'address', 'listingStatus', 'status', 'closingType', 'dealType', 'clientName',
           'mlsNumber', 'listingExpirationDate', 'mlsDescription', 'dealSource',
-          'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'gci',
+          'listPrice', 'salePrice', 'commissionPercent', 'commissionBasePrice', 'commissionMode', 'commissionCalculationMethod', 'commissionFlatAmount', 'gci',
           'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
           'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
           'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
@@ -543,7 +543,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // ── Recalculate splitSnapshot when commission fields change ──────────
         // The ledger and agent view display from splitSnapshot, NOT raw agentPct/agentDollar.
         // Without this, commission edits appear to save but the displayed values don't update.
-        const COMMISSION_TRIGGER = new Set(['salePrice','commissionPercent','gci','commission','commissionBasePrice','agentPct','agentDollar','brokerPct','brokerGci']);
+        const COMMISSION_TRIGGER = new Set(['salePrice','commissionPercent','gci','commission','commissionBasePrice','commissionCalculationMethod','commissionFlatAmount','agentPct','agentDollar','brokerPct','brokerGci']);
         const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
         if (hasCommissionChange) {
           try {
@@ -553,14 +553,28 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             // If commissionPercent is being explicitly changed but gci is NOT being
             // explicitly set, clear the stored gci so resolveGCI uses the new percentage.
             // Otherwise resolveGCI always returns the old stored gci (it takes precedence).
-            const gciForCalc = ('commissionPercent' in txSyncUpdate && !('gci' in txSyncUpdate))
+            if (txSyncUpdate.commissionCalculationMethod === 'flat_dollar') {
+              const exactAmount = Number(txSyncUpdate.commissionFlatAmount ?? txSyncUpdate.gci ?? currentTx.commissionFlatAmount ?? currentTx.gci);
+              if (Number.isFinite(exactAmount) && exactAmount >= 0) {
+                txSyncUpdate.commissionFlatAmount = exactAmount;
+                txSyncUpdate.gci = exactAmount;
+                txSyncUpdate.manualGciOverride = true;
+              }
+            } else if (txSyncUpdate.commissionCalculationMethod === 'percentage') {
+              txSyncUpdate.commissionFlatAmount = null;
+              txSyncUpdate.manualGciOverride = false;
+            }
+            const mergedWithMethod = { ...currentTx, ...txSyncUpdate };
+            const gciForCalc = ('commissionPercent' in txSyncUpdate && !('gci' in txSyncUpdate) && txSyncUpdate.commissionCalculationMethod !== 'flat_dollar')
               ? 0
-              : merged.gci;
+              : mergedWithMethod.gci;
             const newGCI = resolveGCI({
               gci: gciForCalc,
-              salePrice: merged.salePrice,
-              commissionPercent: merged.commissionPercent,
-              commissionBasePrice: merged.commissionBasePrice,
+              salePrice: mergedWithMethod.salePrice,
+              commissionPercent: mergedWithMethod.commissionPercent,
+              commissionBasePrice: mergedWithMethod.commissionBasePrice,
+              commissionCalculationMethod: mergedWithMethod.commissionCalculationMethod,
+              commissionFlatAmount: mergedWithMethod.commissionFlatAmount,
             });
             const agentIdForCalc = String(currentTx.agentId || intake.agentId || '').trim();
             if (newGCI > 0 && agentIdForCalc) {

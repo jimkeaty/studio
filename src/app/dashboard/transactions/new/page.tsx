@@ -346,6 +346,10 @@ const schema = z.object({
   commissionPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   commissionBasePrice: z.coerce.number().min(0).optional().or(z.literal('')),
   gci: z.coerce.number().min(0).optional().or(z.literal('')),
+  // `gci` remains the compatible display and rollup field. These preserve whether
+  // that value is percentage-derived or an exact, intentionally flat amount.
+  commissionCalculationMethod: z.enum(['percentage', 'flat_dollar']).optional(),
+  commissionFlatAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   transactionFee: z.coerce.number().min(0).optional().or(z.literal('')),
   earnestMoney: z.coerce.number().min(0).optional().or(z.literal('')),
   depositHolder: z.enum(['listing_broker', 'selling_broker', 'other']).optional(),
@@ -1267,6 +1271,8 @@ export default function AddTransactionPage() {
     const next = commissionMode === 'percent' ? 'flat' : 'percent';
     setCommissionMode(next);
     form.setValue('commissionMode', next);
+    form.setValue('commissionCalculationMethod', next === 'flat' ? 'flat_dollar' : 'percentage');
+    if (next === 'percent') form.setValue('commissionFlatAmount', '' as any);
     // Clear seller-paying fields when switching modes to avoid misinterpretation
     form.setValue('sellerPayingListingAgent', '' as any);
     form.setValue('sellerPayingBuyerAgent', '' as any);
@@ -1731,6 +1737,25 @@ export default function AddTransactionPage() {
     if (autoPct > 0) form.setValue('commissionPercent', autoPct as any);
   }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer, commissionMode]);
 
+  // In flat mode the seller-paid amount is an exact gross commission, not a
+  // percentage. Persist it separately so later price/status changes do not drift.
+  useEffect(() => {
+    if (commissionMode !== 'flat') return;
+    const listingAmount = ['listing', 'dual'].includes(String(watchedClosingType))
+      ? Number(watchedSellerPayingListing) || 0
+      : 0;
+    const buyerAmount = ['buyer', 'dual'].includes(String(watchedClosingType))
+      ? Number(watchedSellerPayingBuyer) || 0
+      : 0;
+    const flatAmount = Number((listingAmount + buyerAmount).toFixed(2));
+    form.setValue('commissionCalculationMethod', 'flat_dollar' as any, { shouldDirty: false });
+    form.setValue('commissionFlatAmount', flatAmount as any, { shouldDirty: false });
+    if (flatAmount > 0) {
+      form.setValue('gci', flatAmount as any, { shouldDirty: false });
+      gciManuallyEdited.current = true;
+    }
+  }, [commissionMode, watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer, form]);
+
   useEffect(() => {
     // Skip if user has manually typed a GCI — their value takes priority over auto-calc.
     if (gciManuallyEdited.current) return;
@@ -2160,8 +2185,10 @@ export default function AddTransactionPage() {
         // Manual GCI and gross-rate decisions have their own durable flags. Keep
         // legacy broad overrides compatible, but do not let a profile lookup or
         // seller-paid percentage overwrite a saved operational decision on reload.
-        gciManuallyEdited.current = Boolean(tx.manualGciOverride || editCommissionOverride.current);
+        const savedFlatDollarMethod = String(tx.commissionCalculationMethod || '').trim().toLowerCase() === 'flat_dollar';
+        gciManuallyEdited.current = Boolean(savedFlatDollarMethod || tx.manualGciOverride || editCommissionOverride.current);
         commPctManuallyEdited.current = Boolean(tx.manualCommissionPercentOverride || editCommissionOverride.current);
+        setCommissionMode(savedFlatDollarMethod || tx.commissionMode === 'flat' ? 'flat' : 'percent');
         // Pre-fill all form fields from the transaction document
         // Helper: if a Firestore value is an array (legacy data), take the first element
         // This prevents z.enum() and z.string() validation failures when old data has arrays
@@ -2281,6 +2308,9 @@ export default function AddTransactionPage() {
           salePrice: resolvedSalePrice,
           commissionPercent: resolvedCommissionPercent,
           commissionBasePrice: resolvedCommissionBasePrice,
+          commissionMode: (savedFlatDollarMethod || tx.commissionMode === 'flat' ? 'flat' : 'percent') as any,
+          commissionCalculationMethod: (savedFlatDollarMethod ? 'flat_dollar' : 'percentage') as any,
+          commissionFlatAmount: savedFlatDollarMethod ? (tx.commissionFlatAmount ?? resolvedGci) : '',
           sellerCommissionPct: tx.sellerCommissionPct || tx.commissionPercent || '',
           buyerCommissionPct: tx.buyerCommissionPct || '',
           // Historical listing files may carry their finalized commission under
@@ -3100,6 +3130,9 @@ export default function AddTransactionPage() {
             documents: uploadedDocs,
             _replaceDocuments: true,
             inspectionRowData,
+            ...(valuesForSave.commissionCalculationMethod === 'flat_dollar' ? {
+              manualGciOverride: true,
+            } : {}),
           };
         }
 
@@ -7040,7 +7073,7 @@ export default function AddTransactionPage() {
             </div>
             {commissionMode === 'flat' && (
               <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 rounded px-3 py-2">
-                <strong>Flat Rate Mode:</strong> Enter the exact dollar amount the seller is paying. GCI % will not be auto-filled — enter GCI manually below.
+                <strong>Flat Rate Mode:</strong> Enter the exact dollar amount the seller is paying. SmartBroker saves that amount as the authoritative gross commission; any displayed percentage is informational only.
               </p>
             )}
             <div className="space-y-4">
@@ -7356,19 +7389,21 @@ export default function AddTransactionPage() {
                   )} />
                   <FormField control={form.control} name="gci" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>GCI ($)</FormLabel>
+                      <FormLabel>{commissionMode === 'flat' ? 'Flat Commission / GCI ($)' : 'GCI ($)'}</FormLabel>
                       <FormControl>
                         <CurrencyInput
                           value={field.value as any}
                           onChange={(val) => {
                             // Lock GCI so CBP×pct auto-calc won't overwrite this value.
                             gciManuallyEdited.current = true;
+                            form.setValue('commissionCalculationMethod', 'flat_dollar' as any);
+                            form.setValue('commissionFlatAmount', val as any);
                             field.onChange(val);
                           }}
                           placeholder="0"
                         />
                       </FormControl>
-                      <FormDescription>{gciManuallyEdited.current ? 'Manual GCI override — saved as entered until staff changes it.' : 'Gross Commission Income — type to override auto-calc'}</FormDescription>
+                      <FormDescription>{gciManuallyEdited.current ? 'Exact dollar override — saved as entered until an authorized user intentionally changes the commission method.' : 'Gross Commission Income — type to override auto-calc'}</FormDescription>
                     </FormItem>
                   )} />
                 </Grid3>

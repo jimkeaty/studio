@@ -59,7 +59,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'earnestMoney', 'depositHolder', 'depositHolderOther',
   'buyerClosingCostTotal', 'buyerBringToClosing',
   // Commission
-  'commissionPercent', 'commissionBasePrice', 'gci', 'transactionFee',
+  'commissionPercent', 'commissionBasePrice', 'gci', 'commissionCalculationMethod', 'commissionFlatAmount', 'transactionFee',
   'sellerCommissionPct', 'buyerCommissionPct',
   'sellerPayingListingAgent', 'sellerPayingBuyerAgent',
   // Additional transaction info
@@ -336,6 +336,21 @@ export async function PATCH(
       updates.dealType = updates.transactionType;
     }
 
+    // A saved flat dollar is the transaction's source of truth. The agent route
+    // derives the durable flag from the method instead of relying on a client
+    // to send privileged override metadata.
+    if (updates.commissionCalculationMethod === 'flat_dollar') {
+      const exactAmount = Number(updates.commissionFlatAmount ?? updates.gci ?? txData.commissionFlatAmount ?? txData.gci);
+      if (Number.isFinite(exactAmount) && exactAmount >= 0) {
+        updates.commissionFlatAmount = exactAmount;
+        updates.gci = exactAmount;
+        updates.manualGciOverride = true;
+      }
+    } else if (updates.commissionCalculationMethod === 'percentage') {
+      updates.commissionFlatAmount = null;
+      updates.manualGciOverride = false;
+    }
+
     // ── Auto-calculate GCI and splitSnapshot whenever commission-relevant fields change ──
     // Triggered when: salePrice, listPrice, commissionPercent, commissionBasePrice, gci, or status changes.
     // Status-aware base price:
@@ -348,6 +363,8 @@ export async function PATCH(
       updates.commissionPercent !== undefined ||
       updates.commissionBasePrice !== undefined ||
       updates.gci !== undefined ||
+      updates.commissionCalculationMethod !== undefined ||
+      updates.commissionFlatAmount !== undefined ||
       (updates.status !== undefined && updates.status !== txData.status)
     );
 
@@ -375,7 +392,9 @@ export async function PATCH(
           commissionPercent: mergedForCalc.commissionPercent ?? null,
           // A saved operational GCI override remains authoritative when an agent
           // later updates an unrelated commission-relevant field.
-          gci: manualGciOverride ? (txData.gci ?? mergedForCalc.gci ?? null) : (mergedForCalc.gci ?? null),
+          commissionCalculationMethod: mergedForCalc.commissionCalculationMethod ?? null,
+          commissionFlatAmount: mergedForCalc.commissionFlatAmount ?? null,
+          gci: manualGciOverride ? (mergedForCalc.commissionFlatAmount ?? mergedForCalc.gci ?? txData.gci ?? null) : (mergedForCalc.gci ?? null),
         });
         // Tag the GCI as estimated when it's based on list price (active listing, no sale price)
         const { isEstimatedCommission } = await import('@/lib/commissions');
