@@ -90,9 +90,10 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
   {
     id: 'smart-forms',
     name: 'Smart Forms',
-    description: 'Central rollout placeholder for a future forms module.',
+    description: 'Existing form-first signing workspace. Smart Broker provides contextual launch and transaction-level completed-form references; Smart Forms retains templates, signatures, and executed files.',
     iconName: 'FileSignature',
     category: 'productivity',
+    href: '/dashboard/smart-forms',
     defaultEnabled: false,
   },
   {

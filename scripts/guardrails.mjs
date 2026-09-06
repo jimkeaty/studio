@@ -47,6 +47,9 @@ function isServerSafe(rel) {
   // Server-only native Hub publication, audience, and tracking helpers
   if (r.startsWith("src/lib/hub/")) return true;
 
+  // Server-only Smart Forms authorization and transaction-reference helpers
+  if (r.startsWith("src/lib/smartForms/")) return true;
+
   // Server-only transaction utility helpers (co-agent split, etc.)
   if (r.startsWith("src/lib/transactions/")) return true;
 

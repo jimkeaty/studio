@@ -36,6 +36,7 @@ import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSourc
 import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
 import { InspectionReviewPanel } from '@/components/transactions/InspectionReviewPanel';
 import { SignLocationPicker } from '@/components/transactions/SignLocationPicker';
+import { SmartFormsTransactionPanel } from '@/components/transactions/SmartFormsTransactionPanel';
 import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 
@@ -7962,6 +7963,8 @@ export default function AddTransactionPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <SmartFormsTransactionPanel transactionId={editTxId || undefined} readOnly={isClosedAgentView} />
+
               {/* Uploaded file list */}
               {uploadedDocs.length > 0 && (
                 <div className="space-y-2">
