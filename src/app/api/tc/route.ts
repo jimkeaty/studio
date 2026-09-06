@@ -238,6 +238,9 @@ export async function POST(req: NextRequest) {
       commissionPercent: toNum(body.commissionPercent) || null,
       commissionBasePrice: toNum(body.commissionBasePrice) || null,
       commissionMode: toStr(body.commissionMode) || null,
+      cooperatingAgentCommissionMethod: body.cooperatingAgentCommissionMethod === 'flat_dollar' ? 'flat_dollar' : 'percentage',
+      cooperatingAgentCommissionPercent: toNum(body.cooperatingAgentCommissionPercent),
+      cooperatingAgentCommissionFlatAmount: toNum(body.cooperatingAgentCommissionFlatAmount),
       manualGciOverride: toBool(body.manualGciOverride),
       manualGciOverriddenBy: toStr(body.manualGciOverriddenBy) || null,
       manualGciOverriddenAt: toStr(body.manualGciOverriddenAt) || null,
@@ -252,7 +255,9 @@ export async function POST(req: NextRequest) {
       ...(splitSnapshot ? { splitSnapshot } : {}),
       sellerPayingListingAgent: toNum(body.sellerPayingListingAgent) || null,
       sellerPayingListingAgentUnknown: toBool(body.sellerPayingListingAgentUnknown),
-      sellerPayingBuyerAgent: toNum(body.sellerPayingBuyerAgent) || null,
+      sellerPayingBuyerAgent: body.cooperatingAgentCommissionMethod === 'flat_dollar'
+        ? toNum(body.cooperatingAgentCommissionFlatAmount)
+        : toNum(body.cooperatingAgentCommissionPercent) ?? toNum(body.sellerPayingBuyerAgent),
 
       // Earnest money & closing costs
       earnestMoney: toNum(body.earnestMoney) || null,

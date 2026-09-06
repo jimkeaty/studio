@@ -285,6 +285,9 @@ export async function GET(req: NextRequest) {
       if (tx.status === 'active' || tx.status === 'coming_soon') {
         if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
         if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
+        if (tx.cooperatingAgentCommissionMethod != null) safe.cooperatingAgentCommissionMethod = tx.cooperatingAgentCommissionMethod;
+        if (tx.cooperatingAgentCommissionPercent != null) safe.cooperatingAgentCommissionPercent = tx.cooperatingAgentCommissionPercent;
+        if (tx.cooperatingAgentCommissionFlatAmount != null) safe.cooperatingAgentCommissionFlatAmount = tx.cooperatingAgentCommissionFlatAmount;
         if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
         // Prefer split % stored on the transaction; fall back to agent's current plan split %
         const agentSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
@@ -299,6 +302,9 @@ export async function GET(req: NextRequest) {
         if (tx.commissionPercent != null) safe.commissionPercent = tx.commissionPercent;
         if (tx.sellerPayingListingAgent != null) safe.sellerPayingListingAgent = tx.sellerPayingListingAgent;
         if (tx.sellerPayingBuyerAgent != null) safe.sellerPayingBuyerAgent = tx.sellerPayingBuyerAgent;
+        if (tx.cooperatingAgentCommissionMethod != null) safe.cooperatingAgentCommissionMethod = tx.cooperatingAgentCommissionMethod;
+        if (tx.cooperatingAgentCommissionPercent != null) safe.cooperatingAgentCommissionPercent = tx.cooperatingAgentCommissionPercent;
+        if (tx.cooperatingAgentCommissionFlatAmount != null) safe.cooperatingAgentCommissionFlatAmount = tx.cooperatingAgentCommissionFlatAmount;
         // Prefer split % from snapshot, then transaction, then current agent plan
         const pendingSplitPct = snap?.agentSplitPercent ?? tx.agentPct ?? agentCurrentSplitPct ?? null;
         if (pendingSplitPct != null) safe.agentSplitPercent = pendingSplitPct;

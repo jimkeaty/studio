@@ -14,6 +14,7 @@ import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/get
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
+import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -261,6 +262,7 @@ const UPDATABLE_FIELDS = new Set([
   'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
   // Commission paid by seller
   'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+  'cooperatingAgentCommissionMethod', 'cooperatingAgentCommissionPercent', 'cooperatingAgentCommissionFlatAmount',
   // Buyer closing cost
   'buyerClosingCostTotal', 'buyerClosingCostAgentCommission', 'buyerClosingCostTxFee', 'buyerClosingCostHomeWarranty', 'buyerClosingCostOther',
   // Additional info
@@ -523,6 +525,16 @@ export async function PATCH(req: NextRequest) {
     if (hasTransactionVersionConflict(existingData?.updatedAt, expectedUpdatedAt)) {
       return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
     }
+    const cooperatingCommission = buildCooperatingCommissionUpdate({
+      current: existingData || {},
+      proposed: updates,
+      actor: {
+        uid: decoded.uid,
+        name: decoded.name || decoded.email || null,
+        role: (await getStaffRole(decoded.uid)) || 'staff',
+      },
+    });
+    Object.assign(updates, cooperatingCommission.updates);
 
     // Preserve one shared transaction document for co-agents. The helper updates
     // participant allocations only; it never creates replacement files or deletes
@@ -577,10 +589,18 @@ export async function PATCH(req: NextRequest) {
 
     updates.updatedAt = new Date();
     try {
-      await adminDb.collection('transactions').doc(id).update(
-        updates,
-        expectedUpdatedAt ? { lastUpdateTime: existingSnap.updateTime } : undefined,
-      );
+      const transactionRef = adminDb.collection('transactions').doc(id);
+      if (cooperatingCommission.auditEvent) {
+        const batch = adminDb.batch();
+        batch.update(transactionRef, updates, expectedUpdatedAt ? { lastUpdateTime: existingSnap.updateTime } : undefined);
+        batch.create(transactionRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
+        await batch.commit();
+      } else {
+        await transactionRef.update(
+          updates,
+          expectedUpdatedAt ? { lastUpdateTime: existingSnap.updateTime } : undefined,
+        );
+      }
     } catch (error: any) {
       // The Firestore precondition closes the race between the comparison above
       // and the write. A stale editor must reload instead of receiving success.

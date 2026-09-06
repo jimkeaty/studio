@@ -539,10 +539,14 @@ const schema = z.object({
   showingNotesToAgent: z.array(z.string()).optional(),
   showingNotesToAgentOther: z.string().optional(),
 
-  // Commission paid by seller
-  // When commissionMode is 'flat', sellerPayingListingAgent / sellerPayingBuyerAgent hold dollar amounts
+  // Listing-side commission paid by seller. Its gross commission method stays
+  // separate from the cooperating-agent compensation offer below.
   sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
   sellerPayingListingAgentUnknown: z.boolean().optional(),
+  cooperatingAgentCommissionMethod: z.enum(['percentage', 'flat_dollar']).optional(),
+  cooperatingAgentCommissionPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  cooperatingAgentCommissionFlatAmount: z.coerce.number().min(0).optional().or(z.literal('')),
+  // Legacy mirror. New listing-side edits use the dedicated fields above.
   sellerPayingBuyerAgent: z.coerce.number().min(0).optional().or(z.literal('')),
   // 'percent' (default) or 'flat' — controls whether seller-paying fields are % or $
   commissionMode: z.enum(['percent', 'flat']).optional(),
@@ -1274,9 +1278,9 @@ export default function AddTransactionPage() {
     form.setValue('commissionMode', next);
     form.setValue('commissionCalculationMethod', next === 'flat' ? 'flat_dollar' : 'percentage');
     if (next === 'percent') form.setValue('commissionFlatAmount', '' as any);
-    // Clear seller-paying fields when switching modes to avoid misinterpretation
+    // Clear listing-side values when switching methods to avoid misinterpretation.
+    // The cooperating-agent offer has its own independent method and must survive.
     form.setValue('sellerPayingListingAgent', '' as any);
-    form.setValue('sellerPayingBuyerAgent', '' as any);
     commPctManuallyEdited.current = false;
     gciManuallyEdited.current = false;
     manualPercentageSplitEdited.current = false;
@@ -1416,6 +1420,9 @@ export default function AddTransactionPage() {
       closingDays: '',
       inspectionTypes: [],
       sellerPayingListingAgentUnknown: false,
+      cooperatingAgentCommissionMethod: 'percentage',
+      cooperatingAgentCommissionPercent: '',
+      cooperatingAgentCommissionFlatAmount: '',
       tcWorking: 'yes',
       hasCoAgent: false,
       coAgentId: '',
@@ -1504,7 +1511,7 @@ export default function AddTransactionPage() {
   const isActiveListing = watchedStatus === 'active' && isListingSideTransaction;
   // When a listing goes pending/under_contract, reveal all buyer/contract fields on the same form
   const PENDING_STATUSES = ['pending', 'under_contract', 'closed'];
-  const isPendingListing = watchedClosingType === 'listing' && PENDING_STATUSES.includes(watchedStatus as string);
+  const isPendingListing = isListingSideTransaction && PENDING_STATUSES.includes(watchedStatus as string);
   const isCommercialListing = watchedDealType === 'commercial_listing';
 
   // Commercial lease state
@@ -1665,6 +1672,9 @@ export default function AddTransactionPage() {
   const watchedCBP = form.watch('commissionBasePrice');
   const watchedSellerPayingListing = form.watch('sellerPayingListingAgent');
   const watchedSellerPayingBuyer = form.watch('sellerPayingBuyerAgent');
+  const watchedCooperatingCommissionMethod = form.watch('cooperatingAgentCommissionMethod') || 'percentage';
+  const watchedCooperatingCommissionPercent = form.watch('cooperatingAgentCommissionPercent');
+  const watchedCooperatingCommissionFlatAmount = form.watch('cooperatingAgentCommissionFlatAmount');
   const watchedListPrice = form.watch('listPrice');
 
   // ShowingTime owner contacts should reuse the sellers already entered above.
@@ -1734,7 +1744,9 @@ export default function AddTransactionPage() {
     let autoPct = 0;
     if (watchedClosingType === 'listing') autoPct = listingPct;
     else if (watchedClosingType === 'buyer') autoPct = buyerPct;
-    else if (watchedClosingType === 'dual') autoPct = listingPct + buyerPct;
+    // A cooperating-agent offer is a separate payment term. It is never added
+    // to listing-side gross commission, broker revenue, or internal splits.
+    else if (watchedClosingType === 'dual') autoPct = listingPct;
     if (autoPct > 0) form.setValue('commissionPercent', autoPct as any);
   }, [watchedClosingType, watchedSellerPayingListing, watchedSellerPayingBuyer, commissionMode]);
 
@@ -1745,7 +1757,9 @@ export default function AddTransactionPage() {
     const listingAmount = ['listing', 'dual'].includes(String(watchedClosingType))
       ? Number(watchedSellerPayingListing) || 0
       : 0;
-    const buyerAmount = ['buyer', 'dual'].includes(String(watchedClosingType))
+    // Only a buyer-side transaction's legacy seller-paid buyer-agent amount is
+    // gross commission. A listing/dual cooperating offer is recorded separately.
+    const buyerAmount = watchedClosingType === 'buyer'
       ? Number(watchedSellerPayingBuyer) || 0
       : 0;
     const flatAmount = Number((listingAmount + buyerAmount).toFixed(2));
@@ -2297,6 +2311,17 @@ export default function AddTransactionPage() {
           : 0;
         const resolvedGci = Number(explicitGci) > 0 ? explicitGci : (calculatedLegacyGci || inferredLegacyGci || '');
 
+        const resolvedCooperatingCommissionMethod = tx.cooperatingAgentCommissionMethod === 'flat_dollar'
+          ? 'flat_dollar'
+          : tx.cooperatingAgentCommissionMethod === 'percentage'
+            ? 'percentage'
+            : tx.commissionMode === 'flat' ? 'flat_dollar' : 'percentage';
+        const legacyCooperatingValue = tx.sellerPayingBuyerAgent ?? '';
+        const resolvedCooperatingCommissionPercent = tx.cooperatingAgentCommissionPercent ??
+          (resolvedCooperatingCommissionMethod === 'percentage' ? legacyCooperatingValue : '');
+        const resolvedCooperatingCommissionFlatAmount = tx.cooperatingAgentCommissionFlatAmount ??
+          (resolvedCooperatingCommissionMethod === 'flat_dollar' ? legacyCooperatingValue : '');
+
         const fieldMap: Record<string, unknown> = {
           agentId: tx.agentId || effectiveUid || '',
           agentDisplayName: tx.agentDisplayName || effectiveName || '',
@@ -2317,6 +2342,12 @@ export default function AddTransactionPage() {
           commissionFlatAmount: savedFlatDollarMethod ? (tx.commissionFlatAmount ?? resolvedGci) : '',
           sellerCommissionPct: tx.sellerCommissionPct || tx.commissionPercent || '',
           buyerCommissionPct: tx.buyerCommissionPct || '',
+          sellerPayingListingAgent: tx.sellerPayingListingAgent ?? '',
+          sellerPayingListingAgentUnknown: Boolean(tx.sellerPayingListingAgentUnknown),
+          sellerPayingBuyerAgent: legacyCooperatingValue,
+          cooperatingAgentCommissionMethod: resolvedCooperatingCommissionMethod as any,
+          cooperatingAgentCommissionPercent: resolvedCooperatingCommissionPercent,
+          cooperatingAgentCommissionFlatAmount: resolvedCooperatingCommissionFlatAmount,
           // Historical listing files may carry their finalized commission under
           // `commission` or `grossCommission` rather than the unified `gci` field.
           // Hydrate those aliases so the editable commission values—and the
@@ -3087,6 +3118,14 @@ export default function AddTransactionPage() {
         const valuesForSave: Record<string, any> = { ...values };
         if (legacySideResolutionRef.current.preventsAutomaticPersistence) {
           delete valuesForSave.closingType;
+        }
+        // The new cooperating-agent method belongs only to listing-side files.
+        // Removing blank controls on buyer/referral saves prevents any legacy
+        // buyer-side compensation value from being interpreted as this new offer.
+        if (!isListingSideTransaction) {
+          delete valuesForSave.cooperatingAgentCommissionMethod;
+          delete valuesForSave.cooperatingAgentCommissionPercent;
+          delete valuesForSave.cooperatingAgentCommissionFlatAmount;
         }
 
         let apiUrl: string;
@@ -4055,12 +4094,15 @@ export default function AddTransactionPage() {
             </Grid2>
 
             {/* ── Listing Commission block (listing transactions) ── */}
-            {watchedClosingType === 'listing' && (() => {
-              const listingPct = Number(watchedSellerPayingListing) || 0;
-              const buyerPct = Number(watchedSellerPayingBuyer) || 0;
-              const totalPct = listingPct + buyerPct;
+            {isListingSideTransaction && (() => {
+              const listingPct = commissionMode === 'flat' ? 0 : Number(watchedSellerPayingListing) || 0;
+              const cooperatingOffer = watchedCooperatingCommissionMethod === 'flat_dollar'
+                ? `$${(Number(watchedCooperatingCommissionFlatAmount) || 0).toLocaleString('en-US')}`
+                : `${Number(watchedCooperatingCommissionPercent) || 0}%`;
               const lp = Number(watchedListPrice) || 0;
-              const estimatedGci = lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
+              const estimatedGci = commissionMode === 'flat'
+                ? (Number(watchedSellerPayingListing) || null)
+                : lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
               return (
                 <div className="space-y-4 rounded-lg border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-950/20 p-4">
                   <div className="flex items-center justify-between">
@@ -4085,26 +4127,46 @@ export default function AddTransactionPage() {
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
+                    <FormField control={form.control} name="cooperatingAgentCommissionMethod" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>% Seller Paying Buyer&apos;s Agent</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="3" />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-                          </div>
-                        </FormControl>
-                        <FormDescription>Offered to buyer&apos;s agent</FormDescription>
+                        <FormLabel>Cooperating Agent Commission</FormLabel>
+                        <div className="mb-2 flex gap-2">
+                          <Button type="button" size="sm" variant={field.value !== 'flat_dollar' ? 'default' : 'outline'} onClick={() => {
+                            field.onChange('percentage');
+                            form.setValue('sellerPayingBuyerAgent', form.getValues('cooperatingAgentCommissionPercent') as any);
+                          }}>Percentage</Button>
+                          <Button type="button" size="sm" variant={field.value === 'flat_dollar' ? 'default' : 'outline'} onClick={() => {
+                            field.onChange('flat_dollar');
+                            form.setValue('sellerPayingBuyerAgent', form.getValues('cooperatingAgentCommissionFlatAmount') as any);
+                          }}>Exact dollars</Button>
+                        </div>
+                        {field.value === 'flat_dollar' ? (
+                          <FormField control={form.control} name="cooperatingAgentCommissionFlatAmount" render={({ field: valueField }) => (
+                            <FormControl><CurrencyInput value={valueField.value as any} onChange={(value) => {
+                              valueField.onChange(value);
+                              form.setValue('sellerPayingBuyerAgent', value as any);
+                            }} placeholder="0" /></FormControl>
+                          )} />
+                        ) : (
+                          <FormField control={form.control} name="cooperatingAgentCommissionPercent" render={({ field: valueField }) => (
+                            <FormControl><div className="relative"><PercentInput value={valueField.value as any} onChange={(event) => {
+                              valueField.onChange(event);
+                              form.setValue('sellerPayingBuyerAgent', event.target.value as any);
+                            }} placeholder="3" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span></div></FormControl>
+                          )} />
+                        )}
+                        <FormDescription>This buyer-agent offer is separate from SmartBroker&apos;s listing-side GCI, internal split, and broker revenue. It remains editable while this listing is Pending.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
                   </Grid2>
-                  {totalPct > 0 && (
+                  {listingPct > 0 && (
                     <div className="flex items-center gap-6 text-sm text-green-700 dark:text-green-400">
-                      <span>Total commission: <strong>{totalPct}%</strong></span>
-                      {lp > 0 && <span>= <strong>${Math.round(lp * totalPct / 100).toLocaleString('en-US')}</strong> total</span>}
+                      <span>Listing-side commission: <strong>{listingPct}%</strong></span>
+                      {lp > 0 && <span>= <strong>${Math.round(lp * listingPct / 100).toLocaleString('en-US')}</strong> estimated GCI</span>}
                     </div>
                   )}
+                  <p className="text-xs text-muted-foreground">Cooperating-agent offer: <strong>{cooperatingOffer}</strong> — recorded separately and excluded from the listing-side GCI above.</p>
                   <p className="text-xs text-muted-foreground">
                     Estimated based on list price — will be recalculated at closing.
                   </p>
@@ -7127,7 +7189,7 @@ export default function AddTransactionPage() {
                 </label>
               </div>
               )}
-              <div className="max-w-xs">
+              {!isListingSideTransaction && <div className="max-w-xs">
                 <FormField control={form.control} name="sellerPayingBuyerAgent" render={({ field }) => (
                   <FormItem>
                     <FormLabel>
@@ -7152,7 +7214,7 @@ export default function AddTransactionPage() {
                     </FormDescription>
                   </FormItem>
                 )} />
-              </div>
+              </div>}
             </div>
 
             {/* Agent view: Estimated earnings bar — shows split % and take-home; hides GCI and broker details */}

@@ -10,6 +10,7 @@ import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVer
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
+import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -373,6 +374,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
         'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
         'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+        'cooperatingAgentCommissionMethod', 'cooperatingAgentCommissionPercent', 'cooperatingAgentCommissionFlatAmount',
         // Dates
         'listingDate', 'contractDate', 'optionExpiration', 'inspectionDeadline',
         'surveyDeadline', 'projectedCloseDate', 'closedDate', 'closingDate',
@@ -475,6 +477,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
           'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
           'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+          'cooperatingAgentCommissionMethod', 'cooperatingAgentCommissionPercent', 'cooperatingAgentCommissionFlatAmount',
           'listingDate', 'contractDate', 'optionExpiration', 'inspectionDeadline',
           'surveyDeadline', 'projectedCloseDate', 'closedDate', 'closingDate',
           'loanApplicationDeadline', 'appraisalDeadline', 'titleDeadline', 'finalLoanCommitmentDeadline',
@@ -614,10 +617,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           if (hasTransactionVersionConflict(versionedTransactionSnap.data()?.updatedAt, body.expectedTransactionUpdatedAt)) {
             return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
           }
-          await versionedTransactionRef.update(
-            txSyncUpdate,
-            body.expectedTransactionUpdatedAt ? { lastUpdateTime: versionedTransactionSnap.updateTime } : undefined,
-          );
+          const cooperatingCommission = buildCooperatingCommissionUpdate({
+            current: versionedTransactionSnap.data() || {},
+            proposed: txSyncUpdate,
+            actor: { uid: decoded.uid, name: decoded.name || decoded.email || null, role: (await getStaffRole(decoded.uid)) || 'tc' },
+          });
+          Object.assign(txSyncUpdate, cooperatingCommission.updates);
+          if (cooperatingCommission.auditEvent) {
+            const batch = adminDb.batch();
+            batch.update(versionedTransactionRef, txSyncUpdate, body.expectedTransactionUpdatedAt ? { lastUpdateTime: versionedTransactionSnap.updateTime } : undefined);
+            batch.create(versionedTransactionRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
+            await batch.commit();
+          } else {
+            await versionedTransactionRef.update(
+              txSyncUpdate,
+              body.expectedTransactionUpdatedAt ? { lastUpdateTime: versionedTransactionSnap.updateTime } : undefined,
+            );
+          }
         } catch (syncErr: any) {
           if (body.expectedTransactionUpdatedAt && syncErr?.code === 9) {
             return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');

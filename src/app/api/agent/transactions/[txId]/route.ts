@@ -13,6 +13,8 @@ import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllo
 import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
+import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
+import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -62,6 +64,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'commissionPercent', 'commissionBasePrice', 'gci', 'commissionCalculationMethod', 'commissionFlatAmount', 'transactionFee',
   'sellerCommissionPct', 'buyerCommissionPct',
   'sellerPayingListingAgent', 'sellerPayingBuyerAgent',
+  'cooperatingAgentCommissionMethod', 'cooperatingAgentCommissionPercent', 'cooperatingAgentCommissionFlatAmount',
   // Additional transaction info
   'warrantyAtClosing', 'warrantyAmount', 'warrantyPaidBy',
   'agentBonusPassThrough',
@@ -287,7 +290,10 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { resubmitToTc, notifyPendingContract, _replaceDocuments, ...rawUpdates } = body;
+    const { resubmitToTc, notifyPendingContract, _replaceDocuments, expectedUpdatedAt, ...rawUpdates } = body;
+    if (hasTransactionVersionConflict(txData.updatedAt, expectedUpdatedAt)) {
+      return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+    }
 
     // Validate status
     if (rawUpdates.status && !AGENT_ALLOWED_STATUSES.has(rawUpdates.status)) {
@@ -301,6 +307,12 @@ export async function PATCH(
         updates[k] = v;
       }
     }
+    const cooperatingCommission = buildCooperatingCommissionUpdate({
+      current: txData,
+      proposed: updates,
+      actor: { uid, name: decoded.name || decoded.email || null, role: isAdmin ? 'admin' : 'agent' },
+    });
+    Object.assign(updates, cooperatingCommission.updates);
     // Preserve an explicit fee removal as a canonical zero-value state rather
     // than allowing stale legacy amounts to reappear on the next edit.
     if (String(updates.txComplianceFee || '').toLowerCase() === 'no' || updates.txComplianceFee === false) {
@@ -483,8 +495,22 @@ export async function PATCH(
       updates.primaryAgentSideCredit = null;
       updates.primaryAgentUnitCredit = null;
     }
-    // Save updates to the transaction document
-    await txRef.update(updates);
+    // Save the canonical transaction and its immutable commission event together.
+    try {
+      if (cooperatingCommission.auditEvent) {
+        const batch = adminDb.batch();
+        batch.update(txRef, updates, expectedUpdatedAt ? { lastUpdateTime: txSnap.updateTime } : undefined);
+        batch.create(txRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
+        await batch.commit();
+      } else {
+        await txRef.update(updates, expectedUpdatedAt ? { lastUpdateTime: txSnap.updateTime } : undefined);
+      }
+    } catch (error: any) {
+      if (expectedUpdatedAt && error?.code === 9) {
+        return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+      }
+      throw error;
+    }
 
     // ── TC Queue sync: if this transaction has a linked tcIntakes record, mirror key field
     //    changes back so the TC queue always shows current data without requiring a re-approval.

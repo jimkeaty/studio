@@ -2,7 +2,7 @@
 // PATCH  /api/admin/staff-queue/[itemId] — update, complete, dismiss, archive, remove, reopen, checklist, assignment
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { isStaff } from '@/lib/auth/staffAccess';
+import { isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getTcUids } from '@/lib/notifications/getRecipientUids';
 import { getAccountingUids } from '@/lib/notifications/getRecipientUids';
@@ -11,6 +11,7 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { resolveGCI } from '@/lib/commissions';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
+import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -55,6 +56,7 @@ const EDITABLE_TX_FIELDS = new Set([
   'transactionFee', 'earnestMoney', 'depositHolder', 'depositHolderOther',
   'brokerPct', 'brokerGci', 'agentPct', 'agentDollar',
   'sellerPayingListingAgent', 'sellerPayingListingAgentUnknown', 'sellerPayingBuyerAgent',
+  'cooperatingAgentCommissionMethod', 'cooperatingAgentCommissionPercent', 'cooperatingAgentCommissionFlatAmount',
   // Dates
   'listingDate', 'contractDate', 'closedDate', 'closingDate', 'projectedCloseDate',
   'optionExpiration', 'inspectionDeadline', 'surveyDeadline',
@@ -300,6 +302,12 @@ export async function PATCH(
 
       if (Object.keys(allowed).length > 0) {
         allowed.updatedAt = now;
+        const cooperatingCommission = buildCooperatingCommissionUpdate({
+          current: currentTx,
+          proposed: allowed,
+          actor: { uid: decoded.uid, name: reviewerName, role: (await getStaffRole(decoded.uid)) || 'staff' },
+        });
+        Object.assign(allowed, cooperatingCommission.updates);
 
         if (allowed.commissionCalculationMethod === 'flat_dollar') {
           const exactAmount = Number(allowed.commissionFlatAmount ?? allowed.gci ?? currentTx.commissionFlatAmount ?? currentTx.gci);
@@ -402,10 +410,17 @@ export async function PATCH(
           };
         }
         try {
-          await txRef.update(
-            allowed,
-            body.expectedTransactionUpdatedAt ? { lastUpdateTime: currentTxDoc.updateTime } : undefined,
-          );
+          if (cooperatingCommission.auditEvent) {
+            const batch = adminDb.batch();
+            batch.update(txRef, allowed, body.expectedTransactionUpdatedAt ? { lastUpdateTime: currentTxDoc.updateTime } : undefined);
+            batch.create(txRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
+            await batch.commit();
+          } else {
+            await txRef.update(
+              allowed,
+              body.expectedTransactionUpdatedAt ? { lastUpdateTime: currentTxDoc.updateTime } : undefined,
+            );
+          }
         } catch (error: any) {
           if (body.expectedTransactionUpdatedAt && error?.code === 9) {
             return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');

@@ -192,6 +192,11 @@ export interface Transaction {
   // Commission paid by seller
   sellerPayingListingAgent?: number | null;
   sellerPayingListingAgentUnknown?: boolean;
+  /** Independent offer/payment term for the cooperating buyer's agent. */
+  cooperatingAgentCommissionMethod?: 'percentage' | 'flat_dollar' | null;
+  cooperatingAgentCommissionPercent?: number | null;
+  cooperatingAgentCommissionFlatAmount?: number | null;
+  /** @deprecated Legacy mirror of the active cooperating-agent commission value. */
   sellerPayingBuyerAgent?: number | null;
   // Buyer closing cost
   buyerClosingCostTotal?: number | null;

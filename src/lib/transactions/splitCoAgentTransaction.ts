@@ -221,6 +221,9 @@ export async function splitCoAgentTransaction(
     buyerClosingCostOther: tx.buyerClosingCostOther ?? null,
     sellerPayingListingAgent: tx.sellerPayingListingAgent ?? null,
     sellerPayingListingAgentUnknown: tx.sellerPayingListingAgentUnknown ?? null,
+    cooperatingAgentCommissionMethod: tx.cooperatingAgentCommissionMethod ?? null,
+    cooperatingAgentCommissionPercent: tx.cooperatingAgentCommissionPercent ?? null,
+    cooperatingAgentCommissionFlatAmount: tx.cooperatingAgentCommissionFlatAmount ?? null,
     sellerPayingBuyerAgent: tx.sellerPayingBuyerAgent ?? null,
 
     // Notes & documents
