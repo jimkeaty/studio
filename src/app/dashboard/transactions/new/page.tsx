@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
 import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
+import { InspectionReviewPanel } from '@/components/transactions/InspectionReviewPanel';
 import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6693,6 +6694,9 @@ export default function AddTransactionPage() {
                 })}
               </div>
           </Section>}
+          {editTxId && (watchedClosingType === 'buyer' || watchedClosingType === 'dual') && (
+            <InspectionReviewPanel transactionId={editTxId} isReadOnly={persistedEditStatus === 'closed' && !isTcQueueMode} />
+          )}
 
           {/* ── Additional Info (warranty / compliance / occupancy / shortage) ──────────────────────────
               Moved above Buyer Closing Cost so agents fill in these details before entering commission.
