@@ -673,6 +673,7 @@ export default function AddTransactionPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [intakeApproving, setIntakeApproving] = useState(false);
   const lastSaveSucceededRef = useRef(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   // ── Checklist drawer state ─────────────────────────────────────────────────
@@ -3198,6 +3199,7 @@ export default function AddTransactionPage() {
         transactionVersionRef.current = normalizeTransactionVersion(data.transaction?.updatedAt);
         await syncContactsToBook(token);
         lastSaveSucceededRef.current = true;
+        setLastSavedAt(new Date());
         if (!hasOperationalEditAuthority && String(values.status || '').toLowerCase() === 'closed') {
           setPersistedEditStatus('closed');
         }
@@ -3704,6 +3706,12 @@ export default function AddTransactionPage() {
 
       {/* Form — only shown after PDF step */}
       {(pdfStep === 'form') && (<>
+
+      {editMode && lastSavedAt && (
+        <div role="status" className="mb-3 text-sm font-medium text-green-700 dark:text-green-400">
+          Saved successfully · Last saved {lastSavedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+        </div>
+      )}
 
       {/* ── TC / Staff Queue Action Bar ─────────────────────────────────────
           Shown when opened from TC queue (?intakeId=...&role=tc) or

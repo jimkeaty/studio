@@ -235,7 +235,7 @@ const UPDATABLE_FIELDS = new Set([
   'agentId', 'agentDisplayName',
   'status', 'transactionType', 'closingType', 'dealType',
   'address', 'clientName', 'commission',
-  'commissionPercent', 'commissionBasePrice', 'gci', 'transactionFee', 'earnestMoney',
+  'commissionPercent', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'gci', 'transactionFee', 'earnestMoney',
   'depositHolder', 'depositHolderOther',
   'contractDate', 'closedDate', 'listingDate', 'projectedCloseDate',
   'optionExpiration', 'inspectionDeadline', 'surveyDeadline',
@@ -417,7 +417,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Coerce empty-string numeric commission fields to null so they don't overwrite saved values
-    for (const field of ['sellerPayingListingAgent', 'sellerPayingBuyerAgent', 'commissionPercent', 'listPrice', 'salePrice']) {
+    for (const field of ['sellerPayingListingAgent', 'sellerPayingBuyerAgent', 'commissionPercent', 'commissionFlatAmount', 'listPrice', 'salePrice']) {
       if (field in updates && (updates[field] === '' || updates[field] === null || updates[field] === undefined)) {
         updates[field] = null;
       } else if (field in updates && updates[field] !== null) {
@@ -524,6 +524,30 @@ export async function PATCH(req: NextRequest) {
     if (!existingSnap.exists) return jsonError(404, 'Transaction not found');
     if (hasTransactionVersionConflict(existingData?.updatedAt, expectedUpdatedAt)) {
       return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+    }
+    // A selected exact-dollar method is authoritative for gross commission.
+    // Keep the legacy `gci` and the split snapshot's gross amount aligned so
+    // Admin-ledger corrections, rollup rebuilds, reporting, and old display
+    // surfaces all read the same financial result.
+    const effectiveCommissionMethod = String(
+      updates.commissionCalculationMethod ?? existingData?.commissionCalculationMethod ?? '',
+    ).toLowerCase();
+    if (effectiveCommissionMethod === 'flat_dollar') {
+      const flatAmount = Number(updates.commissionFlatAmount ?? existingData?.commissionFlatAmount);
+      if (!Number.isFinite(flatAmount) || flatAmount < 0) {
+        return jsonError(400, 'Exact gross commission must be a valid non-negative dollar amount');
+      }
+      updates.commissionCalculationMethod = 'flat_dollar';
+      updates.commissionFlatAmount = flatAmount;
+      updates.gci = flatAmount;
+      updates.commission = flatAmount;
+      updates.splitSnapshot = {
+        ...(existingData?.splitSnapshot || {}),
+        ...(updates.splitSnapshot || {}),
+        grossCommission: flatAmount,
+      };
+    } else if (updates.commissionCalculationMethod === 'percentage') {
+      updates.commissionCalculationMethod = 'percentage';
     }
     const cooperatingCommission = buildCooperatingCommissionUpdate({
       current: existingData || {},
