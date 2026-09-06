@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useUser } from '@/firebase';
 import { ActiveAgentsChart } from '@/components/dashboard/broker/ActiveAgentsChart';
 import { RecruitingPipelinePanel } from '@/components/dashboard/broker/RecruitingPipelinePanel';
+import { RecruitingOperationsListView } from '@/components/dashboard/broker/RecruitingOperationsListView';
 import { UnifiedRecruitingReportCard } from '@/components/dashboard/broker/UnifiedRecruitingReportCard';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
@@ -1752,8 +1753,9 @@ export default function RecruitingDashboardPage() {
       <RecruiterTodoBoard />
 
       <Tabs defaultValue="recruiting" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
           <TabsTrigger value="recruiting">Recruiting Pipeline</TabsTrigger>
+          <TabsTrigger value="operations">Staff List View</TabsTrigger>
           <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
           <TabsTrigger value="incentive">Incentive Program Config</TabsTrigger>
         </TabsList>
@@ -1764,7 +1766,21 @@ export default function RecruitingDashboardPage() {
           <OneOnOneScheduler agents={[]} />
         </TabsContent>
 
-        {/* ── TAB 2: Recruiting Pipeline (existing content) ───────────────── */}
+        {/* ── TAB 2: Cleaner operational list for staff and admins ─────────── */}
+        <TabsContent value="operations" className="space-y-6 mt-6">
+          <RecruitingOperationsListView
+            year={year}
+            activeAgents={realActiveAgents}
+            newHires={realYtdNewHires}
+            departures={realYtdDepartures}
+            pipelineCount={realPipelineCount}
+            metricMonths={months}
+            activeAgentMonths={activeAgentsData?.months ?? []}
+          />
+          <RecruitingPipelinePanel initialViewMode="table" compact />
+        </TabsContent>
+
+        {/* ── TAB 3: Recruiting Pipeline (existing content) ───────────────── */}
         <TabsContent value="recruiting" className="space-y-8 mt-6">
       {/* ── Unified Recruiting & Agent KPI Report Card ─────────────────────── */}
       <UnifiedRecruitingReportCard year={year} />
@@ -2048,7 +2064,7 @@ export default function RecruitingDashboardPage() {
 
         </TabsContent>
 
-        {/* ── TAB 3: Incentive Program Config ─────────────────────────────── */}
+        {/* ── TAB 4: Incentive Program Config ─────────────────────────────── */}
         <TabsContent value="incentive" className="space-y-6 mt-6">
           <IncentiveConfigPanel />
         </TabsContent>

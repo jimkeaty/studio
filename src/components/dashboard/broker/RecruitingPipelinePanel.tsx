@@ -318,12 +318,18 @@ function ConversionFunnel({ candidates }: { candidates: Candidate[] }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function RecruitingPipelinePanel() {
+export function RecruitingPipelinePanel({
+  initialViewMode = 'kanban',
+  compact = false,
+}: {
+  initialViewMode?: 'kanban' | 'table';
+  compact?: boolean;
+}) {
   const { user } = useUser();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'table'>(initialViewMode);
 
   // Add/Edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -532,10 +538,12 @@ export function RecruitingPipelinePanel() {
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Recruiting Pipeline
+            {compact ? 'Current Recruiting List' : 'Recruiting Pipeline'}
           </h3>
           <p className="text-sm text-muted-foreground">
-            Track candidates through scheduled start; started agents leave the active board automatically.
+            {compact
+              ? 'A concise, actionable candidate list for staff and administrators.'
+              : 'Track candidates through scheduled start; started agents leave the active board automatically.'}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -549,28 +557,32 @@ export function RecruitingPipelinePanel() {
               <CalendarDays className="h-3 w-3" />{todayCount} Due Today
             </Badge>
           )}
-          <Button variant="outline" size="sm" onClick={() => setShowAnalytics(v => !v)}>
-            <BarChart2 className="h-4 w-4 mr-1" />
-            {showAnalytics ? 'Hide' : 'Analytics'}
-          </Button>
-          <div className="flex border rounded-md overflow-hidden">
-            <Button
-              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
-              size="sm"
-              className="rounded-none h-8"
-              onClick={() => setViewMode('kanban')}
-            >
-              <LayoutGrid className="h-4 w-4 mr-1" />Kanban
-            </Button>
-            <Button
-              variant={viewMode === 'table' ? 'default' : 'ghost'}
-              size="sm"
-              className="rounded-none h-8"
-              onClick={() => setViewMode('table')}
-            >
-              <List className="h-4 w-4 mr-1" />Table
-            </Button>
-          </div>
+          {!compact && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setShowAnalytics(v => !v)}>
+                <BarChart2 className="h-4 w-4 mr-1" />
+                {showAnalytics ? 'Hide' : 'Analytics'}
+              </Button>
+              <div className="flex border rounded-md overflow-hidden">
+                <Button
+                  variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="rounded-none h-8"
+                  onClick={() => setViewMode('kanban')}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-1" />Kanban
+                </Button>
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="rounded-none h-8"
+                  onClick={() => setViewMode('table')}
+                >
+                  <List className="h-4 w-4 mr-1" />Table
+                </Button>
+              </div>
+            </>
+          )}
           <Button size="sm" onClick={openAdd}>
             <UserPlus className="h-4 w-4 mr-1" />Add Candidate
           </Button>
