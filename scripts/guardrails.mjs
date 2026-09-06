@@ -44,6 +44,9 @@ function isServerSafe(rel) {
   // Server-only social-media queue, storage, and Meta Page authorization helpers
   if (r.startsWith("src/lib/socialMedia/")) return true;
 
+  // Server-only native Hub publication, audience, and tracking helpers
+  if (r.startsWith("src/lib/hub/")) return true;
+
   // Server-only transaction utility helpers (co-agent split, etc.)
   if (r.startsWith("src/lib/transactions/")) return true;
 

@@ -1,0 +1,4 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { adminDb } from '@/lib/firebase/admin';
+import { HUB_POSTS, notifyHubPost } from '@/lib/hub/core';
+export async function POST(req: NextRequest) { const secret = process.env.CRON_SECRET; if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }); const due = await adminDb.collection(HUB_POSTS).where('status', '==', 'scheduled').where('scheduledFor', '<=', new Date()).limit(100).get(); let published = 0; for (const doc of due.docs) { const post = doc.data(); await doc.ref.update({ status: 'published', publishedAt: new Date(), updatedAt: new Date() }); await notifyHubPost(doc.id, { ...post, status: 'published', publishedAt: new Date() }); published += 1; } return NextResponse.json({ ok: true, published }); }

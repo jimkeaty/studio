@@ -19,6 +19,8 @@ export async function GET() {
           primaryColor: null,
           pwaIconUrl: null,
           askYourBrokerName: 'Ask Your Broker',
+          hubName: 'Keaty Hub',
+          hubSubtitle: null,
         },
       });
     }
@@ -35,6 +37,8 @@ export async function GET() {
         primaryColor: data.primaryColor ?? null,
         pwaIconUrl: data.pwaIconUrl ?? null,
         askYourBrokerName: data.askYourBrokerName ?? 'Ask Your Broker',
+        hubName: data.hubName ?? 'Keaty Hub',
+        hubSubtitle: data.hubSubtitle ?? null,
       },
     });
   } catch (err: any) {
@@ -51,6 +55,8 @@ export async function GET() {
         primaryColor: null,
         pwaIconUrl: null,
         askYourBrokerName: 'Ask Your Broker',
+        hubName: 'Keaty Hub',
+        hubSubtitle: null,
       },
     });
   }

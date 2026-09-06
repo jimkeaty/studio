@@ -56,6 +56,7 @@ export type NotificationType =
   | 'broker_question_escalated'       // Ask Your Broker requires designated broker judgment
   | 'broker_question_answered'        // broker response is ready for the asking agent
   | 'community_comment'               // someone commented on a TV board post → post author notified
+  | 'hub_post_published'              // native Smart Broker Hub post or event reached an eligible audience
   | 'system';                         // generic system notification
 
 export interface NotificationPayload {
@@ -392,6 +393,7 @@ function buildEmailHtml(
     agent_task_reminder:            'Task Reminder',
     home_warranty_education:        'Home Warranty Education',
     community_comment:              'New Comment',
+    hub_post_published:             'Hub Update',
     system:                         'System',
   };
   const badge = typeLabel[type] ?? 'Notification';

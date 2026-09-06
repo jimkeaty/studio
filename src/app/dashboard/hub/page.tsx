@@ -1,0 +1,29 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { useUser } from '@/firebase';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+type HubPost = { id: string; title: string; body: string; category: string; featured: boolean; pinned: boolean; event?: { startsAt?: string | null; location?: string; onlineLink?: string; host?: string; rsvpEnabled?: boolean } | null; resources: { label: string; url: string }[] };
+const group = (posts: HubPost[], kinds: string[]) => posts.filter((post) => kinds.includes(post.category));
+
+export default function HubPage() {
+  const { user } = useUser();
+  const [posts, setPosts] = useState<HubPost[]>([]);
+  const [branding, setBranding] = useState({ hubName: 'Keaty Hub', hubSubtitle: 'Company announcements, events, training, resources, and reminders in one native Smart Broker workspace.' });
+  const [message, setMessage] = useState('');
+  const token = async () => user?.getIdToken() || '';
+  const load = async () => { if (!user) return; const data = await fetch('/api/hub', { headers: { Authorization: `Bearer ${await token()}` } }).then((response) => response.json()); if (data.ok) setPosts(data.posts); else setMessage(data.error || 'Unable to load Hub.'); };
+  useEffect(() => { if (!user) return; load().catch(() => setMessage('Unable to load Hub.')); fetch('/api/branding').then((response) => response.json()).then((data) => { if (data.ok && data.branding) setBranding({ hubName: data.branding.hubName || 'Keaty Hub', hubSubtitle: data.branding.hubSubtitle || 'Company announcements, events, training, resources, and reminders in one native Smart Broker workspace.' }); }).catch(() => {}); }, [user]);
+  const featured = useMemo(() => posts.filter((post) => post.featured || post.pinned), [posts]);
+  const events = useMemo(() => group(posts, ['event']).filter((post) => !post.event?.startsAt || new Date(post.event.startsAt) >= new Date()).sort((a, b) => String(a.event?.startsAt).localeCompare(String(b.event?.startsAt))), [posts]);
+  const updates = useMemo(() => group(posts, ['announcement', 'company_update', 'reminder', 'agent_development']), [posts]);
+  const learning = useMemo(() => group(posts, ['training', 'webinar', 'meeting', 'video']), [posts]);
+  const resources = useMemo(() => group(posts, ['resource', 'link', 'document']), [posts]);
+  const rsvp = async (id: string, response: string) => { const data = await fetch(`/api/hub/${id}/rsvp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` }, body: JSON.stringify({ response }) }).then((value) => value.json()); setMessage(data.ok ? `RSVP recorded: ${response}.` : data.error || 'Unable to record RSVP.'); };
+  const section = (title: string, items: HubPost[], eventMode = false) => <section className="space-y-3"><h2 className="text-lg font-semibold">{title}</h2><div className="grid gap-4 md:grid-cols-2">{items.map((post) => <Card key={post.id}><CardHeader><div className="flex flex-wrap gap-2"><Badge variant="outline">{post.category.replaceAll('_', ' ')}</Badge>{post.pinned && <Badge>Pinned</Badge>}</div><CardTitle className="text-base">{post.title}</CardTitle>{eventMode && post.event && <CardDescription>{post.event.startsAt ? new Date(post.event.startsAt).toLocaleString() : 'Date to be announced'}{post.event.location ? ` · ${post.event.location}` : ''}{post.event.host ? ` · Host: ${post.event.host}` : ''}</CardDescription>}</CardHeader><CardContent className="space-y-3"><p className="whitespace-pre-wrap text-sm">{post.body}</p>{post.event?.onlineLink && <a className="block text-sm font-medium text-primary underline" target="_blank" rel="noreferrer" href={post.event.onlineLink}>Join online</a>}{post.resources.map((resource, index) => <a className="block text-sm font-medium text-primary underline" key={index} target="_blank" rel="noreferrer" href={resource.url}>{resource.label || 'Open resource'}</a>)}{eventMode && post.event?.rsvpEnabled && <div className="flex gap-2"><Button size="sm" onClick={() => rsvp(post.id, 'yes')}>RSVP Yes</Button><Button size="sm" variant="outline" onClick={() => rsvp(post.id, 'maybe')}>Maybe</Button><Button size="sm" variant="ghost" onClick={() => rsvp(post.id, 'no')}>No</Button></div>}</CardContent></Card>)}</div>{!items.length && <p className="text-sm text-muted-foreground">Nothing published in this section yet.</p>}</section>;
+  return <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-6"><div><h1 className="text-2xl font-bold">{branding.hubName}</h1><p className="text-sm text-muted-foreground">{branding.hubSubtitle}</p></div>{message && <p className="rounded-md bg-muted p-3 text-sm">{message}</p>}{section('Featured Announcement', featured)}{section('Upcoming Events', events, true)}{section('Latest Updates', updates)}{section('Training & Classes', learning)}{section('Resources', resources)}<section><h2 className="mb-3 text-lg font-semibold">Smart Broker Modules</h2><div className="flex flex-wrap gap-3 text-sm"><Link className="text-primary underline" href="/dashboard/tv-mode">Coming Soons & Buyer Needs</Link><Link className="text-primary underline" href="/dashboard/open-house">Open House Submission</Link><Link className="text-primary underline" href="/dashboard/training">Training & Help Center</Link><Link className="text-primary underline" href="/dashboard/social-media">Social Media</Link></div><p className="mt-2 text-xs text-muted-foreground">Market activity remains in its existing Smart Broker modules rather than being duplicated in the Hub.</p></section><p className="border-t pt-4 text-xs text-muted-foreground">The legacy Google Keaty Hub remains available during the transition. New native Hub material should be verified before the legacy site is retired.</p></div>;
+}

@@ -66,6 +66,8 @@ export async function GET(req: NextRequest) {
           pwaIconUrl: null,
           askYourBrokerName: 'Ask Your Broker',
           askYourBrokerEscalationUids: [],
+          hubName: 'Keaty Hub',
+          hubSubtitle: null,
           updatedAt: null,
         },
       });
@@ -84,6 +86,8 @@ export async function GET(req: NextRequest) {
         pwaIconUrl: data.pwaIconUrl ?? null,
         askYourBrokerName: data.askYourBrokerName ?? 'Ask Your Broker',
         askYourBrokerEscalationUids: Array.isArray(data.askYourBrokerEscalationUids) ? data.askYourBrokerEscalationUids : [],
+        hubName: data.hubName ?? 'Keaty Hub',
+        hubSubtitle: data.hubSubtitle ?? null,
         updatedAt: data.updatedAt ?? null,
       },
     });
@@ -111,6 +115,8 @@ async function upsertBranding(req: NextRequest) {
       pwaIconUrl,
       askYourBrokerName,
       askYourBrokerEscalationUids,
+      hubName,
+      hubSubtitle,
     } = body;
 
     if (!companyName || typeof companyName !== 'string' || !companyName.trim()) {
@@ -136,6 +142,8 @@ async function upsertBranding(req: NextRequest) {
       askYourBrokerEscalationUids: Array.isArray(askYourBrokerEscalationUids)
         ? [...new Set(askYourBrokerEscalationUids.filter((uid) => typeof uid === 'string' && uid.trim()).map((uid) => uid.trim()))]
         : [],
+      hubName: typeof hubName === 'string' && hubName.trim() ? hubName.trim().slice(0, 80) : 'Keaty Hub',
+      hubSubtitle: typeof hubSubtitle === 'string' && hubSubtitle.trim() ? hubSubtitle.trim().slice(0, 220) : null,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: decoded.uid,
     };

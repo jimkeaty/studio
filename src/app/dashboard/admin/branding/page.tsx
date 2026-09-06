@@ -27,6 +27,8 @@ type BrandingSettings = {
   pwaIconUrl: string | null;
   askYourBrokerName: string;
   askYourBrokerEscalationUids: string[];
+  hubName: string;
+  hubSubtitle: string | null;
   updatedAt: string | null;
 };
 
@@ -40,6 +42,8 @@ const DEFAULT_BRANDING: BrandingSettings = {
   pwaIconUrl: null,
   askYourBrokerName: 'Ask Your Broker',
   askYourBrokerEscalationUids: [],
+  hubName: 'Keaty Hub',
+  hubSubtitle: null,
   updatedAt: null,
 };
 
@@ -724,6 +728,23 @@ export default function AdminBrandingPage() {
                   <Label htmlFor="ask-your-broker-recipients">Escalation recipient user IDs</Label>
                   <Input id="ask-your-broker-recipients" value={(branding.askYourBrokerEscalationUids || []).join(', ')} onChange={(event) => setBranding((current) => ({ ...current, askYourBrokerEscalationUids: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) }))} placeholder="Broker UID, Director UID" />
                   <p className="text-xs text-muted-foreground">These are internal user IDs, not phone numbers or email addresses. Notification preferences determine permitted delivery channels.</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Native Hub</CardTitle>
+                <CardDescription>Set the tenant-facing name and short description for the native announcements, events, training, and resources Hub. The legacy Google Hub remains available during transition.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="hub-name">Hub name</Label>
+                  <Input id="hub-name" value={branding.hubName || ''} onChange={(event) => setBranding((current) => ({ ...current, hubName: event.target.value }))} placeholder="Keaty Hub" maxLength={80} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hub-subtitle">Hub subtitle</Label>
+                  <Input id="hub-subtitle" value={branding.hubSubtitle || ''} onChange={(event) => setBranding((current) => ({ ...current, hubSubtitle: event.target.value || null }))} placeholder="Company announcements, events, training, and resources" maxLength={220} />
                 </div>
               </CardContent>
             </Card>
