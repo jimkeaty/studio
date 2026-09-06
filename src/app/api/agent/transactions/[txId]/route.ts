@@ -89,7 +89,8 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'mediaRequested', 'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
   // Sign order
   'signOrderRequested', 'signServiceType', 'signInstallDate', 'signOwnerName',
-  'signRider', 'signAdditionalOptions', 'signSpecialRequests',
+  'signRider', 'signAdditionalOptions', 'signSpecialRequests', 'signPlacementAddress',
+  'signPlacementLatitude', 'signPlacementLongitude', 'signPlacementNotes',
   // ShowingTime
   'showingTimeRequested', 'showingApptType', 'showingNewOrChange',
   'showingApptHandling', 'showingLeadTime', 'showingLeadTimeSuggested',

@@ -35,6 +35,7 @@ import { resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
 import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
 import { InspectionReviewPanel } from '@/components/transactions/InspectionReviewPanel';
+import { SignLocationPicker } from '@/components/transactions/SignLocationPicker';
 import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 
@@ -502,6 +503,10 @@ const schema = z.object({
   signRequestedDate: z.string().optional().or(z.literal('')),
   signSpecialRequests: z.string().optional(),
   signOwnerName: z.string().optional(),
+  signPlacementAddress: z.string().optional(),
+  signPlacementLatitude: z.string().optional(),
+  signPlacementLongitude: z.string().optional(),
+  signPlacementNotes: z.string().optional(),
   // ShowingTime Setup (listing-only)
   showingTimeRequested: z.boolean().optional(),
   showingNewOrChange: z.enum(['new', 'change']).optional(),
@@ -2496,6 +2501,10 @@ export default function AddTransactionPage() {
           signRiderExt: Array.isArray(tx.signRiderExt) ? (tx.signRiderExt[0] ?? '') : (tx.signRiderExt || ''),
           signAdditionalOptions: tx.signAdditionalOptions || [],
           signRequestedDate: tx.signRequestedDate || '',
+          signPlacementAddress: tx.signPlacementAddress || '',
+          signPlacementLatitude: tx.signPlacementLatitude != null ? String(tx.signPlacementLatitude) : '',
+          signPlacementLongitude: tx.signPlacementLongitude != null ? String(tx.signPlacementLongitude) : '',
+          signPlacementNotes: tx.signPlacementNotes || '',
           signNotes: tx.signNotes || '',
           showingTimeRequested: tx.showingTimeRequested ?? false,
           showingNewOrChange: tx.showingNewOrChange || '',
@@ -5874,6 +5883,18 @@ export default function AddTransactionPage() {
                     <FormField control={form.control} name="signSpecialRequests" render={({ field }) => (
                       <FormItem><FormLabel>Special Requests</FormLabel><FormControl><Textarea placeholder="Any special instructions for the sign company..." {...field} /></FormControl></FormItem>
                     )} />
+                    <SignLocationPicker
+                      address={form.watch('signPlacementAddress') || ''}
+                      latitude={form.watch('signPlacementLatitude') || ''}
+                      longitude={form.watch('signPlacementLongitude') || ''}
+                      notes={form.watch('signPlacementNotes') || ''}
+                      onChange={(value) => {
+                        if (value.address !== undefined) form.setValue('signPlacementAddress', value.address, { shouldDirty: true });
+                        if (value.latitude !== undefined) form.setValue('signPlacementLatitude', value.latitude, { shouldDirty: true });
+                        if (value.longitude !== undefined) form.setValue('signPlacementLongitude', value.longitude, { shouldDirty: true });
+                        if (value.notes !== undefined) form.setValue('signPlacementNotes', value.notes, { shouldDirty: true });
+                      }}
+                    />
                   </CardContent>
                 </CollapsibleContent>
               </Card>

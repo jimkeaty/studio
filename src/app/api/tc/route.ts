@@ -316,6 +316,10 @@ export async function POST(req: NextRequest) {
       signRequestedDate: toStr(body.signRequestedDate) || null,
       signOwnerName: toStr(body.signOwnerName) || null,
       signSpecialRequests: toStr(body.signSpecialRequests) || null,
+      signPlacementAddress: toStr(body.signPlacementAddress) || null,
+      signPlacementLatitude: toStr(body.signPlacementLatitude) || null,
+      signPlacementLongitude: toStr(body.signPlacementLongitude) || null,
+      signPlacementNotes: toStr(body.signPlacementNotes) || null,
 
       // ShowingTime setup — infer requested from presence of showingApptType or showingDisarmCode
       showingTimeRequested: toBool(body.showingTimeRequested) || !!(toStr(body.showingApptType) || toStr(body.showingDisarmCode) || toStr(body.showingAlarmCode)),

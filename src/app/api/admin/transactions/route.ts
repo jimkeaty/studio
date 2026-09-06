@@ -301,7 +301,8 @@ const UPDATABLE_FIELDS = new Set([
   'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
   // Sign order
   'signOrderRequested', 'signServiceType', 'signInstallDate', 'signRider',
-  'signAdditionalOptions', 'signOwnerName', 'signSpecialRequests',
+  'signAdditionalOptions', 'signOwnerName', 'signSpecialRequests', 'signPlacementAddress',
+  'signPlacementLatitude', 'signPlacementLongitude', 'signPlacementNotes',
   // ShowingTime
   'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
   'showingApptOverlaps', 'showingVirtualPreference', 'showingAccessType', 'showingAccessNotes', 'showingAccessDoor',

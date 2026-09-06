@@ -412,7 +412,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
         // Sign order
         'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
-        'signRequestedDate', 'signOwnerName', 'signSpecialRequests',
+        'signRequestedDate', 'signOwnerName', 'signSpecialRequests', 'signPlacementAddress',
+        'signPlacementLatitude', 'signPlacementLongitude', 'signPlacementNotes',
         // ShowingTime
         'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
         'showingNoSameDayAppts', 'showingLeadTimeRequired', 'showingLeadTimeSuggested',
@@ -505,7 +506,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
           'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
           'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
-          'signRequestedDate', 'signOwnerName', 'signSpecialRequests',
+          'signRequestedDate', 'signOwnerName', 'signSpecialRequests', 'signPlacementAddress',
+          'signPlacementLatitude', 'signPlacementLongitude', 'signPlacementNotes',
           'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
           'showingNoSameDayAppts', 'showingLeadTimeRequired', 'showingLeadTimeSuggested',
           'showingMaxApptLength', 'showingApptOverlaps', 'showingVirtualPreference', 'showingShareAgentInfo',

@@ -76,7 +76,8 @@ const EDITABLE_TX_FIELDS = new Set([
   'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
   // Sign order
   'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
-  'signRequestedDate', 'signOwnerName', 'signSpecialRequests',
+  'signRequestedDate', 'signOwnerName', 'signSpecialRequests', 'signPlacementAddress',
+  'signPlacementLatitude', 'signPlacementLongitude', 'signPlacementNotes',
   // ShowingTime
   'showingTimeRequested', 'showingNewOrChange', 'showingApptHandling', 'showingApptType',
   'showingNoSameDayAppts', 'showingLeadTimeRequired', 'showingLeadTimeSuggested',
