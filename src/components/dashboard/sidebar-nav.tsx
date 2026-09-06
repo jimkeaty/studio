@@ -220,6 +220,7 @@ const adminMenuGroups = [
     items: [
       { href: '/dashboard/admin/branding', label: 'Branding', icon: Palette },
       { href: '/dashboard/admin/app-management', label: 'App Management', icon: Puzzle },
+      { href: '/dashboard/admin/notification-delivery-log', label: 'Notification Delivery Log', icon: Bell },
       { href: '/dashboard/admin/open-house-settings', label: 'Open House Settings', icon: Home },
       { href: '/dashboard/admin/transaction-fee-settings', label: 'Broker Fee Defaults', icon: Receipt },
       { href: '/dashboard/settings/notifications', label: 'Notification Settings', icon: Bell },

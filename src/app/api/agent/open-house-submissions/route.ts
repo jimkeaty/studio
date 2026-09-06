@@ -39,12 +39,17 @@ async function resolveAgent(uid: string): Promise<{ agentId: string; agentUid: s
   return { agentId: uid, agentUid: uid, displayName: '' };
 }
 
-/** Returns true if the current time is past Thursday noon (submission deadline) */
-function isPastDeadline(): boolean {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun, 4=Thu
-  const hour = now.getHours();
-  return (day === 4 && hour >= 12) || day === 5 || day === 6 || day === 0;
+/** Returns true if the current Central time is past the Admin-configured deadline. */
+async function isPastDeadline(): Promise<boolean> {
+  const settings = (await adminDb.collection('openHouseSettings').doc('default').get()).data() || {};
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(new Date());
+  const part = (type: string) => Number(parts.find((entry) => entry.type === type)?.value || 0);
+  const weekdayText = parts.find((entry) => entry.type === 'weekday')?.value || '';
+  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekdayText);
+  const deadlineDay = Number(settings.deadlineDayOfWeek ?? 4);
+  const deadlineHour = Number(settings.deadlineHour ?? 13);
+  const deadlineMinute = Number(settings.deadlineMinute ?? 0);
+  return weekday > deadlineDay || (weekday === deadlineDay && (part('hour') > deadlineHour || (part('hour') === deadlineHour && part('minute') >= deadlineMinute)));
 }
 
 function getWeekOf(dateStr: string): string {
@@ -247,7 +252,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { startTime, endTime, openHouseDate, propertyAddress, mlsNumber, specialNotes } = body;
 
-  const lateChange = isPastDeadline();
+  const lateChange = await isPastDeadline();
   const now = new Date().toISOString();
 
   const historyEntry: Record<string, any> = {
@@ -309,7 +314,7 @@ export async function PATCH(req: NextRequest) {
       recipientUids: staffUids,
       title: lateChange ? '⚠️ Late Open House Change' : '✏️ Open House Updated',
       body: lateChange
-        ? `${agentDisplayName} changed their open house AFTER the Thursday noon deadline. New time: ${newDate} ${newStart}–${newEnd}${addr ? ' at ' + addr : ''}. The email blast may have already been sent — please update MLS/Boomtown if needed.`
+        ? `${agentDisplayName} changed their open house after the submission deadline. New time: ${newDate} ${newStart}–${newEnd}${addr ? ' at ' + addr : ''}. The email blast may have already been sent — please update MLS/Boomtown if needed.`
         : `${agentDisplayName} updated their open house to ${newDate} (${newStart}–${newEnd})${addr ? ' at ' + addr : ''}.`,
       url: '/dashboard/admin/staff-queue',
     });
@@ -341,7 +346,7 @@ export async function DELETE(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const cancelReason = body.cancelReason || null;
-  const lateChange = isPastDeadline();
+  const lateChange = await isPastDeadline();
   const now = new Date().toISOString();
 
   await ref.update({ status: 'cancelled', cancelReason, updatedAt: now });

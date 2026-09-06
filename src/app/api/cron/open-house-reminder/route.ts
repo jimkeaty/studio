@@ -53,6 +53,21 @@ function fmtTime(t?: string): string {
   } catch { return t; }
 }
 
+function centralScheduleMatches(settings: Record<string, any>): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false,
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value || '';
+  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(part('weekday'));
+  return weekday === Number(settings.reminderDayOfWeek ?? 4)
+    && Number(part('hour')) === Number(settings.reminderHour ?? 8)
+    && Number(part('minute')) === Number(settings.reminderMinute ?? 0);
+}
+
+async function logDelivery(input: Record<string, any>) {
+  await adminDb.collection('notificationDeliveryLog').add({ ...input, createdAt: new Date() });
+}
+
 /* ── Rich HTML email builder ─────────────────────────────────────────────── */
 
 interface OHItem {
@@ -186,12 +201,18 @@ export async function POST(req: NextRequest) {
   // Load admin-configurable settings from Firestore
   const settingsSnap = await adminDb.collection('openHouseSettings').doc('default').get();
   const settings = settingsSnap.exists ? settingsSnap.data()! : {};
-  const deadlineText = (settings.deadlineText as string) || 'Thursday by 4:00 PM';
+  const deadlineText = (settings.deadlineText as string) || 'Thursday by 1:00 PM';
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Keaty Real Estate';
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://smart-broker-usa.web.app';
 
   /* ── mode: deadline ─────────────────────────────────────────────────── */
   if (mode === 'deadline') {
+    if (settings.reminderEnabled === false) {
+      return NextResponse.json({ ok: true, mode, skipped: true, reason: 'Open-house reminder is disabled by Admin settings.' });
+    }
+    if (url.searchParams.get('force') !== 'true' && !centralScheduleMatches(settings)) {
+      return NextResponse.json({ ok: true, mode, skipped: true, reason: 'Not within the configured Central time schedule.' });
+    }
     const { saturday, sunday } = getComingWeekend();
 
     // Fetch open house submissions for the coming weekend (both pending and confirmed)
@@ -239,55 +260,36 @@ export async function POST(req: NextRequest) {
       .get();
 
     const agentUids: string[] = [];
-    const agentEmails: { uid: string; email: string; name: string }[] = [];
-
     for (const doc of agentSnap.docs) {
       const data = doc.data();
       if (data.isDemoAccount) continue;
       const uid = data.firebaseUid || data.uid;
       if (!uid) continue;
       agentUids.push(uid);
-      if (data.email) {
-        agentEmails.push({
-          uid,
-          email: data.email,
-          name: data.firstName || data.displayName?.split(' ')[0] || 'Agent',
-        });
-      }
     }
 
-    // Send in-app notifications in batches of 50
+    // The shared dispatcher honors in-app/email/SMS preferences. Delivery is
+    // never presumed: provider receipt is a separate "Delivered" status.
     const batchSize = 50;
     for (let i = 0; i < agentUids.length; i += batchSize) {
       const batch = agentUids.slice(i, i + batchSize);
-      await sendNotification(adminDb, {
-        type: 'system',
-        recipientUids: batch,
-        title: '🏠 Open House Deadline: Today!',
-        body: `Submit your open house by ${deadlineText} to be included in the email blast, MLS, Boomtown, and social media posts.${submittedSummary}`,
-        url: '/dashboard/open-house',
-      });
-    }
-
-    // Send individual rich HTML emails via Resend
-    let emailsSent = 0;
-    const resendKey = process.env.RESEND_API_KEY;
-    if (resendKey) {
-      const { Resend } = await import('resend');
-      const resend = new Resend(resendKey);
-      const fromDomain = process.env.RESEND_FROM_DOMAIN || 'smartbrokerusa.com';
-      for (const agent of agentEmails) {
-        try {
-          const html = buildReminderEmail(appName, appUrl, agent.name, deadlineText, satItems, sunItems);
-          await resend.emails.send({
-            from: `${appName} <notifications@${fromDomain}>`,
-            to: [agent.email],
-            subject: `🏠 Open House Deadline Today — Submit by ${deadlineText}`,
-            html,
-          });
-          emailsSent++;
-        } catch (err) {
-          console.error(`[open-house-reminder] Email failed for ${agent.email}:`, err);
+      for (const recipientUid of batch) {
+        await logDelivery({ workflow: 'open_house_last_call', recipientUid, status: 'Scheduled', channels: ['in_app', 'email', 'sms'], url: '/dashboard/open-house' });
+      }
+      try {
+        await sendNotification(adminDb, {
+          type: 'system',
+          recipientUids: batch,
+          title: 'LAST CALL FOR OPEN HOUSES',
+          body: `All weekend open houses must be submitted by ${deadlineText}.${submittedSummary}`,
+          url: '/dashboard/open-house',
+        });
+        for (const recipientUid of batch) {
+          await logDelivery({ workflow: 'open_house_last_call', recipientUid, status: 'Sent', channels: ['in_app', 'email', 'sms'], url: '/dashboard/open-house' });
+        }
+      } catch (error: any) {
+        for (const recipientUid of batch) {
+          await logDelivery({ workflow: 'open_house_last_call', recipientUid, status: 'Failed', error: error.message || 'Notification dispatcher failed', channels: ['in_app', 'email', 'sms'], url: '/dashboard/open-house' });
         }
       }
     }
@@ -296,7 +298,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       mode,
       agentsNotified: agentUids.length,
-      emailsSent,
+      emailsSent: 'Preference-aware email dispatch requested; provider delivery is not assumed.',
       satItems: satItems.length,
       sunItems: sunItems.length,
     });

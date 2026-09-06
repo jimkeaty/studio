@@ -25,7 +25,10 @@ async function verifyAdmin(req: NextRequest) {
 }
 
 const DEFAULTS = {
-  deadlineText: 'Thursday by 4:00 PM',
+  deadlineText: 'Thursday by 1:00 PM',
+  deadlineDayOfWeek: 4,
+  deadlineHour: 13,
+  deadlineMinute: 0,
   reminderDayOfWeek: 4,       // 0=Sun … 6=Sat; 4=Thursday
   reminderHour: 8,             // 8 AM
   reminderMinute: 0,
@@ -53,6 +56,7 @@ export async function POST(req: NextRequest) {
 
   const allowed = [
     'deadlineText',
+    'deadlineDayOfWeek', 'deadlineHour', 'deadlineMinute',
     'reminderDayOfWeek', 'reminderHour', 'reminderMinute',
     'staffReminderDayOfWeek', 'staffReminderHour', 'staffReminderMinute',
     'reminderEnabled', 'staffReminderEnabled',

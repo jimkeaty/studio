@@ -20,6 +20,9 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
 
 interface OHSettings {
   deadlineText: string;
+  deadlineDayOfWeek: number;
+  deadlineHour: number;
+  deadlineMinute: number;
   reminderDayOfWeek: number;
   reminderHour: number;
   reminderMinute: number;
@@ -31,7 +34,10 @@ interface OHSettings {
 }
 
 const DEFAULTS: OHSettings = {
-  deadlineText: 'Thursday by 4:00 PM',
+  deadlineText: 'Thursday by 1:00 PM',
+  deadlineDayOfWeek: 4,
+  deadlineHour: 13,
+  deadlineMinute: 0,
   reminderDayOfWeek: 4,
   reminderHour: 8,
   reminderMinute: 0,
@@ -169,12 +175,16 @@ export default function OpenHouseSettingsPage() {
               id="deadlineText"
               value={settings.deadlineText}
               onChange={e => set('deadlineText', e.target.value)}
-              placeholder="e.g. Thursday by 4:00 PM"
+              placeholder="e.g. Thursday by 1:00 PM"
               className="mt-1"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Shown to agents as: "Submit by <strong>{settings.deadlineText}</strong>"
             </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><Label>Deadline day</Label><Select value={String(settings.deadlineDayOfWeek)} onValueChange={value => set('deadlineDayOfWeek', Number(value))}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{DAY_NAMES.map((day, index) => <SelectItem key={day} value={String(index)}>{day}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Deadline time (Central)</Label><Select value={String(settings.deadlineHour)} onValueChange={value => set('deadlineHour', Number(value))}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{HOUR_OPTIONS.map((hour) => <SelectItem key={hour.value} value={String(hour.value)}>{hour.label}</SelectItem>)}</SelectContent></Select></div>
           </div>
         </CardContent>
       </Card>
