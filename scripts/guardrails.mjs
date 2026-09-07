@@ -50,6 +50,9 @@ function isServerSafe(rel) {
   // Server-only Smart Forms authorization and transaction-reference helpers
   if (r.startsWith("src/lib/smartForms/")) return true;
 
+  // Server-only Smart Property authorization and scenario-reference helpers
+  if (r.startsWith("src/lib/smartProperty/")) return true;
+
   // Server-only transaction utility helpers (co-agent split, etc.)
   if (r.startsWith("src/lib/transactions/")) return true;
 

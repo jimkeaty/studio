@@ -1,0 +1,9 @@
+'use client';
+
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+export default function SmartPropertyLauncherPage() {
+  return <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6"><div><h1 className="text-2xl font-bold">Smart Property ROI / Investment Calculator</h1><p className="text-sm text-muted-foreground">Analyze flips, rentals, commercial investments, and development opportunities in the existing Smart Property workspace.</p></div><Card><CardHeader><CardTitle>Open Smart Property</CardTitle><CardDescription>Smart Property retains its established ROI, cash flow, cap rate, cash-on-cash return, flip profit, rehab, financing, holding costs, and saved-scenario calculations. If you are analyzing a saved transaction, use its Documents section to log the contextual launch and link its saved Smart Property scenario back to that record.</CardDescription></CardHeader><CardContent className="flex flex-wrap gap-3"><a href="https://smartflip-rxtcvbcs.manus.space" target="_blank" rel="noreferrer"><Button>Open Smart Property</Button></a><Link href="/dashboard/transactions/new"><Button variant="outline">Open a Transaction</Button></Link></CardContent></Card><Card><CardHeader><CardTitle>Current connection status</CardTitle></CardHeader><CardContent className="space-y-2 text-sm text-muted-foreground"><p>Smart Property currently has its own sign-in, calculation engine, and saved scenarios. No verified cross-app SSO, prefill endpoint, or scenario-sync webhook has been supplied.</p><p>For safety, Smart Broker keeps property/client information in its canonical record and does not place it in browser URLs. Automatic prefill and saved-scenario synchronization will require a documented and approved integration contract.</p></CardContent></Card></div>;
+}

@@ -99,9 +99,10 @@ export const PLUGIN_REGISTRY: PluginDefinition[] = [
   {
     id: 'smart-property-roi',
     name: 'Smart Property ROI',
-    description: 'Central rollout placeholder for a future property investment analysis module.',
+    description: 'Existing investment underwriting workspace. Smart Broker provides contextual launch and transaction-level scenario references while Smart Property retains calculations and saved scenarios.',
     iconName: 'TrendingUp',
     category: 'analytics',
+    href: '/dashboard/smart-property',
     defaultEnabled: false,
   },
 ];

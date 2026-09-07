@@ -37,6 +37,7 @@ import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentC
 import { InspectionReviewPanel } from '@/components/transactions/InspectionReviewPanel';
 import { SignLocationPicker } from '@/components/transactions/SignLocationPicker';
 import { SmartFormsTransactionPanel } from '@/components/transactions/SmartFormsTransactionPanel';
+import { SmartPropertyTransactionPanel } from '@/components/transactions/SmartPropertyTransactionPanel';
 import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 
@@ -7964,6 +7965,7 @@ export default function AddTransactionPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <SmartFormsTransactionPanel transactionId={editTxId || undefined} readOnly={isClosedAgentView} />
+              <SmartPropertyTransactionPanel transactionId={editTxId || undefined} readOnly={isClosedAgentView} />
 
               {/* Uploaded file list */}
               {uploadedDocs.length > 0 && (
