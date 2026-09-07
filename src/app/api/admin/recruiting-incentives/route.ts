@@ -1,0 +1,3 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { incentiveManagement, requireIncentiveAdmin } from '@/lib/recruiting/adminIncentives';
+export async function GET(req: NextRequest) { try { const admin = await requireIncentiveAdmin(req); return NextResponse.json({ ok: true, ...(await incentiveManagement(admin.uid, admin as Record<string, any>)) }); } catch (error: any) { const status = error.message === 'UNAUTHORIZED' ? 401 : error.message === 'FORBIDDEN' ? 403 : 500; return NextResponse.json({ ok: false, error: error.message || 'Unable to load recruiting incentives.' }, { status }); } }

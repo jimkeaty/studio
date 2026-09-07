@@ -5,6 +5,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import type { RecruitingIncentiveConfig } from '@/lib/types/recruitingConfig';
 import { DEFAULT_RECRUITING_CONFIG } from '@/lib/types/recruitingConfig';
+import { resolveRecruitingOrgId } from '@/lib/recruiting/org';
 
 const COLLECTION = 'recruitingIncentiveConfig';
 // For now, Keaty is the single org. When multi-org is needed, derive orgId from the admin's profile.
@@ -31,8 +32,7 @@ export async function GET(req: NextRequest) {
   if (!decoded) return jsonError(401, 'Unauthorized');
 
   try {
-    const { searchParams } = new URL(req.url);
-    const orgId = searchParams.get('orgId') || DEFAULT_ORG_ID;
+    const orgId = await resolveRecruitingOrgId(decoded.uid, decoded as Record<string, any>).catch(() => DEFAULT_ORG_ID);
 
     const snap = await adminDb.collection(COLLECTION).doc(orgId).get();
     if (!snap.exists) {
@@ -66,8 +66,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { searchParams } = new URL(req.url);
-    const orgId = searchParams.get('orgId') || DEFAULT_ORG_ID;
+    const orgId = await resolveRecruitingOrgId(decoded.uid, decoded as Record<string, any>).catch(() => DEFAULT_ORG_ID);
 
     // Validate required fields
     const {
@@ -83,8 +82,8 @@ export async function PUT(req: NextRequest) {
       description,
     } = body;
 
-    if (typeof gciThreshold !== 'number' || gciThreshold < 0) {
-      return jsonError(400, 'gciThreshold must be a non-negative number');
+    if (typeof gciThreshold !== 'number' || gciThreshold <= 0) {
+      return jsonError(400, 'gciThreshold must be greater than zero; a missing or zero goal may not qualify a recruit.');
     }
     if (typeof tier1PayoutAmount !== 'number' || tier1PayoutAmount < 0) {
       return jsonError(400, 'tier1PayoutAmount must be a non-negative number');

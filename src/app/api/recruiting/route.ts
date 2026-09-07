@@ -9,6 +9,8 @@ import type { DownlineMember, QualificationProgress, AnniversaryYearProgress, Re
 import type { RecruitingIncentiveConfig } from '@/lib/types/recruitingConfig';
 import { DEFAULT_RECRUITING_CONFIG } from '@/lib/types/recruitingConfig';
 import type admin from 'firebase-admin';
+import { buildQualificationProgress as buildCanonicalQualificationProgress } from '@/lib/recruiting/incentiveEngine';
+import { resolveRecruitingOrgId } from '@/lib/recruiting/org';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,9 +45,9 @@ async function fetchTransactionsForAgents(agentIds: string[]) {
 }
 
 /** Load the recruiting incentive config for the org (defaults to 'keaty'). */
-async function loadConfig(): Promise<RecruitingIncentiveConfig> {
+async function loadConfig(orgId: string): Promise<RecruitingIncentiveConfig> {
   try {
-    const snap = await adminDb.collection('recruitingIncentiveConfig').doc('keaty').get();
+    const snap = await adminDb.collection('recruitingIncentiveConfig').doc(orgId).get();
     if (snap.exists) {
       return { id: snap.id, ...snap.data() } as RecruitingIncentiveConfig;
     }
@@ -53,7 +55,7 @@ async function loadConfig(): Promise<RecruitingIncentiveConfig> {
     // Fall through to defaults
   }
   return {
-    id: 'keaty',
+    id: orgId,
     ...DEFAULT_RECRUITING_CONFIG,
     updatedAt: '',
     updatedByUid: '',
@@ -205,9 +207,11 @@ export async function GET(req: NextRequest) {
     const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
 
     // Load incentive config and resolve referrer IDs in parallel
-    const [config, profileByIdSnap] = await Promise.all([
-      loadConfig(),
+    const orgId = await resolveRecruitingOrgId(callerUid, decoded as Record<string, any>);
+    const [config, profileByIdSnap, paymentSnapshot] = await Promise.all([
+      loadConfig(orgId),
       adminDb.collection('agentProfiles').doc(uid).get(),
+      adminDb.collection('recruitingIncentivePayments').where('orgId', '==', orgId).get(),
     ]);
 
     // ── 0. Resolve all possible IDs for this referrer ──────────────────────────
@@ -243,6 +247,12 @@ export async function GET(req: NextRequest) {
       } catch { /* non-fatal */ }
     }
     const referrerIds = Array.from(referrerIdSet);
+    const normalizeStoredDate = (value: any) => parseDate(value)?.toISOString() || (typeof value === 'string' ? value : '');
+    const paymentFor = (recruitId: string, tier: 1 | 2, progress: QualificationProgress | null) => {
+      const window = progress?.anniversaryYears.find((year) => year.isCurrent) ?? progress?.anniversaryYears.at(-1);
+      const windowStart = window ? normalizeStoredDate(window.windowStart) : '';
+      return paymentSnapshot.docs.map((doc) => doc.data()).find((payment) => String(payment.recruitId || '') === recruitId && Number(payment.tier) === tier && referrerIdSet.has(String(payment.recruiterId || '')) && normalizeStoredDate(payment.windowStart) === windowStart);
+    };
 
     // ── 1. Find Tier 1 recruits ────────────────────────────────────────────────
     const tier1SnapBatches = await Promise.all(
@@ -314,12 +324,18 @@ export async function GET(req: NextRequest) {
       const agentId = profile.agentId as string;
       const hireDate = parseDate(profile.startDate);
       const agentTxns = txnsByAgent.get(agentId) ?? [];
+      const qualificationProgress = hireDate ? buildCanonicalQualificationProgress(hireDate, agentTxns, config) : null;
+      const payment = paymentFor(agentId, 1, qualificationProgress);
+      if (qualificationProgress) {
+        qualificationProgress.paymentStatus = payment?.status === 'paid' ? 'paid' : 'not_paid';
+        qualificationProgress.paidAt = parseDate(payment?.paidAt);
+      }
       downline.push({
         agentId,
         displayName: (profile.displayName as string) || agentId,
         tier: 1,
         hireDate,
-        qualificationProgress: hireDate ? buildQualificationProgress(hireDate, agentTxns, config) : null,
+        qualificationProgress,
       });
     }
 
@@ -331,7 +347,7 @@ export async function GET(req: NextRequest) {
       const referrerProfile = tier1Profiles.find(p => p.agentId === referrerId);
 
       // For Tier 2, compute progress using tier2PayoutAmount for the upline agent's credit
-      const qp = hireDate ? buildQualificationProgress(hireDate, agentTxns, config) : null;
+      const qp = hireDate ? buildCanonicalQualificationProgress(hireDate, agentTxns, config) : null;
       // Override annualPayout to use tier2PayoutAmount (the upline agent earns tier2 amount for this recruit)
       if (qp) {
         qp.annualPayout = qp.status === 'qualified' ? config.tier2PayoutAmount : 0;
@@ -340,6 +356,9 @@ export async function GET(req: NextRequest) {
           payoutEarned: y.qualified ? config.tier2PayoutAmount : 0,
         }));
         qp.totalLifetimePayouts = qp.anniversaryYears.reduce((s, y) => s + y.payoutEarned, 0);
+        const payment = paymentFor(agentId, 2, qp);
+        qp.paymentStatus = payment?.status === 'paid' ? 'paid' : 'not_paid';
+        qp.paidAt = parseDate(payment?.paidAt);
       }
 
       downline.push({

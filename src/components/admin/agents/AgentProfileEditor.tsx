@@ -16,6 +16,7 @@ export default function AgentProfileEditor({
 }: AgentProfileEditorProps) {
   const [initialValues, setInitialValues] =
     useState<Partial<AgentProfileFormValues> | null>(null);
+  const [referralHistory, setReferralHistory] = useState<Array<{ id: string; type?: string; referringAgentName?: string | null; priorReferringAgentName?: string | null; changedAt?: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -53,6 +54,7 @@ export default function AgentProfileEditor({
         if (!isMounted) return;
 
         const agent = result.agent || {};
+        setReferralHistory(Array.isArray(result.referralHistory) ? result.referralHistory : []);
 
         setInitialValues({
           firstName: agent.firstName || '',
@@ -123,6 +125,7 @@ export default function AgentProfileEditor({
       agentId={agentId}
       initialValues={initialValues || {}}
       submitLabel="Update Agent"
+      referralHistory={referralHistory}
     />
   );
 }

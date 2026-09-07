@@ -373,9 +373,11 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return jsonError(404, 'Agent profile not found', { agentId });
     }
 
+    const referralHistory = await ref.collection('referralHistory').orderBy('changedAt', 'desc').limit(50).get().catch(() => null);
     return NextResponse.json({
       ok: true,
       agent: snap.data(),
+      referralHistory: referralHistory?.docs.map((doc) => ({ id: doc.id, ...doc.data() })) || [],
     });
   } catch (err: any) {
     if (err?.message === 'UNAUTHORIZED') {
@@ -394,7 +396,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin(req);
+    const admin = await requireAdmin(req);
     const { agentId } = await context.params;
 
     const body = (await req.json()) as AgentProfileInput;
@@ -408,6 +410,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       return jsonError(404, 'Agent profile not found', { agentId });
     }
 
+    const previous = existing.data() || {};
     const updated = {
       firstName: normalized.firstName,
       lastName: normalized.lastName,
@@ -442,7 +445,45 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       updatedAt: new Date().toISOString(),
     };
 
-    await ref.update(updated);
+    const previousReferrerId = String(previous.referringAgentId || '');
+    const nextReferrerId = String(normalized.referringAgentId || '');
+    if (nextReferrerId) {
+      const candidates = await Promise.all([
+        adminDb.collection('agentProfiles').doc(nextReferrerId).get(),
+        adminDb.collection('agentProfiles').where('agentId', '==', nextReferrerId).limit(1).get(),
+      ]);
+      const referringProfile = candidates[0].exists ? candidates[0] : candidates[1].docs[0];
+      if (!referringProfile?.exists || referringProfile.id === agentId || String(referringProfile.data()?.agentId || '') === String(previous.agentId || agentId)) {
+        return jsonError(400, 'A referring agent must be an existing, different agent.');
+      }
+      let ancestorId = String(referringProfile.data()?.referringAgentId || '');
+      const visited = new Set<string>([agentId, String(previous.agentId || '')]);
+      for (let depth = 0; ancestorId && depth < 10; depth++) {
+        if (visited.has(ancestorId)) return jsonError(400, 'Referral attribution cannot create a recruiting relationship loop.');
+        visited.add(ancestorId);
+        const ancestor = await adminDb.collection('agentProfiles').doc(ancestorId).get();
+        ancestorId = ancestor.exists ? String(ancestor.data()?.referringAgentId || '') : '';
+      }
+    }
+    const referralChanged = previousReferrerId !== nextReferrerId;
+    if (referralChanged) {
+      const changeType = !nextReferrerId ? 'removed' : !previousReferrerId ? 'assigned' : 'corrected';
+      const historyRef = ref.collection('referralHistory').doc();
+      const batch = adminDb.batch();
+      batch.update(ref, updated);
+      batch.create(historyRef, {
+        type: changeType,
+        priorReferringAgentId: previousReferrerId || null,
+        priorReferringAgentName: previous.referringAgentDisplayNameSnapshot || null,
+        referringAgentId: nextReferrerId || null,
+        referringAgentName: normalized.referringAgentDisplayNameSnapshot || null,
+        changedAt: new Date().toISOString(),
+        changedByUid: admin.uid,
+      });
+      await batch.commit();
+    } else {
+      await ref.update(updated);
+    }
 
     // Auto-upsert team membership and member plan if this is a team agent
     let membershipResult: { membershipId: string; memberPlanId: string | null } | null = null;

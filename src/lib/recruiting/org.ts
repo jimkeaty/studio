@@ -1,0 +1,4 @@
+import 'server-only';
+import { adminDb } from '@/lib/firebase/admin';
+
+export async function resolveRecruitingOrgId(uid: string, claims?: Record<string, any>): Promise<string> { const claimed = claims?.organizationId || claims?.orgId || claims?.tenantId; if (typeof claimed === 'string' && claimed.trim()) return claimed.trim(); const direct = await adminDb.collection('agentProfiles').doc(uid).get().catch(() => null); let data = direct?.data(); if (!data) { const byUid = await adminDb.collection('agentProfiles').where('firebaseUid', '==', uid).limit(1).get().catch(() => null); data = byUid?.empty ? undefined : byUid?.docs[0].data(); } const profileOrg = data?.organizationId || data?.orgId || data?.tenantId; return typeof profileOrg === 'string' && profileOrg.trim() ? profileOrg.trim() : 'keaty'; }

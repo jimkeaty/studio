@@ -19,6 +19,7 @@ import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoB
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
 import { RecruitingGoalsSummary } from '@/components/dashboard/broker/RecruitingGoalsSummary';
 import { RecruitingReverseCalculator } from '@/components/dashboard/broker/RecruitingReverseCalculator';
+import { RecruitingIncentiveManagement } from '@/components/dashboard/broker/RecruitingIncentiveManagement';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -2080,6 +2081,7 @@ export default function RecruitingDashboardPage() {
         {/* ── TAB 4: Incentive Program Config ─────────────────────────────── */}
         <TabsContent value="incentive" className="space-y-6 mt-6">
           <IncentiveConfigPanel />
+          <RecruitingIncentiveManagement />
         </TabsContent>
 
       </Tabs>

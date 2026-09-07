@@ -81,6 +81,8 @@ type EnhancedDownlineMember = DownlineMember & {
     annualPayout: number;
     anniversaryYears?: AnniversaryYearProgress[];   // NOT annualWindows
     totalLifetimePayouts?: number;                  // NOT lifetimeEarned
+    paymentStatus?: 'not_paid' | 'paid';
+    paidAt?: string | null;
   } | null;
 };
 
@@ -138,16 +140,18 @@ const SummaryCard = ({
 const StatusBadge = ({
   status,
 }: {
-  status: "qualified" | "in_progress" | "expired" | "missing_data";
+  status: "earned" | "paid" | "in_progress" | "expired" | "missing_data";
 }) => {
   const variants = {
-    qualified: "bg-green-500/20 text-green-700 border-green-500/30",
+    earned: "bg-green-500/20 text-green-700 border-green-500/30",
+    paid: "bg-emerald-500/20 text-emerald-700 border-emerald-500/30",
     in_progress: "bg-blue-500/20 text-blue-700 border-blue-500/30",
     expired: "bg-red-500/20 text-red-700 border-red-500/30",
     missing_data: "bg-gray-500/20 text-gray-700 border-gray-500/30",
   };
   const text = {
-    qualified: "Qualified ✓",
+    earned: "Earned — Payment Pending",
+    paid: "Paid",
     in_progress: "In Progress",
     expired: "Expired",
     missing_data: "No Data",
@@ -475,17 +479,18 @@ export function RecruitingIncentiveTracker() {
                     <TableRow>
                       <TableHead className="w-6"></TableHead>
                       <TableHead>Agent</TableHead>
+                      <TableHead>Recruit / Qualification Period</TableHead>
                       <TableHead>Window Progress to {fmt(gciThreshold)} GCI</TableHead>
                       <TableHead>Time Left</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">This Year</TableHead>
+                      <TableHead className="text-right">Potential / Earned</TableHead>
                       <TableHead className="text-right">Lifetime</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {downline.filter(m => m.tier === 1).map((member) => {
                       const qp = member.qualificationProgress as EnhancedDownlineMember["qualificationProgress"];
-                      const status: "qualified" | "in_progress" | "expired" | "missing_data" = qp?.status ?? "missing_data";
+                      const status: "earned" | "paid" | "in_progress" | "expired" | "missing_data" = qp?.paymentStatus === 'paid' ? 'paid' : qp?.status === 'qualified' ? 'earned' : qp?.status ?? "missing_data";
                       const closed = Number(qp?.closedCompanyGciGrossInWindow || 0);
                       const pending = Number(qp?.pendingCompanyGciGrossInWindow || 0);
                       const annualPayout = Number(qp?.annualPayout || 0);
@@ -509,6 +514,7 @@ export function RecruitingIncentiveTracker() {
                               {hasHistory && (isExpanded ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />)}
                             </TableCell>
                             <TableCell className="font-medium">{member.displayName || member.agentId}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{member.hireDate ? new Date(member.hireDate).toLocaleDateString() : 'Not Started'}{qp?.windowEndsAt ? <><br />Ends {new Date(qp.windowEndsAt).toLocaleDateString()}</> : null}</TableCell>
                             <TableCell>
                               <div className="space-y-1">
                                 <GciProgressBar closed={closed} pending={pending} threshold={gciThreshold} />
@@ -556,16 +562,17 @@ export function RecruitingIncentiveTracker() {
                       <TableHead className="w-6"></TableHead>
                       <TableHead>Agent</TableHead>
                       <TableHead>Recruited By</TableHead>
+                      <TableHead>Recruit / Qualification Period</TableHead>
                       <TableHead>Window Progress to {fmt(gciThreshold)} GCI</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">This Year</TableHead>
+                      <TableHead className="text-right">Potential / Earned</TableHead>
                       <TableHead className="text-right">Lifetime</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {downline.filter(m => m.tier === 2).map((member) => {
                       const qp = member.qualificationProgress as EnhancedDownlineMember["qualificationProgress"];
-                      const status: "qualified" | "in_progress" | "expired" | "missing_data" = qp?.status ?? "missing_data";
+                      const status: "earned" | "paid" | "in_progress" | "expired" | "missing_data" = qp?.paymentStatus === 'paid' ? 'paid' : qp?.status === 'qualified' ? 'earned' : qp?.status ?? "missing_data";
                       const closed = Number(qp?.closedCompanyGciGrossInWindow || 0);
                       const pending = Number(qp?.pendingCompanyGciGrossInWindow || 0);
                       const annualPayout = Number(qp?.annualPayout || 0);
@@ -584,6 +591,7 @@ export function RecruitingIncentiveTracker() {
                             </TableCell>
                             <TableCell className="font-medium">{member.displayName || member.agentId}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{member.referrerDisplayName || "—"}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{member.hireDate ? new Date(member.hireDate).toLocaleDateString() : 'Not Started'}{qp?.windowEndsAt ? <><br />Ends {new Date(qp.windowEndsAt).toLocaleDateString()}</> : null}</TableCell>
                             <TableCell>
                               <div className="space-y-1">
                                 <GciProgressBar closed={closed} pending={pending} threshold={gciThreshold} />

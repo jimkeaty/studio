@@ -80,6 +80,7 @@ type AgentProfileFormProps = {
   agentId?: string;
   initialValues?: Partial<AgentProfileFormValues>;
   submitLabel?: string;
+  referralHistory?: Array<{ id: string; type?: string; referringAgentName?: string | null; priorReferringAgentName?: string | null; changedAt?: string }>;
 };
 
 type TeamOption = {
@@ -307,6 +308,7 @@ export default function AgentProfileForm({
   agentId,
   initialValues,
   submitLabel = 'Save Agent',
+  referralHistory = [],
 }: AgentProfileFormProps) {
   const router = useRouter();
 
@@ -2137,6 +2139,13 @@ export default function AgentProfileForm({
 
       <section className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Relationships</h2>
+
+        <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm">
+          <strong>Referred By: </strong>{values.referringAgentDisplayNameSnapshot || 'No Referring Agent'}
+          {referralHistory.length > 0 && (
+            <p className="mt-1 text-xs text-gray-500">Most recent referral update: {referralHistory[0].type || 'updated'}{referralHistory[0].changedAt ? ` on ${new Date(referralHistory[0].changedAt).toLocaleDateString()}` : ''}.</p>
+          )}
+        </div>
 
         <div className="mt-4">
           <label className="mb-1 block text-sm font-medium">Referring Agent</label>

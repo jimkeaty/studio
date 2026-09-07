@@ -1,0 +1,3 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { markIncentivePaid, requireIncentiveAdmin } from '@/lib/recruiting/adminIncentives';
+export async function POST(req: NextRequest) { try { const admin = await requireIncentiveAdmin(req); const body = await req.json(); return NextResponse.json({ ok: true, ...(await markIncentivePaid(admin.uid, admin as Record<string, any>, body)) }); } catch (error: any) { const message = error.message || 'Unable to record incentive payment.'; const status = message === 'UNAUTHORIZED' ? 401 : message === 'FORBIDDEN' ? 403 : /Only an earned|already recorded/.test(message) ? 409 : 500; return NextResponse.json({ ok: false, error: message }, { status }); } }

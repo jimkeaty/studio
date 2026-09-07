@@ -53,6 +53,9 @@ function isServerSafe(rel) {
   // Server-only Smart Property authorization and scenario-reference helpers
   if (r.startsWith("src/lib/smartProperty/")) return true;
 
+  // Server-only recruiting incentive calculation, tenant, and payment helpers
+  if (r.startsWith("src/lib/recruiting/")) return true;
+
   // Server-only transaction utility helpers (co-agent split, etc.)
   if (r.startsWith("src/lib/transactions/")) return true;
 

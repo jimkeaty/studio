@@ -56,6 +56,8 @@ export interface AnniversaryYearProgress {
   isCurrent: boolean;
   /** Payout earned for this year (based on config) */
   payoutEarned: number;
+  /** Exact closed-transaction date on which the threshold was first reached. */
+  qualifiedAt?: Date | null;
 }
 
 /**
@@ -85,6 +87,9 @@ export interface QualificationProgress {
   totalLifetimePayouts: number;
   /** Number of years this recruit has qualified */
   qualifiedYearsCount: number;
+  /** Immutable payment record state for the current qualification window. */
+  paymentStatus?: 'not_paid' | 'paid';
+  paidAt?: Date | null;
 }
 
 /**
