@@ -44,8 +44,12 @@ The Task 7 focused and full regression suites passed. The local Next.js compilat
 
 ### Continuing publication blocker
 
-Tasks #7 through #24 are checkpointed only in the local clone. GitHub CLI authentication remains expired, so no commits after the last successful remote publication can be pushed or deployed until the existing repository connection is restored. No credentials or tokens are requested or stored in this worktree.
+The publication blocker was resolved on 2026-09-06. The complete accumulated change range `5978641..8a624e4`, including Tasks #7 through #24, was pushed to `origin/main`; remote `main` now resolves to `8a624e4dcf5e5be13a53671f817b9ab7fb3b9421`. The GitHub workflow query returned no repository workflow runs, so an automated Firebase/App Hosting deployment could not be observed or claimed from this repository. No credentials or tokens were requested or stored in this worktree.
 
 ### Task 12 activation dependency
 
 The repository contains secured digest logic at `/api/cron/transaction-activity-digest`, but no checked-in scheduler configuration was found. A production scheduler must call that endpoint once daily after routine checklist activity, using the already-deployed cron secret. The route will not send an empty digest and will retain events for retry if email delivery is not configured or fails.
+
+### Publication recovery and final queue state
+
+The table entries marked `Local checkpoint pending` reflect the status at the time each task was finished. On 2026-09-06, the backlog was published together to GitHub `main` through commit `8a624e4`. The repository has no observable GitHub Actions deployment run, so source publication is verified but a live Firebase/App Hosting rollout is not. Production scheduler activation, Meta/SSO integration credentials, broker-review configuration, and editorial legacy-Hub migration remain separate operational dependencies described in their respective task entries.
