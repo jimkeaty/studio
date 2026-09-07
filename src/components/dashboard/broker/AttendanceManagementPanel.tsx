@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useUser } from '@/firebase';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { CalendarCheck2, Clock3, MapPin, Printer, QrCode, Settings2, Users } from 'lucide-react';
 
+declare global { interface Window { L?: any; } }
+
 type Agent = { agentId: string; name: string; startDate?: string };
 type OfficeLocationConfig = { latitude: number; longitude: number; radiusMeters: number; address?: string | null; updatedAt?: string | null };
+const DEFAULT_OFFICE_MAP_CENTER = { latitude: 30.2241, longitude: -92.0198 };
 
 const QR_EVENTS = [
   { type: 'huddle', label: 'Team Huddle', schedule: 'Tuesday & Thursday · 8:30–9:00 AM', detail: 'Required. Agents scan the code while attending the huddle.' },
@@ -40,6 +43,15 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
   const [officeLatitude, setOfficeLatitude] = useState('');
   const [officeLongitude, setOfficeLongitude] = useState('');
   const [addressStatus, setAddressStatus] = useState('');
+  const officeMapRef = useRef<HTMLDivElement | null>(null);
+  const officeMapInstanceRef = useRef<any>(null);
+  const officeMapMarkerRef = useRef<any>(null);
+
+  const setOfficePin = useCallback((latitude: number, longitude: number, message?: string) => {
+    setOfficeLatitude(latitude.toFixed(6));
+    setOfficeLongitude(longitude.toFixed(6));
+    if (message) setAddressStatus(message);
+  }, []);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -90,9 +102,7 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
       const matches = await response.json();
       if (!matches?.[0]) throw new Error('Address not found. Check the street address, city, and ZIP code.');
       const match = matches[0];
-      setOfficeLatitude(Number(match.lat).toFixed(6));
-      setOfficeLongitude(Number(match.lon).toFixed(6));
-      setAddressStatus(`Location found: ${match.display_name}. Review the map link, then save this office location.`);
+      setOfficePin(Number(match.lat), Number(match.lon), `Location found: ${match.display_name}. Drag the map pin to the exact office spot before saving if needed.`);
     } catch (error: any) {
       setAddressStatus(error.message || 'Address lookup failed. You can enter latitude and longitude manually.');
     }
@@ -105,13 +115,93 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
       return;
     }
     navigator.geolocation.getCurrentPosition((position) => {
-      setOfficeLatitude(position.coords.latitude.toFixed(6));
-      setOfficeLongitude(position.coords.longitude.toFixed(6));
-      setAddressStatus('Current device location captured. Add a readable office address if desired, then save.');
+      setOfficePin(position.coords.latitude, position.coords.longitude, 'Current device location captured. Drag the map pin to refine it if needed, then save.');
     }, (error) => {
       toast({ title: 'Location access is required', description: error.code === error.PERMISSION_DENIED ? 'Allow location access while standing at the office, then try again.' : 'Unable to confirm this device location. Please try again.', variant: 'destructive' });
     }, { enableHighAccuracy: true, timeout: 20_000, maximumAge: 30_000 });
   };
+
+  useEffect(() => {
+    if (!locationOpen || !officeMapRef.current) return;
+    let cancelled = false;
+
+    const loadMap = async () => {
+      if (!window.L) {
+        if (!document.querySelector('link[data-office-location-map]')) {
+          const css = document.createElement('link');
+          css.rel = 'stylesheet';
+          css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+          css.dataset.officeLocationMap = 'true';
+          document.head.appendChild(css);
+        }
+        await new Promise<void>((resolve, reject) => {
+          const existing = document.querySelector('script[data-office-location-map]') as HTMLScriptElement | null;
+          if (existing) {
+            if (window.L) resolve();
+            else {
+              existing.addEventListener('load', () => resolve(), { once: true });
+              existing.addEventListener('error', () => reject(new Error('Map could not load.')), { once: true });
+            }
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+          script.dataset.officeLocationMap = 'true';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Map could not load.'));
+          document.head.appendChild(script);
+        });
+      }
+      if (cancelled || !window.L || !officeMapRef.current) return;
+      const latitude = Number(officeLatitude);
+      const longitude = Number(officeLongitude);
+      const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+      const center = hasCoordinates ? [latitude, longitude] : [DEFAULT_OFFICE_MAP_CENTER.latitude, DEFAULT_OFFICE_MAP_CENTER.longitude];
+      const map = window.L.map(officeMapRef.current).setView(center, hasCoordinates ? 17 : 12);
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+      officeMapInstanceRef.current = map;
+      const placeMarker = (point: any) => {
+        if (officeMapMarkerRef.current) officeMapMarkerRef.current.remove();
+        const marker = window.L.marker(point, { draggable: true }).addTo(map);
+        marker.on('dragend', () => {
+          const moved = marker.getLatLng();
+          setOfficePin(moved.lat, moved.lng, 'Map pin moved. The displayed latitude and longitude now match the selected office location.');
+        });
+        officeMapMarkerRef.current = marker;
+      };
+      if (hasCoordinates) placeMarker(center);
+      map.on('click', (event: any) => {
+        placeMarker(event.latlng);
+        setOfficePin(event.latlng.lat, event.latlng.lng, 'Map pin moved. The displayed latitude and longitude now match the selected office location.');
+      });
+    };
+
+    loadMap().catch((error: any) => setAddressStatus(error.message || 'Map could not load. You can still edit latitude and longitude directly.'));
+    return () => {
+      cancelled = true;
+      if (officeMapInstanceRef.current) officeMapInstanceRef.current.remove();
+      officeMapInstanceRef.current = null;
+      officeMapMarkerRef.current = null;
+    };
+  }, [locationOpen, setOfficePin]);
+
+  useEffect(() => {
+    const map = officeMapInstanceRef.current;
+    const latitude = Number(officeLatitude);
+    const longitude = Number(officeLongitude);
+    if (!map || !window.L || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    const point = window.L.latLng(latitude, longitude);
+    map.setView(point, 17);
+    if (officeMapMarkerRef.current) officeMapMarkerRef.current.setLatLng(point);
+    else {
+      const marker = window.L.marker(point, { draggable: true }).addTo(map);
+      marker.on('dragend', () => {
+        const moved = marker.getLatLng();
+        setOfficePin(moved.lat, moved.lng, 'Map pin moved. The displayed latitude and longitude now match the selected office location.');
+      });
+      officeMapMarkerRef.current = marker;
+    }
+  }, [officeLatitude, officeLongitude, setOfficePin]);
 
   const saveOfficeLocation = async () => {
     if (!user) return;
@@ -181,7 +271,7 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
       </CardContent>
     </Card>
 
-    <Dialog open={locationOpen} onOpenChange={setLocationOpen}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-violet-700" />Set Official Office Location</DialogTitle><DialogDescription>Enter the office address where agents must be for floor-time sign-in. Review the mapped location and selected radius before saving.</DialogDescription></DialogHeader><div className="space-y-4 py-2"><div className="space-y-1.5"><Label htmlFor="office-address">Office Address</Label><div className="flex gap-2"><Input id="office-address" value={officeAddress} onChange={event => setOfficeAddress(event.target.value)} placeholder="Street address, city, state, ZIP" /><Button type="button" variant="outline" onClick={findOfficeAddress} disabled={saving}>Find Address</Button></div><p className="text-xs text-muted-foreground">You can set this from anywhere. The saved address is used to choose the GPS point that agents must be near.</p></div><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><Label htmlFor="office-latitude">Latitude</Label><Input id="office-latitude" inputMode="decimal" value={officeLatitude} onChange={event => setOfficeLatitude(event.target.value)} placeholder="30.224100" /></div><div className="space-y-1.5"><Label htmlFor="office-longitude">Longitude</Label><Input id="office-longitude" inputMode="decimal" value={officeLongitude} onChange={event => setOfficeLongitude(event.target.value)} placeholder="-92.019800" /></div></div><div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" onClick={useCurrentDeviceLocation} disabled={saving}>Use This Device Location</Button>{Number.isFinite(Number(officeLatitude)) && Number.isFinite(Number(officeLongitude)) && <a className="text-sm font-medium text-primary underline" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${officeLatitude},${officeLongitude}`)}`} target="_blank" rel="noreferrer">Review on Map</a>}</div>{addressStatus && <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{addressStatus}</p>}<div className="space-y-1.5"><Label>Allowed radius (meters)</Label><Input type="number" min="25" max="1000" value={radiusMeters} onChange={event => setRadiusMeters(event.target.value)} /><p className="text-xs text-muted-foreground">250 meters is a practical starting radius. A tighter radius better verifies office presence but may fail indoors or on devices with weaker GPS.</p></div></div><DialogFooter><Button variant="outline" onClick={() => setLocationOpen(false)}>Cancel</Button><Button onClick={saveOfficeLocation} disabled={saving}>{saving ? 'Saving…' : 'Save Official Office Location'}</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={locationOpen} onOpenChange={setLocationOpen}><DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-violet-700" />Set Official Office Location</DialogTitle><DialogDescription>Enter the office address where agents must be for floor-time sign-in. Then drag the map pin to the exact office spot before saving.</DialogDescription></DialogHeader><div className="space-y-4 py-2"><div className="space-y-1.5"><Label htmlFor="office-address">Office Address</Label><div className="flex gap-2"><Input id="office-address" value={officeAddress} onChange={event => setOfficeAddress(event.target.value)} placeholder="Street address, city, state, ZIP" /><Button type="button" variant="outline" onClick={findOfficeAddress} disabled={saving}>Find Address</Button></div><p className="text-xs text-muted-foreground">You can set this from anywhere. Address search places an initial pin; you control the final saved point.</p></div><div className="space-y-1.5"><Label>Exact Office Pin</Label><div ref={officeMapRef} className="h-72 w-full rounded-md border bg-muted" aria-label="Office location map; click or drag the pin to set the exact floor-time office location" /><p className="text-xs text-muted-foreground">Click the map or drag the marker to move the office location. The latitude and longitude below update automatically.</p></div><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><Label htmlFor="office-latitude">Latitude</Label><Input id="office-latitude" inputMode="decimal" value={officeLatitude} onChange={event => setOfficeLatitude(event.target.value)} placeholder="30.224100" /></div><div className="space-y-1.5"><Label htmlFor="office-longitude">Longitude</Label><Input id="office-longitude" inputMode="decimal" value={officeLongitude} onChange={event => setOfficeLongitude(event.target.value)} placeholder="-92.019800" /></div></div><div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" onClick={useCurrentDeviceLocation} disabled={saving}>Use This Device Location</Button>{Number.isFinite(Number(officeLatitude)) && Number.isFinite(Number(officeLongitude)) && <a className="text-sm font-medium text-primary underline" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${officeLatitude},${officeLongitude}`)}`} target="_blank" rel="noreferrer">Open in Google Maps</a>}</div>{addressStatus && <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{addressStatus}</p>}<div className="space-y-1.5"><Label>Allowed radius (meters)</Label><Input type="number" min="25" max="1000" value={radiusMeters} onChange={event => setRadiusMeters(event.target.value)} /><p className="text-xs text-muted-foreground">250 meters is a practical starting radius. A tighter radius better verifies office presence but may fail indoors or on devices with weaker GPS.</p></div></div><DialogFooter><Button variant="outline" onClick={() => setLocationOpen(false)}>Cancel</Button><Button onClick={saveOfficeLocation} disabled={saving}>{saving ? 'Saving…' : 'Save Official Office Location'}</Button></DialogFooter></DialogContent></Dialog>
 
     <Dialog open={trainingOpen} onOpenChange={setTrainingOpen}><DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>Record Training Attendance</DialogTitle><DialogDescription>Log the training topic, length, and each participating agent. Each participant receives an attendance record on their own dashboard and in Ethan’s reporting.</DialogDescription></DialogHeader><div className="grid gap-3 py-2 sm:grid-cols-2"><div className="space-y-1.5"><Label>Date</Label><Input type="date" value={training.date} onChange={event => setTraining(form => ({ ...form, date: event.target.value }))} /></div><div className="space-y-1.5"><Label>Duration (minutes)</Label><Input type="number" min="0" value={training.durationMinutes} onChange={event => setTraining(form => ({ ...form, durationMinutes: event.target.value }))} /></div><div className="space-y-1.5 sm:col-span-2"><Label>Training Topic *</Label><Input placeholder="Example: Buyer consultation role play" value={training.topic} onChange={event => setTraining(form => ({ ...form, topic: event.target.value }))} /></div><label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={training.directorLed} onChange={event => setTraining(form => ({ ...form, directorLed: event.target.checked }))} />Credit this session to Ethan’s Director scorecard.</label><div className="space-y-1.5 sm:col-span-2"><Label>Notes</Label><Textarea rows={3} placeholder="Key topics, materials, or follow-up" value={training.notes} onChange={event => setTraining(form => ({ ...form, notes: event.target.value }))} /></div></div><div className="rounded-lg border"><div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2"><p className="text-sm font-semibold">Participants ({selectedCount})</p><Button variant="ghost" size="sm" onClick={() => setTraining(form => ({ ...form, participantIds: form.participantIds.length === agents.length ? [] : agents.map(agent => agent.agentId) }))}>{training.participantIds.length === agents.length ? 'Clear all' : 'Select all'}</Button></div><div className="grid max-h-64 gap-1 overflow-y-auto p-3 sm:grid-cols-2">{agents.map(agent => <label key={agent.agentId} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"><input type="checkbox" checked={training.participantIds.includes(agent.agentId)} onChange={() => toggleAgent(agent.agentId)} />{agent.name}</label>)}</div></div><DialogFooter><Button variant="outline" onClick={() => setTrainingOpen(false)}>Cancel</Button><Button onClick={saveTraining} disabled={saving || !training.topic.trim() || !selectedCount}>{saving ? 'Saving…' : 'Save Training Attendance'}</Button></DialogFooter></DialogContent></Dialog>
   </>;

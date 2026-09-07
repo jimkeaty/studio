@@ -86,7 +86,12 @@ test('administrators can set and verify the official office address without rely
   assert.match(managerPanel, /Find Address/);
   assert.match(managerPanel, /nominatim\.openstreetmap\.org\/search/);
   assert.match(managerPanel, /Use This Device Location/);
-  assert.match(managerPanel, /Review on Map/);
+  assert.match(managerPanel, /Exact Office Pin/);
+  assert.match(managerPanel, /officeMapRef/);
+  assert.match(managerPanel, /draggable: true/);
+  assert.match(managerPanel, /marker\.on\('dragend'/);
+  assert.match(managerPanel, /Click the map or drag the marker/);
+  assert.match(managerPanel, /Open in Google Maps/);
   assert.match(managerPanel, /Save Official Office Location/);
   assert.match(managerPanel, /Edit Office Location/);
 });
