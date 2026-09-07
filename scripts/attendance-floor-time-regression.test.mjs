@@ -44,6 +44,22 @@ test('QR attendance is restricted to scheduled event windows and cannot be dupli
   assert.match(route, /source: 'qr'/);
 });
 
+test('View as Agent loads the selected active agent attendance history but never permits proxy check-ins', async () => {
+  const [route, agentPanel] = await Promise.all([readFile(routePath, 'utf8'), readFile(agentPanelPath, 'utf8')]);
+  assert.match(route, /requestedAgentId/);
+  assert.match(route, /auth\.isAdmin && requestedAgentId \? await resolveAgent\(requestedAgentId\) : self/);
+  assert.match(route, /where\('firebaseUid', '==', identity\)/);
+  assert.match(route, /where\('agentId', '==', identity\)/);
+  assert.match(route, /linkedUser\.data\(\)\?\.agentId/);
+  assert.match(route, /You can only view your own attendance/);
+  assert.match(agentPanel, /useEffectiveUser/);
+  assert.match(agentPanel, /\?agentId=\$\{encodeURIComponent\(effectiveUid\)\}/);
+  assert.match(agentPanel, /impersonationReady/);
+  assert.match(agentPanel, /Attendance is view-only/);
+  assert.match(agentPanel, /disabled=\{submitting !== null \|\| viewOnly\}/);
+  assert.match(agentPanel, /disabled=\{submitting !== null \|\| !data\.officeLocationConfigured \|\| viewOnly\}/);
+});
+
 test('agent and staff interfaces retain QR, secure floor-time, and training-roster controls', async () => {
   const [agentPanel, managerPanel, navigation] = await Promise.all([
     readFile(agentPanelPath, 'utf8'),

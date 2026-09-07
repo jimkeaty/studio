@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useUser } from '@/firebase';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,7 +66,7 @@ function eventLabel(type: string) {
 }
 
 export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boolean }) {
-  const { user } = useUser();
+  const { user, effectiveUid, isImpersonating, impersonationReady } = useEffectiveUser();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const [data, setData] = useState<AttendanceData | null>(null);
@@ -77,11 +77,12 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
   const highlightedEvent = requestedEvent === 'huddle' || requestedEvent === 'role_play_ids' ? requestedEvent : null;
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user || !impersonationReady) return;
     setLoading(true);
     try {
       const token = await user.getIdToken();
-      const response = await fetch('/api/agent/attendance', { headers: { Authorization: `Bearer ${token}` } });
+      const params = isImpersonating && effectiveUid ? `?agentId=${encodeURIComponent(effectiveUid)}` : '';
+      const response = await fetch(`/api/agent/attendance${params}`, { headers: { Authorization: `Bearer ${token}` } });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to load attendance');
       setData(result);
@@ -90,7 +91,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
     } finally {
       setLoading(false);
     }
-  }, [toast, user]);
+  }, [effectiveUid, impersonationReady, isImpersonating, toast, user]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -106,6 +107,10 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
 
   const post = async (action: string, payload: Record<string, unknown> = {}) => {
     if (!user) return;
+    if (isImpersonating) {
+      toast({ title: 'Attendance is view-only', description: 'Exit View as Agent before recording attendance or floor time.', variant: 'destructive' });
+      return null;
+    }
     setSubmitting(action);
     try {
       const token = await user.getIdToken();
@@ -156,6 +161,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
   };
 
   const recentRecords = useMemo(() => data?.records.slice(0, compact ? 3 : 8) || [], [compact, data]);
+  const viewOnly = isImpersonating;
 
   if (loading) return <Skeleton className={compact ? 'h-48 w-full' : 'h-[560px] w-full'} />;
   if (!data) return null;
@@ -174,6 +180,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
         </div>
       </CardHeader>
       <CardContent className="space-y-5 pt-5">
+        {viewOnly && <Alert className="border-amber-300 bg-amber-50 text-amber-950"><AlertTitle>Viewing attendance history only</AlertTitle><AlertDescription>Exit View as Agent before recording attendance or starting a floor-time shift. This prevents staff from creating attendance records on an agent’s behalf.</AlertDescription></Alert>}
         {highlightedEvent && (
           <Alert className="border-primary/30 bg-primary/5"><QrCode className="h-4 w-4 text-primary" /><AlertTitle>{eventLabel(highlightedEvent)} check-in</AlertTitle><AlertDescription>Use the button below while you are attending the scheduled session. Your signed-in account is recorded once per session.</AlertDescription></Alert>
         )}
@@ -186,7 +193,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
               const isHighlighted = highlightedEvent === type;
               return <div key={type} className={`rounded-lg border p-4 ${isHighlighted ? 'border-primary bg-primary/5' : 'bg-background'}`}>
                 <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{schedule.label}</p><p className="mt-1 text-sm text-muted-foreground">{schedule.days.join(' & ')} · {schedule.startLabel}</p></div><CalendarCheck2 className="h-5 w-5 text-primary" /></div>
-                <Button className="mt-4 w-full" variant={isHighlighted ? 'default' : 'outline'} onClick={() => checkInEvent(type)} disabled={submitting !== null}>{submitting === 'checkInEvent' && isHighlighted ? 'Recording...' : 'Record Attendance'}</Button>
+                <Button className="mt-4 w-full" variant={isHighlighted ? 'default' : 'outline'} onClick={() => checkInEvent(type)} disabled={submitting !== null || viewOnly}>{submitting === 'checkInEvent' && isHighlighted ? 'Recording...' : 'Record Attendance'}</Button>
               </div>;
             })}
           </div>
@@ -195,7 +202,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
         <section>
           <div className="mb-3 flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold">Secure Office Floor Time</h3></div>
           <div className="grid gap-3 lg:grid-cols-[1.3fr_.7fr_.7fr]">
-            <div className="rounded-lg border bg-background p-4"><p className="font-semibold">{openShift ? 'Floor-time shift in progress' : 'Start your floor-time shift'}</p><p className="mt-1 text-sm text-muted-foreground">{openShift ? `Checked in at ${formatTime(openShift.checkInAt)}. Check out when you leave the office.` : 'Your phone will confirm you are at the office. Both arrival and departure are time-stamped.'}</p><Button className="mt-4" onClick={() => floorAction(openShift ? 'floorCheckOut' : 'floorCheckIn')} disabled={submitting !== null || !data.officeLocationConfigured}>{submitting?.startsWith('floor') ? 'Verifying...' : openShift ? 'Check Out of Floor Time' : 'Check In to Floor Time'}</Button>{!data.officeLocationConfigured && <p className="mt-2 text-xs text-amber-700">An administrator must set the office location before secure floor-time check-ins can begin.</p>}</div>
+            <div className="rounded-lg border bg-background p-4"><p className="font-semibold">{openShift ? 'Floor-time shift in progress' : 'Start your floor-time shift'}</p><p className="mt-1 text-sm text-muted-foreground">{openShift ? `Checked in at ${formatTime(openShift.checkInAt)}. Check out when you leave the office.` : 'Your phone will confirm you are at the office. Both arrival and departure are time-stamped.'}</p><Button className="mt-4" onClick={() => floorAction(openShift ? 'floorCheckOut' : 'floorCheckIn')} disabled={submitting !== null || !data.officeLocationConfigured || viewOnly}>{submitting?.startsWith('floor') ? 'Verifying...' : openShift ? 'Check Out of Floor Time' : 'Check In to Floor Time'}</Button>{!data.officeLocationConfigured && <p className="mt-2 text-xs text-amber-700">An administrator must set the office location before secure floor-time check-ins can begin.</p>}</div>
             <div className="rounded-lg border bg-background p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">This Week</p><p className="mt-2 text-2xl font-bold">{summary.qualifyingWeeklyShifts} / {summary.weeklyShiftGoal}</p><p className="mt-1 text-xs text-muted-foreground">qualifying {summary.weeklyShiftMinutes / 60}-hour shifts</p></div>
             <div className="rounded-lg border bg-background p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">This Month</p><p className="mt-2 text-2xl font-bold">{summary.qualifyingWeekendShifts} / {summary.weekendShiftGoal}</p><p className="mt-1 text-xs text-muted-foreground">qualifying {summary.weekendShiftMinutes / 60}-hour weekend shifts</p></div>
           </div>

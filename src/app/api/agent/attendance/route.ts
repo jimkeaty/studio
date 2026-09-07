@@ -29,9 +29,25 @@ async function authenticate(req: NextRequest): Promise<AuthContext | null> {
   }
 }
 
-async function resolveAgent(uid: string) {
-  const byUid = await adminDb.collection('agentProfiles').where('uid', '==', uid).limit(1).get();
-  const profileDoc = !byUid.empty ? byUid.docs[0] : await adminDb.collection('agentProfiles').doc(uid).get();
+async function resolveAgent(identity: string) {
+  const direct = await adminDb.collection('agentProfiles').doc(identity).get();
+  const byUid = direct.exists
+    ? null
+    : await adminDb.collection('agentProfiles').where('uid', '==', identity).limit(1).get();
+  const byFirebaseUid = !direct.exists && (!byUid || byUid.empty)
+    ? await adminDb.collection('agentProfiles').where('firebaseUid', '==', identity).limit(1).get()
+    : null;
+  const byAgentId = !direct.exists && (!byUid || byUid.empty) && (!byFirebaseUid || byFirebaseUid.empty)
+    ? await adminDb.collection('agentProfiles').where('agentId', '==', identity).limit(1).get()
+    : null;
+  const queriedProfile = byUid?.docs[0] ?? byFirebaseUid?.docs[0] ?? byAgentId?.docs[0] ?? null;
+  let profileDoc = direct.exists ? direct : queriedProfile;
+
+  if (!profileDoc) {
+    const linkedUser = await adminDb.collection('users').doc(identity).get();
+    const linkedAgentId = linkedUser.exists ? String(linkedUser.data()?.agentId || '') : '';
+    if (linkedAgentId) profileDoc = await adminDb.collection('agentProfiles').doc(linkedAgentId).get();
+  }
   if (!profileDoc?.exists) return null;
   const profile = profileDoc.data() as Record<string, any>;
   const status = String(profile.status || profile.agentStatus || 'active').toLowerCase();
@@ -108,10 +124,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  if (!auth.isAdmin && requestedAgentId) return jsonError(403, 'You can only view your own attendance');
   const self = await resolveAgent(auth.uid);
-  const agentId = auth.isAdmin && requestedAgentId ? requestedAgentId : self?.agentId;
-  if (!agentId) return jsonError(403, 'An active agent profile is required');
-  if (!auth.isAdmin && requestedAgentId && requestedAgentId !== agentId) return jsonError(403, 'You can only view your own attendance');
+  const target = auth.isAdmin && requestedAgentId ? await resolveAgent(requestedAgentId) : self;
+  if (!target) return jsonError(403, 'An active agent profile is required');
+  const agentId = target.agentId;
 
   try {
     const records = await recordsForAgent(agentId);
@@ -125,7 +142,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       agentId,
-      agentName: self?.agentId === agentId ? self.agentName : null,
+      agentName: target.agentName,
       today,
       schedules: SCHEDULED_ATTENDANCE_EVENTS,
       officeLocationConfigured: Boolean(await getOfficeLocation()),
