@@ -26,13 +26,14 @@ type AttendanceRecord = {
 type AttendanceData = {
   ok: boolean;
   today: string;
-  schedules: Record<string, { label: string; days: string[]; startLabel: string }>;
+  schedules: Record<string, { label: string; days: string[]; startLabel: string; endLabel: string; required: boolean }>;
   officeLocationConfigured: boolean;
   records: AttendanceRecord[];
   summary: {
     huddlesThisMonth: number;
     rolePlayThisMonth: number;
     trainingThisMonth: number;
+    salesMeetingsThisMonth: number;
     qualifyingWeeklyShifts: number;
     weeklyShiftGoal: number;
     weeklyShiftMinutes: number;
@@ -60,10 +61,14 @@ function formatMinutes(value?: number | null) {
 function eventLabel(type: string) {
   if (type === 'huddle') return 'Team Huddle';
   if (type === 'role_play_ids') return 'Role Play / New Agent IDS';
+  if (type === 'sales_meeting') return 'Sales Meeting';
   if (type === 'floor_time') return 'Floor Time';
   if (type === 'training') return 'Training';
   return type.replace(/_/g, ' ');
 }
+
+const TRACKED_SESSION_TYPES = ['huddle', 'training', 'sales_meeting', 'role_play_ids'] as const;
+type TrackedSessionType = typeof TRACKED_SESSION_TYPES[number];
 
 export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boolean }) {
   const { user, effectiveUid, isImpersonating, impersonationReady } = useEffectiveUser();
@@ -74,7 +79,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
   const [submitting, setSubmitting] = useState<string | null>(null);
 
   const requestedEvent = searchParams.get('event');
-  const highlightedEvent = requestedEvent === 'huddle' || requestedEvent === 'role_play_ids' ? requestedEvent : null;
+  const highlightedEvent = TRACKED_SESSION_TYPES.includes(requestedEvent as TrackedSessionType) ? requestedEvent as TrackedSessionType : null;
 
   const load = useCallback(async () => {
     if (!user || !impersonationReady) return;
@@ -130,7 +135,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
     }
   };
 
-  const checkInEvent = async (eventType: 'huddle' | 'role_play_ids') => {
+  const checkInEvent = async (eventType: TrackedSessionType) => {
     const result = await post('checkInEvent', { eventType });
     if (result) {
       toast({ title: `${eventLabel(eventType)} attendance recorded`, description: 'Your attendance is now on your dashboard and Ethan’s attendance report.' });
@@ -174,7 +179,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
             <CardTitle className="flex items-center gap-2"><QrCode className="h-5 w-5 text-primary" />Attendance & Floor Time</CardTitle>
-            <CardDescription className="mt-1">Use the posted QR code for scheduled sessions. Floor time requires a signed-in, location-verified check-in and check-out.</CardDescription>
+            <CardDescription className="mt-1">Track required huddles and role play, plus optional training and sales meetings. Floor time requires a signed-in, location-verified check-in and check-out.</CardDescription>
           </div>
           <Badge variant={data.officeLocationConfigured ? 'default' : 'secondary'} className="w-fit gap-1"><ShieldCheck className="h-3.5 w-3.5" />{data.officeLocationConfigured ? 'Office verification active' : 'Office location awaiting setup'}</Badge>
         </div>
@@ -188,11 +193,12 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
         <section>
           <div className="mb-3 flex items-center gap-2"><Users className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold">Scheduled Team Attendance</h3></div>
           <div className="grid gap-3 md:grid-cols-2">
-            {(['huddle', 'role_play_ids'] as const).map(type => {
+            {TRACKED_SESSION_TYPES.map(type => {
               const schedule = data.schedules[type];
+              if (!schedule) return null;
               const isHighlighted = highlightedEvent === type;
               return <div key={type} className={`rounded-lg border p-4 ${isHighlighted ? 'border-primary bg-primary/5' : 'bg-background'}`}>
-                <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{schedule.label}</p><p className="mt-1 text-sm text-muted-foreground">{schedule.days.join(' & ')} · {schedule.startLabel}</p></div><CalendarCheck2 className="h-5 w-5 text-primary" /></div>
+                <div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{schedule.label}</p><Badge variant={schedule.required ? 'default' : 'secondary'}>{schedule.required ? 'Required' : 'Optional · tracking only'}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{schedule.days.join(' & ')} · {schedule.startLabel}–{schedule.endLabel}</p></div><CalendarCheck2 className="h-5 w-5 text-primary" /></div>
                 <Button className="mt-4 w-full" variant={isHighlighted ? 'default' : 'outline'} onClick={() => checkInEvent(type)} disabled={submitting !== null || viewOnly}>{submitting === 'checkInEvent' && isHighlighted ? 'Recording...' : 'Record Attendance'}</Button>
               </div>;
             })}

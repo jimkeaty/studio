@@ -57,3 +57,7 @@ The table entries marked `Local checkpoint pending` reflect the status at the ti
 ### Release build repair
 
 On 2026-09-07, the legacy Next.js `<Html>` prerender failure was traced to the sandbox inheriting `NODE_ENV=development` while executing `next build`, not to a Smart Broker page importing `next/document`. The build script now explicitly runs `NODE_ENV=production next build`, and a clean production build completed all 295 static pages after the full safeguard suite. A focused regression prevents the build command from losing that production environment. App Hosting deployment and live smoke testing remain required before representing the release as live.
+
+### Post-queue office-location rollout note
+
+On 2026-09-07, the address-based secure office-location configuration was completed and published to `main` as commit `ef374f2`. It adds administrator-entered address lookup, editable verified coordinates, map review, a configurable radius, and a readable saved-location status while retaining GPS/radius enforcement for agent floor-time check-in and check-out. Focused regression 7/7, full safeguards 167/167, and a production build generating all 295 static pages passed. The public App Hosting build badge remained at the prior `bbba6a0` release after multiple checks, so live rollout of `ef374f2` is pending Firebase confirmation. This does not block the subsequent attendance schedule work.

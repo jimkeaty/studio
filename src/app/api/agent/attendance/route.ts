@@ -150,6 +150,7 @@ export async function GET(req: NextRequest) {
       huddlesThisMonth: filtered.filter(record => record.type === 'huddle' && String(record.date || '').startsWith(today.slice(0, 7))).length,
       rolePlayThisMonth: filtered.filter(record => record.type === 'role_play_ids' && String(record.date || '').startsWith(today.slice(0, 7))).length,
       trainingThisMonth: filtered.filter(record => record.type === 'training' && String(record.date || '').startsWith(today.slice(0, 7))).length,
+      salesMeetingsThisMonth: filtered.filter(record => record.type === 'sales_meeting' && String(record.date || '').startsWith(today.slice(0, 7))).length,
     };
     return NextResponse.json({
       ok: true,

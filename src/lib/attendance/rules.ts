@@ -5,17 +5,41 @@ export const SCHEDULED_ATTENDANCE_EVENTS = {
     label: 'Team Huddle',
     days: ['Tue', 'Thu'],
     startLabel: '8:30 AM',
+    endLabel: '9:00 AM',
     startMinutes: 8 * 60 + 30,
-    opensMinutes: 8 * 60,
-    closesMinutes: 10 * 60,
+    opensMinutes: 8 * 60 + 15,
+    closesMinutes: 9 * 60 + 5,
+    required: true,
+  },
+  training: {
+    label: 'Optional Training',
+    days: ['Tue', 'Thu'],
+    startLabel: '9:00 AM',
+    endLabel: '10:00 AM',
+    startMinutes: 9 * 60,
+    opensMinutes: 8 * 60 + 45,
+    closesMinutes: 10 * 60 + 5,
+    required: false,
+  },
+  sales_meeting: {
+    label: 'Optional Sales Meeting',
+    days: ['Wed'],
+    startLabel: '9:00 AM',
+    endLabel: '10:00 AM',
+    startMinutes: 9 * 60,
+    opensMinutes: 8 * 60 + 45,
+    closesMinutes: 10 * 60 + 5,
+    required: false,
   },
   role_play_ids: {
     label: 'Role Play / New Agent IDS',
     days: ['Wed'],
     startLabel: '10:00 AM',
+    endLabel: '11:00 AM',
     startMinutes: 10 * 60,
-    opensMinutes: 9 * 60 + 30,
-    closesMinutes: 11 * 60 + 30,
+    opensMinutes: 9 * 60 + 45,
+    closesMinutes: 11 * 60 + 5,
+    required: true,
   },
 } as const;
 
@@ -81,7 +105,7 @@ export function isWeekend(value: string) {
 }
 
 export function isScheduledAttendanceEvent(value: string): value is ScheduledAttendanceEvent {
-  return value === 'huddle' || value === 'role_play_ids';
+  return value in SCHEDULED_ATTENDANCE_EVENTS;
 }
 
 export function scheduledEventWindow(eventType: ScheduledAttendanceEvent, now = new Date()) {

@@ -9,12 +9,26 @@ const managerPanelPath = new URL('../src/components/dashboard/broker/AttendanceM
 const attendancePagePath = new URL('../src/app/dashboard/attendance/page.tsx', import.meta.url);
 const navigationPath = new URL('../src/components/dashboard/sidebar-nav.tsx', import.meta.url);
 
-test('attendance rules preserve the required huddle, role-play, and floor-time standards', async () => {
+test('attendance rules preserve required huddle and role-play times plus optional training and sales-meeting tracking', async () => {
   const rules = await readFile(rulesPath, 'utf8');
   assert.match(rules, /huddle:[\s\S]*days: \['Tue', 'Thu'\]/);
   assert.match(rules, /startLabel: '8:30 AM'/);
+  assert.match(rules, /endLabel: '9:00 AM'/);
+  assert.match(rules, /huddle:[\s\S]*required: true/);
+  assert.match(rules, /training:[\s\S]*days: \['Tue', 'Thu'\]/);
+  assert.match(rules, /label: 'Optional Training'/);
+  assert.match(rules, /training:[\s\S]*startLabel: '9:00 AM'/);
+  assert.match(rules, /training:[\s\S]*endLabel: '10:00 AM'/);
+  assert.match(rules, /training:[\s\S]*required: false/);
+  assert.match(rules, /sales_meeting:[\s\S]*days: \['Wed'\]/);
+  assert.match(rules, /label: 'Optional Sales Meeting'/);
+  assert.match(rules, /sales_meeting:[\s\S]*startLabel: '9:00 AM'/);
+  assert.match(rules, /sales_meeting:[\s\S]*endLabel: '10:00 AM'/);
+  assert.match(rules, /sales_meeting:[\s\S]*required: false/);
   assert.match(rules, /role_play_ids:[\s\S]*days: \['Wed'\]/);
   assert.match(rules, /startLabel: '10:00 AM'/);
+  assert.match(rules, /endLabel: '11:00 AM'/);
+  assert.match(rules, /role_play_ids:[\s\S]*required: true/);
   assert.match(rules, /weeklyShiftCount: 2/);
   assert.match(rules, /weeklyShiftMinutes: 180/);
   assert.match(rules, /monthlyWeekendShiftCount: 1/);
@@ -88,11 +102,17 @@ test('agent and staff interfaces retain QR, secure floor-time, and training-rost
   assert.match(agentPanel, /Check In to Floor Time/);
   assert.match(agentPanel, /Check Out of Floor Time/);
   assert.match(agentPanel, /Record Attendance/);
+  assert.match(agentPanel, /Optional · tracking only/);
+  assert.match(agentPanel, /sales_meeting/);
   assert.match(managerPanel, /QRCodeSVG/);
   assert.match(managerPanel, /recordTrainingSession/);
   assert.match(managerPanel, /Recent Agent Attendance & Floor Time/);
   assert.match(managerPanel, /scope=all/);
   assert.match(managerPanel, /Set Office Location/);
+  assert.match(managerPanel, /Tuesday & Thursday · 8:30–9:00 AM/);
+  assert.match(managerPanel, /Tuesday & Thursday · 9:00–10:00 AM/);
+  assert.match(managerPanel, /Wednesday · 9:00–10:00 AM/);
+  assert.match(managerPanel, /Wednesday · 10:00–11:00 AM/);
   assert.match(attendancePage, /useIsAdminLike/);
   assert.match(attendancePage, /AttendanceManagementPanel/);
   assert.match(attendancePage, /!loading && isAdmin/);
@@ -109,4 +129,5 @@ test('Director reporting retains attendance, training, and new-agent follow-up t
   assert.match(route, /Huddle Attendance — This Month/);
   assert.match(route, /Role Play \/ IDS Attendance — This Month/);
   assert.match(route, /Training Attendance — This Month/);
+  assert.match(route, /Sales Meeting Attendance — This Month/);
 });

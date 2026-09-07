@@ -17,8 +17,10 @@ type Agent = { agentId: string; name: string; startDate?: string };
 type OfficeLocationConfig = { latitude: number; longitude: number; radiusMeters: number; address?: string | null; updatedAt?: string | null };
 
 const QR_EVENTS = [
-  { type: 'huddle', label: 'Team Huddle', schedule: 'Tuesday & Thursday · 8:30 AM', detail: 'Agents scan the code while attending the huddle.' },
-  { type: 'role_play_ids', label: 'Role Play / New Agent IDS', schedule: 'Wednesday · 10:00 AM', detail: 'Agents scan the code while attending role play or New Agent IDS.' },
+  { type: 'huddle', label: 'Team Huddle', schedule: 'Tuesday & Thursday · 8:30–9:00 AM', detail: 'Required. Agents scan the code while attending the huddle.' },
+  { type: 'training', label: 'Optional Training', schedule: 'Tuesday & Thursday · 9:00–10:00 AM', detail: 'Optional. Agents may scan the code to track participation; it is not a mandatory attendance requirement.' },
+  { type: 'sales_meeting', label: 'Optional Sales Meeting', schedule: 'Wednesday · 9:00–10:00 AM', detail: 'Optional. Agents may scan the code to track participation; it is not a mandatory attendance requirement.' },
+  { type: 'role_play_ids', label: 'Role Play / New Agent IDS', schedule: 'Wednesday · 10:00–11:00 AM', detail: 'Required. Agents scan the code while attending role play or New Agent IDS.' },
 ] as const;
 
 export function AttendanceManagementPanel({ year }: { year: number }) {
@@ -164,7 +166,7 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
 
   const toggleAgent = (agentId: string) => setTraining(form => ({ ...form, participantIds: form.participantIds.includes(agentId) ? form.participantIds.filter(id => id !== agentId) : [...form.participantIds, agentId] }));
   const selectedCount = useMemo(() => training.participantIds.length, [training.participantIds]);
-  const recordLabel = (record: Record<string, any>) => record.eventLabel || (record.type === 'huddle' ? 'Team Huddle' : record.type === 'role_play_ids' ? 'Role Play / New Agent IDS' : record.type === 'floor_time' ? 'Floor Time' : record.type === 'training' ? record.topic || 'Training' : String(record.type || '').replace(/_/g, ' '));
+  const recordLabel = (record: Record<string, any>) => record.eventLabel || (record.type === 'huddle' ? 'Team Huddle' : record.type === 'role_play_ids' ? 'Role Play / New Agent IDS' : record.type === 'sales_meeting' ? 'Sales Meeting' : record.type === 'floor_time' ? 'Floor Time' : record.type === 'training' ? record.topic || 'Training' : String(record.type || '').replace(/_/g, ' '));
   const formatTime = (value?: string) => value ? new Date(value).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—';
   const formatDuration = (minutes?: number) => minutes ? `${Math.floor(minutes / 60) ? `${Math.floor(minutes / 60)}h ` : ''}${minutes % 60 ? `${minutes % 60}m` : ''}`.trim() : '—';
 
