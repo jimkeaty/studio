@@ -13,8 +13,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { CalendarCheck2, Clock3, MapPin, Printer, QrCode, Settings2, Users } from 'lucide-react';
 
-declare global { interface Window { L?: any; } }
-
 type Agent = { agentId: string; name: string; startDate?: string };
 type OfficeLocationConfig = { latitude: number; longitude: number; radiusMeters: number; address?: string | null; updatedAt?: string | null };
 const DEFAULT_OFFICE_MAP_CENTER = { latitude: 30.2241, longitude: -92.0198 };
@@ -46,6 +44,7 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
   const officeMapRef = useRef<HTMLDivElement | null>(null);
   const officeMapInstanceRef = useRef<any>(null);
   const officeMapMarkerRef = useRef<any>(null);
+  const officeLeafletRef = useRef<any>(null);
 
   const setOfficePin = useCallback((latitude: number, longitude: number, message?: string) => {
     setOfficeLatitude(latitude.toFixed(6));
@@ -126,43 +125,27 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
     let cancelled = false;
 
     const loadMap = async () => {
-      if (!window.L) {
-        if (!document.querySelector('link[data-office-location-map]')) {
-          const css = document.createElement('link');
-          css.rel = 'stylesheet';
-          css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-          css.dataset.officeLocationMap = 'true';
-          document.head.appendChild(css);
-        }
-        await new Promise<void>((resolve, reject) => {
-          const existing = document.querySelector('script[data-office-location-map]') as HTMLScriptElement | null;
-          if (existing) {
-            if (window.L) resolve();
-            else {
-              existing.addEventListener('load', () => resolve(), { once: true });
-              existing.addEventListener('error', () => reject(new Error('Map could not load.')), { once: true });
-            }
-            return;
-          }
-          const script = document.createElement('script');
-          script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-          script.dataset.officeLocationMap = 'true';
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error('Map could not load.'));
-          document.head.appendChild(script);
-        });
-      }
-      if (cancelled || !window.L || !officeMapRef.current) return;
+      // Leaflet is bundled in the application, not fetched from an external script at runtime.
+      const leafletModule = await import('leaflet');
+      const L = leafletModule.default ?? leafletModule;
+      if (cancelled || !officeMapRef.current) return;
+      officeLeafletRef.current = L;
       const latitude = Number(officeLatitude);
       const longitude = Number(officeLongitude);
       const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
-      const center = hasCoordinates ? [latitude, longitude] : [DEFAULT_OFFICE_MAP_CENTER.latitude, DEFAULT_OFFICE_MAP_CENTER.longitude];
-      const map = window.L.map(officeMapRef.current).setView(center, hasCoordinates ? 17 : 12);
-      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+      const center: [number, number] = hasCoordinates ? [latitude, longitude] : [DEFAULT_OFFICE_MAP_CENTER.latitude, DEFAULT_OFFICE_MAP_CENTER.longitude];
+      const map = L.map(officeMapRef.current).setView(center, hasCoordinates ? 17 : 12);
+      const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 20,
+        subdomains: 'abcd',
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      }).addTo(map);
+      tileLayer.on('tileerror', () => setAddressStatus('Map tiles could not load. Use Open in Google Maps or enter coordinates manually, then save.'));
       officeMapInstanceRef.current = map;
+      const pinIcon = L.divIcon({ className: 'smartbroker-office-pin', html: '<span aria-hidden="true">●</span>', iconSize: [28, 28], iconAnchor: [14, 14] });
       const placeMarker = (point: any) => {
         if (officeMapMarkerRef.current) officeMapMarkerRef.current.remove();
-        const marker = window.L.marker(point, { draggable: true }).addTo(map);
+        const marker = L.marker(point, { draggable: true, icon: pinIcon }).addTo(map);
         marker.on('dragend', () => {
           const moved = marker.getLatLng();
           setOfficePin(moved.lat, moved.lng, 'Map pin moved. The displayed latitude and longitude now match the selected office location.');
@@ -174,6 +157,9 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
         placeMarker(event.latlng);
         setOfficePin(event.latlng.lat, event.latlng.lng, 'Map pin moved. The displayed latitude and longitude now match the selected office location.');
       });
+      // The dialog animates into view. Recalculate after that animation so tiles are never left blank.
+      window.setTimeout(() => map.invalidateSize(), 150);
+      window.setTimeout(() => map.invalidateSize(), 500);
     };
 
     loadMap().catch((error: any) => setAddressStatus(error.message || 'Map could not load. You can still edit latitude and longitude directly.'));
@@ -189,12 +175,14 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
     const map = officeMapInstanceRef.current;
     const latitude = Number(officeLatitude);
     const longitude = Number(officeLongitude);
-    if (!map || !window.L || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-    const point = window.L.latLng(latitude, longitude);
+    const L = officeLeafletRef.current;
+    if (!map || !L || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    const point = L.latLng(latitude, longitude);
     map.setView(point, 17);
     if (officeMapMarkerRef.current) officeMapMarkerRef.current.setLatLng(point);
     else {
-      const marker = window.L.marker(point, { draggable: true }).addTo(map);
+      const pinIcon = L.divIcon({ className: 'smartbroker-office-pin', html: '<span aria-hidden="true">●</span>', iconSize: [28, 28], iconAnchor: [14, 14] });
+      const marker = L.marker(point, { draggable: true, icon: pinIcon }).addTo(map);
       marker.on('dragend', () => {
         const moved = marker.getLatLng();
         setOfficePin(moved.lat, moved.lng, 'Map pin moved. The displayed latitude and longitude now match the selected office location.');

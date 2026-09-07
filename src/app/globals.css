@@ -1,4 +1,6 @@
 @tailwind base;
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind components;
 @tailwind utilities;
 
@@ -8,6 +10,21 @@ html {
 
 body {
   font-family: var(--font-body), sans-serif;
+}
+
+.smartbroker-office-pin {
+  align-items: center;
+  background: #4338ca;
+  border: 3px solid #ffffff;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 0.35);
+  color: #ffffff;
+  display: flex;
+  font-size: 12px;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  width: 28px;
 }
 
 /* iOS PWA safe-area support — ensures content never hides behind the

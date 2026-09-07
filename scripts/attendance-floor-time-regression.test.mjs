@@ -92,6 +92,10 @@ test('administrators can set and verify the official office address without rely
   assert.match(managerPanel, /marker\.on\('dragend'/);
   assert.match(managerPanel, /Click the map or drag the marker/);
   assert.match(managerPanel, /Open in Google Maps/);
+  assert.match(managerPanel, /await import\('leaflet'\)/);
+  assert.match(managerPanel, /basemaps\.cartocdn\.com/);
+  assert.doesNotMatch(managerPanel, /unpkg\.com\/leaflet/);
+  assert.doesNotMatch(managerPanel, /tile\.openstreetmap\.org/);
   assert.match(managerPanel, /Save Official Office Location/);
   assert.match(managerPanel, /Edit Office Location/);
 });
