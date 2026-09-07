@@ -6,6 +6,7 @@ const rulesPath = new URL('../src/lib/attendance/rules.ts', import.meta.url);
 const routePath = new URL('../src/app/api/agent/attendance/route.ts', import.meta.url);
 const agentPanelPath = new URL('../src/components/dashboard/agent/AttendanceAndFloorTimePanel.tsx', import.meta.url);
 const managerPanelPath = new URL('../src/components/dashboard/broker/AttendanceManagementPanel.tsx', import.meta.url);
+const attendancePagePath = new URL('../src/app/dashboard/attendance/page.tsx', import.meta.url);
 const navigationPath = new URL('../src/components/dashboard/sidebar-nav.tsx', import.meta.url);
 
 test('attendance rules preserve the required huddle, role-play, and floor-time standards', async () => {
@@ -61,9 +62,10 @@ test('View as Agent loads the selected active agent attendance history but never
 });
 
 test('agent and staff interfaces retain QR, secure floor-time, and training-roster controls', async () => {
-  const [agentPanel, managerPanel, navigation] = await Promise.all([
+  const [agentPanel, managerPanel, attendancePage, navigation] = await Promise.all([
     readFile(agentPanelPath, 'utf8'),
     readFile(managerPanelPath, 'utf8'),
+    readFile(attendancePagePath, 'utf8'),
     readFile(navigationPath, 'utf8'),
   ]);
   assert.match(agentPanel, /navigator\.geolocation\.getCurrentPosition/);
@@ -74,6 +76,10 @@ test('agent and staff interfaces retain QR, secure floor-time, and training-rost
   assert.match(managerPanel, /recordTrainingSession/);
   assert.match(managerPanel, /Recent Agent Attendance & Floor Time/);
   assert.match(managerPanel, /scope=all/);
+  assert.match(managerPanel, /Set Office Location/);
+  assert.match(attendancePage, /useIsAdminLike/);
+  assert.match(attendancePage, /AttendanceManagementPanel/);
+  assert.match(attendancePage, /!loading && isAdmin/);
   assert.match(navigation, /Attendance & Floor Time/);
 });
 
