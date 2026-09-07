@@ -61,6 +61,22 @@ test('View as Agent loads the selected active agent attendance history but never
   assert.match(agentPanel, /disabled=\{submitting !== null \|\| !data\.officeLocationConfigured \|\| viewOnly\}/);
 });
 
+test('administrators can set and verify the official office address without relying on their current device location', async () => {
+  const [route, managerPanel] = await Promise.all([readFile(routePath, 'utf8'), readFile(managerPanelPath, 'utf8')]);
+  assert.match(route, /address: string \| null/);
+  assert.match(route, /const address = String\(body\.address \|\| ''\)/);
+  assert.match(route, /officeLocation,\n        updatedAt/);
+  assert.match(route, /officeLocationConfigured: Boolean\(officeLocation\)/);
+  assert.match(route, /officeLocation,\n        records/);
+  assert.match(managerPanel, /Office Address/);
+  assert.match(managerPanel, /Find Address/);
+  assert.match(managerPanel, /nominatim\.openstreetmap\.org\/search/);
+  assert.match(managerPanel, /Use This Device Location/);
+  assert.match(managerPanel, /Review on Map/);
+  assert.match(managerPanel, /Save Official Office Location/);
+  assert.match(managerPanel, /Edit Office Location/);
+});
+
 test('agent and staff interfaces retain QR, secure floor-time, and training-roster controls', async () => {
   const [agentPanel, managerPanel, attendancePage, navigation] = await Promise.all([
     readFile(agentPanelPath, 'utf8'),

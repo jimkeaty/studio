@@ -11,7 +11,13 @@ import {
 } from '@/lib/attendance/rules';
 
 type AuthContext = { uid: string; isAdmin: boolean };
-type OfficeLocation = { latitude: number; longitude: number; radiusMeters: number };
+type OfficeLocation = {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  address: string | null;
+  updatedAt: string | null;
+};
 type AttendanceRecord = Record<string, any> & { id: string };
 
 function jsonError(status: number, error: string) {
@@ -86,6 +92,10 @@ async function getOfficeLocation() {
     radiusMeters: Number.isFinite(Number(data?.officeLocation?.radiusMeters))
       ? Math.max(25, Math.min(Number(data?.officeLocation?.radiusMeters), 1_000))
       : 250,
+    address: typeof data?.officeLocation?.address === 'string' && data.officeLocation.address.trim()
+      ? data.officeLocation.address.trim()
+      : null,
+    updatedAt: typeof data?.updatedAt === 'string' ? data.updatedAt : null,
   };
 }
 
@@ -112,11 +122,13 @@ export async function GET(req: NextRequest) {
         .map(doc => ({ id: doc.id, ...(doc.data() as Record<string, any>) }) as AttendanceRecord)
         .filter(record => !year || String(record.date || '').startsWith(year))
         .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.checkInAt || '').localeCompare(String(a.checkInAt || '')));
+      const officeLocation = await getOfficeLocation();
       return NextResponse.json({
         ok: true,
         today: centralParts().date,
         schedules: SCHEDULED_ATTENDANCE_EVENTS,
-        officeLocationConfigured: Boolean(await getOfficeLocation()),
+        officeLocationConfigured: Boolean(officeLocation),
+        officeLocation,
         records: records.slice(0, 500),
       });
     } catch (error: any) {
@@ -252,12 +264,19 @@ export async function POST(req: NextRequest) {
       if (!auth.isAdmin) return jsonError(403, 'Administrator access is required');
       if (!validLocation(body.location)) return jsonError(400, 'A valid office location is required');
       const radiusMeters = Math.max(25, Math.min(Number(body.radiusMeters || 250), 1_000));
+      const address = String(body.address || '').trim().replace(/\s+/g, ' ').slice(0, 300) || null;
+      const officeLocation = {
+        latitude: Number(body.location.latitude),
+        longitude: Number(body.location.longitude),
+        radiusMeters,
+        address,
+      };
       await adminDb.collection('attendanceSettings').doc('office').set({
-        officeLocation: { latitude: Number(body.location.latitude), longitude: Number(body.location.longitude), radiusMeters },
+        officeLocation,
         updatedAt: now.toISOString(),
         updatedByUid: auth.uid,
       }, { merge: true });
-      return NextResponse.json({ ok: true, radiusMeters });
+      return NextResponse.json({ ok: true, radiusMeters, officeLocation: { ...officeLocation, updatedAt: now.toISOString() } });
     }
 
     if (action === 'recordTrainingSession') {
