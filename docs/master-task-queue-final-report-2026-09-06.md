@@ -2,20 +2,20 @@
 
 **Report date:** September 6, 2026  
 **Queue processed:** Tasks #2–#24, in sequence  
-**Source status:** Published to GitHub `main` through commit [`5da24f4`](https://github.com/jimkeaty/studio/commit/5da24f4).  
-**Production status:** **Not verified.** The repository has no observable GitHub Actions run, and the local production build still stops during static-page generation because of an existing legacy `<Html>` import error. Source publication is verified; a Firebase/App Hosting rollout must not be assumed.
+**Source status:** Published to GitHub `main` through commit [`67f69a8`](https://github.com/jimkeaty/studio/commit/67f69a8).  
+**Production status:** **Build-ready but not live-verified.** The production build now completes successfully; Firebase/App Hosting rollout remains unverified because no observable GitHub Actions deployment workflow exists.
 
 ## Bottom line
 
 The queue implementation is complete at the source-code level, including local checkpoints, regression coverage, and a consolidated push to the repository’s `main` branch. The core transaction, commission, recruiting, notification, app-management, and integration work uses the existing canonical systems rather than introducing replacement transaction records or parallel financial calculations.
 
-The work is **not ready to be represented as fully live** until the existing static-page build errors are fixed and the App Hosting deployment is verified. Several requested capabilities are deliberately partial because they depend on external systems or business decisions that were not available: production schedulers, Meta Page authorization, documented SSO/API contracts for separate apps, broker-review configuration, and an editorial decision on legacy Hub content.
+The work is **not ready to be represented as fully live** until the App Hosting deployment is verified. Several requested capabilities are deliberately partial because they depend on external systems or business decisions that were not available: production schedulers, Meta Page authorization, documented SSO/API contracts for separate apps, broker-review configuration, and an editorial decision on legacy Hub content.
 
 | Status | Tasks | Meaning |
 |---|---|---|
 | **Completed in source** | #2, #3, #4, #7, #8, #9, #10, #11, #13, #14, #19 | Required Smart Broker code and regression coverage were implemented within existing architecture. |
 | **Partially completed by design** | #5, #6, #12, #15, #16, #17, #18, #20, #21, #22, #23, #24 | The Smart Broker side is implemented or extended, but an external dependency, business decision, unavailable authoritative material, or operational activation remains. |
-| **Blocked from verified live rollout** | All post-Task #6 source changes | GitHub publication is now restored, but static build prerender failures and no observable deployment workflow prevent live verification. |
+| **Blocked from verified live rollout** | All post-Task #6 source changes | GitHub publication and the production build are now verified, but no observable deployment workflow or live App Hosting validation is available. |
 
 ## Completed tasks
 
@@ -67,8 +67,8 @@ The final full safeguard suite passed **164 of 164** checks with **0 failures**.
 | Focused Task #24 regression | **7/7 passed** | Recruiting qualification, referral history, payment and tenant protections are source-level covered. |
 | Full safeguard suite | **164/164 passed** | New work passed alongside prior transaction, accounting, notification, app-launch, social-media, Hub, and integration safeguards. |
 | Type validation | **No Task #24 source diagnostic** | Type validation still reports existing generated `.next` validator errors for unrelated nested agent-profile routes. |
-| Production build | **Compilation succeeded** | Compilation succeeded in 73 seconds, then static-page generation failed due to legacy `<Html>` imports outside `pages/_document` for `/404` and `/dashboard/admin/notification-monitor`. |
-| GitHub publication | **Verified** | `origin/main` equals `5da24f4`; all accumulated commits from `5978641` through `5da24f4` are published. |
+| Production build | **Passed** | The build completed all 295 static pages after the build script was corrected to run Next.js with `NODE_ENV=production`; the safeguard suite passed 164/164 at that validation. |
+| GitHub publication | **Verified** | `origin/main` reached `67f69a8` before the release-environment repair checkpoint. |
 | Live Firebase/App Hosting | **Unknown** | `gh run list --branch main` returned no workflow runs. No live release should be claimed without an explicit deployment verification. |
 
 ## Important source-of-truth and legacy findings
@@ -88,7 +88,7 @@ The final full safeguard suite passed **164 of 164** checks with **0 failures**.
 
 ### Highest priority
 
-1. **Repair and verify deployment before calling this live.** The build compiles, but the legacy `pages/_document` issue stops static prerendering for `/404` and `/dashboard/admin/notification-monitor`. This is the immediate release risk.
+1. **Deploy and verify the live App Hosting release before calling this live.** The local production build now passes; the remaining release risk is an unverified deployment connection and live smoke test.
 2. **Confirm Task #24 recruiting terms.** Provide or make accessible the actual video/transcript/policy, then confirm the intended threshold, payout amount, payment cadence, tier-two rule, window basis, recurrence, and treatment of inactive/terminated recruits. The system has preserved the current configuration rather than guessing.
 3. **Decide who administers recurring jobs.** Configure the secured production scheduler for Task #12 daily activity digest, Task #17 Thursday last call, Task #18 deadline reminders, and Task #21 scheduled Hub publication. Timing controls exist; schedules are not activated by source code alone.
 

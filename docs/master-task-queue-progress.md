@@ -53,3 +53,7 @@ The repository contains secured digest logic at `/api/cron/transaction-activity-
 ### Publication recovery and final queue state
 
 The table entries marked `Local checkpoint pending` reflect the status at the time each task was finished. On 2026-09-06, the backlog was published together to GitHub `main` through commit `8a624e4`. The repository has no observable GitHub Actions deployment run, so source publication is verified but a live Firebase/App Hosting rollout is not. Production scheduler activation, Meta/SSO integration credentials, broker-review configuration, and editorial legacy-Hub migration remain separate operational dependencies described in their respective task entries.
+
+### Release build repair
+
+On 2026-09-07, the legacy Next.js `<Html>` prerender failure was traced to the sandbox inheriting `NODE_ENV=development` while executing `next build`, not to a Smart Broker page importing `next/document`. The build script now explicitly runs `NODE_ENV=production next build`, and a clean production build completed all 295 static pages after the full safeguard suite. A focused regression prevents the build command from losing that production environment. App Hosting deployment and live smoke testing remain required before representing the release as live.
