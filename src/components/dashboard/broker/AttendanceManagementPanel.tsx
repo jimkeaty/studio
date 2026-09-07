@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { loadLeaflet } from '@/lib/client/leafletLoader';
 import { CalendarCheck2, Clock3, MapPin, Printer, QrCode, Settings2, Users } from 'lucide-react';
 
 type Agent = { agentId: string; name: string; startDate?: string };
@@ -44,7 +45,6 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
   const officeMapRef = useRef<HTMLDivElement | null>(null);
   const officeMapInstanceRef = useRef<any>(null);
   const officeMapMarkerRef = useRef<any>(null);
-  const officeLeafletRef = useRef<any>(null);
 
   const setOfficePin = useCallback((latitude: number, longitude: number, message?: string) => {
     setOfficeLatitude(latitude.toFixed(6));
@@ -125,11 +125,8 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
     let cancelled = false;
 
     const loadMap = async () => {
-      // Leaflet is bundled in the application, not fetched from an external script at runtime.
-      const leafletModule = await import('leaflet');
-      const L = leafletModule.default ?? leafletModule;
+      const L = await loadLeaflet();
       if (cancelled || !officeMapRef.current) return;
-      officeLeafletRef.current = L;
       const latitude = Number(officeLatitude);
       const longitude = Number(officeLongitude);
       const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
@@ -175,7 +172,7 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
     const map = officeMapInstanceRef.current;
     const latitude = Number(officeLatitude);
     const longitude = Number(officeLongitude);
-    const L = officeLeafletRef.current;
+    const L = window.L;
     if (!map || !L || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
     const point = L.latLng(latitude, longitude);
     map.setView(point, 17);

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { loadLeaflet } from '@/lib/client/leafletLoader';
 
 type Props = { address: string; latitude: string; longitude: string; notes: string; onChange: (value: { address?: string; latitude?: string; longitude?: string; notes?: string }) => void; };
 const LAFAYETTE = { lat: 30.2241, lng: -92.0198 };
@@ -15,7 +16,7 @@ export function SignLocationPicker({ address, latitude, longitude, notes, onChan
   useEffect(() => {
     let cancelled = false; const start = async () => {
       if (!mapRef.current || instanceRef.current) return;
-      const leafletModule = await import('leaflet'); const L = leafletModule.default ?? leafletModule;
+      const L = await loadLeaflet();
       if (cancelled || !mapRef.current) return; leafletRef.current = L;
       const center: [number, number] = hasCoordinates ? [lat, lng] : [LAFAYETTE.lat, LAFAYETTE.lng]; const map = L.map(mapRef.current).setView(center, hasCoordinates ? 17 : 12); const tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd', attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }).addTo(map); tiles.on('tileerror', () => setMessage('Map tiles could not load. Enter coordinates manually.')); instanceRef.current = map;
       const pinIcon = L.divIcon({ className: 'smartbroker-office-pin', html: '<span aria-hidden="true">●</span>', iconSize: [28, 28], iconAnchor: [14, 14] }); const setMarker = (point: any) => { if (markerRef.current) markerRef.current.remove(); markerRef.current = L.marker(point, { draggable: true, icon: pinIcon }).addTo(map); markerRef.current.on('dragend', () => { const next = markerRef.current.getLatLng(); applyPin(next.lat, next.lng); }); };

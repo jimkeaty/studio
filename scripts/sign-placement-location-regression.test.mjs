@@ -15,9 +15,9 @@ test('sign placement supports an optional typed address, nearby-place search, ma
   assert.match(picker, /nominatim\.openstreetmap\.org\/search/);
   assert.match(picker, /map\.on\('click'/);
   assert.match(picker, /draggable: true/);
-  assert.match(picker, /await import\('leaflet'\)/);
+  assert.match(picker, /loadLeaflet/);
   assert.match(picker, /basemaps\.cartocdn\.com/);
-  assert.doesNotMatch(picker, /unpkg\.com\/leaflet/);
+  assert.doesNotMatch(picker, /await import\('leaflet'\)/);
   assert.doesNotMatch(picker, /tile\.openstreetmap\.org/);
   for (const field of ['address', 'latitude', 'longitude', 'notes']) assert.match(picker, new RegExp(field));
   assert.match(picker, /Address is optional when exact coordinates are sufficient/);
