@@ -61,6 +61,9 @@ test('APHW education requests retain buyer and seller distinctions, consent, ale
   assert.match(trainingArticlesSource, /home-warranty-education-calls/);
   assert.match(trainingArticlesSource, /12-month nurture experience/);
   assert.match(trainingArticlesSource, /consultation calendar link/);
+  assert.match(trainingArticlesSource, /transaction-saving-required-vs-optional/);
+  assert.match(trainingArticlesSource, /Everything Else Can Wait/);
+  assert.match(trainingArticlesSource, /TC inspection-scheduling choices/);
   assert.match(aphwInvitationSource, /https:\/\/www\.aphw\.com\/consultation\//);
   assert.match(aphwInvitationSource, /Your Home Warranty Education Call/);
   assert.match(aphwInvitationSource, /Your Seller Home Warranty Coverage/);

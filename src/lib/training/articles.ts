@@ -338,8 +338,8 @@ export const ARTICLES: Article[] = [
     <tr><td>1</td><td><strong>Status</strong></td><td>Active, Coming Soon, or Pending</td></tr>
     <tr><td>2</td><td><strong>Closing Type</strong></td><td>Listing, Buyer, Dual, or Referral</td></tr>
     <tr><td>3</td><td><strong>Property Address</strong></td><td>Street address of the property</td></tr>
-    <tr><td>4</td><td><strong>Client Name</strong></td><td>Seller’s name for listings; buyer’s name for buyer-side deals</td></tr>
-    <tr><td>5</td><td><strong>Working with TC?</strong></td><td>Yes/No — routes submission to TC Queue if Yes</td></tr>
+    <tr><td>4</td><td><strong>Client Name</strong></td><td>Required for a new Buyer or Dual file. A new Listing or Referral may be saved before a client name is known.</td></tr>
+    <tr><td>5</td><td><strong>Working with TC?</strong></td><td>Defaults to Yes; change it only if the file should not be routed to the TC Queue.</td></tr>
   </tbody>
 </table>
 <p>All other fields — List Price, Commission %, ShowingTime, Staging, Inspections, Media, Sign Requests — are optional at this stage. Fill them in now or come back later.</p>
@@ -348,7 +348,7 @@ export const ARTICLES: Article[] = [
 <p><strong>No additional fields are required</strong> by the system to save this status change. Simply open the transaction from your dashboard and update the Status field. That said, you should upload the executed Purchase Agreement and fill in the Sale Price, Buyer Contact, and Closing Date so your TC and staff can begin processing the file promptly.</p>
 
 <h3>Changing Status: Pending → Closed</h3>
-<p><strong>No additional fields are required</strong> to mark a transaction Closed. The system will automatically route the closed transaction to the Staff Queue for final processing and commission payout.</p>
+<p><strong>No additional fields are required</strong> to mark a transaction Closed. Add the actual closing date when known so reporting and closeout work are accurate; the system can supply a date for an operational closeout when one was not entered. The closed transaction routes to the Staff Queue for final processing and commission payout.</p>
 
 <h2>Step-by-Step: Submitting a New Listing</h2>
 <ol>
@@ -426,7 +426,7 @@ export const ARTICLES: Article[] = [
     publishedAt: '2026-05-06',
     content: `
 <h2>Overview</h2>
-<p>When submitting a transaction, you must specify whether a <strong>Transaction Compliance Fee</strong> applies and who is paying for it. This ensures accurate commission calculations and clear instructions for the title company.</p>
+<p>The <strong>Transaction Compliance Fee</strong> section is optional at the time of submission. Complete it when the fee details are known. If a fee applies, choose whether it applies and who is responsible so the commission preview and title instructions are accurate.</p>
 
 <h2>Where to Set the Fee</h2>
 <p>In the Add Transaction form, scroll down to the <strong>Additional Info</strong> section. You will see a toggle for <em>Transaction Compliance Fee?</em></p>
@@ -1576,6 +1576,71 @@ export const ARTICLES: Article[] = [
   <li><strong>Warranty (Agent Pays):</strong> Pre-split reduction. Deducted from GCI before split is calculated.</li>
   <li><strong>Any item (Buyer Pays Directly or from Closing Cost Pool):</strong> Adds to GCI before split. No deduction from agent net.</li>
 </ul>
+    `,
+  },
+  {
+    id: 'transaction-saving-required-vs-optional',
+    title: 'Saving Transactions: What Is Required and What Can Wait',
+    description: 'The short list of information needed to save a transaction or status change, plus common validation errors and recovery steps.',
+    category: 'Transactions',
+    audience: 'both',
+    readingTimeMinutes: 5,
+    publishedAt: '2026-09-08',
+    content: `
+<h2>Purpose</h2>
+<p>Smart Broker is designed to let you save a transaction when you have the basic identifying information. You do <strong>not</strong> need to complete every section before saving, submitting to TC/Staff, or changing a listing from Active to Pending.</p>
+
+<blockquote><p>If a field is optional, it may be left blank. A blank optional selection—including home-warranty questions and inspection-scheduling choices—must not prevent a transaction from saving.</p></blockquote>
+
+<h2>The Small List of Required Information</h2>
+<table><thead><tr><th>What is required?</th><th>When?</th><th>What to enter</th></tr></thead><tbody>
+<tr><td><strong>Status</strong></td><td>Every transaction</td><td>Choose Active, Coming Soon, Pending, Closed, Cancelled, or Temp Off Market.</td></tr>
+<tr><td><strong>Transaction side</strong></td><td>Every transaction</td><td>Choose Buyer, Listing, Dual, or Referral when you start the file.</td></tr>
+<tr><td><strong>Deal type</strong></td><td>Every transaction</td><td>This defaults to Residential Sale. Change it only when the transaction is land, a lease, or commercial.</td></tr>
+<tr><td><strong>Property address</strong></td><td>Buyer, Listing, and Dual files</td><td>Enter a usable full property address. A Referral may be saved before an address is known.</td></tr>
+<tr><td><strong>Client name</strong></td><td>New Buyer and Dual files only</td><td>Enter at least one buyer, seller, or client name. A Listing or Referral can be saved before this is known.</td></tr>
+<tr><td><strong>Working with TC?</strong></td><td>Every transaction</td><td>The form starts at Yes. Change it to No only when the file should not be sent to the TC Queue.</td></tr>
+</tbody></table>
+
+<h2>Everything Else Can Wait</h2>
+<p>You may save with all of the following blank: APHW/home-warranty choices, inspection and TC inspection-scheduling details, dates, commission information, earnest money, title/lender information, buyer or seller contact details, other-agent information, ShowingTime, sign order, media order, MLS description, referral details, comments, and notes.</p>
+<p>Entering a value still requires that the value make sense. For example, an email address must be formatted correctly, a percentage must be between 0 and 100, and a dollar amount cannot be negative. Those checks protect the record; they do not mean the field is required.</p>
+
+<h2>Changing a Listing to Pending</h2>
+<ol>
+<li>Open the existing listing from <strong>My Transactions</strong>.</li>
+<li>Change <strong>Status</strong> to <strong>Pending</strong>.</li>
+<li>Add the contract date, sale price, buyer, and executed agreement when you have them, but do not delay a save because an optional section is not complete.</li>
+<li>Click <strong>Save Changes</strong>.</li>
+</ol>
+<p>The Pending update is sent to the Staff Queue. If the transaction works with a TC, it is also available through that workflow. APHW and TC inspection-scheduling choices can be blank, Yes, No, or an applicable workflow option.</p>
+
+<h2>Home Warranty Education</h2>
+<table><thead><tr><th>Your selection</th><th>Can the transaction save?</th><th>What it means</th></tr></thead><tbody>
+<tr><td>Leave it blank</td><td><strong>Yes</strong></td><td>No APHW education request is made.</td></tr>
+<tr><td>Select Yes</td><td><strong>Yes</strong></td><td>An APHW educational-call request is recorded for the relevant client workflow.</td></tr>
+<tr><td>Select No</td><td><strong>Yes</strong></td><td>No APHW education request is made.</td></tr>
+</tbody></table>
+
+<h2>When a Save Is Correctly Rejected</h2>
+<table><thead><tr><th>Message or situation</th><th>What to do</th></tr></thead><tbody>
+<tr><td>“Please select a status”</td><td>Choose a status and save again.</td></tr>
+<tr><td>“Type of closing is required”</td><td>Return to the transaction-side choice and select Buyer, Listing, Dual, or Referral.</td></tr>
+<tr><td>Property-address message</td><td>Enter a complete address for Buyer, Listing, or Dual. Referrals may be saved without an address.</td></tr>
+<tr><td>Invalid email, negative amount, or percentage outside 0–100</td><td>Correct or clear the entered value. Empty optional fields are allowed.</td></tr>
+<tr><td>Co-agent split message</td><td>When a co-agent is selected, the primary and co-agent split percentages must total 100%. Turn off the co-agent choice if it was accidental.</td></tr>
+<tr><td>“This transaction was changed by another authorized user”</td><td>Refresh the transaction, review the other user’s saved changes, then enter your correction again and save.</td></tr>
+<tr><td>Agent tries to edit a Closed file</td><td>Ask TC, Staff, or Admin to make the authorized correction. Agents are view-only after close.</td></tr>
+</tbody></table>
+
+<h2>If a Save Still Fails</h2>
+<ol>
+<li>Do not close the browser tab. Your entered information remains on the current form.</li>
+<li>Read the red message and correct only the named field, if one is named.</li>
+<li>Take a screenshot showing the transaction address and complete error message.</li>
+<li>Send the screenshot to Staff/Admin. Do not create a duplicate transaction while the original form is still open.</li>
+</ol>
+<p>The form also automatically saves drafts during entry. If you need to leave, wait for the draft confirmation before refreshing or closing the page.</p>
     `,
   },
 ];
