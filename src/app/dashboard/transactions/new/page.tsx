@@ -327,6 +327,12 @@ function CurrencyInput({
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema
 // ─────────────────────────────────────────────────────────────────────────────
+// Optional select controls initialize and hydrate as an empty string. Zod's
+// `optional()` accepts undefined but not that UI blank value, so every optional
+// yes/no selection must explicitly accept it. This keeps optional sections from
+// blocking a valid transaction submission.
+const optionalYesNo = z.enum(['yes', 'no']).optional().or(z.literal(''));
+
 const schema = z.object({
   // Agent
   agentId: z.string().optional(),
@@ -478,14 +484,14 @@ const schema = z.object({
   seller4Phone: z.string().optional(),
 
   // Pre-Listing Inspections (listing-only)
-  preListingInspectionOrdered: z.enum(['yes', 'no']).optional(),
+  preListingInspectionOrdered: optionalYesNo,
   preListingTargetInspectionDate: z.string().optional().or(z.literal('')),
   preListingInspectionTypes: z.array(z.string()).optional(),
   preListingTcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).optional(),
   preListingTcScheduleInspectionsOther: z.string().optional(),
   preListingInspectorName: z.string().optional(),
   // Buyer/Pending Inspections
-  inspectionOrdered: z.enum(['yes', 'no']).optional(),
+  inspectionOrdered: optionalYesNo,
   targetInspectionDate: z.string().optional().or(z.literal('')),
   inspectionTypes: z.array(z.string()).optional(),
   tcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).optional(),
@@ -566,20 +572,20 @@ const schema = z.object({
   buyerClosingCostOther: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // Additional info
-  warrantyAtClosing: z.enum(['yes', 'no']).optional(),
+  warrantyAtClosing: optionalYesNo,
   warrantyAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   warrantyPaidBy: z.string().optional(),
-  buyerWarrantyEducationRequested: z.enum(['yes', 'no']).optional(),
-  sellerWarrantyEducationRequested: z.enum(['yes', 'no']).optional(),
-  txComplianceFee: z.enum(['yes', 'no']).optional(),
+  buyerWarrantyEducationRequested: optionalYesNo,
+  sellerWarrantyEducationRequested: optionalYesNo,
+  txComplianceFee: optionalYesNo,
   txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   txComplianceFeePaidBy: z.string().optional(),
   txComplianceFeeAgentAllocation: z.enum(['primary_agent', 'co_agent', 'split_equal', 'custom']).optional(),
   txComplianceFeePrimaryAgentAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   txComplianceFeeCoAgentAmount: z.coerce.number().min(0).optional().or(z.literal('')),
-  occupancyAgreement: z.enum(['yes', 'no']).optional(),
+  occupancyAgreement: optionalYesNo,
   occupancyDates: z.string().optional(),
-  shortageInCommission: z.enum(['yes', 'no']).optional(),
+  shortageInCommission: optionalYesNo,
   shortageAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   buyerBringToClosing: z.coerce.number().min(0).optional().or(z.literal('')),
   shortageHandledBy: z.string().optional(),

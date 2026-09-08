@@ -36,9 +36,12 @@ test('new buyer transactions default to the editable $395 compliance fee', () =>
   assert.match(formSource, /form\.setValue\('txComplianceFeeAmount', 395 as any\)/);
 });
 
-test('APHW education requests retain buyer and seller distinctions, consent, alerts, and in-form help', () => {
-  assert.match(formSource, /buyerWarrantyEducationRequested: z\.enum\(\['yes', 'no'\]\)\.optional\(\)/);
-  assert.match(formSource, /sellerWarrantyEducationRequested: z\.enum\(\['yes', 'no'\]\)\.optional\(\)/);
+test('APHW education requests retain buyer and seller distinctions, consent, alerts, in-form help, and optional save behavior', () => {
+  assert.match(formSource, /const optionalYesNo = z\.enum\(\['yes', 'no'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /buyerWarrantyEducationRequested: optionalYesNo/);
+  assert.match(formSource, /sellerWarrantyEducationRequested: optionalYesNo/);
+  assert.match(formSource, /buyerWarrantyEducationRequested: ''/);
+  assert.match(formSource, /sellerWarrantyEducationRequested: ''/);
   assert.match(formSource, /Buyer Home Warranty Education/);
   assert.match(formSource, /Seller Home Warranty Education/);
   assert.match(formSource, /\$5,000 in E&amp;O deductible coverage/);
