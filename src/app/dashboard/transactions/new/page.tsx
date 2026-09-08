@@ -40,6 +40,7 @@ import { SmartFormsTransactionPanel } from '@/components/transactions/SmartForms
 import { SmartPropertyTransactionPanel } from '@/components/transactions/SmartPropertyTransactionPanel';
 import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
+import { optionalSelect, optionalStringArray } from '@/lib/transactions/optionalFormValues';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -327,22 +328,20 @@ function CurrencyInput({
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema
 // ─────────────────────────────────────────────────────────────────────────────
-// Optional select controls initialize and hydrate as an empty string. Zod's
-// `optional()` accepts undefined but not that UI blank value, so every optional
-// yes/no selection must explicitly accept it. This keeps optional sections from
-// blocking a valid transaction submission.
-const optionalYesNo = z.enum(['yes', 'no']).optional().or(z.literal(''));
-const optionalCommissionCalculationMethod = z.enum(['percentage', 'flat_dollar']).optional().or(z.literal(''));
-const optionalDepositHolder = z.enum(['listing_broker', 'selling_broker', 'other']).optional().or(z.literal(''));
-const optionalCommercialLeaseCommissionMode = z.enum(['percent', 'flat']).optional().or(z.literal(''));
-const optionalClientType = z.enum(['buyer', 'seller', 'dual']).optional().or(z.literal(''));
-const optionalInspectionScheduleChoice = z.enum(['yes', 'no', 'other', 'already_scheduled']).optional().or(z.literal(''));
-const optionalShowingNewOrChange = z.enum(['new', 'change']).optional().or(z.literal(''));
-const optionalShowingContactType = z.enum(['agent', 'owner', 'occupant']).optional().or(z.literal(''));
-const optionalCooperatingCommissionMethod = z.enum(['percentage', 'flat_dollar']).optional().or(z.literal(''));
-const optionalCommissionMode = z.enum(['percent', 'flat']).optional().or(z.literal(''));
-const optionalFeeAllocation = z.enum(['primary_agent', 'co_agent', 'split_equal', 'custom']).optional().or(z.literal(''));
-const optionalCoAgentRole = z.enum(['co_list', 'co_buyer', 'co_both', 'referral', 'other']).optional().or(z.literal(''));
+// Optional controls must tolerate form blanks and malformed legacy values. These
+// shared validators normalize them to `undefined` rather than blocking a save.
+const optionalYesNo = optionalSelect(['yes', 'no']);
+const optionalCommissionCalculationMethod = optionalSelect(['percentage', 'flat_dollar']);
+const optionalDepositHolder = optionalSelect(['listing_broker', 'selling_broker', 'other']);
+const optionalCommercialLeaseCommissionMode = optionalSelect(['percent', 'flat']);
+const optionalClientType = optionalSelect(['buyer', 'seller', 'dual']);
+const optionalInspectionScheduleChoice = optionalSelect(['yes', 'no', 'other', 'already_scheduled']);
+const optionalShowingNewOrChange = optionalSelect(['new', 'change']);
+const optionalShowingContactType = optionalSelect(['agent', 'owner', 'occupant']);
+const optionalCooperatingCommissionMethod = optionalSelect(['percentage', 'flat_dollar']);
+const optionalCommissionMode = optionalSelect(['percent', 'flat']);
+const optionalFeeAllocation = optionalSelect(['primary_agent', 'co_agent', 'split_equal', 'custom']);
+const optionalCoAgentRole = optionalSelect(['co_list', 'co_buyer', 'co_both', 'referral', 'other']);
 
 const schema = z.object({
   // Agent
@@ -497,19 +496,19 @@ const schema = z.object({
   // Pre-Listing Inspections (listing-only)
   preListingInspectionOrdered: optionalYesNo,
   preListingTargetInspectionDate: z.string().optional().or(z.literal('')),
-  preListingInspectionTypes: z.array(z.string()).optional(),
+  preListingInspectionTypes: optionalStringArray,
   preListingTcScheduleInspections: optionalInspectionScheduleChoice,
   preListingTcScheduleInspectionsOther: z.string().optional(),
   preListingInspectorName: z.string().optional(),
   // Buyer/Pending Inspections
   inspectionOrdered: optionalYesNo,
   targetInspectionDate: z.string().optional().or(z.literal('')),
-  inspectionTypes: z.array(z.string()).optional(),
+  inspectionTypes: optionalStringArray,
   tcScheduleInspections: optionalInspectionScheduleChoice,
   tcScheduleInspectionsOther: z.string().optional(),
   inspectorName: z.string().optional(),
   // Media Order (listing-only)
-  mediaTypes: z.array(z.string()).optional(),
+  mediaTypes: optionalStringArray,
   mediaRequestedDate: z.string().optional().or(z.literal('')),
   mediaNotes: z.string().optional(),
   // MLS Description Builder (listing-only)
@@ -517,7 +516,7 @@ const schema = z.object({
   // Sign Order (listing-only)
   signOrderRequested: z.boolean().optional(),
   signServiceType: z.string().optional(),
-  signAdditionalOptions: z.array(z.string()).optional(),
+  signAdditionalOptions: optionalStringArray,
   signRiderExt: z.string().optional(),
   signRequestedDate: z.string().optional().or(z.literal('')),
   signSpecialRequests: z.string().optional(),
@@ -529,7 +528,7 @@ const schema = z.object({
   // ShowingTime Setup (listing-only)
   showingTimeRequested: z.boolean().optional(),
   showingNewOrChange: optionalShowingNewOrChange,
-  showingApptHandling: z.array(z.string()).optional(),
+  showingApptHandling: optionalStringArray,
   showingVirtualPreference: z.string().optional(),
   showingApptType: z.string().optional(),
   showingNoSameDayAppts: z.boolean().optional(),
@@ -543,14 +542,14 @@ const schema = z.object({
   showingCallOrder2Email: z.string().optional(),
   showingCallOrder2Type: optionalShowingContactType,
   showingCallOrder2Confirm: z.string().optional(),
-  showingCallOrder2Notify: z.array(z.string()).optional(),
+  showingCallOrder2Notify: optionalStringArray,
   showingCallOrder3Name: z.string().optional(),
   showingCallOrder3Mobile: z.string().optional(),
   showingCallOrder3AltPhone: z.string().optional(),
   showingCallOrder3Email: z.string().optional(),
   showingCallOrder3Type: optionalShowingContactType,
   showingCallOrder3Confirm: z.string().optional(),
-  showingCallOrder3Notify: z.array(z.string()).optional(),
+  showingCallOrder3Notify: optionalStringArray,
   showingShareAgentInfo: z.string().optional(),
   showingAccessType: z.string().optional(),
   showingAccessNotes: z.string().optional(),
@@ -560,7 +559,7 @@ const schema = z.object({
   showingPasscode: z.string().optional(),
   showingAlarmNotes: z.string().optional(),
   showingNotesToStaff: z.string().optional(),
-  showingNotesToAgent: z.array(z.string()).optional(),
+  showingNotesToAgent: optionalStringArray,
   showingNotesToAgentOther: z.string().optional(),
 
   // Listing-side commission paid by seller. Its gross commission method stays

@@ -38,14 +38,17 @@ test('all optional select families accept blank values and cannot block a Pendin
     'optionalFeeAllocation',
     'optionalCoAgentRole',
   ];
+  assert.match(form, /import \{ optionalSelect, optionalStringArray \} from '@\/lib\/transactions\/optionalFormValues';/);
   for (const helper of blankSafeHelpers) {
-    assert.match(form, new RegExp(`const ${helper} = .*\\.optional\\(\\)\\.or\\(z\\.literal\\(''\\)\\)`), `${helper} must accept a blank form value`);
+    assert.match(form, new RegExp(`const ${helper} = optionalSelect\\(`), `${helper} must use the blank-safe optional select validator`);
   }
   assert.match(form, /preListingTcScheduleInspections: optionalInspectionScheduleChoice/);
   assert.match(form, /tcScheduleInspections: optionalInspectionScheduleChoice/);
   assert.match(form, /buyerWarrantyEducationRequested: optionalYesNo/);
   assert.match(form, /sellerWarrantyEducationRequested: optionalYesNo/);
   assert.match(form, /showingNewOrChange: optionalShowingNewOrChange/);
+  assert.match(form, /showingCallOrder2Notify: optionalStringArray/);
+  assert.match(form, /showingCallOrder3Notify: optionalStringArray/);
   assert.match(form, /if \(typeof candidate === 'boolean' \|\| candidate === null \|\| candidate === undefined\) return fallback/);
   assert.match(form, /const safeStringArray = \(val: unknown\): string\[\] => \{/);
   assert.match(form, /showingCallOrder2Notify: safeStringArray\(tx\.showingCallOrder2Notify\)/);

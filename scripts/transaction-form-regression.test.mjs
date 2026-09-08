@@ -37,7 +37,8 @@ test('new buyer transactions default to the editable $395 compliance fee', () =>
 });
 
 test('APHW education requests retain buyer and seller distinctions, consent, alerts, in-form help, and optional save behavior', () => {
-  assert.match(formSource, /const optionalYesNo = z\.enum\(\['yes', 'no'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /import \{ optionalSelect, optionalStringArray \} from '@\/lib\/transactions\/optionalFormValues';/);
+  assert.match(formSource, /const optionalYesNo = optionalSelect\(\['yes', 'no'\]\)/);
   assert.match(formSource, /buyerWarrantyEducationRequested: optionalYesNo/);
   assert.match(formSource, /sellerWarrantyEducationRequested: optionalYesNo/);
   assert.match(formSource, /buyerWarrantyEducationRequested: ''/);
@@ -87,11 +88,12 @@ test('listing lifecycle dates remain visible and hydrate after a listing becomes
 test('Pending listing updates accept blank optional TC and inspection workflow selections', () => {
   assert.match(
     formSource,
-    /const optionalInspectionScheduleChoice = z\.enum\(\['yes', 'no', 'other', 'already_scheduled'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/,
+    /const optionalInspectionScheduleChoice = optionalSelect\(\['yes', 'no', 'other', 'already_scheduled'\]\)/,
   );
   assert.match(formSource, /preListingTcScheduleInspections: optionalInspectionScheduleChoice/);
   assert.match(formSource, /tcScheduleInspections: optionalInspectionScheduleChoice/);
-  assert.match(formSource, /const optionalShowingNewOrChange = z\.enum\(\['new', 'change'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /const optionalShowingNewOrChange = optionalSelect\(\['new', 'change'\]\)/);
+  assert.match(formSource, /showingCallOrder2Notify: optionalStringArray/);
   assert.match(formSource, /commissionCalculationMethod: optionalCommissionCalculationMethod/);
   assert.match(formSource, /cooperatingAgentCommissionMethod: optionalCooperatingCommissionMethod/);
   assert.match(formSource, /\{ message: 'Full property address is required for buyer, listing, and dual transactions\.', path: \['address'\] \}/);
@@ -185,7 +187,7 @@ test('dual and co-agent production credit follows explicitly assigned representa
   assert.match(productionCreditSource, /role === 'co_list' \|\| role === 'co_buyer' \|\| role === 'co_both'/);
   assert.match(productionCreditSource, /if \(role === 'co_both'\)[\s\S]*?const credit = share \* 2/);
   assert.match(productionCreditSource, /const primaryCredit = 1 \+ primaryShare/);
-  assert.match(formSource, /const optionalCoAgentRole = z\.enum\(\['co_list', 'co_buyer', 'co_both', 'referral', 'other'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /const optionalCoAgentRole = optionalSelect\(\['co_list', 'co_buyer', 'co_both', 'referral', 'other'\]\)/);
   assert.match(formSource, /coAgentRole: optionalCoAgentRole/);
   assert.match(formSource, /<SelectItem value="co_both">Co-Agent on Both Sides<\/SelectItem>/);
   assert.match(agentRollupSource, /getAgentProductionCredit\(t, agentId\)/);

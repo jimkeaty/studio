@@ -15,7 +15,7 @@ test('flat-dollar commission uses a durable explicit method and exact amount', (
   assert.match(commissionCalculator, /commissionCalculationMethod/);
   assert.match(commissionCalculator, /commissionFlatAmount/);
   assert.match(commissionCalculator, /flatAmount >= 0/);
-  assert.match(transactionForm, /const optionalCommissionCalculationMethod = z\.enum\(\['percentage', 'flat_dollar'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(transactionForm, /const optionalCommissionCalculationMethod = optionalSelect\(\['percentage', 'flat_dollar'\]\)/);
   assert.match(transactionForm, /commissionCalculationMethod: optionalCommissionCalculationMethod/);
   assert.match(transactionForm, /commissionFlatAmount:/);
   assert.match(transactionForm, /SmartBroker saves that amount as the authoritative gross commission/);

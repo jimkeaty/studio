@@ -14,7 +14,7 @@ const auditHelper = read('src/lib/transactions/cooperatingCommission.ts');
 const sharedTypes = read('src/lib/types.ts');
 
 test('pending listing cooperating commission has a dedicated, independent percentage-or-dollar model', () => {
-  assert.match(form, /const optionalCooperatingCommissionMethod = z\.enum\(\['percentage', 'flat_dollar'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(form, /const optionalCooperatingCommissionMethod = optionalSelect\(\['percentage', 'flat_dollar'\]\)/);
   assert.match(form, /cooperatingAgentCommissionMethod: optionalCooperatingCommissionMethod/);
   assert.match(form, /cooperatingAgentCommissionPercent:/);
   assert.match(form, /cooperatingAgentCommissionFlatAmount:/);
