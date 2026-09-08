@@ -24,6 +24,7 @@ const adminHook = read('src/hooks/useIsAdminLike.ts');
 const onboarding = read('src/app/api/onboarding/route.ts');
 const tcQueuePage = read('src/app/dashboard/admin/tc/page.tsx');
 const sidebar = read('src/components/dashboard/sidebar-nav.tsx');
+const staffSelfLink = read('src/app/api/admin/staff-self-link/route.ts');
 
 test('Accounting users can control each closeout event through standard notification preferences', () => {
   for (const event of [
@@ -96,4 +97,9 @@ test('the Accounting role has the approved Admin, TC, and Accounting operational
   assert.match(tcQueuePage, /u\.role === 'tc' \|\| u\.role === 'tc_admin' \|\| u\.role === 'accounting'/);
   assert.match(sidebar, /const \{ isAdmin: showAdminMenu \} = useIsAdminLike\(\)/);
   assert.match(agentTransactions, /Closed transactions cannot be edited by agents/);
+});
+
+test('inactive staff records cannot regain Accounting or Admin-equivalent access through legacy self-link fallbacks', () => {
+  assert.match(staffSelfLink, /if \(!linkedData\.status\)/);
+  assert.match(staffSelfLink, /!d\.data\(\)\.status && \(d\.data\(\)\.email \|\| ''\)\.toLowerCase\(\) === email\.toLowerCase\(\)/);
 });

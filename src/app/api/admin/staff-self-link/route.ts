@@ -78,8 +78,14 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .get();
     if (!alreadyLinkedAll.empty) {
-      await ensureUserDoc(alreadyLinkedAll.docs[0].data() as Record<string, any>);
-      return NextResponse.json({ ok: true, linked: false, role: alreadyLinkedAll.docs[0].data().role });
+      const linkedData = alreadyLinkedAll.docs[0].data() as Record<string, any>;
+      // This fallback exists solely for pre-status legacy records. An explicitly
+      // inactive staff account must not be treated as linked operational staff.
+      if (!linkedData.status) {
+        await ensureUserDoc(linkedData);
+        return NextResponse.json({ ok: true, linked: false, role: linkedData.role });
+      }
+      return NextResponse.json({ ok: true, linked: false, role: null });
     }
 
     // ── First-time link: find staffUsers record by email ──────────────────────
@@ -107,7 +113,7 @@ export async function POST(req: NextRequest) {
     if (matchSnap.empty) {
       const allStaff = await adminDb.collection('staffUsers').get();
       const matchDoc = allStaff.docs.find(
-        (d) => (d.data().email || '').toLowerCase() === email.toLowerCase()
+        (d) => !d.data().status && (d.data().email || '').toLowerCase() === email.toLowerCase()
       );
       if (matchDoc) {
         matchSnap = { empty: false, docs: [matchDoc] } as any;
