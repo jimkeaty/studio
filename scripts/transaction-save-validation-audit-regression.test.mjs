@@ -46,6 +46,10 @@ test('all optional select families accept blank values and cannot block a Pendin
   assert.match(form, /buyerWarrantyEducationRequested: optionalYesNo/);
   assert.match(form, /sellerWarrantyEducationRequested: optionalYesNo/);
   assert.match(form, /showingNewOrChange: optionalShowingNewOrChange/);
+  assert.match(form, /if \(typeof candidate === 'boolean' \|\| candidate === null \|\| candidate === undefined\) return fallback/);
+  assert.match(form, /const safeStringArray = \(val: unknown\): string\[\] => \{/);
+  assert.match(form, /showingCallOrder2Notify: safeStringArray\(tx\.showingCallOrder2Notify\)/);
+  assert.match(form, /showingCallOrder3Notify: safeStringArray\(tx\.showingCallOrder3Notify\)/);
 });
 
 test('conditional financial and co-agent rules apply only when the user elects those workflows', () => {

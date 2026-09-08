@@ -2233,11 +2233,19 @@ export default function AddTransactionPage() {
         commPctManuallyEdited.current = Boolean(tx.manualCommissionPercentOverride || editCommissionOverride.current);
         setCommissionMode(savedFlatDollarMethod || tx.commissionMode === 'flat' ? 'flat' : 'percent');
         // Pre-fill all form fields from the transaction document
-        // Helper: if a Firestore value is an array (legacy data), take the first element
-        // This prevents z.enum() and z.string() validation failures when old data has arrays
+        // Helpers for legacy transaction values. Older records occasionally stored a
+        // boolean where the current optional select expects a string choice, or a
+        // boolean where current ShowingTime notification controls expect an array.
+        // Treat those incompatible optional values as unselected rather than letting
+        // them block an otherwise valid status update.
         const safeEnum = (val: unknown, fallback = '') => {
-          if (Array.isArray(val)) return val[0] ?? fallback;
-          return val ?? fallback;
+          const candidate = Array.isArray(val) ? val[0] : val;
+          if (typeof candidate === 'boolean' || candidate === null || candidate === undefined) return fallback;
+          return String(candidate);
+        };
+        const safeStringArray = (val: unknown): string[] => {
+          if (Array.isArray(val)) return val.filter((item): item is string => typeof item === 'string');
+          return typeof val === 'string' ? [val] : [];
         };
         const safeStr = (val: unknown, fallback = '') => {
           if (Array.isArray(val)) return val[0] ?? fallback;
@@ -2528,7 +2536,7 @@ export default function AddTransactionPage() {
           showingTimeRequested: tx.showingTimeRequested ?? false,
           showingNewOrChange: tx.showingNewOrChange || '',
           showingApptType: tx.showingApptType || '',
-          showingApptHandling: Array.isArray(tx.showingApptHandling) ? tx.showingApptHandling : (tx.showingApptHandling ? [tx.showingApptHandling] : []),
+          showingApptHandling: safeStringArray(tx.showingApptHandling),
           showingMaxApptLength: tx.showingMaxApptLength || '',
           showingApptOverlaps: tx.showingApptOverlaps || '',
           showingVirtualPreference: tx.showingVirtualPreference || '',
@@ -2547,7 +2555,7 @@ export default function AddTransactionPage() {
           showingArmCode: tx.showingArmCode || tx.showingAlarmArm || '',
           showingPasscode: tx.showingPasscode || '',
           showingAlarmNotes: tx.showingAlarmNotes || '',
-          showingNotesToAgent: Array.isArray(tx.showingNotesToAgent) ? tx.showingNotesToAgent : (tx.showingNotesToAgent ? [tx.showingNotesToAgent] : []),
+          showingNotesToAgent: safeStringArray(tx.showingNotesToAgent),
           showingNotesToAgentOther: tx.showingNotesToAgentOther || '',
           showingNotesToStaff: tx.showingNotesToStaff || '',
           showingCallOrder1Name: tx.showingCallOrder1Name || '',
@@ -2556,16 +2564,16 @@ export default function AddTransactionPage() {
           showingCallOrder2Mobile: tx.showingCallOrder2Mobile || tx.showingCallOrder2Phone || '',
           showingCallOrder2AltPhone: tx.showingCallOrder2AltPhone || '',
           showingCallOrder2Email: tx.showingCallOrder2Email || '',
-          showingCallOrder2Type: tx.showingCallOrder2Type || '',
-          showingCallOrder2Confirm: tx.showingCallOrder2Confirm || '',
-          showingCallOrder2Notify: Array.isArray(tx.showingCallOrder2Notify) ? tx.showingCallOrder2Notify : (tx.showingCallOrder2Notify ? [tx.showingCallOrder2Notify] : []),
+          showingCallOrder2Type: safeEnum(tx.showingCallOrder2Type, ''),
+          showingCallOrder2Confirm: safeEnum(tx.showingCallOrder2Confirm, ''),
+          showingCallOrder2Notify: safeStringArray(tx.showingCallOrder2Notify),
           showingCallOrder3Name: tx.showingCallOrder3Name || '',
           showingCallOrder3Mobile: tx.showingCallOrder3Mobile || tx.showingCallOrder3Phone || '',
           showingCallOrder3AltPhone: tx.showingCallOrder3AltPhone || '',
           showingCallOrder3Email: tx.showingCallOrder3Email || '',
-          showingCallOrder3Type: tx.showingCallOrder3Type || '',
-          showingCallOrder3Confirm: tx.showingCallOrder3Confirm || '',
-          showingCallOrder3Notify: Array.isArray(tx.showingCallOrder3Notify) ? tx.showingCallOrder3Notify : (tx.showingCallOrder3Notify ? [tx.showingCallOrder3Notify] : []),
+          showingCallOrder3Type: safeEnum(tx.showingCallOrder3Type, ''),
+          showingCallOrder3Confirm: safeEnum(tx.showingCallOrder3Confirm, ''),
+          showingCallOrder3Notify: safeStringArray(tx.showingCallOrder3Notify),
           mediaRequested: tx.mediaRequested ?? false,
           mediaTypes: tx.mediaTypes || [],
           mediaRequestedDate: tx.mediaRequestedDate || '',

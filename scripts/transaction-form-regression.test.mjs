@@ -375,13 +375,24 @@ test('ShowingTime information saves and reopens through the unified Staff Queue 
     'showingCallOrder3Type', 'showingCallOrder3Confirm', 'showingCallOrder3Notify',
   ];
   for (const field of currentShowingFields) {
-    assert.match(formSource, new RegExp(`${field}: (?:tx\\.${field}|Array\\.isArray\\(tx\\.${field}\\))`), `${field} must hydrate when a transaction reopens`);
+    const legacyEnumFields = new Set([
+      'showingCallOrder2Type',
+      'showingCallOrder2Confirm',
+      'showingCallOrder3Type',
+      'showingCallOrder3Confirm',
+    ]);
+    const hydrationPattern = field.endsWith('Notify')
+      ? `${field}: safeStringArray\\(tx\\.${field}\\)`
+      : legacyEnumFields.has(field)
+        ? `${field}: safeEnum\\(tx\\.${field}, ''\\)`
+        : `${field}: (?:tx\\.${field}|Array\\.isArray\\(tx\\.${field}\\))`;
+    assert.match(formSource, new RegExp(hydrationPattern), `${field} must hydrate when a transaction reopens`);
     assert.match(adminRouteSource, new RegExp(`'${field}'`), `${field} must persist through operational Staff Queue saves`);
     assert.match(agentRouteSource, new RegExp(`'${field}'`), `${field} must persist through agent saves`);
   }
   assert.match(formSource, /showingCallOrder2Mobile: tx\.showingCallOrder2Mobile \|\| tx\.showingCallOrder2Phone/);
   assert.match(formSource, /showingCallOrder3Mobile: tx\.showingCallOrder3Mobile \|\| tx\.showingCallOrder3Phone/);
-  assert.match(formSource, /showingNotesToAgent: Array\.isArray\(tx\.showingNotesToAgent\)/);
+  assert.match(formSource, /showingNotesToAgent: safeStringArray\(tx\.showingNotesToAgent\)/);
 });
 
 test('ShowingTime owner call orders reuse saved seller contacts without replacing manual call-order entries', () => {
