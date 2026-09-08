@@ -35,6 +35,9 @@ type NotificationType =
   | 'staff_queue_new'
   | 'staff_queue_resolved'
   | 'staff_queue_attention'
+  | 'accounting_closeout_new'
+  | 'accounting_closeout_attention'
+  | 'accounting_closeout_completed'
   | 'tx_status_change'
   | 'tx_new_agent'
   | 'transaction_activity_digest'
@@ -167,6 +170,27 @@ const EVENT_GROUPS: { label: string; description: string; events: EventMeta[] }[
         type: 'staff_queue_attention',
         label: 'Action Required',
         description: 'When a staff queue item needs your attention',
+      },
+    ],
+  },
+  {
+    label: 'Accounting Closeout',
+    description: 'Notifications related to closed files sent to Accounting',
+    events: [
+      {
+        type: 'accounting_closeout_new',
+        label: 'New Closed File',
+        description: 'When TC or Staff completes a closed file and it is ready for Accounting review',
+      },
+      {
+        type: 'accounting_closeout_attention',
+        label: 'Information or Action Requested',
+        description: 'When Accounting requests information needed to finish a closeout',
+      },
+      {
+        type: 'accounting_closeout_completed',
+        label: 'Accounting Complete',
+        description: 'When Accounting completes the closeout review for a file you handed off',
       },
     ],
   },

@@ -4,7 +4,7 @@
  *
  * staffUsers documents contain:
  *   - firebaseUid  (the Firebase Auth UID)
- *   - role         ('office_admin' | 'tc_admin' | 'tc' | 'staff')
+ *   - role         ('office_admin' | 'tc_admin' | 'tc' | 'staff' | 'accounting')
  *   - email, displayName, phone
  */
 
@@ -49,6 +49,10 @@ async function resolveStaffUids(
 
   for (const doc of docs) {
     const data = doc.data() as Record<string, any>;
+    // New records explicitly use active/inactive. Legacy records that predate
+    // the field remain eligible, but an inactive staff account must never be
+    // included in operational notifications.
+    if (String(data.status || 'active').toLowerCase() === 'inactive') continue;
     if (data.firebaseUid) {
       uids.push(data.firebaseUid as string);
       continue;

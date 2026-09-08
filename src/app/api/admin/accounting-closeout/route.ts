@@ -20,6 +20,17 @@ function error(status: number, message: string) {
   return NextResponse.json({ ok: false, error: message }, { status });
 }
 
+function workflowRecipientUids(transaction: Record<string, any>, closeout: Record<string, any>) {
+  const candidates = [
+    closeout.tcCompletedBy?.uid,
+    closeout.handedOffBy?.uid,
+    transaction.assignedTcUid,
+    transaction.tcUid,
+    ...(Array.isArray(transaction.assignedTcUids) ? transaction.assignedTcUids : []),
+  ];
+  return [...new Set(candidates.map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
 function serialize(value: any): any {
   if (value == null) return value;
   if (typeof value?.toDate === 'function') return value.toDate().toISOString();
@@ -110,6 +121,12 @@ export async function POST(req: NextRequest) {
     const closeout: Record<string, any> = { ...current, updatedAt: now };
     let historyAction = '';
     let historyDetail = '';
+    let notification: {
+      type: 'accounting_closeout_attention' | 'accounting_closeout_completed';
+      recipientUids: string[];
+      title: string;
+      body: string;
+    } | null = null;
     if (action === 'take') {
       closeout.status = 'in_progress';
       closeout.assignedToUid = decoded.uid;
@@ -135,17 +152,18 @@ export async function POST(req: NextRequest) {
       closeout.needsInformation = { detail: request, requestedAt: now, requestedBy: actor };
       historyAction = 'Accounting requested information';
       historyDetail = request;
-      const tcUids = await getTcUids(adminDb);
-      if (tcUids.length > 0) {
-        await sendNotification(adminDb, {
-          type: 'accounting_closeout_attention',
-          recipientUids: tcUids,
-          title: 'Accounting Needs Information',
-          body: `${transaction.propertyAddress || transaction.address || 'A closed transaction'} needs: ${request}`,
-          url: `/dashboard/admin/accounting?transactionId=${transactionId}`,
-          data: { transactionId },
-        });
-      }
+      // Notify the person who completed the Staff/TC closeout and any TC
+      // explicitly assigned to the file. Older files may not have an assignee,
+      // so retain the TC-team fallback rather than silently leaving a request
+      // unanswered.
+      const assignedRecipients = workflowRecipientUids(transaction, current);
+      const recipientUids = assignedRecipients.length > 0 ? assignedRecipients : await getTcUids(adminDb);
+      notification = {
+        type: 'accounting_closeout_attention',
+        recipientUids,
+        title: 'Accounting Needs Information',
+        body: `${transaction.propertyAddress || transaction.address || 'A closed transaction'} needs: ${request}`,
+      };
     } else if (action === 'set_field_state') {
       const fieldId = String(body.fieldId || '').trim();
       const state = String(body.state || '') as AccountingFieldState;
@@ -165,6 +183,15 @@ export async function POST(req: NextRequest) {
       closeout.completedBy = actor;
       historyAction = 'Accounting closeout completed';
       historyDetail = `${actor.name} completed accounting closeout. Transaction status remains Closed.`;
+      const recipientUids = workflowRecipientUids(transaction, current);
+      if (recipientUids.length > 0) {
+        notification = {
+          type: 'accounting_closeout_completed',
+          recipientUids,
+          title: 'Accounting Closeout Complete',
+          body: `${transaction.propertyAddress || transaction.address || 'A closed transaction'} has completed Accounting closeout.`,
+        };
+      }
     } else if (action === 'reopen') {
       closeout.status = 'in_progress';
       closeout.completedAt = null;
@@ -189,6 +216,17 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     }, { merge: true });
     await writeProcessingHistory(adminDb, transactionId, { action: historyAction, detail: historyDetail, actor });
+
+    // Delivery follows each recipient's global and per-event settings. A
+    // channel being disabled, missing a phone, or lacking an email provider
+    // never changes the saved accounting workflow state.
+    if (notification && notification.recipientUids.length > 0) {
+      await sendNotification(adminDb, {
+        ...notification,
+        url: `/dashboard/admin/accounting?transactionId=${transactionId}`,
+        data: { transactionId },
+      });
+    }
 
     return NextResponse.json({ ok: true, accounting: serialize(closeout) });
   } catch (cause: any) {

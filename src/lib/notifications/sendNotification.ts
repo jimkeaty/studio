@@ -169,12 +169,15 @@ async function dispatchToUser(
   const userData = userDoc.exists ? (userDoc.data() as Record<string, any>) : {};
 
   // ── Resolve contact info ──────────────────────────────────────────────────
-  // If the users/{uid} doc is missing email/phone (common for staff users whose
-  // doc was created before the self-link flow), fall back to the staffUsers record.
-  let resolvedEmail: string = userData.email || '';
-  let resolvedName:  string = userData.displayName || userData.name || '';
-  let resolvedPhone: string = userData.phone || '';
-  if (!resolvedEmail) {
+  // If any users/{uid} contact detail is missing (common for staff users whose
+  // doc was created before the self-link flow), supplement it from staffUsers.
+  // This preserves users/{uid} as the priority source while allowing an
+  // Accounting user with a saved staff phone to opt into SMS even when their
+  // Firebase profile already has an email address.
+  let resolvedEmail: string = String(userData.email || '').trim();
+  let resolvedName:  string = String(userData.displayName || userData.name || '').trim();
+  let resolvedPhone: string = String(userData.phone || '').trim();
+  if (!resolvedEmail || !resolvedName || !resolvedPhone) {
     try {
       const staffSnap = await db
         .collection('staffUsers')
@@ -183,9 +186,9 @@ async function dispatchToUser(
         .get();
       if (!staffSnap.empty) {
         const sd = staffSnap.docs[0].data() as Record<string, any>;
-        resolvedEmail = sd.email || '';
-        resolvedName  = resolvedName || sd.displayName || sd.name || '';
-        resolvedPhone = resolvedPhone || sd.phone || '';
+        resolvedEmail = resolvedEmail || String(sd.email || '').trim();
+        resolvedName  = resolvedName || String(sd.displayName || sd.name || '').trim();
+        resolvedPhone = resolvedPhone || String(sd.phone || '').trim();
       }
     } catch {
       // staffUsers lookup failed — skip silently

@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     for (const field of allowed) {
       if (!(field in body)) continue;
       if (field === 'role') {
-        const validRoles = ['office_admin', 'tc_admin', 'tc', 'accounting'];
+        const validRoles = ['office_admin', 'tc_admin', 'tc', 'staff', 'accounting'];
         if (!validRoles.includes(body.role)) return jsonError(400, `Invalid role: ${body.role}`);
       }
       if (field === 'status') {

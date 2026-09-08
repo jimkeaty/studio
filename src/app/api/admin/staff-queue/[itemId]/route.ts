@@ -13,6 +13,12 @@ import { resolveGCI } from '@/lib/commissions';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
+import {
+  DIRECT_SPLIT_FIELDS,
+  mergeOperationalDirectSplit,
+  OPERATIONAL_TRANSACTION_FORM_FIELDS,
+  synchronizeOperationalCloseDate,
+} from '@/lib/transactions/operationalEditFields';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -110,6 +116,10 @@ const EDITABLE_TX_FIELDS = new Set([
   'primaryAgentSplitPercent', 'coAgentSplitPercent',
   // Documents
   'documents',
+  // Newly added and legacy unified-form fields. Keep this queue editor in
+  // step with the authoritative transaction form so a Staff correction is
+  // never silently ignored, including after the file is closed.
+  ...OPERATIONAL_TRANSACTION_FORM_FIELDS,
 ]);
 
 // Fields that trigger a commission recalculation when changed
@@ -119,8 +129,6 @@ const COMMISSION_TRIGGER_FIELDS = new Set([
 // Fields that directly set split values — when ONLY these change (no GCI change),
 // merge them straight into splitSnapshot instead of running a profile recalculation.
 // This preserves manual overrides set by staff without reverting to profile defaults.
-const DIRECT_SPLIT_FIELDS = new Set(['agentPct', 'agentDollar', 'brokerPct', 'brokerGci']);
-
 // Default checklist items seeded for new staff queue items (mirrors TC queue checklist)
 const DEFAULT_CHECKLIST = [
   { id: 'sq_01', order: 1, label: 'Review transaction details' },
@@ -305,6 +313,7 @@ export async function PATCH(
       }
 
       if (Object.keys(allowed).length > 0) {
+        synchronizeOperationalCloseDate(allowed);
         allowed.updatedAt = now;
         const cooperatingCommission = buildCooperatingCommissionUpdate({
           current: currentTx,
@@ -391,28 +400,7 @@ export async function PATCH(
         // WITHOUT changing GCI, merge those values straight into splitSnapshot
         // so displayed values update without reverting to profile-based defaults.
         const hasDirectSplitChange = Object.keys(txUpdates).some(k => DIRECT_SPLIT_FIELDS.has(k));
-        if (hasDirectSplitChange && !hasCommissionChange) {
-          const existingSplit = currentTx.splitSnapshot || {};
-          const newAgentPct = allowed.agentPct != null ? Number(allowed.agentPct) : null;
-          const newAgentDollar = allowed.agentDollar != null ? Number(allowed.agentDollar) : null;
-          const newBrokerPct = allowed.brokerPct != null ? Number(allowed.brokerPct) : null;
-          const newBrokerGci = allowed.brokerGci != null ? Number(allowed.brokerGci) : null;
-          const _mergedForFee = { ...currentTx, ...allowed };
-          const _feeAmt = Number(_mergedForFee.txComplianceFeeAmount) || 0;
-          const _feePaidBy = String(_mergedForFee.txComplianceFeePaidBy || '').toLowerCase().trim();
-          const _agentPaysFee = _mergedForFee.txComplianceFee === 'yes' && _feeAmt > 0 && _feePaidBy === 'agent';
-          const netAgentDollar = newAgentDollar != null && _agentPaysFee
-            ? Number(Math.max(0, newAgentDollar - _feeAmt).toFixed(2))
-            : newAgentDollar;
-          allowed.splitSnapshot = {
-            ...existingSplit,
-            ...(newAgentPct != null ? { agentSplitPercent: newAgentPct } : {}),
-            ...(netAgentDollar != null ? { agentNetCommission: netAgentDollar } : {}),
-            ...(newBrokerPct != null ? { companySplitPercent: newBrokerPct } : {}),
-            ...(newBrokerGci != null ? { companyRetained: newBrokerGci } : {}),
-            ...(_agentPaysFee && newAgentDollar != null ? { agentFeeDeduction: _feeAmt } : {}),
-          };
-        }
+        if (hasDirectSplitChange) mergeOperationalDirectSplit(currentTx, allowed);
         try {
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();

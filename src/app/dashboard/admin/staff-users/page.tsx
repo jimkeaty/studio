@@ -27,7 +27,7 @@ import { Separator } from '@/components/ui/separator';
 import { Plus, Pencil, UserX, UserCheck, Mail, Shield, Building2, ClipboardList, AlertTriangle, CheckCircle2, Bell, MessageSquare, Smartphone, Link2, Link2Off, RefreshCw, Receipt } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type StaffRole = 'office_admin' | 'tc_admin' | 'tc' | 'accounting';
+type StaffRole = 'office_admin' | 'tc_admin' | 'tc' | 'staff' | 'accounting';
 
 type NotifPrefs = {
   inApp: boolean;
@@ -53,6 +53,7 @@ const ROLE_LABELS: Record<StaffRole, string> = {
   office_admin: 'Office Admin',
   tc_admin: 'TC Admin',
   tc: 'Transaction Coordinator',
+  staff: 'Staff',
   accounting: 'Accounting',
 };
 
@@ -60,6 +61,7 @@ const ROLE_DESCRIPTIONS: Record<StaffRole, string> = {
   office_admin: 'Full dashboard access — agents, transactions, reports. No TC notifications.',
   tc_admin: 'Full TC queue + can view agent dashboards. Receives TC notifications.',
   tc: 'TC intake queue only. Receives TC notifications.',
+  staff: 'Staff Queue access with full authorized transaction editing, including closed-file corrections.',
   accounting: 'Accounting closeout queue only. Receives closed-transaction handoff notifications.',
 };
 
@@ -67,6 +69,7 @@ const ROLE_ICONS: Record<StaffRole, React.ElementType> = {
   office_admin: Building2,
   tc_admin: Shield,
   tc: ClipboardList,
+  staff: ClipboardList,
   accounting: Receipt,
 };
 
@@ -74,6 +77,7 @@ const ROLE_COLORS: Record<StaffRole, string> = {
   office_admin: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
   tc_admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
   tc: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  staff: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300',
   accounting: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
 };
 

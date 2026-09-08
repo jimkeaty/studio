@@ -15,6 +15,7 @@ import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSid
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
+import { OPERATIONAL_TRANSACTION_FORM_FIELDS } from '@/lib/transactions/operationalEditFields';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -352,6 +353,10 @@ const UPDATABLE_FIELDS = new Set([
   'titleOfficerStreet', 'warrantyAmount', 'workingWithTc',
   'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested', 'agentBonusPassThrough',
   'inspectionRowData',
+  // The unified form continues to add operational fields over time. Maintain
+  // one canonical Admin/Staff/TC correction surface so a valid authorized
+  // change does not disappear merely because it was made after closing.
+  ...OPERATIONAL_TRANSACTION_FORM_FIELDS,
 ]);
 
 export async function PATCH(req: NextRequest) {

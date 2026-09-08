@@ -12,6 +12,11 @@ import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUi
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
+import {
+  mergeOperationalDirectSplit,
+  OPERATIONAL_TRANSACTION_FORM_FIELDS,
+  synchronizeOperationalCloseDate,
+} from '@/lib/transactions/operationalEditFields';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -450,6 +455,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'documents',
         // Pass-through
         'isPassThrough',
+        // Keep TC edits aligned with the full authorized transaction form. This
+        // adds later form fields and legacy aliases without creating a second
+        // financial or transaction record.
+        ...OPERATIONAL_TRANSACTION_FORM_FIELDS,
       ];
       for (const field of editableFields) {
         if (field in body) {
@@ -464,8 +473,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           } else {
             updates[field] = val === '' || val === null ? null : val;
           }
+          }
         }
-      }
+      synchronizeOperationalCloseDate(updates);
       await docRef.update(updates);
 
       // ── Sync edits to the linked transactions doc so the agent sees them immediately ──
@@ -534,6 +544,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'primaryAgentSplitPercent', 'coAgentSplitPercent',
         'documents',
         'isPassThrough',
+        ...OPERATIONAL_TRANSACTION_FORM_FIELDS,
       ];
         const txSyncUpdate: Record<string, any> = { updatedAt: now };
         for (const f of txSyncFields) {
@@ -556,18 +567,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // ── Recalculate splitSnapshot when commission fields change ──────────
         // The ledger and agent view display from splitSnapshot, NOT raw agentPct/agentDollar.
         // Without this, commission edits appear to save but the displayed values don't update.
-        const COMMISSION_TRIGGER = new Set(['salePrice','commissionPercent','gci','commission','commissionBasePrice','commissionCalculationMethod','commissionFlatAmount','agentPct','agentDollar','brokerPct','brokerGci']);
+        const COMMISSION_TRIGGER = new Set(['salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount']);
         const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
+        const currentTxForUpdateDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
+        const currentTxForUpdate = currentTxForUpdateDoc.exists ? (currentTxForUpdateDoc.data() as Record<string, any>) : {};
         if (hasCommissionChange) {
           try {
-            const currentTxDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
-            const currentTx = currentTxDoc.exists ? (currentTxDoc.data() as any) : {};
-            const merged = { ...currentTx, ...txSyncUpdate };
+            const merged = { ...currentTxForUpdate, ...txSyncUpdate };
             // If commissionPercent is being explicitly changed but gci is NOT being
             // explicitly set, clear the stored gci so resolveGCI uses the new percentage.
             // Otherwise resolveGCI always returns the old stored gci (it takes precedence).
             if (txSyncUpdate.commissionCalculationMethod === 'flat_dollar') {
-              const exactAmount = Number(txSyncUpdate.commissionFlatAmount ?? txSyncUpdate.gci ?? currentTx.commissionFlatAmount ?? currentTx.gci);
+              const exactAmount = Number(txSyncUpdate.commissionFlatAmount ?? txSyncUpdate.gci ?? currentTxForUpdate.commissionFlatAmount ?? currentTxForUpdate.gci);
               if (Number.isFinite(exactAmount) && exactAmount >= 0) {
                 txSyncUpdate.commissionFlatAmount = exactAmount;
                 txSyncUpdate.gci = exactAmount;
@@ -577,7 +588,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               txSyncUpdate.commissionFlatAmount = null;
               txSyncUpdate.manualGciOverride = false;
             }
-            const mergedWithMethod = { ...currentTx, ...txSyncUpdate };
+            const mergedWithMethod = { ...currentTxForUpdate, ...txSyncUpdate };
             const gciForCalc = ('commissionPercent' in txSyncUpdate && !('gci' in txSyncUpdate) && txSyncUpdate.commissionCalculationMethod !== 'flat_dollar')
               ? 0
               : mergedWithMethod.gci;
@@ -589,12 +600,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               commissionCalculationMethod: mergedWithMethod.commissionCalculationMethod,
               commissionFlatAmount: mergedWithMethod.commissionFlatAmount,
             });
-            const agentIdForCalc = String(currentTx.agentId || intake.agentId || '').trim();
+            const agentIdForCalc = String(currentTxForUpdate.agentId || intake.agentId || '').trim();
             if (newGCI > 0 && agentIdForCalc) {
               const txDate = merged.closedDate || merged.contractDate || null;
               const calculation = await resolveTransactionCalculation({
                 agentId: agentIdForCalc,
-                agentDisplayName: String(currentTx.agentDisplayName || intake.agentDisplayName || '').trim(),
+                agentDisplayName: String(currentTxForUpdate.agentDisplayName || intake.agentDisplayName || '').trim(),
                 commission: newGCI,
                 transactionDate: txDate,
               });
@@ -619,6 +630,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             console.warn('[TC update] splitSnapshot recalculation failed (non-fatal):', calcErr?.message);
           }
         }
+        // A manual agent/broker split must survive the same save as a gross
+        // commission correction. Apply it after any profile-based calculation
+        // so TC never sees their exact split silently revert.
+        mergeOperationalDirectSplit(currentTxForUpdate, txSyncUpdate);
         try {
           const versionedTransactionRef = adminDb.collection('transactions').doc(linkedTxId);
           const versionedTransactionSnap = await versionedTransactionRef.get();

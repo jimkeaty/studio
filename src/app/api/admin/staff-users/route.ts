@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     if (!displayName?.trim() || !email?.trim()) {
       return jsonError(400, 'Missing required fields: displayName and email');
     }
-    const validRoles = ['office_admin', 'tc_admin', 'tc', 'accounting'];
+    const validRoles = ['office_admin', 'tc_admin', 'tc', 'staff', 'accounting'];
     if (newRole && !validRoles.includes(newRole)) {
       return jsonError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`);
     }
