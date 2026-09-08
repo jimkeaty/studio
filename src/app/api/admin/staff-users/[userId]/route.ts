@@ -1,7 +1,7 @@
 // PATCH + DELETE /api/admin/staff-users/[userId]
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { getStaffRole } from '@/lib/auth/staffAccess';
+import { isAdminLike } from '@/lib/auth/staffAccess';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -18,8 +18,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
-    const callerRole = await getStaffRole(decoded.uid);
-    if (callerRole !== 'office_admin' && callerRole !== 'tc_admin') return jsonError(403, 'Forbidden: Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
     const { userId } = await params;
     const body = await req.json();
@@ -88,8 +87,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const token = extractBearer(req);
     if (!token) return jsonError(401, 'Unauthorized');
     const decoded = await adminAuth.verifyIdToken(token);
-    const callerRole = await getStaffRole(decoded.uid);
-    if (callerRole !== 'office_admin' && callerRole !== 'tc_admin') return jsonError(403, 'Forbidden: Admin only');
+    if (!(await isAdminLike(decoded.uid))) return jsonError(403, 'Forbidden: Admin only');
 
     const { userId } = await params;
     const docRef = adminDb.collection('staffUsers').doc(userId);

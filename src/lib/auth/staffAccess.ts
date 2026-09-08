@@ -47,7 +47,10 @@ export async function getStaffRole(uid: string): Promise<StaffRole | null> {
         .where('firebaseUid', '==', uid)
         .limit(1)
         .get();
-      if (!allSnap.empty) snap = allSnap as any;
+      // Only accept this fallback for records created before the status field
+      // existed. An explicitly inactive account must never regain access just
+      // because the active-status query returned no document.
+      if (!allSnap.empty && !allSnap.docs[0].data().status) snap = allSnap as any;
     }
 
     const role = snap.empty ? null : (snap.docs[0].data().role as StaffRole);
@@ -64,7 +67,7 @@ export async function getStaffRole(uid: string): Promise<StaffRole | null> {
  */
 export async function isAdminLike(uid: string): Promise<boolean> {
   const role = await getStaffRole(uid);
-  return role === 'office_admin' || role === 'tc_admin';
+  return role === 'office_admin' || role === 'tc_admin' || role === 'accounting';
 }
 
 /**

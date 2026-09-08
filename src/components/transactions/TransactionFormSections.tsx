@@ -9,7 +9,7 @@
  *   - Admin Transaction Ledger (admin/transactions/edit/page.tsx)
  *
  * Each section accepts { form, role, isReadOnly, user, toast } props.
- * role: 'agent' | 'tc' | 'staff' | 'admin'
+ * role: 'agent' | 'tc' | 'staff' | 'accounting' | 'admin'
  * isReadOnly: true = closed transaction (agent view only)
  */
 
@@ -98,7 +98,7 @@ export type InspVendor = {
   company: string | null;
 };
 
-export type TransactionRole = 'agent' | 'tc' | 'staff' | 'admin';
+export type TransactionRole = 'agent' | 'tc' | 'staff' | 'accounting' | 'admin';
 
 export interface TransactionFormSectionProps {
   form: UseFormReturn<any>;
@@ -257,7 +257,7 @@ export function KeyDatesSection({ form, role }: TransactionFormSectionProps) {
   const isListing = closingType === 'listing';
   const isBuyer = closingType === 'buyer';
   const isDual = closingType === 'dual';
-  const isAdmin = role === 'admin' || role === 'tc' || role === 'staff';
+  const isAdmin = role === 'admin' || role === 'tc' || role === 'staff' || role === 'accounting';
 
   return (
     <Section title="Key Dates">

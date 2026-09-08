@@ -40,8 +40,8 @@ async function resolveWizardRole(uid: string, email: string | null): Promise<Wiz
     if (!staffSnap.empty) {
       const staffData = staffSnap.docs[0].data();
       const role = staffData.role ?? '';
-      if (role === 'office_admin' || role === 'tc_admin') return 'broker';
-      if (role === 'tc') return 'staff';
+      if (role === 'office_admin' || role === 'tc_admin' || role === 'accounting') return 'broker';
+      if (role === 'tc' || role === 'staff') return 'staff';
     }
 
     // Also check by email
@@ -53,8 +53,8 @@ async function resolveWizardRole(uid: string, email: string | null): Promise<Wiz
         .get();
       if (!staffByEmail.empty) {
         const role = staffByEmail.docs[0].data().role ?? '';
-        if (role === 'office_admin' || role === 'tc_admin') return 'broker';
-        if (role === 'tc') return 'staff';
+        if (role === 'office_admin' || role === 'tc_admin' || role === 'accounting') return 'broker';
+        if (role === 'tc' || role === 'staff') return 'staff';
       }
     }
   } catch {

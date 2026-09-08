@@ -6,8 +6,8 @@ const SUPER_ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 
 /**
  * Returns { isStaff, isAdmin, role, loading } where:
- *   - isStaff: true for any staff user (tc, tc_admin, office_admin) + super admin
- *   - isAdmin: true for office_admin and tc_admin + super admin
+ *   - isStaff: true for any active staff user + super admin
+ *   - isAdmin: true for office_admin, tc_admin, and full-access accounting + super admin
  *   - role: the staff role string, or null if not staff
  */
 export function useIsStaff(): {
@@ -62,7 +62,7 @@ export function useIsStaff(): {
           const staffOk = !!d.ok;
           const staffRole = d.role ?? null;
           setIsStaffUser(staffOk);
-          setIsAdminUser(staffOk && (staffRole === 'office_admin' || staffRole === 'tc_admin'));
+          setIsAdminUser(staffOk && (staffRole === 'office_admin' || staffRole === 'tc_admin' || staffRole === 'accounting'));
           setRole(staffRole);
           setStaffChecked(true);
         }

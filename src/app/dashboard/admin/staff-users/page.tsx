@@ -62,7 +62,7 @@ const ROLE_DESCRIPTIONS: Record<StaffRole, string> = {
   tc_admin: 'Full TC queue + can view agent dashboards. Receives TC notifications.',
   tc: 'TC intake queue only. Receives TC notifications.',
   staff: 'Staff Queue access with full authorized transaction editing, including closed-file corrections.',
-  accounting: 'Accounting closeout queue only. Receives closed-transaction handoff notifications.',
+  accounting: 'Full Admin, TC, and Accounting workflow access. Receives closeout notifications and can correct closed files.',
 };
 
 const ROLE_ICONS: Record<StaffRole, React.ElementType> = {

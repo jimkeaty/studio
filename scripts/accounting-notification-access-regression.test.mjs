@@ -18,6 +18,12 @@ const staffUsers = read('src/app/api/admin/staff-users/route.ts');
 const staffUserUpdate = read('src/app/api/admin/staff-users/[userId]/route.ts');
 const staffUsersPage = read('src/app/dashboard/admin/staff-users/page.tsx');
 const operationalFields = read('src/lib/transactions/operationalEditFields.ts');
+const staffAccess = read('src/lib/auth/staffAccess.ts');
+const staffHook = read('src/hooks/useIsStaff.ts');
+const adminHook = read('src/hooks/useIsAdminLike.ts');
+const onboarding = read('src/app/api/onboarding/route.ts');
+const tcQueuePage = read('src/app/dashboard/admin/tc/page.tsx');
+const sidebar = read('src/components/dashboard/sidebar-nav.tsx');
 
 test('Accounting users can control each closeout event through standard notification preferences', () => {
   for (const event of [
@@ -75,4 +81,19 @@ test('Admin can assign Accounting and Staff roles with linked notification profi
   assert.match(staffUsers, /phone: phone\?\.trim\(\) \|\| null/);
   assert.match(staffUsersPage, /staff: 'Staff'/);
   assert.match(staffUsersPage, /accounting: 'Accounting'/);
+});
+
+test('the Accounting role has the approved Admin, TC, and Accounting operational access without broadening agent permissions', () => {
+  assert.match(staffAccess, /return role === 'office_admin' \|\| role === 'tc_admin' \|\| role === 'accounting'/);
+  assert.match(staffAccess, /return role === 'office_admin' \|\| role === 'accounting'/);
+  assert.match(staffAccess, /!allSnap\.empty && !allSnap\.docs\[0\]\.data\(\)\.status/);
+  assert.match(adminHook, /full-access 'accounting'/);
+  assert.match(staffHook, /staffRole === 'office_admin' \|\| staffRole === 'tc_admin' \|\| staffRole === 'accounting'/);
+  assert.match(staffUsers, /isAdminLike\(decoded\.uid\)/);
+  assert.match(staffUserUpdate, /isAdminLike\(decoded\.uid\)/);
+  assert.match(staffUsersPage, /Full Admin, TC, and Accounting workflow access/);
+  assert.match(onboarding, /role === 'office_admin' \|\| role === 'tc_admin' \|\| role === 'accounting'/);
+  assert.match(tcQueuePage, /u\.role === 'tc' \|\| u\.role === 'tc_admin' \|\| u\.role === 'accounting'/);
+  assert.match(sidebar, /const \{ isAdmin: showAdminMenu \} = useIsAdminLike\(\)/);
+  assert.match(agentTransactions, /Closed transactions cannot be edited by agents/);
 });

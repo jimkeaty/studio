@@ -49,7 +49,7 @@ type StaffUser = {
   id: string;
   displayName: string;
   email: string;
-  role: 'tc' | 'tc_admin' | 'office_admin';
+  role: 'tc' | 'tc_admin' | 'office_admin' | 'accounting';
   status: 'active' | 'inactive';
 };
 
@@ -181,7 +181,7 @@ export default function TcQueuePage() {
       const data = await res.json();
       if (data.ok) {
         const tc = (data.users as StaffUser[]).filter(
-          (u) => (u.role === 'tc' || u.role === 'tc_admin') && u.status === 'active'
+          (u) => (u.role === 'tc' || u.role === 'tc_admin' || u.role === 'accounting') && u.status === 'active'
         );
         setTcStaff(tc);
       }

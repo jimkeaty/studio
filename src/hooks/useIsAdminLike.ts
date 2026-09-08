@@ -8,7 +8,7 @@ const SUPER_ADMIN_UID = '1kJsXTU1JjZXMidmoIPXgXxizll1';
 /**
  * Returns { isAdmin, loading } where isAdmin is true for:
  *   - The super admin UID
- *   - Any staff user with role 'office_admin' or 'tc_admin'
+ *   - Any staff user with role 'office_admin', 'tc_admin', or full-access 'accounting'
  *
  * On every login, this hook also calls /api/admin/staff-self-link to ensure
  * the user's Firebase UID is linked to their staffUsers record (needed when
