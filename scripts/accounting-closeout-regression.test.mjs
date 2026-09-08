@@ -19,12 +19,23 @@ test('accounting closeout is a departmental workflow on the canonical transactio
   assert.match(staffQueue, /String\(txDocForAccounting\.data\(\)\?\.status \|\| ''\)\.toLowerCase\(\) === 'closed'/);
 });
 
-test('accounting snapshot preserves the required financial and closeout fields with zero, missing, and N/A states', () => {
-  for (const field of ['propertyAddress', 'transactionIdentifier', 'salePrice', 'grossGci', 'companyDollar', 'agentCommission', 'bonuses', 'inHouse', 'dualAgent', 'warranty', 'transactionFee', 'listingFee']) {
+test('accounting snapshot presents the full requested transaction, commission, referral, fee, and payout review fields', () => {
+  for (const field of [
+    'propertyAddress', 'clientNames', 'leadSource', 'listingDate', 'contractDate', 'projectedCloseDate', 'listingExpirationDate', 'closeDate',
+    'listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'brokerPercent', 'brokerGci', 'referral', 'agentPercent', 'agentNet', 'bonuses', 'totalAgentPayout',
+  ]) {
     assert.match(closeout, new RegExp(`id: '${field}'`));
   }
+  assert.match(closeout, /resolveGCI/);
+  assert.match(closeout, /getAgentBonusPassThrough/);
+  assert.match(closeout, /companySplitPercent/);
+  assert.match(closeout, /agentSplitPercent/);
+  assert.match(closeout, /outboundReferralFeePercent/);
   assert.match(closeout, /'value' \| 'zero' \| 'missing' \| 'na'/);
   assert.match(closeout, /requiredAccountingFieldsMissing/);
+  assert.match(panel, /Transaction details/);
+  assert.match(panel, /Commission, referral, fees, and payout/);
+  assert.match(panel, /totalAgentPayout/);
 });
 
 test('accounting access and completion validation cannot silently bypass incomplete data', () => {
