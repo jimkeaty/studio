@@ -617,14 +617,19 @@ export async function PATCH(req: NextRequest) {
       const transactionRef = adminDb.collection('transactions').doc(id);
       if (cooperatingCommission.auditEvent) {
         const batch = adminDb.batch();
-        batch.update(transactionRef, updates, expectedUpdatedAt ? { lastUpdateTime: existingSnap.updateTime } : undefined);
+        if (expectedUpdatedAt) {
+          batch.update(transactionRef, updates, { lastUpdateTime: existingSnap.updateTime });
+        } else {
+          batch.update(transactionRef, updates);
+        }
         batch.create(transactionRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
         await batch.commit();
       } else {
-        await transactionRef.update(
-          updates,
-          expectedUpdatedAt ? { lastUpdateTime: existingSnap.updateTime } : undefined,
-        );
+        if (expectedUpdatedAt) {
+          await transactionRef.update(updates, { lastUpdateTime: existingSnap.updateTime });
+        } else {
+          await transactionRef.update(updates);
+        }
       }
     } catch (error: any) {
       // The Firestore precondition closes the race between the comparison above

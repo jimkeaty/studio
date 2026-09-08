@@ -26,6 +26,21 @@ test('Task 9: Admin, Staff, and TC save routes reject a stale transaction versio
     assert.match(source, /hasTransactionVersionConflict/, `${name} must compare the canonical version`);
     assert.match(source, /jsonError\(409, 'This transaction was changed by another authorized user/, `${name} must return an explicit conflict`);
     assert.match(source, /lastUpdateTime:/, `${name} must use a Firestore write precondition`);
+    assert.doesNotMatch(
+      source,
+      /\.update\([\s\S]{0,240}\? \{ lastUpdateTime: [\s\S]{0,80}: undefined/,
+      `${name} must not pass an undefined precondition into Firestore update`,
+    );
+  }
+});
+
+test('Task 9: version-safe transaction updates use a two-argument Firestore call when no precondition is supplied', () => {
+  for (const [name, source] of [
+    ['admin transaction route', adminRoute],
+    ['staff queue route', staffQueueRoute],
+    ['TC route', tcRoute],
+  ]) {
+    assert.match(source, /else \{\s*(?:await )?\w+\.update\(\w+\);/, `${name} must omit the absent precondition`);
   }
 });
 

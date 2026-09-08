@@ -634,14 +634,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           Object.assign(txSyncUpdate, cooperatingCommission.updates);
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();
-            batch.update(versionedTransactionRef, txSyncUpdate, body.expectedTransactionUpdatedAt ? { lastUpdateTime: versionedTransactionSnap.updateTime } : undefined);
+            if (body.expectedTransactionUpdatedAt) {
+              batch.update(versionedTransactionRef, txSyncUpdate, { lastUpdateTime: versionedTransactionSnap.updateTime });
+            } else {
+              batch.update(versionedTransactionRef, txSyncUpdate);
+            }
             batch.create(versionedTransactionRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
             await batch.commit();
           } else {
-            await versionedTransactionRef.update(
-              txSyncUpdate,
-              body.expectedTransactionUpdatedAt ? { lastUpdateTime: versionedTransactionSnap.updateTime } : undefined,
-            );
+            if (body.expectedTransactionUpdatedAt) {
+              await versionedTransactionRef.update(txSyncUpdate, { lastUpdateTime: versionedTransactionSnap.updateTime });
+            } else {
+              await versionedTransactionRef.update(txSyncUpdate);
+            }
           }
         } catch (syncErr: any) {
           if (body.expectedTransactionUpdatedAt && syncErr?.code === 9) {

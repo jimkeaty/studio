@@ -416,14 +416,19 @@ export async function PATCH(
         try {
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();
-            batch.update(txRef, allowed, body.expectedTransactionUpdatedAt ? { lastUpdateTime: currentTxDoc.updateTime } : undefined);
+            if (body.expectedTransactionUpdatedAt) {
+              batch.update(txRef, allowed, { lastUpdateTime: currentTxDoc.updateTime });
+            } else {
+              batch.update(txRef, allowed);
+            }
             batch.create(txRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
             await batch.commit();
           } else {
-            await txRef.update(
-              allowed,
-              body.expectedTransactionUpdatedAt ? { lastUpdateTime: currentTxDoc.updateTime } : undefined,
-            );
+            if (body.expectedTransactionUpdatedAt) {
+              await txRef.update(allowed, { lastUpdateTime: currentTxDoc.updateTime });
+            } else {
+              await txRef.update(allowed);
+            }
           }
         } catch (error: any) {
           if (body.expectedTransactionUpdatedAt && error?.code === 9) {

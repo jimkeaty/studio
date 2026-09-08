@@ -500,11 +500,19 @@ export async function PATCH(
     try {
       if (cooperatingCommission.auditEvent) {
         const batch = adminDb.batch();
-        batch.update(txRef, updates, expectedUpdatedAt ? { lastUpdateTime: txSnap.updateTime } : undefined);
+        if (expectedUpdatedAt) {
+          batch.update(txRef, updates, { lastUpdateTime: txSnap.updateTime });
+        } else {
+          batch.update(txRef, updates);
+        }
         batch.create(txRef.collection('auditEvents').doc(), cooperatingCommission.auditEvent);
         await batch.commit();
       } else {
-        await txRef.update(updates, expectedUpdatedAt ? { lastUpdateTime: txSnap.updateTime } : undefined);
+        if (expectedUpdatedAt) {
+          await txRef.update(updates, { lastUpdateTime: txSnap.updateTime });
+        } else {
+          await txRef.update(updates);
+        }
       }
     } catch (error: any) {
       if (expectedUpdatedAt && error?.code === 9) {
