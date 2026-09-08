@@ -332,6 +332,17 @@ function CurrencyInput({
 // yes/no selection must explicitly accept it. This keeps optional sections from
 // blocking a valid transaction submission.
 const optionalYesNo = z.enum(['yes', 'no']).optional().or(z.literal(''));
+const optionalCommissionCalculationMethod = z.enum(['percentage', 'flat_dollar']).optional().or(z.literal(''));
+const optionalDepositHolder = z.enum(['listing_broker', 'selling_broker', 'other']).optional().or(z.literal(''));
+const optionalCommercialLeaseCommissionMode = z.enum(['percent', 'flat']).optional().or(z.literal(''));
+const optionalClientType = z.enum(['buyer', 'seller', 'dual']).optional().or(z.literal(''));
+const optionalInspectionScheduleChoice = z.enum(['yes', 'no', 'other', 'already_scheduled']).optional().or(z.literal(''));
+const optionalShowingNewOrChange = z.enum(['new', 'change']).optional().or(z.literal(''));
+const optionalShowingContactType = z.enum(['agent', 'owner', 'occupant']).optional().or(z.literal(''));
+const optionalCooperatingCommissionMethod = z.enum(['percentage', 'flat_dollar']).optional().or(z.literal(''));
+const optionalCommissionMode = z.enum(['percent', 'flat']).optional().or(z.literal(''));
+const optionalFeeAllocation = z.enum(['primary_agent', 'co_agent', 'split_equal', 'custom']).optional().or(z.literal(''));
+const optionalCoAgentRole = z.enum(['co_list', 'co_buyer', 'co_both', 'referral', 'other']).optional().or(z.literal(''));
 
 const schema = z.object({
   // Agent
@@ -358,11 +369,11 @@ const schema = z.object({
   gci: z.coerce.number().min(0).optional().or(z.literal('')),
   // `gci` remains the compatible display and rollup field. These preserve whether
   // that value is percentage-derived or an exact, intentionally flat amount.
-  commissionCalculationMethod: z.enum(['percentage', 'flat_dollar']).optional(),
+  commissionCalculationMethod: optionalCommissionCalculationMethod,
   commissionFlatAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   transactionFee: z.coerce.number().min(0).optional().or(z.literal('')),
   earnestMoney: z.coerce.number().min(0).optional().or(z.literal('')),
-  depositHolder: z.enum(['listing_broker', 'selling_broker', 'other']).optional(),
+  depositHolder: optionalDepositHolder,
   depositHolderOther: z.string().optional(),
   brokerPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   brokerGci: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -392,7 +403,7 @@ const schema = z.object({
   commercialLeaseTerm: z.coerce.number().min(0).optional().or(z.literal('')),
   commercialTotalLeaseValue: z.coerce.number().min(0).optional().or(z.literal('')),
   commercialLeaseGci: z.coerce.number().min(0).optional().or(z.literal('')),
-  commercialLeaseCommissionMode: z.enum(['percent', 'flat']).optional(),
+  commercialLeaseCommissionMode: optionalCommercialLeaseCommissionMode,
   commercialLeaseCommissionPct: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   commercialLeaseCommissionFlat: z.coerce.number().min(0).optional().or(z.literal('')),
   commercialLeaseEffectivePct: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -453,7 +464,7 @@ const schema = z.object({
   workingWithTc: z.boolean().optional(),
 
   // Client Type
-  clientType: z.enum(['buyer', 'seller', 'dual']).optional(),
+  clientType: optionalClientType,
 
   // Buyer info
   buyerName: z.string().optional(),
@@ -487,14 +498,14 @@ const schema = z.object({
   preListingInspectionOrdered: optionalYesNo,
   preListingTargetInspectionDate: z.string().optional().or(z.literal('')),
   preListingInspectionTypes: z.array(z.string()).optional(),
-  preListingTcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).optional(),
+  preListingTcScheduleInspections: optionalInspectionScheduleChoice,
   preListingTcScheduleInspectionsOther: z.string().optional(),
   preListingInspectorName: z.string().optional(),
   // Buyer/Pending Inspections
   inspectionOrdered: optionalYesNo,
   targetInspectionDate: z.string().optional().or(z.literal('')),
   inspectionTypes: z.array(z.string()).optional(),
-  tcScheduleInspections: z.enum(['yes', 'no', 'other', 'already_scheduled']).optional(),
+  tcScheduleInspections: optionalInspectionScheduleChoice,
   tcScheduleInspectionsOther: z.string().optional(),
   inspectorName: z.string().optional(),
   // Media Order (listing-only)
@@ -517,7 +528,7 @@ const schema = z.object({
   signPlacementNotes: z.string().optional(),
   // ShowingTime Setup (listing-only)
   showingTimeRequested: z.boolean().optional(),
-  showingNewOrChange: z.enum(['new', 'change']).optional(),
+  showingNewOrChange: optionalShowingNewOrChange,
   showingApptHandling: z.array(z.string()).optional(),
   showingVirtualPreference: z.string().optional(),
   showingApptType: z.string().optional(),
@@ -530,14 +541,14 @@ const schema = z.object({
   showingCallOrder2Mobile: z.string().optional(),
   showingCallOrder2AltPhone: z.string().optional(),
   showingCallOrder2Email: z.string().optional(),
-  showingCallOrder2Type: z.enum(['agent', 'owner', 'occupant']).optional(),
+  showingCallOrder2Type: optionalShowingContactType,
   showingCallOrder2Confirm: z.string().optional(),
   showingCallOrder2Notify: z.array(z.string()).optional(),
   showingCallOrder3Name: z.string().optional(),
   showingCallOrder3Mobile: z.string().optional(),
   showingCallOrder3AltPhone: z.string().optional(),
   showingCallOrder3Email: z.string().optional(),
-  showingCallOrder3Type: z.enum(['agent', 'owner', 'occupant']).optional(),
+  showingCallOrder3Type: optionalShowingContactType,
   showingCallOrder3Confirm: z.string().optional(),
   showingCallOrder3Notify: z.array(z.string()).optional(),
   showingShareAgentInfo: z.string().optional(),
@@ -556,13 +567,13 @@ const schema = z.object({
   // separate from the cooperating-agent compensation offer below.
   sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
   sellerPayingListingAgentUnknown: z.boolean().optional(),
-  cooperatingAgentCommissionMethod: z.enum(['percentage', 'flat_dollar']).optional(),
+  cooperatingAgentCommissionMethod: optionalCooperatingCommissionMethod,
   cooperatingAgentCommissionPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   cooperatingAgentCommissionFlatAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   // Legacy mirror. New listing-side edits use the dedicated fields above.
   sellerPayingBuyerAgent: z.coerce.number().min(0).optional().or(z.literal('')),
   // 'percent' (default) or 'flat' — controls whether seller-paying fields are % or $
-  commissionMode: z.enum(['percent', 'flat']).optional(),
+  commissionMode: optionalCommissionMode,
 
   // Buyer closing cost paid by seller
   buyerClosingCostTotal: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -580,7 +591,7 @@ const schema = z.object({
   txComplianceFee: optionalYesNo,
   txComplianceFeeAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   txComplianceFeePaidBy: z.string().optional(),
-  txComplianceFeeAgentAllocation: z.enum(['primary_agent', 'co_agent', 'split_equal', 'custom']).optional(),
+  txComplianceFeeAgentAllocation: optionalFeeAllocation,
   txComplianceFeePrimaryAgentAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   txComplianceFeeCoAgentAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   occupancyAgreement: optionalYesNo,
@@ -612,7 +623,7 @@ const schema = z.object({
   hasCoAgent: z.boolean().optional(),
   coAgentId: z.string().optional(),
   coAgentDisplayName: z.string().optional(),
-  coAgentRole: z.enum(['co_list', 'co_buyer', 'co_both', 'referral', 'other']).optional(),
+  coAgentRole: optionalCoAgentRole,
   primaryAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   coAgentSplitPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
 }).refine(

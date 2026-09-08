@@ -81,6 +81,19 @@ test('listing lifecycle dates remain visible and hydrate after a listing becomes
   assert.match(formSource, /\{isListingSideTransaction && \(/);
 });
 
+test('Pending listing updates accept blank optional TC and inspection workflow selections', () => {
+  assert.match(
+    formSource,
+    /const optionalInspectionScheduleChoice = z\.enum\(\['yes', 'no', 'other', 'already_scheduled'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/,
+  );
+  assert.match(formSource, /preListingTcScheduleInspections: optionalInspectionScheduleChoice/);
+  assert.match(formSource, /tcScheduleInspections: optionalInspectionScheduleChoice/);
+  assert.match(formSource, /const optionalShowingNewOrChange = z\.enum\(\['new', 'change'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /commissionCalculationMethod: optionalCommissionCalculationMethod/);
+  assert.match(formSource, /cooperatingAgentCommissionMethod: optionalCooperatingCommissionMethod/);
+  assert.match(formSource, /\{ message: 'Full property address is required for buyer, listing, and dual transactions\.', path: \['address'\] \}/);
+});
+
 test('an explicit No clears a transaction fee and cannot be re-enabled by stale fee values', () => {
   assert.match(formSource, /const feeExplicitlyDisabled = \['no', 'false', 'off', '0'\]\.includes\(rawComplianceFee\)/);
   assert.match(formSource, /if \(value === 'no'\) \{[\s\S]*form\.setValue\('txComplianceFeeAmount', ''\)/);
@@ -169,7 +182,8 @@ test('dual and co-agent production credit follows explicitly assigned representa
   assert.match(productionCreditSource, /role === 'co_list' \|\| role === 'co_buyer' \|\| role === 'co_both'/);
   assert.match(productionCreditSource, /if \(role === 'co_both'\)[\s\S]*?const credit = share \* 2/);
   assert.match(productionCreditSource, /const primaryCredit = 1 \+ primaryShare/);
-  assert.match(formSource, /coAgentRole: z\.enum\(\['co_list', 'co_buyer', 'co_both', 'referral', 'other'\]\)/);
+  assert.match(formSource, /const optionalCoAgentRole = z\.enum\(\['co_list', 'co_buyer', 'co_both', 'referral', 'other'\]\)\.optional\(\)\.or\(z\.literal\(''\)\)/);
+  assert.match(formSource, /coAgentRole: optionalCoAgentRole/);
   assert.match(formSource, /<SelectItem value="co_both">Co-Agent on Both Sides<\/SelectItem>/);
   assert.match(agentRollupSource, /getAgentProductionCredit\(t, agentId\)/);
   assert.match(leaderboardRouteSource, /getAgentProductionCredit\(t, participantId\)/);
