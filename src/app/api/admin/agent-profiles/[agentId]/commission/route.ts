@@ -403,7 +403,16 @@ export async function GET(
       .map(normalizeTier)
       .filter((t: ReturnType<typeof normalizeTier>) => t.agentSplitPercent > 0 || t.companySplitPercent > 0);
 
-    if (agentStoredTiers.length > 0) {
+    const isMemberOnLeaderTeam =
+      agentType === 'team' &&
+      teamRole === 'member' &&
+      Boolean(primaryTeamId) &&
+      !isLeaderlessGroup;
+
+    // A team member's old generic profile tiers must not replace the active
+    // leader-team plan. Explicit member override bands were already returned
+    // above; every other leader-team member is calculated from the team plan.
+    if (agentStoredTiers.length > 0 && !isMemberOnLeaderTeam) {
       // Agent has saved tiers with valid splits — use them as the source of truth.
       // Fetch YTD rollup for tier progression before returning.
       let ytdStored = 0;

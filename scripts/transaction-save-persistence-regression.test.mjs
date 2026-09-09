@@ -12,6 +12,8 @@ const transactionForm = read('src/app/dashboard/transactions/new/page.tsx');
 const adminLedger = read('src/app/dashboard/admin/transactions/page.tsx');
 const transactionCreateRoute = read('src/app/api/tc/route.ts');
 const operationalFields = read('src/lib/transactions/operationalEditFields.ts');
+const commissionProfileRoute = read('src/app/api/admin/agent-profiles/[agentId]/commission/route.ts');
+const teamResolver = read('src/app/api/transactions/_lib/teamTransactionResolver.ts');
 
 test('Task 9: canonical transaction version helper recognizes supplied stale saves', () => {
   assert.match(versionHelper, /hasTransactionVersionConflict/);
@@ -71,4 +73,14 @@ test('pass-through selections persist through Admin, Staff, TC, and new-transact
   assert.match(staffQueueRoute, /const isPassThrough = isPassThroughTransaction\(\{ \.\.\.currentTx, \.\.\.allowed \}\)/);
   assert.match(tcRoute, /const isPassThrough = isPassThroughTransaction\(\{ \.\.\.currentTxForUpdate, \.\.\.txSyncUpdate \}\)/);
   assert.match(transactionForm, /if \(isPassThroughTransaction\) \{[\s\S]*?gci: resolvedGci,[\s\S]*?agentPct: 100,[\s\S]*?agentDollar: Number\(resolvedAgentDollar\) > 0 \? resolvedAgentDollar : resolvedGci/);
+});
+
+test('leader-team members use the team plan and preserve a member, leader, and brokerage snapshot on operational save', () => {
+  assert.match(commissionProfileRoute, /const isMemberOnLeaderTeam =/);
+  assert.match(commissionProfileRoute, /if \(agentStoredTiers\.length > 0 && !isMemberOnLeaderTeam\)/);
+  assert.match(adminRoute, /hasSplitChange && !isPassThrough && !hasManualCommissionOverride/);
+  assert.match(adminRoute, /teamCalculation\.calculationModel === 'teamMember'/);
+  assert.match(adminRoute, /updates\.agentDollar = teamSplit\.memberPaid/);
+  assert.match(adminRoute, /updates\.brokerGci = teamSplit\.companyRetained/);
+  assert.match(teamResolver, /const leaderRetainedAfterMember = asMoney\(leaderStructureGross - memberPaid\)/);
 });

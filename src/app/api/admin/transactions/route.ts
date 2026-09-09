@@ -568,6 +568,58 @@ export async function PATCH(req: NextRequest) {
     Object.assign(updates, cooperatingCommission.updates);
     enforcePassThroughFinancialPolicy(existingData || {}, updates);
 
+    // A leader-team member uses a three-way snapshot: member payout, leader
+    // retained spread, and brokerage/company retained. A legacy generic 70/30
+    // profile split can otherwise overwrite that snapshot during an ordinary
+    // Staff/Admin/TC edit. Respect explicit manual overrides and pass-throughs,
+    // but rebuild the canonical team snapshot for an untouched team calculation.
+    const effectiveTransaction = { ...existingData, ...updates };
+    const isPassThrough = Boolean(
+      effectiveTransaction.isPassThrough ||
+      effectiveTransaction.passThrough ||
+      String(effectiveTransaction.dealSource || '').toLowerCase() === 'pass_through',
+    );
+    const hasManualCommissionOverride =
+      updates.commissionOverridden === true || existingData?.commissionOverridden === true;
+    if (hasSplitChange && !isPassThrough && !hasManualCommissionOverride) {
+      const grossCommission = Number(
+        effectiveTransaction.gci ??
+        effectiveTransaction.commission ??
+        effectiveTransaction.splitSnapshot?.grossCommission ??
+        0,
+      );
+      const referralPercent = Number(
+        effectiveTransaction.outboundReferralFee?.referralPercent ??
+        effectiveTransaction.outboundReferralFeePercent ??
+        0,
+      );
+      const agentId = String(effectiveTransaction.agentId || '').trim();
+      if (agentId && grossCommission > 0) {
+        try {
+          const teamCalculation = await resolveTransactionCalculation({
+            agentId,
+            agentDisplayName: String(effectiveTransaction.agentDisplayName || '').trim(),
+            commission: grossCommission,
+            referralFeePercent: referralPercent > 0 ? referralPercent : null,
+            transactionDate: effectiveTransaction.closedDate || effectiveTransaction.contractDate || null,
+          });
+          if (teamCalculation.calculationModel === 'teamMember') {
+            const teamSplit = teamCalculation.splitSnapshot as Record<string, any>;
+            updates.splitSnapshot = {
+              ...(updates.splitSnapshot || {}),
+              ...teamSplit,
+            };
+            updates.agentPct = teamSplit.memberPercentOfLeaderSide;
+            updates.brokerPct = teamSplit.companySplitPercent;
+            updates.agentDollar = teamSplit.memberPaid;
+            updates.brokerGci = teamSplit.companyRetained;
+          }
+        } catch (teamCalculationError: any) {
+          console.warn('[api/admin/transactions PATCH] Team snapshot refresh failed; preserving the saved snapshot:', teamCalculationError?.message);
+        }
+      }
+    }
+
     // Preserve one shared transaction document for co-agents. The helper updates
     // participant allocations only; it never creates replacement files or deletes
     // the original transaction used by TC/Staff links and documents.
