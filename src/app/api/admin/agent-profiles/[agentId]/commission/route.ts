@@ -153,14 +153,13 @@ export async function GET(
     if (
       agentType === 'team' &&
       teamRole === 'member' &&
+      teamMemberCompMode === 'custom' &&
       teamMemberOverrideBands.length > 0 &&
       primaryTeamId
     ) {
-      // NOTE: teamMemberCompMode is intentionally NOT checked here.
-      // Any team member with saved override bands uses those bands as the source
-      // of truth — regardless of whether teamMemberCompMode is 'custom' or
-      // 'teamDefault'. This handles profiles saved before the fix that may have
-      // stale teamMemberCompMode values in Firestore.
+      // Custom member bands are an explicit per-agent exception. Legacy arrays
+      // alone are not an override: they can be stale copies of a prior team
+      // configuration and must not replace the active linked member plan.
       try {
         // Fetch the team plan to get the leader structure (for company split %)
         let companyPctForMember = 25; // safe fallback
@@ -595,7 +594,11 @@ export async function GET(
 
     // ── 1. Agent's own stored tiers — source of truth ──────────────────────────
     // agentStoredTiers was computed above. Use it directly.
-    let tiers: ReturnType<typeof normalizeTier>[] = agentStoredTiers;
+    // A member of a team with a leader must be calculated from their linked
+    // member plan (or an explicit custom override handled above). Do not let
+    // generic profile tiers left from an earlier configuration silently become
+    // that member's current payout ladder.
+    let tiers: ReturnType<typeof normalizeTier>[] = isMemberOnLeaderTeam ? [] : agentStoredTiers;
     let tiersSource = 'agent_custom';
 
     // ── 2. If tiers are empty, try team plan bands ────────────────────────────
@@ -674,7 +677,33 @@ export async function GET(
                 // The leaderPercent is used ONLY to set the broker/company cut.
                 // memberPercent is the member's own split of the full GCI.
                 const leaderBands: any[] = planData.leaderStructureBands || [];
-                const memberBands: any[] = planData.memberDefaultBands || [];
+                let memberBands: any[] = planData.memberDefaultBands || [];
+
+                // The membership's linked member plan is the canonical payout
+                // ladder for this individual. Team defaults apply only when a
+                // member has no linked plan. This is essential for Scott's
+                // Tier 2: member 70%, Charles spread 5%, brokerage 25%.
+                try {
+                  const membershipSnap = await adminDb
+                    .collection('teamMemberships')
+                    .doc(`${primaryTeamId}__${agentId}__member`)
+                    .get();
+                  const memberPlanId = membershipSnap.exists
+                    ? String(membershipSnap.data()?.memberPlanId || data.defaultPlanId || '')
+                    : String(data.defaultPlanId || '');
+                  if (memberPlanId) {
+                    const memberPlanSnap = await adminDb.collection('memberPlans').doc(memberPlanId).get();
+                    const payoutBands = memberPlanSnap.exists
+                      ? memberPlanSnap.data()?.payoutBands
+                      : null;
+                    if (Array.isArray(payoutBands) && payoutBands.length > 0) {
+                      memberBands = payoutBands;
+                    }
+                  }
+                } catch {
+                  // The active team-plan defaults remain a safe fallback if a
+                  // legacy membership or member plan cannot be read.
+                }
 
                 if (leaderBands.length > 0 && memberBands.length > 0) {
                   // Build tiers by pairing each leader band with the matching member band.

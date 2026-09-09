@@ -107,3 +107,31 @@ test('Charles Ditch Team preserves the approved 70-percent member, 5-percent lea
     /companyPct = teamIsWithLeader\s*\? Number\(matchingLeaderBand\?\.companyPercent \?\? companyPctForMember\)/,
   );
 });
+
+test('leader-team members ignore stale generic profile tiers and use their linked member plan for Tier 2 payout', () => {
+  assert.match(
+    commissionProfileRoute,
+    /teamMemberCompMode === 'custom'[\s\S]*?teamMemberOverrideBands\.length > 0/,
+    'Only an explicit custom team-member mode may use override bands',
+  );
+  assert.match(
+    commissionProfileRoute,
+    /let tiers: ReturnType<typeof normalizeTier>\[\] = isMemberOnLeaderTeam \? \[\] : agentStoredTiers/,
+    'Leader-team members must not start from stale generic profile tiers',
+  );
+  assert.match(
+    commissionProfileRoute,
+    /teamMemberships[\s\S]*?\$\{primaryTeamId\}__\$\{agentId\}__member[\s\S]*?memberPlans/,
+    'Commission preview must resolve the member plan linked to active membership',
+  );
+  assert.match(
+    charlesDitchTeam,
+    /fromCompanyDollar: 42000, toCompanyDollar: 84000, memberPercent: 70/,
+    'Scott Tier 2 member plan remains 70% of full GCI',
+  );
+  assert.match(
+    charlesDitchTeam,
+    /fromCompanyDollar: 42000, toCompanyDollar: 84000, leaderPercent: 75, companyPercent: 25/,
+    'Charles Tier 2 leader plan remains 75% leader side and 25% brokerage',
+  );
+});
