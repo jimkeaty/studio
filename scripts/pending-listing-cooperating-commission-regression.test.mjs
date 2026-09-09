@@ -61,7 +61,7 @@ test('agent edits remain blocked after Closed while operational routes retain th
 });
 
 test('legacy buyer-side seller-paid commission remains outside the new listing-side offer model', () => {
-  assert.match(form, /if \(!isListingSideTransaction\) \{/);
+  assert.match(form, /if \(values\.isPassThrough \|\| !isListingSideTransaction\) \{/);
   assert.match(form, /delete valuesForSave\.cooperatingAgentCommissionMethod/);
   assert.match(auditHelper, /blank form defaults can never erase buyer data/);
 });

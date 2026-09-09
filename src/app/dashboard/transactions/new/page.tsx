@@ -567,7 +567,10 @@ const schema = z.object({
   sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
   sellerPayingListingAgentUnknown: z.boolean().optional(),
   cooperatingAgentCommissionMethod: optionalCooperatingCommissionMethod,
-  cooperatingAgentCommissionPercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  // A legacy listing may carry an old dollar value in this percentage field.
+  // The sibling-aware rule below keeps the normal 0–100% rule, while allowing
+  // a pass-through to save and discard this irrelevant legacy value.
+  cooperatingAgentCommissionPercent: z.coerce.number().min(0).optional().or(z.literal('')),
   cooperatingAgentCommissionFlatAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   // Legacy mirror. New listing-side edits use the dedicated fields above.
   sellerPayingBuyerAgent: z.coerce.number().min(0).optional().or(z.literal('')),
@@ -636,6 +639,13 @@ const schema = z.object({
     return Math.abs(p + c - 100) < 0.01;
   },
   { message: 'Primary and co-agent split percentages must total 100%', path: ['coAgentSplitPercent'] }
+).refine(
+  (data) => {
+    if (data.isPassThrough) return true;
+    const value = data.cooperatingAgentCommissionPercent;
+    return value === '' || value === undefined || Number(value) <= 100;
+  },
+  { message: 'Cooperating agent commission percent must be less than or equal to 100', path: ['cooperatingAgentCommissionPercent'] }
 );
 
 type FormValues = z.infer<typeof schema>;
@@ -3182,7 +3192,7 @@ export default function AddTransactionPage() {
         // The new cooperating-agent method belongs only to listing-side files.
         // Removing blank controls on buyer/referral saves prevents any legacy
         // buyer-side compensation value from being interpreted as this new offer.
-        if (!isListingSideTransaction) {
+        if (values.isPassThrough || !isListingSideTransaction) {
           delete valuesForSave.cooperatingAgentCommissionMethod;
           delete valuesForSave.cooperatingAgentCommissionPercent;
           delete valuesForSave.cooperatingAgentCommissionFlatAmount;

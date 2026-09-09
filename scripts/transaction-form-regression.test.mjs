@@ -152,6 +152,8 @@ test('pass-throughs receive sale, volume, and agent-payout recognition but no co
   assert.match(formSource, /Any entered commission pays 100% to the agent before an agent-paid transaction fee;[\s\S]*?does not count toward brokerage\/company dollar or tier advancement/);
   assert.match(formSource, /if \(watchedIsPassThrough\) \{[\s\S]*?setActiveTier\(null\);[\s\S]*?agentPct', 100[\s\S]*?brokerPct', 0[\s\S]*?agentDollar', netGci[\s\S]*?brokerGci', 0/);
   assert.match(formSource, /Pass-through payout:[\s\S]*?Agent receives 100% of the commission after any outbound referral/);
+  assert.match(formSource, /if \(data\.isPassThrough\) return true;[\s\S]*?cooperatingAgentCommissionPercent/);
+  assert.match(formSource, /if \(values\.isPassThrough \|\| !isListingSideTransaction\) \{[\s\S]*?delete valuesForSave\.cooperatingAgentCommissionPercent/);
 });
 
 test('agent bonus pass-through is separate from commission, splits evenly for co-agents, and is excluded from production and tier calculations', () => {
