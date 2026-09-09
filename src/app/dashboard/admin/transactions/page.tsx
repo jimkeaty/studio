@@ -25,6 +25,7 @@ import {
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { getAgentTakeHome } from '@/lib/transactions/agentTakeHome';
 
 /* ─── Constants ──────────────────────────────────────────────────────── */
 
@@ -67,7 +68,7 @@ const ALL_STATUSES = ['active', 'coming_soon', 'temp_off_market', 'pending', 'cl
 
 /* ─── Sorting ────────────────────────────────────────────────────────── */
 
-type SortKey = 'status' | 'address' | 'agent' | 'closingType' | 'dealType' | 'contractDate' | 'projectedCloseDate' | 'closedDate' | 'salePrice' | 'grossComm' | 'netAgent' | 'companyRetained' | 'source';
+type SortKey = 'status' | 'address' | 'agent' | 'closingType' | 'dealType' | 'contractDate' | 'projectedCloseDate' | 'closedDate' | 'salePrice' | 'grossComm' | 'agentTakeHome' | 'companyRetained' | 'source';
 type SortDir = 'asc' | 'desc';
 
 function getSortValue(tx: Transaction, key: SortKey): string | number {
@@ -82,7 +83,7 @@ function getSortValue(tx: Transaction, key: SortKey): string | number {
     case 'closedDate': return tx.closedDate || (tx as any).closingDate || '';
     case 'salePrice': return (tx as any).salePrice || 0;
     case 'grossComm': return tx.splitSnapshot?.grossCommission ?? tx.commission ?? 0;
-    case 'netAgent': return tx.splitSnapshot?.agentNetCommission ?? tx.agentDollar ?? tx.netCommission ?? 0;
+    case 'agentTakeHome': return getAgentTakeHome(tx as any);
     case 'companyRetained': {
       // Use splitSnapshot.companyRetained directly — the resolver already computes this
       // correctly for all transaction types (team member = GCI × companyPercent).
@@ -527,7 +528,7 @@ export default function AdminTransactionLedgerPage() {
       setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortKey(key);
-      setSortDir(key === 'closedDate' || key === 'salePrice' || key === 'grossComm' || key === 'netAgent' || key === 'companyRetained' ? 'desc' : 'asc');
+      setSortDir(key === 'closedDate' || key === 'salePrice' || key === 'grossComm' || key === 'agentTakeHome' || key === 'companyRetained' ? 'desc' : 'asc');
     }
   };
 
@@ -554,7 +555,7 @@ export default function AdminTransactionLedgerPage() {
       const addressMatch = !searchTerm ||
         (t.address || '').toLowerCase().includes(searchTerm) ||
         (t.id || '').toLowerCase().includes(searchTerm) ||
-        (t.propertyAddress || '').toLowerCase().includes(searchTerm);
+        ((t as any).propertyAddress || '').toLowerCase().includes(searchTerm);
       return statusMatch && agentMatch && addressMatch;
     });
 
@@ -575,7 +576,7 @@ export default function AdminTransactionLedgerPage() {
   }, [transactions, statusFilter, agentFilter, addressSearch, sortKey, sortDir]);
 
   const totalGross = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.grossCommission ?? t.commission ?? 0), 0), [filtered]);
-  const totalNet = useMemo(() => filtered.reduce((s, t) => s + (t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0), 0), [filtered]);
+  const totalAgentTakeHome = useMemo(() => filtered.reduce((sum, transaction) => sum + getAgentTakeHome(transaction as any), 0), [filtered]);
   const totalBroker = useMemo(() => filtered.reduce((s, t) => {
     // Use splitSnapshot.companyRetained directly — the resolver already computes this
     // correctly for all transaction types (team member = GCI × companyPercent).
@@ -779,10 +780,10 @@ export default function AdminTransactionLedgerPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Net to Agents</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Agent Take Home</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold text-primary">{formatCurrency(totalNet)}</p></CardContent>
+          <CardContent><p className="text-2xl font-bold text-primary">{formatCurrency(totalAgentTakeHome)}</p></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -885,7 +886,7 @@ export default function AdminTransactionLedgerPage() {
               {/* ── Mobile card layout (sm and below) ─────────────────────────── */}
               <div className="flex flex-col gap-3 sm:hidden">
                 {filtered.map((t) => {
-                  const net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? (t as any).netCommission ?? 0;
+                  const agentTakeHome = getAgentTakeHome(t as any);
                   const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
                   const sc = statusConfig[t.status] || statusConfig.pending;
                   return (
@@ -913,8 +914,8 @@ export default function AdminTransactionLedgerPage() {
                           <p className="text-sm font-semibold">{gross ? formatCurrency(gross) : '—'}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Net to Agent</p>
-                          <p className="text-sm font-semibold text-primary">{net ? formatCurrency(net) : '—'}</p>
+                          <p className="text-xs text-muted-foreground">Agent Take Home</p>
+                          <p className="text-sm font-semibold text-primary">{agentTakeHome ? formatCurrency(agentTakeHome) : '—'}</p>
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -983,8 +984,8 @@ export default function AdminTransactionLedgerPage() {
                     <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('grossComm')}>
                       <span className="flex items-center justify-end">Gross Comm.<SortIcon col="grossComm" /></span>
                     </TableHead>
-                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('netAgent')}>
-                      <span className="flex items-center justify-end">Net to Agent<SortIcon col="netAgent" /></span>
+                    <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[130px] text-right" onClick={() => toggleSort('agentTakeHome')}>
+                      <span className="flex items-center justify-end">Agent Take Home<SortIcon col="agentTakeHome" /></span>
                     </TableHead>
                     <TableHead className="cursor-pointer select-none whitespace-nowrap min-w-[110px] text-right" onClick={() => toggleSort('companyRetained')}>
                       <span className="flex items-center justify-end">Co. Retained<SortIcon col="companyRetained" /></span>
@@ -998,7 +999,7 @@ export default function AdminTransactionLedgerPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((t) => {
-                    const net = t.splitSnapshot?.agentNetCommission ?? t.agentDollar ?? t.netCommission ?? 0;
+                    const agentTakeHome = getAgentTakeHome(t as any);
                     const gross = t.splitSnapshot?.grossCommission ?? t.commission ?? 0;
                     // For team member transactions, the true company retained is:
                     // Use splitSnapshot.companyRetained directly — the resolver already computes
@@ -1013,7 +1014,8 @@ export default function AdminTransactionLedgerPage() {
                     const isEstimate = isActiveListing && sp === 0; // only show ~ prefix when no sale price
                     const estimatedGrossGci = isActiveListing && lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
                     const agentSplitPct = Number((t as any).agentCurrentSplitPct) || 0;
-                    const estimatedNetAgent = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
+                    const estimatedAgentSplit = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * agentSplitPct / 100) : null;
+                    const estimatedAgentTakeHome = estimatedAgentSplit === null ? null : getAgentTakeHome(t as any, estimatedAgentSplit);
                     const estimatedCoRetained = estimatedGrossGci !== null && agentSplitPct > 0 ? Math.round(estimatedGrossGci * (1 - agentSplitPct / 100)) : null;
                     return (
                       <TableRow
@@ -1141,10 +1143,10 @@ export default function AdminTransactionLedgerPage() {
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right font-semibold text-primary whitespace-nowrap">
                           {isActiveListing
-                            ? (estimatedNetAgent !== null
-                                ? <span className="text-primary" title={isEstimate ? 'Estimated based on list price & agent split %' : 'Calculated from sale price & agent split %'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedNetAgent)}</span>
+                            ? (estimatedAgentTakeHome !== null
+                                ? <span className="text-primary" title={isEstimate ? 'Estimated agent split less any agent-paid transaction fee' : 'Agent split less any agent-paid transaction fee'}>{isEstimate ? '~' : ''}{formatCurrency(estimatedAgentTakeHome)}</span>
                                 : '—')
-                            : (net ? formatCurrency(net) : '—')
+                            : (agentTakeHome ? <span title="Agent split less any agent-paid transaction fee">{formatCurrency(agentTakeHome)}</span> : '—')
                           }
                         </TableCell>
                         <TableCell className="min-w-[110px] text-right whitespace-nowrap">
