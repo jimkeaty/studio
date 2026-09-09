@@ -13,7 +13,7 @@ export const OPERATIONAL_TRANSACTION_FORM_FIELDS = [
   'manualGciOverride', 'manualGciOverriddenBy', 'manualGciOverriddenAt',
   'manualCommissionPercentOverride', 'manualCommissionPercentOverriddenBy', 'manualCommissionPercentOverriddenAt',
   'participantAllocations', 'primaryAgentSideCredit', 'primaryAgentUnitCredit',
-  'agentBonusPassThrough',
+  'agentBonusPassThrough', 'isPassThrough',
   'actualCloseDate', 'closingDate', 'closedDate',
   'commercialForSale', 'commercialSalePrice', 'commercialForLease', 'commercialLeaseMonthly',
   'commercialLeasePricePerSqft', 'commercialLeaseTerm', 'commercialTotalLeaseValue',

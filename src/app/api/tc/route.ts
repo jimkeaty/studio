@@ -9,6 +9,7 @@ import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getStaffUidsForAgent, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
+import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -137,6 +138,7 @@ export async function POST(req: NextRequest) {
       transactionType: dealType,
       dealType,
       dealSource: toStr(body.dealSource) || null,
+      isPassThrough: toBool(body.isPassThrough),
       workingWithTc,
       tcWorking: body.tcWorking || null,
       tcStatus: workingWithTc ? 'submitted' : null,
@@ -451,6 +453,9 @@ export async function POST(req: NextRequest) {
       createdAt: now,
       updatedAt: now,
     };
+    // An operational user can designate a new file as pass-through. Apply the
+    // same canonical zero-economics policy used by Admin, Staff, and TC edits.
+    enforcePassThroughFinancialPolicy({}, txDoc);
 
     // Pre-allocate document references
     const txRef = adminDb.collection('transactions').doc();

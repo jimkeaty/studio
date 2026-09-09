@@ -16,6 +16,7 @@ import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducat
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { OPERATIONAL_TRANSACTION_FORM_FIELDS } from '@/lib/transactions/operationalEditFields';
+import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -565,6 +566,7 @@ export async function PATCH(req: NextRequest) {
       },
     });
     Object.assign(updates, cooperatingCommission.updates);
+    enforcePassThroughFinancialPolicy(existingData || {}, updates);
 
     // Preserve one shared transaction document for co-agents. The helper updates
     // participant allocations only; it never creates replacement files or deletes

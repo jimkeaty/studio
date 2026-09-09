@@ -19,6 +19,7 @@ import {
   OPERATIONAL_TRANSACTION_FORM_FIELDS,
   synchronizeOperationalCloseDate,
 } from '@/lib/transactions/operationalEditFields';
+import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -124,7 +125,7 @@ const EDITABLE_TX_FIELDS = new Set([
 
 // Fields that trigger a commission recalculation when changed
 const COMMISSION_TRIGGER_FIELDS = new Set([
-  'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount',
+  'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource',
 ]);
 // Fields that directly set split values — when ONLY these change (no GCI change),
 // merge them straight into splitSnapshot instead of running a profile recalculation.
@@ -337,8 +338,9 @@ export async function PATCH(
         // ── Auto-recalculate commission when financial fields change ──────────
         // If any commission-triggering field changed, recompute the splitSnapshot
         // so agent net, company dollar, and tier are always up to date.
+        const isPassThrough = enforcePassThroughFinancialPolicy(currentTx, allowed);
         const hasCommissionChange = Object.keys(txUpdates).some(k => COMMISSION_TRIGGER_FIELDS.has(k));
-        if (hasCommissionChange) {
+        if (hasCommissionChange && !isPassThrough) {
           try {
             // Merge new values over current transaction to get the effective GCI
             const merged = { ...currentTx, ...allowed };
@@ -400,7 +402,7 @@ export async function PATCH(
         // WITHOUT changing GCI, merge those values straight into splitSnapshot
         // so displayed values update without reverting to profile-based defaults.
         const hasDirectSplitChange = Object.keys(txUpdates).some(k => DIRECT_SPLIT_FIELDS.has(k));
-        if (hasDirectSplitChange) mergeOperationalDirectSplit(currentTx, allowed);
+        if (hasDirectSplitChange && !isPassThrough) mergeOperationalDirectSplit(currentTx, allowed);
         try {
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();

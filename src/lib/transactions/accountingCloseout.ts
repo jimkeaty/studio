@@ -1,6 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { getAgentBonusPassThrough } from '@/lib/transactions/resolveAgentBonusPassThrough';
 import { resolveGCI } from '@/lib/commissions';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 
 export type AccountingFieldState = 'value' | 'zero' | 'missing' | 'na';
 export type AccountingFieldFormat = 'currency' | 'percent' | 'text' | 'date';
@@ -182,6 +183,7 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
   const warrantyAmount = money(transaction.warrantyAmount);
   const transactionFee = firstMoney(transaction.txComplianceFeeAmount, transaction.buyerTransactionFee, transaction.transactionFeeAmount, transaction.transactionFee);
   const listingFee = firstMoney(transaction.listingFee);
+  const isPassThrough = isPassThroughTransaction(transaction);
   const grossGci = resolveGCI({
     commissionBasePrice: money(transaction.commissionBasePrice),
     salePrice: money(transaction.salePrice),
@@ -191,11 +193,13 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
     gci: money(transaction.gci),
     commissionCalculationMethod: transaction.commissionCalculationMethod,
     commissionFlatAmount: money(transaction.commissionFlatAmount),
+    isPassThrough,
+    dealSource: transaction.dealSource,
   });
   const brokerPercent = firstPercent(split.companySplitPercent, transaction.brokerPct);
-  const brokerGci = firstMoney(split.companyRetained, transaction.brokerGci, transaction.companyDollar);
+  const brokerGci = isPassThrough ? 0 : firstMoney(split.companyRetained, transaction.brokerGci, transaction.companyDollar);
   const agentPercent = firstPercent(split.agentSplitPercent, transaction.agentPct);
-  const agentNet = firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);
+  const agentNet = isPassThrough ? 0 : firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);
   const bonus = getAgentBonusPassThrough(transaction);
   const totalAgentPayout = agentNet === null ? null : Math.round((agentNet + bonus) * 100) / 100;
   const referral = referralSummary(transaction, split);

@@ -10,6 +10,8 @@ const staffQueueRoute = read('src/app/api/admin/staff-queue/[itemId]/route.ts');
 const tcRoute = read('src/app/api/admin/tc/[id]/route.ts');
 const transactionForm = read('src/app/dashboard/transactions/new/page.tsx');
 const adminLedger = read('src/app/dashboard/admin/transactions/page.tsx');
+const transactionCreateRoute = read('src/app/api/tc/route.ts');
+const operationalFields = read('src/lib/transactions/operationalEditFields.ts');
 
 test('Task 9: canonical transaction version helper recognizes supplied stale saves', () => {
   assert.match(versionHelper, /hasTransactionVersionConflict/);
@@ -54,4 +56,19 @@ test('Task 9: the unified edit form persists its loaded version and shows a refr
 test('Task 9: direct Admin Ledger transfer and quick-status saves include the loaded version', () => {
   assert.match(adminLedger, /expectedUpdatedAt: \(transferTx as any\)\.updatedAt/);
   assert.match(adminLedger, /expectedUpdatedAt: \(quickStatusTx as any\)\.updatedAt/);
+});
+
+test('pass-through selections persist through Admin, Staff, TC, and new-transaction save paths without normal split recalculation overwriting zero economics', () => {
+  assert.match(operationalFields, /'isPassThrough'/);
+  for (const [name, source] of [
+    ['admin transaction route', adminRoute],
+    ['staff queue route', staffQueueRoute],
+    ['TC route', tcRoute],
+    ['new transaction route', transactionCreateRoute],
+  ]) {
+    assert.match(source, /enforcePassThroughFinancialPolicy/, `${name} must enforce canonical pass-through economics`);
+  }
+  assert.match(staffQueueRoute, /hasCommissionChange && !isPassThrough/);
+  assert.match(tcRoute, /hasCommissionChange && !isPassThrough/);
+  assert.match(transactionForm, /if \(isPassThroughTransaction\) \{[\s\S]*?Object\.assign\(fieldMap, \{[\s\S]*?gci: 0,[\s\S]*?agentDollar: 0/);
 });

@@ -2584,6 +2584,16 @@ export default function AddTransactionPage() {
           isCommercial: tx.isCommercial ?? false,
           showingTimeId: tx.showingTimeId || '',
         };
+        if (isPassThroughTransaction) {
+          Object.assign(fieldMap, {
+            isPassThrough: true,
+            gci: 0,
+            brokerPct: 0,
+            brokerGci: 0,
+            agentPct: 0,
+            agentDollar: 0,
+          });
+        }
         setPersistedEditStatus(String(fieldMap.status || '').toLowerCase() || null);
         // Global sanitization: for any string field that has an array value in Firestore
         // (legacy data from old form versions), coerce it to the first element or empty string.

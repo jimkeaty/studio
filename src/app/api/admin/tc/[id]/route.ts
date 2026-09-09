@@ -17,6 +17,7 @@ import {
   OPERATIONAL_TRANSACTION_FORM_FIELDS,
   synchronizeOperationalCloseDate,
 } from '@/lib/transactions/operationalEditFields';
+import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -567,11 +568,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // ── Recalculate splitSnapshot when commission fields change ──────────
         // The ledger and agent view display from splitSnapshot, NOT raw agentPct/agentDollar.
         // Without this, commission edits appear to save but the displayed values don't update.
-        const COMMISSION_TRIGGER = new Set(['salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount']);
+        const COMMISSION_TRIGGER = new Set(['salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource']);
         const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
         const currentTxForUpdateDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
         const currentTxForUpdate = currentTxForUpdateDoc.exists ? (currentTxForUpdateDoc.data() as Record<string, any>) : {};
-        if (hasCommissionChange) {
+        const isPassThrough = enforcePassThroughFinancialPolicy(currentTxForUpdate, txSyncUpdate);
+        if (hasCommissionChange && !isPassThrough) {
           try {
             const merged = { ...currentTxForUpdate, ...txSyncUpdate };
             // If commissionPercent is being explicitly changed but gci is NOT being
@@ -633,7 +635,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // A manual agent/broker split must survive the same save as a gross
         // commission correction. Apply it after any profile-based calculation
         // so TC never sees their exact split silently revert.
-        mergeOperationalDirectSplit(currentTxForUpdate, txSyncUpdate);
+        if (!isPassThrough) mergeOperationalDirectSplit(currentTxForUpdate, txSyncUpdate);
         try {
           const versionedTransactionRef = adminDb.collection('transactions').doc(linkedTxId);
           const versionedTransactionSnap = await versionedTransactionRef.get();
@@ -647,6 +649,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             actor: { uid: decoded.uid, name: decoded.name || decoded.email || null, role: (await getStaffRole(decoded.uid)) || 'tc' },
           });
           Object.assign(txSyncUpdate, cooperatingCommission.updates);
+          enforcePassThroughFinancialPolicy(versionedTransactionSnap.data() || {}, txSyncUpdate);
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();
             if (body.expectedTransactionUpdatedAt) {

@@ -11,6 +11,8 @@
  *   - commissionBasePrice always takes priority when explicitly set
  */
 
+import { normalizeDealSource } from '@/lib/normalizeDealSource';
+
 /** Statuses where list price is used as the commission base fallback. */
 export const ACTIVE_LISTING_STATUSES = new Set([
   'active',
@@ -35,6 +37,10 @@ export interface CommissionInputs {
   commissionCalculationMethod?: 'percentage' | 'flat_dollar' | string | null;
   /** Exact gross commission amount when the transaction method is flat-dollar. */
   commissionFlatAmount?: number | null;
+  /** Pass-through files retain volume recognition but never create GCI. */
+  isPassThrough?: boolean | null;
+  passThrough?: boolean | null;
+  dealSource?: string | null;
 }
 
 /** True only when a transaction intentionally uses a saved exact-dollar commission. */
@@ -77,6 +83,9 @@ export function resolveCommissionBase(inputs: CommissionInputs): number {
  *   3. 0
  */
 export function resolveGCI(inputs: CommissionInputs): number {
+  if (inputs.isPassThrough || inputs.passThrough || normalizeDealSource(String(inputs.dealSource || '')) === 'pass_through') {
+    return 0;
+  }
   // A flat-dollar commission is its own source of truth. Never convert the
   // amount back into a percentage or let a later price/status edit overwrite it.
   if (isFlatDollarCommission(inputs)) {
