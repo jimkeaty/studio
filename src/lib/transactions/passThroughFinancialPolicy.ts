@@ -1,10 +1,13 @@
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { resolveGCI } from '@/lib/commissions';
 
 /**
  * Applies the approved pass-through policy to the same canonical transaction
  * record used by all operational editors. A pass-through remains a closed sale
- * with its price and side/volume credit, but it cannot retain brokerage GCI,
- * agent commission, company dollar, or tier-credit economics after a save.
+ * with its price and side/volume credit. When an actual commission check is
+ * received, the agent retains 100% of the net commission before any separate
+ * agent-paid fee. The brokerage retains no company dollar and the transaction
+ * remains excluded from company-GCI and tier-progress reporting.
  */
 export function enforcePassThroughFinancialPolicy(
   currentTransaction: Record<string, any>,
@@ -22,26 +25,42 @@ export function enforcePassThroughFinancialPolicy(
   // legacy deal-source field. This lets every queue and report identify it.
   updates.isPassThrough = true;
 
-  // Preserve price and commission-rate context for audit/reference purposes,
-  // but zero the financial values that must never be credited on a pass-through.
-  updates.gci = 0;
-  updates.commission = 0;
-  updates.commissionFlatAmount = 0;
-  updates.agentPct = 0;
-  updates.agentDollar = 0;
+  // The gross commission and outbound referral deduction remain visible for
+  // payout and Accounting review. The agent receives 100% of the amount left
+  // after any outbound referral; transaction fees are shown separately and
+  // deducted only in the Agent Take Home display.
+  const grossCommission = resolveGCI({
+    commissionBasePrice: Number(merged.commissionBasePrice) || null,
+    salePrice: Number(merged.salePrice) || null,
+    listPrice: Number(merged.listPrice) || null,
+    status: merged.status,
+    commissionPercent: Number(merged.commissionPercent) || null,
+    gci: Number(merged.gci ?? merged.commission) || null,
+    commissionCalculationMethod: merged.commissionCalculationMethod,
+    commissionFlatAmount: Number(merged.commissionFlatAmount) || null,
+  });
+  const referralFee = Number(
+    proposedSplit.referralFeeDollar ?? existingSplit.referralFeeDollar ??
+    merged.outboundReferralFeeDollar ?? merged.outboundReferralFee?.referralDollar ?? 0,
+  ) || 0;
+  const agentNetCommission = Math.max(0, Math.round((grossCommission - referralFee) * 100) / 100);
+
+  updates.gci = grossCommission;
+  updates.commission = grossCommission;
+  updates.agentPct = 100;
+  updates.agentDollar = agentNetCommission;
   updates.brokerPct = 0;
   updates.brokerGci = 0;
-  updates.manualGciOverride = false;
 
   updates.splitSnapshot = {
     ...existingSplit,
     ...proposedSplit,
-    grossCommission: 0,
-    referralFeeDollar: 0,
-    netAfterReferral: 0,
-    agentSplitPercent: 0,
+    grossCommission,
+    referralFeeDollar: referralFee || null,
+    netAfterReferral: agentNetCommission,
+    agentSplitPercent: 100,
     companySplitPercent: 0,
-    agentNetCommission: 0,
+    agentNetCommission,
     leaderStructureGross: 0,
     memberPaid: 0,
     leaderRetainedAfterMember: 0,

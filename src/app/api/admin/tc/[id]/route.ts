@@ -12,6 +12,7 @@ import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUi
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import {
   mergeOperationalDirectSplit,
   OPERATIONAL_TRANSACTION_FORM_FIELDS,
@@ -572,8 +573,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
         const currentTxForUpdateDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
         const currentTxForUpdate = currentTxForUpdateDoc.exists ? (currentTxForUpdateDoc.data() as Record<string, any>) : {};
-        const isPassThrough = enforcePassThroughFinancialPolicy(currentTxForUpdate, txSyncUpdate);
-        if (hasCommissionChange && !isPassThrough) {
+        const isPassThrough = isPassThroughTransaction({ ...currentTxForUpdate, ...txSyncUpdate });
+        if (hasCommissionChange) {
           try {
             const merged = { ...currentTxForUpdate, ...txSyncUpdate };
             // If commissionPercent is being explicitly changed but gci is NOT being

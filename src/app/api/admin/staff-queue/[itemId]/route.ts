@@ -13,6 +13,7 @@ import { resolveGCI } from '@/lib/commissions';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import {
   DIRECT_SPLIT_FIELDS,
   mergeOperationalDirectSplit,
@@ -338,9 +339,9 @@ export async function PATCH(
         // ── Auto-recalculate commission when financial fields change ──────────
         // If any commission-triggering field changed, recompute the splitSnapshot
         // so agent net, company dollar, and tier are always up to date.
-        const isPassThrough = enforcePassThroughFinancialPolicy(currentTx, allowed);
+        const isPassThrough = isPassThroughTransaction({ ...currentTx, ...allowed });
         const hasCommissionChange = Object.keys(txUpdates).some(k => COMMISSION_TRIGGER_FIELDS.has(k));
-        if (hasCommissionChange && !isPassThrough) {
+        if (hasCommissionChange) {
           try {
             // Merge new values over current transaction to get the effective GCI
             const merged = { ...currentTx, ...allowed };
@@ -403,6 +404,7 @@ export async function PATCH(
         // so displayed values update without reverting to profile-based defaults.
         const hasDirectSplitChange = Object.keys(txUpdates).some(k => DIRECT_SPLIT_FIELDS.has(k));
         if (hasDirectSplitChange && !isPassThrough) mergeOperationalDirectSplit(currentTx, allowed);
+        enforcePassThroughFinancialPolicy(currentTx, allowed);
         try {
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();

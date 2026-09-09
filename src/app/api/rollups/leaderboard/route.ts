@@ -365,8 +365,8 @@ async function handlePeriod(
           agg.closed += credit.closedSides;
           // Production volume is credited once per represented side; income stays split.
           agg.closedVolume += salePrice * credit.volumeMultiplier;
+          agg.agentNetCommission += num(participant.splitSnapshot?.agentNetCommission ?? participant.commission);
           if (!isPassThrough) {
-            agg.agentNetCommission += num(participant.splitSnapshot?.agentNetCommission ?? participant.commission);
             agg.totalGCI += num(participant.splitSnapshot?.grossCommission ?? participant.commission);
             agg.companyDollar += num(participant.splitSnapshot?.companyRetained ?? 0);
           }

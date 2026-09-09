@@ -511,13 +511,13 @@ export async function GET(req: NextRequest) {
         if (!d) continue;
         const dUtc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const monthIndex = dUtc.getUTCMonth();
-        if (!isPassThrough) monthlyBuckets[monthIndex].closed += net;
+        monthlyBuckets[monthIndex].closed += net;
         monthlyBuckets[monthIndex].closed += bonusForAgent;
         if (
           dUtc.getTime() >= effectiveStart.getTime() &&
           dUtc.getTime() <= asOf.getTime()
         ) {
-          if (!isPassThrough) netEarned += net;
+          netEarned += net;
           agentBonusPassThrough += bonusForAgent;
           if (!isReferralClosing) {
             closedUnits += sideCount;

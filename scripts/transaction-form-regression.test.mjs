@@ -132,23 +132,24 @@ test('legacy finalized commission aliases hydrate the earnings breakdown GCI', (
 
 test('a legacy zero GCI is recalculated from saved commission base and rate before split-dollar inference', () => {
   assert.match(formSource, /const resolvedCommissionBasePrice = tx\.commissionBasePrice \|\| resolvedSalePrice \|\| ''/);
-  assert.match(formSource, /const calculatedLegacyGci = !isPassThroughTransaction && Number\(explicitGci\) <= 0 && Number\(resolvedCommissionBasePrice\) > 0 && Number\(resolvedCommissionPercent\) > 0/);
+  assert.match(formSource, /const calculatedLegacyGci = Number\(explicitGci\) <= 0 && Number\(resolvedCommissionBasePrice\) > 0 && Number\(resolvedCommissionPercent\) > 0/);
   assert.match(formSource, /resolveGCI\(\{ commissionBasePrice: Number\(resolvedCommissionBasePrice\), commissionPercent: Number\(resolvedCommissionPercent\) \}\)/);
-  assert.match(formSource, /const inferredLegacyGci = !isPassThroughTransaction && Number\(explicitGci\) <= 0 && calculatedLegacyGci <= 0/);
+  assert.match(formSource, /const inferredLegacyGci = Number\(explicitGci\) <= 0 && calculatedLegacyGci <= 0/);
   assert.match(formSource, /const resolvedGci = Number\(explicitGci\) > 0 \? explicitGci : \(calculatedLegacyGci \|\| inferredLegacyGci \|\| ''\)/);
 });
 
-test('pass-throughs receive sale and volume recognition but no income, company-dollar, or tier credit', () => {
+test('pass-throughs receive sale, volume, and agent-payout recognition but no company-dollar or tier credit', () => {
   assert.match(passThroughHelperSource, /normalizeDealSource\(String\(tx\.dealSource \?\? ''\)\) === 'pass_through'/);
-  assert.match(agentRollupSource, /closedVolume \+= volumeCredit;[\s\S]*?if \(!isPassThrough\) \{[\s\S]*?totalGCI \+=/);
+  assert.match(agentRollupSource, /closedVolume \+= volumeCredit;[\s\S]*?agentNetCommission \+=[\s\S]*?if \(!isPassThrough\) \{[\s\S]*?totalGCI \+=/);
   assert.match(agentRollupSource, /if \(!isPassThrough\) \{[\s\S]*?tierProgressionGci \+=/);
   assert.match(leaderboardRouteSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
-  assert.match(leaderboardRouteSource, /agg\.closedVolume \+=[\s\S]*?if \(!isPassThrough\) \{[\s\S]*?agg\.agentNetCommission/);
+  assert.match(leaderboardRouteSource, /agg\.closedVolume \+=[\s\S]*?agg\.agentNetCommission \+=[\s\S]*?if \(!isPassThrough\) \{[\s\S]*?agg\.totalGCI/);
   assert.match(agentDashboardSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
+  assert.match(agentDashboardSource, /netEarned \+= net;/);
   assert.match(agentDashboardSource, /closedUnits \+= sideCount;[\s\S]*?closedVolume \+= productionVolume;[\s\S]*?if \(!isPassThrough\) totalGCI \+= gci/);
   assert.match(agentDashboardSource, /if \(isPassThroughTransaction\(t\)\) continue;[\s\S]*?grossGCIYTD \+= tierGCI/);
   assert.match(brokerCommandMetricsSource, /const isPassThrough = isPassThroughTransaction\(t\);/);
-  assert.match(formSource, /counts as a closed sale and sale-price volume,[\s\S]*?does not count toward agent GCI, agent net, brokerage\/company dollar, or tier advancement/);
+  assert.match(formSource, /Any entered commission pays 100% to the agent before an agent-paid transaction fee;[\s\S]*?does not count toward brokerage\/company dollar or tier advancement/);
 });
 
 test('agent bonus pass-through is separate from commission, splits evenly for co-agents, and is excluded from production and tier calculations', () => {

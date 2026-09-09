@@ -193,13 +193,14 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
     gci: money(transaction.gci),
     commissionCalculationMethod: transaction.commissionCalculationMethod,
     commissionFlatAmount: money(transaction.commissionFlatAmount),
-    isPassThrough,
-    dealSource: transaction.dealSource,
   });
   const brokerPercent = firstPercent(split.companySplitPercent, transaction.brokerPct);
   const brokerGci = isPassThrough ? 0 : firstMoney(split.companyRetained, transaction.brokerGci, transaction.companyDollar);
-  const agentPercent = firstPercent(split.agentSplitPercent, transaction.agentPct);
-  const agentNet = isPassThrough ? 0 : firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);
+  const referralDollar = firstMoney(split.referralFeeDollar, transaction.outboundReferralFeeDollar, transaction.outboundReferralFee?.referralDollar) || 0;
+  const agentPercent = isPassThrough ? 100 : firstPercent(split.agentSplitPercent, transaction.agentPct);
+  const agentNet = isPassThrough
+    ? Math.max(0, Math.round((grossGci - referralDollar) * 100) / 100)
+    : firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);
   const bonus = getAgentBonusPassThrough(transaction);
   const totalAgentPayout = agentNet === null ? null : Math.round((agentNet + bonus) * 100) / 100;
   const referral = referralSummary(transaction, split);

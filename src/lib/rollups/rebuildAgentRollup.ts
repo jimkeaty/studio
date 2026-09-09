@@ -190,12 +190,12 @@ export async function rebuildAgentRollup(
       // Closed transactions — calendar year
       if (status === 'closed') {
         closed += productionCredit.closedSides;
-        // Pass-throughs receive production recognition for the completed sale
-        // and their allocated sale-price volume, but never income or tier credit.
+        // Pass-throughs receive production recognition and agent payout, but
+        // never company GCI, company dollar, or tier credit.
         closedVolume += volumeCredit;
+        agentNetCommission += num(activeSplitSnapshot?.agentNetCommission ?? t.commission);
         if (!isPassThrough) {
           totalGCI += num(activeSplitSnapshot?.grossCommission ?? t.commission);
-          agentNetCommission += num(activeSplitSnapshot?.agentNetCommission ?? t.commission);
           companyDollar += num(activeSplitSnapshot?.companyRetained ?? 0);
         }
         agentBonusPassThrough += getAgentBonusPassThrough(t, agentId);
@@ -263,9 +263,9 @@ export async function rebuildAgentRollup(
         if (status === 'closed') {
           closed += productionCredit.closedSides;
           closedVolume += coVolumeCredit;
+          agentNetCommission += num(coSplitSnapshot?.agentNetCommission ?? 0);
           if (!isPassThrough) {
             totalGCI += num(coSplitSnapshot?.grossCommission ?? 0);
-            agentNetCommission += num(coSplitSnapshot?.agentNetCommission ?? 0);
             companyDollar += num(coSplitSnapshot?.companyRetained ?? 0);
           }
           agentBonusPassThrough += getAgentBonusPassThrough(t, agentId);

@@ -2335,10 +2335,10 @@ export default function AddTransactionPage() {
         const resolvedAgentDollar = tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.splitSnapshot?.agentDollar || tx.agentNetCommission || tx.agentCommission || '';
         const explicitGci = tx.gci || tx.splitSnapshot?.grossCommission || tx.splitSnapshot?.grossCommissionAmount || tx.grossCommission || tx.commission || tx.commissionAmount || tx.grossCommissionIncome || '';
         const isPassThroughTransaction = Boolean(tx.passThrough || tx.isPassThrough || String(tx.dealSource || '').toLowerCase() === 'pass_through');
-        const calculatedLegacyGci = !isPassThroughTransaction && Number(explicitGci) <= 0 && Number(resolvedCommissionBasePrice) > 0 && Number(resolvedCommissionPercent) > 0
+        const calculatedLegacyGci = Number(explicitGci) <= 0 && Number(resolvedCommissionBasePrice) > 0 && Number(resolvedCommissionPercent) > 0
           ? resolveGCI({ commissionBasePrice: Number(resolvedCommissionBasePrice), commissionPercent: Number(resolvedCommissionPercent) })
           : 0;
-        const inferredLegacyGci = !isPassThroughTransaction && Number(explicitGci) <= 0 && calculatedLegacyGci <= 0 && Number(resolvedBrokerGci) > 0 && Number(resolvedAgentDollar) > 0
+        const inferredLegacyGci = Number(explicitGci) <= 0 && calculatedLegacyGci <= 0 && Number(resolvedBrokerGci) > 0 && Number(resolvedAgentDollar) > 0
           ? Number(resolvedBrokerGci) + Number(resolvedAgentDollar)
           : 0;
         const resolvedGci = Number(explicitGci) > 0 ? explicitGci : (calculatedLegacyGci || inferredLegacyGci || '');
@@ -2587,11 +2587,11 @@ export default function AddTransactionPage() {
         if (isPassThroughTransaction) {
           Object.assign(fieldMap, {
             isPassThrough: true,
-            gci: 0,
+            gci: resolvedGci,
             brokerPct: 0,
             brokerGci: 0,
-            agentPct: 0,
-            agentDollar: 0,
+            agentPct: 100,
+            agentDollar: Number(resolvedAgentDollar) > 0 ? resolvedAgentDollar : resolvedGci,
           });
         }
         setPersistedEditStatus(String(fieldMap.status || '').toLowerCase() || null);
@@ -7950,8 +7950,8 @@ export default function AddTransactionPage() {
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Pass-Through Transaction</p>
                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                      Agent is buying/selling personal property. It counts as a closed sale and sale-price volume,
-                      but does not count toward agent GCI, agent net, brokerage/company dollar, or tier advancement.
+                      Agent is buying/selling personal property. It counts as a closed sale and sale-price volume.
+                      Any entered commission pays 100% to the agent before an agent-paid transaction fee; it does not count toward brokerage/company dollar or tier advancement.
                     </p>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 mt-0.5">

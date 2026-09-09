@@ -58,7 +58,7 @@ test('Task 9: direct Admin Ledger transfer and quick-status saves include the lo
   assert.match(adminLedger, /expectedUpdatedAt: \(quickStatusTx as any\)\.updatedAt/);
 });
 
-test('pass-through selections persist through Admin, Staff, TC, and new-transaction save paths without normal split recalculation overwriting zero economics', () => {
+test('pass-through selections persist through Admin, Staff, TC, and new-transaction save paths without profile splits overwriting the approved 100-percent agent payout', () => {
   assert.match(operationalFields, /'isPassThrough'/);
   for (const [name, source] of [
     ['admin transaction route', adminRoute],
@@ -68,7 +68,7 @@ test('pass-through selections persist through Admin, Staff, TC, and new-transact
   ]) {
     assert.match(source, /enforcePassThroughFinancialPolicy/, `${name} must enforce canonical pass-through economics`);
   }
-  assert.match(staffQueueRoute, /hasCommissionChange && !isPassThrough/);
-  assert.match(tcRoute, /hasCommissionChange && !isPassThrough/);
-  assert.match(transactionForm, /if \(isPassThroughTransaction\) \{[\s\S]*?Object\.assign\(fieldMap, \{[\s\S]*?gci: 0,[\s\S]*?agentDollar: 0/);
+  assert.match(staffQueueRoute, /const isPassThrough = isPassThroughTransaction\(\{ \.\.\.currentTx, \.\.\.allowed \}\)/);
+  assert.match(tcRoute, /const isPassThrough = isPassThroughTransaction\(\{ \.\.\.currentTxForUpdate, \.\.\.txSyncUpdate \}\)/);
+  assert.match(transactionForm, /if \(isPassThroughTransaction\) \{[\s\S]*?gci: resolvedGci,[\s\S]*?agentPct: 100,[\s\S]*?agentDollar: Number\(resolvedAgentDollar\) > 0 \? resolvedAgentDollar : resolvedGci/);
 });
