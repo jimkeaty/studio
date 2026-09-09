@@ -111,6 +111,11 @@ test('Charles Ditch Team preserves the approved 70-percent member, 5-percent lea
 test('leader-team members ignore stale generic profile tiers and use their linked member plan for Tier 2 payout', () => {
   assert.match(
     commissionProfileRoute,
+    /collection\('teamMemberships'\)[\s\S]*?where\('agentId', '==', agentId\)[\s\S]*?activeFlag === true/,
+    'Commission preview must resolve active membership even when legacy profile metadata is incomplete',
+  );
+  assert.match(
+    commissionProfileRoute,
     /teamMemberCompMode === 'custom'[\s\S]*?teamMemberOverrideBands\.length > 0/,
     'Only an explicit custom team-member mode may use override bands',
   );

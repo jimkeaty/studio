@@ -94,13 +94,47 @@ export async function GET(
     }
     const data = snap.data() || {};
 
-    const agentType: string = data.agentType || 'independent';
-    const teamGroup: string = data.teamGroup || 'independent';
+    let agentType: string = data.agentType || 'independent';
+    let teamGroup: string = data.teamGroup || 'independent';
     const commissionMode: string = data.commissionMode || 'team_default';
-    const primaryTeamId: string | null = data.primaryTeamId || null;
-    const teamRole: string | null = data.teamRole || null;
+    let primaryTeamId: string | null = data.primaryTeamId || null;
+    let teamRole: string | null = data.teamRole || null;
     const teamMemberCompMode: string = data.teamMemberCompMode || 'teamDefault';
     const teamMemberOverrideBands: any[] = data.teamMemberOverrideBands || [];
+
+    // Profiles created before the current team workflow may retain generic tiers
+    // without primaryTeamId/teamRole. The active membership collection is the
+    // canonical source for whether this agent is a leader-team member and must
+    // be resolved before any profile tier can be selected.
+    try {
+      const membershipSnap = await adminDb
+        .collection('teamMemberships')
+        .where('agentId', '==', agentId)
+        .get();
+      const activeMemberships = membershipSnap.docs
+        .map((doc) => doc.data() || {})
+        .filter((membership: any) => membership.activeFlag === true);
+      const activeMembership = activeMemberships.find(
+        (membership: any) => membership.teamId === primaryTeamId,
+      ) || activeMemberships.find(
+        (membership: any) => membership.role === 'member',
+      ) || activeMemberships[0];
+
+      if (activeMembership?.teamId && activeMembership?.role) {
+        primaryTeamId = String(activeMembership.teamId);
+        teamRole = activeMembership.role === 'leader' ? 'leader' : 'member';
+        agentType = 'team';
+        const activeTeamSnap = await adminDb.collection('teams').doc(primaryTeamId).get();
+        if (activeTeamSnap.exists) {
+          const activeTeam = activeTeamSnap.data() || {};
+          teamGroup = String(activeTeam.teamGroup || activeTeam.slug || teamGroup);
+        }
+      }
+    } catch {
+      // Preserve the profile metadata fallback if a legacy membership lookup
+      // cannot be completed; normal independent-agent commission behavior is
+      // still available rather than failing the transaction form.
+    }
 
     // Whether this agent is on a leaderless group (SGL, CGL, referral_group, etc.)
     // Leaderless agents never get the team leader breakdown panel.
