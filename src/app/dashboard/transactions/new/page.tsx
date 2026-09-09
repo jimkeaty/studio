@@ -2073,6 +2073,7 @@ export default function AddTransactionPage() {
 
   // Auto-calculate commission split
   const watchedGCI = form.watch('gci');
+  const watchedIsPassThrough = form.watch('isPassThrough');
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
     const grossGci = Number(watchedGCI) || 0;
@@ -2093,6 +2094,19 @@ export default function AddTransactionPage() {
       form.setValue('outboundReferralFeeDollar', referralFee as any);
     }
     const netGci = Math.max(0, grossGci - referralFee);
+
+    // A pass-through is an authorized exception to the normal commission
+    // profile/tier calculation. The agent receives 100% of the commission
+    // remaining after an outbound referral, while broker/company dollar is $0.
+    // Do not require a normal tier match merely to save this workflow.
+    if (watchedIsPassThrough) {
+      setActiveTier(null);
+      form.setValue('agentPct', 100 as any);
+      form.setValue('brokerPct', 0 as any);
+      form.setValue('agentDollar', netGci as any);
+      form.setValue('brokerGci', 0 as any);
+      return;
+    }
 
     // Tier lookup uses the full gross GCI (per knowledge base: tier lookup on full GCI)
     const ytd = agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0;
@@ -2138,7 +2152,7 @@ export default function AddTransactionPage() {
       form.setValue('agentDollar', agentGross as any);
       form.setValue('brokerGci', brokerGci as any);
     }
-  }, [watchedGCI, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy, editMode, brokerFeeDefaultsLoaded]);
+  }, [watchedGCI, watchedIsPassThrough, agentCommission, watchedReferralPct, watchedReferralDollar, hasOutboundReferral, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy, editMode, brokerFeeDefaultsLoaded]);
 
   // Sync additionalComments → notes
   const watchedAdditionalComments = form.watch('additionalComments');
@@ -7560,7 +7574,9 @@ export default function AddTransactionPage() {
                         ? 'border-blue-200 bg-blue-50 text-blue-800'
                         : 'border-amber-200 bg-amber-50 text-amber-800'
                   }`}>
-                    {commissionLoading ? (
+                    {watchedIsPassThrough ? (
+                      <span><strong>Pass-through payout:</strong> Agent receives 100% of the commission after any outbound referral. Broker/company dollar and tier credit are $0.</span>
+                    ) : commissionLoading ? (
                       <span>Loading commission structure...</span>
                     ) : activeTier ? (
                       <div className="flex flex-col gap-1">
@@ -7601,7 +7617,7 @@ export default function AddTransactionPage() {
 
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Broker / Agent Split</p>
-                  {agentCommission && commissionManualOverride.current && (
+                  {agentCommission && commissionManualOverride.current && !watchedIsPassThrough && (
                     <button
                       type="button"
                       className="text-xs font-medium text-blue-600 hover:underline"
