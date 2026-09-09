@@ -185,28 +185,45 @@ export async function GET(
           }
         }
         // Build tiers from the member's custom override bands.
-        // companySplitPercent = 100 - memberPercent for ALL agent types.
         //
         // For leaderless groups (SGL/CGL): broker keeps 100 - memberPct. Simple.
         //
-        // For teams with a leader: memberPercent in teamMemberOverrideBands is the
-        // member's effective payout as a % of full GCI (already net of the leader cut).
-        // So companySplitPercent = 100 - memberPct correctly represents what the company
-        // retains after paying the agent. The leader's share comes out of that company
-        // portion and is tracked separately in teamMemberLeaderSplit — it does NOT affect
-        // the agent/company split shown in the transaction form.
+        // For teams with a leader, memberPercent remains the member's direct percentage
+        // of full GCI, but the brokerage percentage must come from the corresponding
+        // leader-team plan band. The leader retains the difference between the plan's
+        // leader side and the member's direct payout. Using 100 - memberPct here would
+        // incorrectly fold the leader's retained amount into brokerage revenue and make
+        // a 70% member / 75% leader-side / 25% brokerage plan render as generic 70/30.
         const customMemberTiers = teamMemberOverrideBands.map((b: any, i: number) => {
           const memberPct = Number(b.memberPercent || 0);
-          const companyPct = Math.max(0, 100 - memberPct); // always 100 - agent%
+          const memberBandFrom = Number(b.fromCompanyDollar || 0);
+          const matchingLeaderBand = teamIsWithLeader
+            ? leaderBandsForMember.find((leaderBand: any) => {
+                const from = Number(leaderBand.fromCompanyDollar || 0);
+                const to = leaderBand.toCompanyDollar === null || leaderBand.toCompanyDollar === undefined
+                  ? null
+                  : Number(leaderBand.toCompanyDollar);
+                return memberBandFrom >= from && (to === null || memberBandFrom < to);
+              }) || leaderBandsForMember[Math.min(i, leaderBandsForMember.length - 1)]
+            : null;
+          const companyPct = teamIsWithLeader
+            ? Number(matchingLeaderBand?.companyPercent ?? companyPctForMember)
+            : Math.max(0, 100 - memberPct);
           return {
             tierName: b.tierName || `Band ${i + 1}`,
-            fromCompanyDollar: Number(b.fromCompanyDollar || 0),
+            fromCompanyDollar: memberBandFrom,
             toCompanyDollar:
               b.toCompanyDollar === null || b.toCompanyDollar === undefined
                 ? null
                 : Number(b.toCompanyDollar),
             agentSplitPercent: memberPct,
             companySplitPercent: companyPct,
+            ...(teamIsWithLeader && matchingLeaderBand
+              ? {
+                  leaderStructurePercent: Number(matchingLeaderBand.leaderPercent || 0),
+                  memberPercentOfLeaderSide: memberPct,
+                }
+              : {}),
             transactionFee: null,
             capAmount: null,
             notes: b.notes || '',

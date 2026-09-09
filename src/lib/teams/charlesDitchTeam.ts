@@ -44,11 +44,11 @@ export const charlesDitchTeamPlan: TeamPlan = {
   thresholdMarkers: CHARLES_DITCH_THRESHOLD_MARKERS,
   structureModel: 'leaderFirst',
   leaderStructureBands: [
-    { fromCompanyDollar: 0, toCompanyDollar: 42000, leaderPercent: 70, companyPercent: 30 },
-    { fromCompanyDollar: 42000, toCompanyDollar: 84000, leaderPercent: 70, companyPercent: 30 },
-    { fromCompanyDollar: 84000, toCompanyDollar: 140000, leaderPercent: 70, companyPercent: 30 },
-    { fromCompanyDollar: 140000, toCompanyDollar: 168000, leaderPercent: 70, companyPercent: 30 },
-    { fromCompanyDollar: 168000, toCompanyDollar: 224000, leaderPercent: 70, companyPercent: 30 },
+    { fromCompanyDollar: 0, toCompanyDollar: 42000, leaderPercent: 75, companyPercent: 25 },
+    { fromCompanyDollar: 42000, toCompanyDollar: 84000, leaderPercent: 75, companyPercent: 25 },
+    { fromCompanyDollar: 84000, toCompanyDollar: 140000, leaderPercent: 75, companyPercent: 25 },
+    { fromCompanyDollar: 140000, toCompanyDollar: 168000, leaderPercent: 75, companyPercent: 25 },
+    { fromCompanyDollar: 168000, toCompanyDollar: 224000, leaderPercent: 75, companyPercent: 25 },
     { fromCompanyDollar: 224000, toCompanyDollar: null, leaderPercent: 90, companyPercent: 10 },
   ],
   memberDefaultBands: [

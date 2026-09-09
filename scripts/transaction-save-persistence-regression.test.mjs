@@ -14,6 +14,7 @@ const transactionCreateRoute = read('src/app/api/tc/route.ts');
 const operationalFields = read('src/lib/transactions/operationalEditFields.ts');
 const commissionProfileRoute = read('src/app/api/admin/agent-profiles/[agentId]/commission/route.ts');
 const teamResolver = read('src/app/api/transactions/_lib/teamTransactionResolver.ts');
+const charlesDitchTeam = read('src/lib/teams/charlesDitchTeam.ts');
 
 test('Task 9: canonical transaction version helper recognizes supplied stale saves', () => {
   assert.match(versionHelper, /hasTransactionVersionConflict/);
@@ -78,9 +79,31 @@ test('pass-through selections persist through Admin, Staff, TC, and new-transact
 test('leader-team members use the team plan and preserve a member, leader, and brokerage snapshot on operational save', () => {
   assert.match(commissionProfileRoute, /const isMemberOnLeaderTeam =/);
   assert.match(commissionProfileRoute, /if \(agentStoredTiers\.length > 0 && !isMemberOnLeaderTeam\)/);
+  assert.match(commissionProfileRoute, /const matchingLeaderBand = teamIsWithLeader/);
+  assert.match(commissionProfileRoute, /companyPct = teamIsWithLeader/);
+  assert.match(commissionProfileRoute, /leaderStructurePercent: Number\(matchingLeaderBand\.leaderPercent \|\| 0\)/);
   assert.match(adminRoute, /hasSplitChange && !isPassThrough && !hasManualCommissionOverride/);
   assert.match(adminRoute, /teamCalculation\.calculationModel === 'teamMember'/);
   assert.match(adminRoute, /updates\.agentDollar = teamSplit\.memberPaid/);
   assert.match(adminRoute, /updates\.brokerGci = teamSplit\.companyRetained/);
   assert.match(teamResolver, /const leaderRetainedAfterMember = asMoney\(leaderStructureGross - memberPaid\)/);
+});
+
+test('Charles Ditch Team preserves the approved 70-percent member, 5-percent leader, and 25-percent brokerage Tier 1 allocation', () => {
+  assert.match(
+    charlesDitchTeam,
+    /\{ fromCompanyDollar: 0, toCompanyDollar: 42000, leaderPercent: 75, companyPercent: 25 \}/,
+  );
+  assert.match(
+    charlesDitchTeam,
+    /\{ fromCompanyDollar: 42000, toCompanyDollar: 84000, memberPercent: 70 \}/,
+  );
+  assert.match(
+    commissionProfileRoute,
+    /leaderStructurePercent: Number\(matchingLeaderBand\.leaderPercent \|\| 0\)/,
+  );
+  assert.match(
+    commissionProfileRoute,
+    /companyPct = teamIsWithLeader\s*\? Number\(matchingLeaderBand\?\.companyPercent \?\? companyPctForMember\)/,
+  );
 });

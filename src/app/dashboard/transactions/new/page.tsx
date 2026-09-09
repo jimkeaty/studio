@@ -7671,6 +7671,11 @@ export default function AddTransactionPage() {
                     </button>
                   )}
                 </div>
+                {agentCommission?.teamMemberLeaderSplit && commissionManualOverride.current && !watchedIsPassThrough && (
+                  <p className="text-xs text-amber-700">
+                    This saved file has a manual split. Re-calculate from agent profile to apply the current team plan; this will replace the saved manual split.
+                  </p>
+                )}
                 {hasOperationalEditAuthority && commissionManualOverride.current && !Number(watchedBrokerPct) && !Number(watchedAgentPct) && (
                   <p className="text-xs text-amber-700">
                     Manual dollar override: percentage splits are cleared so the entered dollar amounts remain authoritative.
