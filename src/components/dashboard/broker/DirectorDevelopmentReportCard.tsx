@@ -359,7 +359,6 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
           <div className="grid gap-3 py-2 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2"><Label>Named Director of Agent Development</Label><Input value={goalForm.directorName} onChange={event => setGoalForm(form => ({ ...form, directorName: event.target.value }))} /><p className="text-xs text-muted-foreground">This report card and score are assigned to this named Director. Staff may document activities, but the score remains Ethan’s responsibility.</p></div>
             {[
-              ['teamAppointments', 'Team Appointments / Month'],
               ['recruitingWorkshops', 'Recruiting Workshops / Month'],
               ['buyerSellerWorkshops', 'Buyer & Seller Workshops / Month'],
               ['networkingEvents', 'Qualifying Events / Month (YPN, Mortgage, Builder, RCA)'],

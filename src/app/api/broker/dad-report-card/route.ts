@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { centralParts } from '@/lib/attendance/rules';
 import { calculateOperationalMeetingEligibility } from '@/lib/agent-development/operationalMeetingEligibility';
+import { assessTeamAppointmentThreshold, TEAM_APPOINTMENT_THRESHOLDS } from '@/lib/agent-development/teamAppointmentThresholds';
 
 const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
 const ACTIVITY_TYPES = new Set([
@@ -347,6 +348,7 @@ export async function GET(req: NextRequest) {
     const currentMonthActivityTotal = (type: string) => currentMonthActivities
       .filter(activity => activity.activityType === type)
       .reduce((total, activity) => total + sanitizeNumber(activity.count, 1), 0);
+    const teamAppointmentStatus = assessTeamAppointmentThreshold(currentMonthActivityTotal('team_appointments'));
     const callNightsThisMonth = currentMonthActivities.filter(activity => activity.activityType === 'call_night');
     const validCallNightsThisMonth = callNightsThisMonth.filter(activity => sanitizeNumber(activity.durationHours, 0) >= 3);
     const shortCallNightsThisMonth = callNightsThisMonth.filter(activity => sanitizeNumber(activity.durationHours, 0) < 3);
@@ -391,7 +393,17 @@ export async function GET(req: NextRequest) {
       makeMetric('buyer_seller_workshops', 'Buyer & Seller Workshops', activityTotal('buyer_seller_workshop'), plan.monthlyGoals.buyerSellerWorkshops * monthsElapsed, 'workshops', `Target is ${plan.monthlyGoals.buyerSellerWorkshops} buyer/seller workshop(s) per month.`),
       makeMetric('ypn_events', 'YPN Events Attended', activityTotal('ypn_event'), plan.monthlyGoals.ypnEventsScheduled * monthsElapsed, 'events', 'Set the number of scheduled YPN events in Goals; attendance is expected at every scheduled event.'),
       makeMetric('qualifying_events', 'Qualifying Networking Events', activityTotal('ypn_event') + activityTotal('partner_event'), plan.monthlyGoals.networkingEvents * monthsElapsed, 'events', `Target is ${plan.monthlyGoals.networkingEvents} YPN, mortgage, builder, or RCA event(s) per month.`),
-      makeMetric('team_appointments', 'Team Appointments', activityTotal('team_appointments'), plan.monthlyGoals.teamAppointments * monthsElapsed, 'appointments', `Target is ${plan.monthlyGoals.teamAppointments} team appointments per month.`),
+      {
+        key: 'team_appointments_monthly',
+        label: 'Team Appointments — This Month',
+        actual: teamAppointmentStatus.actual,
+        goal: teamAppointmentStatus.goal,
+        unit: 'appointments',
+        detail: `Approved monthly thresholds: below ${TEAM_APPOINTMENT_THRESHOLDS.minimum} is Below Minimum; ${TEAM_APPOINTMENT_THRESHOLDS.minimum}–${TEAM_APPOINTMENT_THRESHOLDS.target - 1} Meets Minimum; ${TEAM_APPOINTMENT_THRESHOLDS.target}+ Meets Target.`,
+        missingAgents: [],
+        grade: teamAppointmentStatus.status,
+        pct: teamAppointmentStatus.pct,
+      },
       makeMetric('new_agent_welcome_calls', 'New Agent Welcome Calls', welcomeCovered.length, newAgentsThisYear.length, 'agents', 'Every new agent should receive and have a tracked welcome call.', welcomeMissing),
       ...plan.customKpis.filter(item => item.active).map(kpi =>
         makeMetric(
