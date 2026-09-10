@@ -37,6 +37,7 @@ import {
 import { RecruitingIncentiveTracker } from '@/components/dashboard/agent/RecruitingIncentiveTracker';
 import { CoachingNotesWidget } from '@/components/dashboard/agent/CoachingNotesWidget';
 import { AttendanceAndFloorTimePanel } from '@/components/dashboard/agent/AttendanceAndFloorTimePanel';
+import { TodaysGoals } from '@/components/dashboard/agent/TodaysGoals';
 import { TeamLeaderDashboard } from '@/components/dashboard/TeamLeaderDashboard';
 import { AppointmentsPipeline } from '@/components/dashboard/AppointmentsPipeline';
 import { AgentTransactionsSection } from '@/components/dashboard/AgentTransactionsSection';
@@ -526,8 +527,8 @@ function AgentDashboardPage() {
       {/* ════════════════════════════════════════════════════════════════════
           3. REPORT CARD — Hero Grade Cards
          ════════════════════════════════════════════════════════════════════ */}
-      {/* ═══ TODAY'S FOCUS CARD (Improvement #2) ═══════════════════ */}
-      {(!isTeamLeader || perfView !== 'team') && !loading && dashboard && <TodaysFocusCard dashboard={dashboard} />}
+      {/* SBUSA-017: immediate canonical goals precede secondary dashboard analytics. */}
+      {(!isTeamLeader || perfView !== 'team') && !loading && dashboard && <TodaysGoals />}
 
       {(!isTeamLeader || perfView !== 'team') && loading && <DashboardSkeleton />}
       {(!isTeamLeader || perfView !== 'team') && !loading && error && (

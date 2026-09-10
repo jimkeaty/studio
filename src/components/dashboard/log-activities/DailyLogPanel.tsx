@@ -99,6 +99,7 @@ export function DailyLogPanel({ date, agentId, userId, onOpenChange }: { date: D
       
       toast({ title: 'Success', description: `Activities for ${format(date!, 'PPP')} saved.` });
       setLastSaved(new Date());
+      window.dispatchEvent(new Event('daily-activity-saved'));
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Save Failed', description: err.message });
     } finally {
