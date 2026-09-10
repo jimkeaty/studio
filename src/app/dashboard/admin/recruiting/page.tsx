@@ -1793,11 +1793,11 @@ export default function RecruitingDashboardPage() {
 
         {/* ── TAB 3: Admin Report Cards and recruiting controls ───────────── */}
         <TabsContent value="admin-report-cards" className="space-y-8 mt-6">
-      <DirectorDevelopmentReportCard year={year} />
       <AttendanceManagementPanel year={year} />
       <RecruiterTodoBoard />
       {/* ── Unified Recruiting & Agent KPI Report Card ─────────────────────── */}
       <UnifiedRecruitingReportCard year={year} />
+      <DirectorDevelopmentReportCard year={year} />
 
 
 

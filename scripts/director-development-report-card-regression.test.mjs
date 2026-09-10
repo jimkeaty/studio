@@ -16,7 +16,7 @@ test('Director report card remains assigned to a named Director and supports con
   assert.match(route, /action === 'savePlan'/);
   assert.match(route, /customKpis: normalizeCustomKpis/);
   assert.match(card, /Named Director of Agent Development/);
-  assert.match(card, /Director of Agent Development Report Card/);
+  assert.match(card, /Director of Agent Development/);
   assert.match(card, /Custom KPIs/);
 });
 
@@ -47,7 +47,7 @@ test('Director scorecard requires four documented in-person relationship meeting
   assert.match(card, /Recruiting — External Agent \/ Prospect/);
 });
 
-test('Director report card remains first in the renamed Admin Report Cards view and preserves meeting notes', async () => {
+test('Director report card follows the established Production report cards in the Admin Report Cards view and preserves meeting notes', async () => {
   const [page, oneOnOneRoute, todoBoard] = await Promise.all([
     readFile(recruitingPagePath, 'utf8'),
     readFile(oneOnOneRoutePath, 'utf8'),
@@ -56,6 +56,7 @@ test('Director report card remains first in the renamed Admin Report Cards view 
 
   assert.match(page, /TabsTrigger value="admin-report-cards">Admin Report Cards/);
   assert.match(page, /<DirectorDevelopmentReportCard year=\{year\} \/>/);
+  assert.ok(page.indexOf('<UnifiedRecruitingReportCard year={year} />') < page.indexOf('<DirectorDevelopmentReportCard year={year} />'));
   assert.match(oneOnOneRoute, /'status', 'notes', 'completedAt', 'completionNotes'/);
   assert.match(oneOnOneRoute, /updates\.status === 'completed'/);
   assert.match(todoBoard, /Quarterly — Strategy & Plan/);

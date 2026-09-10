@@ -33,6 +33,8 @@ import {
 
 type Metric = {
   key: string;
+  section?: 'agent_development' | 'recruiting_activity';
+  order?: number;
   label: string;
   actual: number;
   goal: number;
@@ -301,6 +303,14 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
 
   const scorecard = data.scorecard || { metrics: [], overallPct: null, overallGrade: '—', scoredMetricCount: 0 };
   const period = data.reportPeriod || {};
+  const groupedMetrics = {
+    agentDevelopment: (scorecard.metrics as Metric[])
+      .filter(metric => (metric.section || 'agent_development') === 'agent_development')
+      .sort((a, b) => (a.order ?? 1000) - (b.order ?? 1000)),
+    recruitingActivity: (scorecard.metrics as Metric[])
+      .filter(metric => metric.section === 'recruiting_activity')
+      .sort((a, b) => (a.order ?? 1000) - (b.order ?? 1000)),
+  };
   const addCustomKpi = () => setGoalForm(form => ({
     ...form,
     customKpis: [...form.customKpis, { id: `custom_${Date.now()}`, label: '', unit: 'activities', monthlyGoal: '0', active: true }],
@@ -311,8 +321,8 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
       <CardHeader className="border-b border-indigo-100 pb-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2 text-xl"><ClipboardList className="h-5 w-5 text-indigo-700" />{data.director?.name || 'Ethan'} — Director of Agent Development Report Card</CardTitle>
-            <CardDescription className="mt-1">Operational coaching, recruiting activity, and team-development scorecard for {year}.</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-xl"><ClipboardList className="h-5 w-5 text-indigo-700" />{data.director?.name || 'Ethan'} — Director of Agent Development</CardTitle>
+            <CardDescription className="mt-1">Production report-card continuation for operational coaching, recruiting activity, and team development in {year}.</CardDescription>
             <p className="mt-2 text-xs text-muted-foreground">Current period: week of {labelDate(period.weekStart)} · month of {labelDate(period.monthStart)} · quarter starting {labelDate(period.quarterStart)} · effective start {labelDate(data.plan?.effectiveStartDate || `${year}-01-01`)}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -327,16 +337,16 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-6 pt-5">
-        <section>
-          <div className="mb-3 flex items-center gap-2"><Users className="h-4 w-4 text-indigo-700" /><h3 className="text-sm font-semibold">Agent Coaching Coverage</h3></div>
+        <section data-testid="director-agent-development" className="rounded-2xl border border-t-4 border-t-violet-500 bg-card/70 p-4 shadow-sm md:p-5">
+          <div className="mb-5 flex items-center gap-3 border-b border-border/80 pb-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700"><Users className="h-5 w-5" /></div><div><h3 className="text-base font-bold tracking-tight">Agent Development</h3><p className="pt-0.5 text-xs font-medium text-muted-foreground">New-agent one-on-ones, call nights, buyer and seller workshops, and team appointments.</p></div></div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {scorecard.metrics.slice(0, 4).map((metric: Metric) => <GoalCard key={metric.key} metric={metric} />)}
+            {groupedMetrics.agentDevelopment.map(metric => <GoalCard key={metric.key} metric={metric} />)}
           </div>
         </section>
-        <section>
-          <div className="mb-3 flex items-center gap-2"><Activity className="h-4 w-4 text-indigo-700" /><h3 className="text-sm font-semibold">Monthly Development & Recruiting Activity</h3></div>
+        <section data-testid="director-recruiting-activity" className="rounded-2xl border border-t-4 border-t-orange-500 bg-card/70 p-4 shadow-sm md:p-5">
+          <div className="mb-5 flex items-center gap-3 border-b border-border/80 pb-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-700"><Activity className="h-5 w-5" /></div><div><h3 className="text-base font-bold tracking-tight">Recruiting Activity</h3><p className="pt-0.5 text-xs font-medium text-muted-foreground">Recruiting workshops, YPN and qualifying networking, welcome calls, and distinct prospect follow-ups.</p></div></div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {scorecard.metrics.slice(4).map((metric: Metric) => <GoalCard key={metric.key} metric={metric} />)}
+            {groupedMetrics.recruitingActivity.map(metric => <GoalCard key={metric.key} metric={metric} />)}
           </div>
         </section>
         <Collapsible>

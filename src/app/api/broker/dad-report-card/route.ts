@@ -84,6 +84,36 @@ const DEFAULT_PLAN: DadPlan = {
   customKpis: [],
 };
 
+type DirectorMetricSection = 'agent_development' | 'recruiting_activity';
+
+/**
+ * SBUSA-012 presentation taxonomy only. Metric calculations and score ownership
+ * remain in the single enrichedMetrics array below; consumers use this metadata
+ * to render each metric exactly once under the appropriate Production section.
+ */
+const DIRECTOR_METRIC_PRESENTATION: Record<string, { section: DirectorMetricSection; order: number }> = {
+  weekly_new_agent_one_on_ones: { section: 'agent_development', order: 10 },
+  monthly_under_year_one_on_ones: { section: 'agent_development', order: 20 },
+  monthly_no_production_one_on_ones: { section: 'agent_development', order: 30 },
+  quarterly_strategy_one_on_ones: { section: 'agent_development', order: 40 },
+  new_agent_follow_ups: { section: 'agent_development', order: 50 },
+  valid_call_nights_monthly: { section: 'agent_development', order: 60 },
+  buyer_seller_workshops: { section: 'agent_development', order: 70 },
+  team_appointments_monthly: { section: 'agent_development', order: 80 },
+  recruiting_workshops: { section: 'recruiting_activity', order: 10 },
+  ypn_events: { section: 'recruiting_activity', order: 20 },
+  qualifying_events: { section: 'recruiting_activity', order: 30 },
+  weekly_relationship_meetings: { section: 'recruiting_activity', order: 40 },
+  new_agent_welcome_calls: { section: 'recruiting_activity', order: 50 },
+  recruiting_follow_ups_daily: { section: 'recruiting_activity', order: 60 },
+  recruiting_follow_ups_weekly: { section: 'recruiting_activity', order: 70 },
+  recruiting_follow_ups_monthly: { section: 'recruiting_activity', order: 80 },
+};
+
+function directorMetricPresentation(key: string): { section: DirectorMetricSection; order: number } {
+  return DIRECTOR_METRIC_PRESENTATION[key] || { section: 'agent_development', order: 1000 };
+}
+
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
@@ -507,6 +537,7 @@ export async function GET(req: NextRequest) {
         : { ...metric, primaryBasis: definition.basis };
       return {
         ...displayMetric,
+        ...directorMetricPresentation(metric.key),
         information: {
           metricName: metric.label,
           definition: definition.definition,
