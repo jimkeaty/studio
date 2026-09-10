@@ -611,6 +611,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 agentDisplayName: String(currentTxForUpdate.agentDisplayName || intake.agentDisplayName || '').trim(),
                 commission: newGCI,
                 transactionDate: txDate,
+                transactionId: linkedTxId,
               });
               txSyncUpdate.commission = newGCI;
               txSyncUpdate.splitSnapshot = calculation.splitSnapshot;

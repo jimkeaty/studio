@@ -1300,6 +1300,9 @@ export default function AddTransactionPage() {
   const commissionManualOverride = useRef(false);
   // Saved transaction-specific overrides must survive the profile lookup in edit mode.
   const editCommissionOverride = useRef(false);
+  // Set only by the explicit profile recalculation action. This makes the next
+  // authorized save replace a prior manual split with the canonical team result.
+  const profileRecalculationRequested = useRef(false);
   // Tracks a newly entered manual percentage split for the current save attempt.
   // It is intentionally separate from a manual-dollar override, which clears both %s.
   const manualPercentageSplitEdited = useRef(false);
@@ -2018,6 +2021,9 @@ export default function AddTransactionPage() {
 
   // Fetch agent commission structure
   const watchedAgentId = form.watch('agentId');
+  const watchedGCI = form.watch('gci');
+  const watchedClosedDate = form.watch('closedDate');
+  const commissionPreviewDate = watchedClosedDate || watchedContractDate || '';
   // Broker defaults apply only to new files. Existing files retain their saved fee
   // decision, including an explicit "No", regardless of a profile/tier default.
   useEffect(() => {
@@ -2059,9 +2065,18 @@ export default function AddTransactionPage() {
       commissionManualOverride.current = editCommissionOverride.current;
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/admin/agent-profiles/${watchedAgentId}/commission`, {
+        const previewParams = new URLSearchParams();
+        if (editTxId) previewParams.set('transactionId', editTxId);
+        if (commissionPreviewDate) previewParams.set('transactionDate', commissionPreviewDate);
+        const currentGci = Number(watchedGCI) || 0;
+        if (currentGci > 0) previewParams.set('currentGci', String(currentGci));
+        const previewQuery = previewParams.toString();
+        const res = await fetch(
+          `/api/admin/agent-profiles/${watchedAgentId}/commission${previewQuery ? `?${previewQuery}` : ''}`,
+          {
           headers: { Authorization: `Bearer ${token}` },
-        });
+          },
+        );
         const data = await res.json();
         if (!cancelled && data.ok) {
           setAgentCommission(data);
@@ -2079,10 +2094,9 @@ export default function AddTransactionPage() {
     };
     fetchCommission();
     return () => { cancelled = true; };
-  }, [user, isAdmin, watchedAgentId, editMode, brokerFeeDefaultsLoaded]);
+  }, [user, isAdmin, watchedAgentId, editMode, brokerFeeDefaultsLoaded, editTxId, commissionPreviewDate, watchedGCI]);
 
   // Auto-calculate commission split
-  const watchedGCI = form.watch('gci');
   const watchedIsPassThrough = form.watch('isPassThrough');
   useEffect(() => {
     if (!agentCommission || commissionManualOverride.current) return;
@@ -3217,7 +3231,11 @@ export default function AddTransactionPage() {
             _replaceDocuments: true,
             inspectionRowData,
             // Mark that commission was manually overridden if split fields changed
-            ...(commissionManualOverride.current ? {
+            ...(profileRecalculationRequested.current ? {
+              commissionOverridden: false,
+              commissionOverriddenBy: null,
+              commissionOverriddenAt: null,
+            } : commissionManualOverride.current ? {
               commissionOverridden: true,
               commissionOverriddenBy: user!.uid,
               commissionOverriddenAt: new Date().toISOString(),
@@ -7632,7 +7650,10 @@ export default function AddTransactionPage() {
                       type="button"
                       className="text-xs font-medium text-blue-600 hover:underline"
                       onClick={() => {
+                        profileRecalculationRequested.current = true;
                         commissionManualOverride.current = false;
+                        editCommissionOverride.current = false;
+                        manualPercentageSplitEdited.current = false;
                         const gci = Number(form.getValues('gci')) || 0;
                         if (gci > 0 && agentCommission) {
                           const ytd2 = agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0;
@@ -7689,7 +7710,7 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="30"
-                          onChange={(e) => { commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
+                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
                         />
                       </FormControl>
                     </FormItem>
@@ -7713,7 +7734,7 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="70"
-                          onChange={(e) => { commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
+                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
                         />
                       </FormControl>
                     </FormItem>

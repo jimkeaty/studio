@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getTeamDefaultTiers, getTeamDefaultTransactionFee, LEADERLESS_TEAM_GROUPS } from '@/lib/commissions/teamTemplates';
 import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
+import { getTierProgressionAsOf } from '@/lib/transactions/tierProgressionAsOf';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -35,6 +36,63 @@ function normalizeTier(t: any) {
   };
 }
 
+async function getPreviewProgression(input: {
+  agentId: string;
+  profile: Record<string, any>;
+  transactionDate: string | null;
+  transactionId: string | null;
+  currentGci: number;
+}) {
+  const anniversaryMonth = Number(input.profile.anniversaryMonth ?? 0);
+  const anniversaryDay = Number(input.profile.anniversaryDay ?? 0);
+
+  if (input.transactionDate) {
+    const historical = await getTierProgressionAsOf({
+      db: adminDb,
+      agentId: input.agentId,
+      anniversaryMonth,
+      anniversaryDay,
+      asOfDate: input.transactionDate,
+      excludeTransactionId: input.transactionId,
+    });
+    return {
+      gci: Number((historical.gci + input.currentGci).toFixed(2)),
+      companyDollar: historical.companyDollar,
+      cycleStart: historical.cycleStart,
+      cycleEnd: historical.cycleEnd,
+      basis: 'transaction_date' as const,
+      asOfDate: input.transactionDate,
+    };
+  }
+
+  const today = new Date();
+  const currentCycle = getAnniversaryCycle(anniversaryMonth, anniversaryDay, today);
+  const rollupYear = currentCycle.cycleStart.getUTCFullYear();
+  let rollupSnap = await adminDb
+    .collection('agentYearRollups')
+    .doc(`${input.agentId}_${rollupYear}`)
+    .get();
+  if (!rollupSnap.exists) {
+    const previous = await adminDb
+      .collection('agentYearRollups')
+      .doc(`${input.agentId}_${rollupYear - 1}`)
+      .get();
+    const previousEnd = previous.exists && previous.data()?.cycleEnd
+      ? new Date(previous.data()!.cycleEnd)
+      : null;
+    if (previous.exists && previousEnd && today <= previousEnd) rollupSnap = previous;
+  }
+  const rollup = rollupSnap.exists ? (rollupSnap.data() || {}) : {};
+  return {
+    gci: Number(rollup.tierProgressionGci ?? rollup.tierProgressionCompanyDollar ?? rollup.companyDollar ?? 0),
+    companyDollar: Number(rollup.tierProgressionCompanyDollar ?? rollup.companyDollar ?? 0),
+    cycleStart: String(rollup.cycleStart || currentCycle.cycleStart.toISOString().slice(0, 10)),
+    cycleEnd: String(rollup.cycleEnd || currentCycle.cycleEnd.toISOString().slice(0, 10)),
+    basis: 'current_rollup' as const,
+    asOfDate: null,
+  };
+}
+
 /**
  * GET /api/admin/agent-profiles/[agentId]/commission
  *
@@ -62,6 +120,13 @@ export async function GET(
     const decoded = await adminAuth.verifyIdToken(token);
     const { agentId } = await params;
     if (!agentId) return jsonError(400, 'Missing agentId');
+    const requestUrl = new URL(req.url);
+    const transactionDate = requestUrl.searchParams.get('transactionDate');
+    const transactionId = requestUrl.searchParams.get('transactionId');
+    const parsedCurrentGci = Number(requestUrl.searchParams.get('currentGci') || 0);
+    const currentGci = Number.isFinite(parsedCurrentGci) && parsedCurrentGci > 0
+      ? parsedCurrentGci
+      : 0;
 
     // Allow: admin-like users can fetch any agent's commission profile.
     // Allow: an agent can fetch their own commission profile:
@@ -173,6 +238,14 @@ export async function GET(
         cycleEnd: null,
       });
     }
+
+    const previewProgression = await getPreviewProgression({
+      agentId,
+      profile: data,
+      transactionDate,
+      transactionId,
+      currentGci,
+    });
 
     // ── 0a-MEMBER. Team member with custom override bands — HIGHEST PRIORITY ───
     // Applies to ALL team members (both teams with a leader AND leaderless groups
@@ -323,10 +396,12 @@ export async function GET(
           defaultTransactionFee: defaultTransactionFeeMember,
           tiers: customMemberTiers,
           teamMemberLeaderSplit: teamMemberLeaderSplitCustom,
-          ytdTierProgressionGci: ytdCustom,
-          ytdTierProgressionCompanyDollar: ytdCustom,
-          cycleStart: cycleStartCustom,
-          cycleEnd: cycleEndCustom,
+          ytdTierProgressionGci: previewProgression.gci,
+          ytdTierProgressionCompanyDollar: previewProgression.companyDollar,
+          cycleStart: previewProgression.cycleStart,
+          cycleEnd: previewProgression.cycleEnd,
+          progressionBasis: previewProgression.basis,
+          progressionAsOfDate: previewProgression.asOfDate,
         });
       } catch {
         // Silently fall through to standard tier resolution
@@ -427,10 +502,12 @@ export async function GET(
                     defaultTransactionFee: defaultTransactionFeeLeader,
                     tiers: leaderTiersFromPlan,
                     teamMemberLeaderSplit: null,
-                    ytdTierProgressionGci: ytdLeader,
-                    ytdTierProgressionCompanyDollar: ytdLeader,
-                    cycleStart: cycleStartLeader,
-                    cycleEnd: cycleEndLeader,
+                    ytdTierProgressionGci: previewProgression.gci,
+                    ytdTierProgressionCompanyDollar: previewProgression.companyDollar,
+                    cycleStart: previewProgression.cycleStart,
+                    cycleEnd: previewProgression.cycleEnd,
+                    progressionBasis: previewProgression.basis,
+                    progressionAsOfDate: previewProgression.asOfDate,
                   });
                 }
               }
@@ -566,10 +643,12 @@ export async function GET(
         defaultTransactionFee: defaultTransactionFeeStored,
         tiers: agentStoredTiers,
         teamMemberLeaderSplit: teamMemberLeaderSplitStored,
-        ytdTierProgressionGci: ytdStored,
-        ytdTierProgressionCompanyDollar: ytdStored,
-        cycleStart: cycleStartStored,
-        cycleEnd: cycleEndStored,
+        ytdTierProgressionGci: previewProgression.gci,
+        ytdTierProgressionCompanyDollar: previewProgression.companyDollar,
+        cycleStart: previewProgression.cycleStart,
+        cycleEnd: previewProgression.cycleEnd,
+        progressionBasis: previewProgression.basis,
+        progressionAsOfDate: previewProgression.asOfDate,
       });
     }
 
@@ -1001,10 +1080,12 @@ export async function GET(
       defaultTransactionFee,
       tiers,
       teamMemberLeaderSplit,
-      ytdTierProgressionGci,
-      ytdTierProgressionCompanyDollar,
-      cycleStart,
-      cycleEnd,
+      ytdTierProgressionGci: previewProgression.gci,
+      ytdTierProgressionCompanyDollar: previewProgression.companyDollar,
+      cycleStart: previewProgression.cycleStart,
+      cycleEnd: previewProgression.cycleEnd,
+      progressionBasis: previewProgression.basis,
+      progressionAsOfDate: previewProgression.asOfDate,
     });
   } catch (err: any) {
     console.error('[commission API] Unexpected error:', err?.message || err);

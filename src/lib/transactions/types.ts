@@ -66,6 +66,8 @@ export type ResolveTransactionInput = {
   agentId: string;
   agentDisplayName: string;
   commission: number;
+  /** Existing transaction being recalculated; excluded from historical progression before this commission is added back once. */
+  transactionId?: string | null;
   /**
    * Optional: the date of the transaction (closedDate or contractDate).
    * When provided, the anniversary cycle is computed relative to this date

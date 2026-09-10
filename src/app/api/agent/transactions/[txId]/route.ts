@@ -430,6 +430,7 @@ export async function PATCH(
                 agentDisplayName: agentDisplayNameForCalc,
                 commission: rawGci,
                 transactionDate: txDate,
+                transactionId: txId,
               });
               updates.splitSnapshot = calc.splitSnapshot;
               updates.creditSnapshot = calc.creditSnapshot;

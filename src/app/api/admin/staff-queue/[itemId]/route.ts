@@ -371,6 +371,7 @@ export async function PATCH(
                   agentDisplayName,
                   commission: newGCI,
                   transactionDate: txDate,
+                  transactionId: item.transactionId,
                 });
                 allowed.commission = newGCI;
                 allowed.splitSnapshot = calculation.splitSnapshot;

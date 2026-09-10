@@ -602,6 +602,7 @@ export async function PATCH(req: NextRequest) {
             commission: grossCommission,
             referralFeePercent: referralPercent > 0 ? referralPercent : null,
             transactionDate: effectiveTransaction.closedDate || effectiveTransaction.contractDate || null,
+            transactionId: id,
           });
           if (teamCalculation.calculationModel === 'teamMember') {
             const teamSplit = teamCalculation.splitSnapshot as Record<string, any>;
@@ -1075,6 +1076,7 @@ export async function PATCH(req: NextRequest) {
             commission: grossGci,
             referralFeePercent: referralPct > 0 ? referralPct : null,
             transactionDate: txData?.closedDate || txData?.contractDate || null,
+            transactionId: id,
           });
           const newSplitSnapshot = {
             ...(txData?.splitSnapshot || {}),
