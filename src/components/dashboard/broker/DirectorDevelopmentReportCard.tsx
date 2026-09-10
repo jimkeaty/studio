@@ -20,6 +20,7 @@ import {
   ChevronUp,
   ClipboardList,
   Clock3,
+  Download,
   Phone,
   Plus,
   Save,
@@ -110,6 +111,7 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exportingEligibility, setExportingEligibility] = useState(false);
   const [goalForm, setGoalForm] = useState({
     teamAppointments: '80',
     callNightHours: '3',
@@ -254,6 +256,29 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
     }
   };
 
+  const exportOperationalEligibility = async () => {
+    if (!user) return;
+    setExportingEligibility(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/broker/dad-report-card?year=${year}&format=csv`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('Unable to export operational meeting eligibility');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `operational-meeting-eligibility-${year}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (exportError: any) {
+      toast({ title: 'Unable to export eligibility', description: exportError.message, variant: 'destructive' });
+    } finally {
+      setExportingEligibility(false);
+    }
+  };
+
   if (loading) return <Skeleton className="h-[520px] w-full" />;
   if (error) return <Card className="border-red-200"><CardContent className="py-5 text-sm text-red-700">{error}</CardContent></Card>;
   if (!data) return null;
@@ -280,6 +305,7 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
               <p className="mt-1 text-2xl font-bold leading-none">{scorecard.overallPct == null ? '—' : `${scorecard.overallPct}%`} · {scorecard.overallGrade}</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><Settings2 className="mr-1.5 h-3.5 w-3.5" />Goals</Button>
+            <Button variant="outline" size="sm" onClick={exportOperationalEligibility} disabled={exportingEligibility}><Download className="mr-1.5 h-3.5 w-3.5" />{exportingEligibility ? 'Exporting…' : 'Export 1:1 List'}</Button>
             <Button size="sm" onClick={() => setActivityOpen(true)}><Plus className="mr-1.5 h-3.5 w-3.5" />Log Activity</Button>
           </div>
         </div>

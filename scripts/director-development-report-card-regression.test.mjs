@@ -25,8 +25,10 @@ test('Director scorecard protects the required weekly, monthly, and quarterly co
 
   assert.match(route, /New Agent 1:1s — This Week/);
   assert.match(route, /Agents Under 1 Year — This Month/);
-  assert.match(route, /No Production \/ Pending — This Month/);
+  assert.match(route, /No Production or Pending in Last 60 Days — This Month/);
   assert.match(route, /All-Agent Strategy 1:1s — This Quarter/);
+  assert.match(route, /calculateOperationalMeetingEligibility/);
+  assert.match(route, /sixtyDayWindowStart/);
   assert.match(route, /new Set\(\['weekly_90day', 'weekly'\]\)/);
   assert.match(route, /new Set\(\['quarterly_strategy'\]\)/);
   assert.match(route, /requireNotes = false/);

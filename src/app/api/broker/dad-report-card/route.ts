@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { centralParts } from '@/lib/attendance/rules';
+import { calculateOperationalMeetingEligibility } from '@/lib/agent-development/operationalMeetingEligibility';
 
 const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
 const ACTIVITY_TYPES = new Set([
@@ -209,11 +211,12 @@ export async function GET(req: NextRequest) {
   if (!caller) return jsonError(403, 'Administrator or staff access required');
 
   try {
-    const year = Number(new URL(req.url).searchParams.get('year') || new Date().getFullYear());
+    const requestUrl = new URL(req.url);
+    const year = Number(requestUrl.searchParams.get('year') || Number(centralParts().date.slice(0, 4)));
     if (!Number.isInteger(year) || year < 2018 || year > 2100) return jsonError(400, 'Invalid year');
 
-    const today = ymd(new Date());
-    const reportEnd = year === new Date().getUTCFullYear() ? today : `${year}-12-31`;
+    const centralToday = centralParts().date;
+    const reportEnd = year === Number(centralToday.slice(0, 4)) ? centralToday : `${year}-12-31`;
     const reportMonth = Number(reportEnd.slice(5, 7));
     const monthsElapsed = year === new Date().getUTCFullYear() ? reportMonth : 12;
     const monthStart = `${reportEnd.slice(0, 7)}-01`;
@@ -233,7 +236,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const plan = normalizePlan(planSnap.exists ? planSnap.data() : null);
-    const agents = profileSnap.docs
+    const agentInputs = profileSnap.docs
       .map(doc => {
         const profile = doc.data() as any;
         const status = String(profile.status || profile.agentStatus || 'active').toLowerCase();
@@ -242,30 +245,29 @@ export async function GET(req: NextRequest) {
           name: String(profile.displayName || profile.name || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || doc.id),
           startDate: isoDate(profile.startDate),
           status,
-          active: !INACTIVE_STATUSES.has(status),
           teamGroup: String(profile.teamGroup || ''),
+          identityKeys: [doc.id, profile.agentId, profile.uid, profile.firebaseUid],
         };
       })
       .filter(agent => agent.startDate && agent.startDate <= reportEnd);
-
+    const agents = agentInputs.map(agent => ({ ...agent, active: !INACTIVE_STATUSES.has(agent.status) }));
+    const eligibility = calculateOperationalMeetingEligibility({
+      agents: agentInputs,
+      transactions: [
+        ...closedSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })),
+        ...pendingSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })),
+      ],
+      asOfDate: reportEnd,
+    });
+    // Retain the existing all-active payload for attendance and unrelated selectors.
+    // SBUSA-002 narrows only operational 1:1 categories, not the general active roster.
     const activeAgents = agents.filter(agent => agent.active);
-    const newAgent90 = activeAgents.filter(agent => agent.startDate! > ymd(addDays(fromYmd(reportEnd), -90)));
-    const agentsUnderYear = activeAgents.filter(agent => agent.startDate! > ymd(addDays(fromYmd(reportEnd), -365)));
+    const operationalActiveAgents = eligibility.activeAgents;
+    const newAgent90 = eligibility.operational.new_agent_90_day;
+    const noProductionOrPending = eligibility.operational.no_production_or_pending_last_60_days;
+    const agentsUnderYear = eligibility.operational.under_one_year;
+    const quarterlyAll = eligibility.quarterlyStrategyAgents;
     const newAgentsThisYear = agents.filter(agent => agent.startDate!.startsWith(String(year)) && agent.startDate! <= reportEnd);
-
-    const closedAgentIds = new Set<string>();
-    for (const doc of closedSnap.docs) {
-      const tx = doc.data() as any;
-      const date = isoDate(tx.closedDate);
-      if (!within(date, `${year}-01-01`, reportEnd)) continue;
-      for (const id of [tx.agentId, tx.coAgentId].filter(Boolean)) closedAgentIds.add(String(id));
-    }
-    const pendingAgentIds = new Set<string>();
-    for (const doc of pendingSnap.docs) {
-      const tx = doc.data() as any;
-      for (const id of [tx.agentId, tx.coAgentId].filter(Boolean)) pendingAgentIds.add(String(id));
-    }
-    const noProductionOrPending = activeAgents.filter(agent => !closedAgentIds.has(agent.agentId) && !pendingAgentIds.has(agent.agentId));
 
     const completedMeetings = oneOnOneSnap.docs
       .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
@@ -275,7 +277,7 @@ export async function GET(req: NextRequest) {
       });
 
     const coveredIds = (
-      target: typeof activeAgents,
+      target: Array<{ agentId: string; name: string }>,
       start: string,
       end: string,
       requireNotes = false,
@@ -300,9 +302,9 @@ export async function GET(req: NextRequest) {
     };
 
     const weeklyNew = coveredIds(newAgent90, weekStart, weekEnd, false, new Set(['weekly_90day', 'weekly']));
-    const monthlyUnderYear = coveredIds(agentsUnderYear, monthStart, monthEnd, false, new Set(['weekly_90day', 'weekly', 'monthly_cgl', 'monthly', 'quarterly_strategy']));
-    const monthlyNoProduction = coveredIds(noProductionOrPending, monthStart, monthEnd, false, new Set(['monthly_no_production', 'monthly_cgl', 'monthly', 'quarterly_strategy']));
-    const quarterlyAll = coveredIds(activeAgents, quarterStart, reportEnd, true, new Set(['quarterly_strategy']));
+    const monthlyUnderYear = coveredIds(agentsUnderYear, monthStart, monthEnd, false, new Set(['monthly_cgl', 'monthly']));
+    const monthlyNoProduction = coveredIds(noProductionOrPending, monthStart, monthEnd, false, new Set(['monthly_no_production', 'monthly_cgl', 'monthly']));
+    const quarterlyAllCoverage = coveredIds(quarterlyAll, quarterStart, reportEnd, true, new Set(['quarterly_strategy']));
 
     const activities = activitySnap.docs
       .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
@@ -341,10 +343,10 @@ export async function GET(req: NextRequest) {
     const trainingSessionIds = new Set(attendanceRecords.filter(record => record.type === 'training' && record.sessionId).map(record => String(record.sessionId)));
 
     const metrics = [
-      makeMetric('weekly_new_agent_one_on_ones', 'New Agent 1:1s — This Week', weeklyNew.actual, newAgent90.length, 'agents', 'Each agent in the first 90 days should have one completed 1:1 this Monday–Sunday.', weeklyNew.missing),
-      makeMetric('monthly_under_year_one_on_ones', 'Agents Under 1 Year — This Month', monthlyUnderYear.actual, agentsUnderYear.length, 'agents', 'Each active agent with less than one year of tenure should have one completed 1:1 this month.', monthlyUnderYear.missing),
-      makeMetric('monthly_no_production_one_on_ones', 'No Production / Pending — This Month', monthlyNoProduction.actual, noProductionOrPending.length, 'agents', 'Tracks active agents with no closed deal year-to-date and no current pending file.', monthlyNoProduction.missing),
-      makeMetric('quarterly_strategy_one_on_ones', 'All-Agent Strategy 1:1s — This Quarter', quarterlyAll.actual, activeAgents.length, 'agents', 'Requires a completed quarterly 1:1 with completion notes and a strategic plan.', quarterlyAll.missing),
+      makeMetric('weekly_new_agent_one_on_ones', 'New Agent 1:1s — This Week', weeklyNew.actual, newAgent90.length, 'agents', 'Active CGL and Charles Ditch Team agents on days 1–90 receive this exclusive weekly operational assignment.', weeklyNew.missing),
+      makeMetric('monthly_under_year_one_on_ones', 'Agents Under 1 Year — This Month', monthlyUnderYear.actual, agentsUnderYear.length, 'agents', 'Active CGL and Charles Ditch Team agents on days 91–365 qualify only when they had production or a pending transaction in the inclusive last 60 days.', monthlyUnderYear.missing),
+      makeMetric('monthly_no_production_one_on_ones', 'No Production or Pending in Last 60 Days — This Month', monthlyNoProduction.actual, noProductionOrPending.length, 'agents', `Active CGL and Charles Ditch Team agents with no closed or pending activity from ${eligibility.sixtyDayWindowStart} through ${reportEnd}; this category takes precedence over Under One Year.`, monthlyNoProduction.missing),
+      makeMetric('quarterly_strategy_one_on_ones', 'All-Agent Strategy 1:1s — This Quarter', quarterlyAllCoverage.actual, quarterlyAll.length, 'agents', 'All active agents qualify regardless of team. Requires a completed quarterly 1:1 with completion notes and a strategic plan.', quarterlyAllCoverage.missing),
       makeMetric('weekly_relationship_meetings', 'In-Person Coffee / Lunch Meetings — This Week', relationshipMeetingsThisWeek.length, 4, 'meetings', 'Four in-person relationship meetings each week, outside the office, with current agents or recruiting prospects.'),
       makeMetric('sales_meetings', 'Sales Meetings — This Month', currentMonthActivityTotal('sales_meeting'), plan.monthlyGoals.salesMeetings, 'meetings', 'Track individual or group sales meetings led by the Director. Set a monthly goal when a required cadence is established.'),
       makeMetric('huddles_led', 'Team Huddles — This Month', currentMonthActivityTotal('huddle'), plan.monthlyGoals.huddles, 'huddles', 'Required huddles are Tuesday and Thursday from 8:30 to 9:00 AM.'),
@@ -383,6 +385,32 @@ export async function GET(req: NextRequest) {
       : null;
     const overallGrade = overallPct === null ? '—' : gradeFor(overallPct, 100).grade;
 
+    const operationalAssignments = Object.entries(eligibility.operational).flatMap(([category, eligibleAgents]) =>
+      eligibleAgents.map(agent => ({
+        agentId: agent.agentId,
+        name: agent.name,
+        teamGroup: agent.teamGroup,
+        startDate: agent.startDate,
+        tenureDay: agent.tenureDay,
+        category,
+        last60DayActivity: agent.activityInLast60Days.map(activity => `${activity.kind}:${activity.date}`).join('; '),
+      }))
+    );
+
+    if (requestUrl.searchParams.get('format') === 'csv') {
+      const csvValue = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+      const rows = [
+        ['Agent ID', 'Agent', 'Team Group', 'Start Date', 'Tenure Day', 'Operational Category', 'Closed/Pending Activity in Last 60 Days'],
+        ...operationalAssignments.map(item => [item.agentId, item.name, item.teamGroup, item.startDate || '', item.tenureDay ?? '', item.category, item.last60DayActivity]),
+      ];
+      return new NextResponse(rows.map(row => row.map(csvValue).join(',')).join('\n'), {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="operational-meeting-eligibility-${reportEnd}.csv"`,
+        },
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       year,
@@ -391,8 +419,21 @@ export async function GET(req: NextRequest) {
       director: { name: plan.directorName },
       scorecard: { metrics, overallPct, overallGrade, scoredMetricCount: scoredMetrics.length },
       eligibleAgents: {
-        active: activeAgents.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate })),
+        active: activeAgents.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate, teamGroup: agent.teamGroup })),
         newAgent90: newAgent90.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate })),
+        operational: {
+          newAgent90: newAgent90.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate })),
+          noProductionLast60Days: noProductionOrPending.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate })),
+          underOneYear: agentsUnderYear.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate })),
+        },
+        quarterlyStrategy: quarterlyAll.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate, teamGroup: agent.teamGroup })),
+        operationalEligibility: {
+          asOfDate: eligibility.asOfDate,
+          sixtyDayWindowStart: eligibility.sixtyDayWindowStart,
+          operationalEligibleCount: operationalActiveAgents.length,
+          excluded: eligibility.excluded,
+          assignments: operationalAssignments,
+        },
       },
       activities: activities.slice(0, 100).map(activity => ({
         id: activity.id,

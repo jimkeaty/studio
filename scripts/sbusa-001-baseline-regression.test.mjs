@@ -58,9 +58,10 @@ test('SBUSA-001 baseline captures the current sources that later queue tasks mus
 
   // SBUSA-011: ordinary selectors currently append inactive and out profiles.
   assert.match(selector, /where\('status', 'in', \['inactive', 'out'\]\)/);
-  // SBUSA-002: the existing no-production calculation is not yet the locked rolling 60-day rule.
-  assert.match(dad, /No Production \/ Pending — This Month/);
-  assert.match(dad, /within\(date, `\$\{year\}-01-01`, reportEnd\)/);
+  // SBUSA-002: the report card now uses the canonical rolling 60-day eligibility service.
+  assert.match(dad, /calculateOperationalMeetingEligibility/);
+  assert.match(dad, /No Production or Pending in Last 60 Days — This Month/);
+  assert.match(dad, /sixtyDayWindowStart/);
   // SBUSA-008: a past scheduled start currently transitions automatically.
   assert.match(pipeline, /status: 'started'/);
   assert.match(pipeline, /autoStartedAt/);
