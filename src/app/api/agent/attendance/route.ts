@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import {
+  CENTRAL_TIME_ZONE,
   centralParts,
+  FLOOR_TIME_QR_DEDUPLICATION_MINUTES,
   floorTimeSummary,
+  hasRecentFloorTimeQrCheckIn,
   isScheduledAttendanceEvent,
   SCHEDULED_ATTENDANCE_EVENTS,
   scheduledEventWindow,
   type ScheduledAttendanceEvent,
 } from '@/lib/attendance/rules';
+import { sendTransactionalSmsWithResult } from '@/lib/notifications/sendNotification';
 
 type AuthContext = { uid: string; isAdmin: boolean };
 type OfficeLocation = {
@@ -19,6 +23,13 @@ type OfficeLocation = {
   updatedAt: string | null;
 };
 type AttendanceRecord = Record<string, any> & { id: string };
+type FloorTimeQrSettings = {
+  enabled: boolean;
+  codeId: string | null;
+  directorRecipientUid: string | null;
+  directorRecipientName: string | null;
+  updatedAt: string | null;
+};
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -99,6 +110,44 @@ async function getOfficeLocation() {
   };
 }
 
+function floorTimeQrSettings(data: Record<string, any> | null | undefined): FloorTimeQrSettings {
+  const source = data?.floorTimeQr || {};
+  return {
+    enabled: source?.enabled === true,
+    codeId: typeof source?.codeId === 'string' && source.codeId.trim() ? source.codeId : null,
+    directorRecipientUid: typeof source?.directorRecipientUid === 'string' && source.directorRecipientUid.trim() ? source.directorRecipientUid : null,
+    directorRecipientName: typeof source?.directorRecipientName === 'string' && source.directorRecipientName.trim() ? source.directorRecipientName : null,
+    updatedAt: typeof source?.updatedAt === 'string' ? source.updatedAt : null,
+  };
+}
+
+async function getFloorTimeQrSettings() {
+  const snapshot = await adminDb.collection('attendanceSettings').doc('office').get();
+  return floorTimeQrSettings(snapshot.exists ? snapshot.data() as Record<string, any> : null);
+}
+
+async function resolveDirectorRecipient(uid: string) {
+  const [userDoc, staffSnap] = await Promise.all([
+    adminDb.collection('users').doc(uid).get(),
+    adminDb.collection('staffUsers').where('firebaseUid', '==', uid).limit(1).get(),
+  ]);
+  const user = userDoc.exists ? userDoc.data() as Record<string, any> : {};
+  const staff = staffSnap.empty ? {} : staffSnap.docs[0].data() as Record<string, any>;
+  if (staff.status && String(staff.status).toLowerCase() !== 'active') return null;
+  return {
+    uid,
+    displayName: String(user.displayName || user.name || staff.displayName || staff.name || 'Director of Agent Development').trim(),
+    phone: String(user.phone || staff.phone || '').trim() || null,
+  };
+}
+
+function localFloorTimeLabel(now: Date) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: CENTRAL_TIME_ZONE,
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  }).format(now);
+}
+
 async function recordsForAgent(agentId: string): Promise<AttendanceRecord[]> {
   const snapshot = await adminDb.collection('agentAttendance').where('agentId', '==', agentId).get();
   return snapshot.docs
@@ -122,13 +171,14 @@ export async function GET(req: NextRequest) {
         .map(doc => ({ id: doc.id, ...(doc.data() as Record<string, any>) }) as AttendanceRecord)
         .filter(record => !year || String(record.date || '').startsWith(year))
         .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.checkInAt || '').localeCompare(String(a.checkInAt || '')));
-      const officeLocation = await getOfficeLocation();
+      const [officeLocation, floorTimeQr] = await Promise.all([getOfficeLocation(), getFloorTimeQrSettings()]);
       return NextResponse.json({
         ok: true,
         today: centralParts().date,
         schedules: SCHEDULED_ATTENDANCE_EVENTS,
         officeLocationConfigured: Boolean(officeLocation),
         officeLocation,
+        floorTimeQr,
         records: records.slice(0, 500),
       });
     } catch (error: any) {
@@ -152,6 +202,7 @@ export async function GET(req: NextRequest) {
       trainingThisMonth: filtered.filter(record => record.type === 'training' && String(record.date || '').startsWith(today.slice(0, 7))).length,
       salesMeetingsThisMonth: filtered.filter(record => record.type === 'sales_meeting' && String(record.date || '').startsWith(today.slice(0, 7))).length,
     };
+    const floorTimeQr = await getFloorTimeQrSettings();
     return NextResponse.json({
       ok: true,
       agentId,
@@ -159,6 +210,7 @@ export async function GET(req: NextRequest) {
       today,
       schedules: SCHEDULED_ATTENDANCE_EVENTS,
       officeLocationConfigured: Boolean(await getOfficeLocation()),
+      floorTimeQrEnabled: floorTimeQr.enabled,
       records: filtered.slice(0, 150),
       summary: { ...attendance, ...floorTimeSummary(filtered, today) },
     });
@@ -204,6 +256,78 @@ export async function POST(req: NextRequest) {
       };
       await recordRef.create(record);
       return NextResponse.json({ ok: true, record });
+    }
+
+    if (action === 'checkInFloorTimeQr') {
+      if (!self) return jsonError(403, 'An active agent profile is required for Floor Time QR check-in');
+      const settings = await getFloorTimeQrSettings();
+      const qrCodeId = String(body.qrCodeId || '').trim();
+      if (!settings.enabled || !settings.codeId || !qrCodeId || qrCodeId !== settings.codeId) {
+        return jsonError(403, 'This Floor Time QR code is disabled, expired, or invalid');
+      }
+      const agentRecords = await recordsForAgent(self.agentId);
+      if (hasRecentFloorTimeQrCheckIn(agentRecords, self.agentId, qrCodeId, now)) {
+        return jsonError(409, `A Floor Time QR check-in was already recorded within the ${FLOOR_TIME_QR_DEDUPLICATION_MINUTES}-minute deduplication window`);
+      }
+      const checkInAt = now.toISOString();
+      const recordRef = adminDb.collection('agentAttendance').doc();
+      const record = {
+        agentId: self.agentId,
+        agentDisplayName: self.agentName,
+        type: 'floor_time',
+        eventType: 'floor_time_qr',
+        eventLabel: 'Floor Time QR Check-In',
+        date: nowCentral.date,
+        businessTimeZone: CENTRAL_TIME_ZONE,
+        qrCodeId,
+        qrPresenceOnly: true,
+        durationMinutes: 0,
+        checkInAt,
+        checkOutAt: checkInAt,
+        locationVerified: false,
+        source: 'floor_time_qr',
+        notificationState: 'pending',
+        notificationAttemptId: null,
+        loggedByUid: auth.uid,
+        createdAt: checkInAt,
+      };
+      await recordRef.create(record);
+
+      const recipient = settings.directorRecipientUid ? await resolveDirectorRecipient(settings.directorRecipientUid) : null;
+      const attemptRef = adminDb.collection('attendanceNotificationAttempts').doc();
+      const attemptBase = {
+        attendanceRecordId: recordRef.id,
+        eventType: 'floor_time_qr',
+        recipientRole: 'director_of_agent_development',
+        recipientUid: recipient?.uid || settings.directorRecipientUid || null,
+        recipientDisplayName: recipient?.displayName || settings.directorRecipientName || null,
+        provider: 'twilio',
+        providerMessageId: null,
+        createdAt: checkInAt,
+        updatedAt: checkInAt,
+        createdByUid: auth.uid,
+      };
+      await attemptRef.create({
+        ...attemptBase,
+        state: recipient ? 'pending' : 'failed',
+        failureReason: recipient ? null : 'director_recipient_not_configured',
+      });
+      await recordRef.update({ notificationAttemptId: attemptRef.id, updatedAt: now.toISOString() });
+      if (!recipient) {
+        await recordRef.update({ notificationState: 'failed', notificationFailureReason: 'director_recipient_not_configured', notificationUpdatedAt: new Date().toISOString() });
+        return NextResponse.json({ ok: true, record: { id: recordRef.id, ...record, notificationAttemptId: attemptRef.id, notificationState: 'failed' }, notification: { state: 'failed', reason: 'director_recipient_not_configured' } });
+      }
+
+      const sms = await sendTransactionalSmsWithResult(adminDb, {
+        toPhone: recipient.phone,
+        body: `Floor Time check-in: ${self.agentName} checked in at ${localFloorTimeLabel(now)}. Please verify or activate floor-time leads for this agent.`,
+      });
+      const notificationUpdatedAt = new Date().toISOString();
+      await Promise.all([
+        attemptRef.update({ state: sms.state, providerMessageId: sms.providerMessageId, failureReason: sms.failureReason, updatedAt: notificationUpdatedAt }),
+        recordRef.update({ notificationState: sms.state, notificationFailureReason: sms.failureReason, notificationUpdatedAt }),
+      ]);
+      return NextResponse.json({ ok: true, record: { id: recordRef.id, ...record, notificationAttemptId: attemptRef.id, notificationState: sms.state }, notification: { state: sms.state } });
     }
 
     if (action === 'floorCheckIn') {
@@ -278,6 +402,34 @@ export async function POST(req: NextRequest) {
         updatedByUid: auth.uid,
       }, { merge: true });
       return NextResponse.json({ ok: true, radiusMeters, officeLocation: { ...officeLocation, updatedAt: now.toISOString() } });
+    }
+
+    if (action === 'configureFloorTimeQr') {
+      if (!auth.isAdmin) return jsonError(403, 'Administrator access is required');
+      const existingDoc = await adminDb.collection('attendanceSettings').doc('office').get();
+      const existing = floorTimeQrSettings(existingDoc.exists ? existingDoc.data() as Record<string, any> : null);
+      const enabled = body.enabled === true;
+      const directorRecipientUid = String(body.directorRecipientUid || '').trim() || null;
+      let directorRecipientName: string | null = null;
+      if (directorRecipientUid) {
+        const recipient = await resolveDirectorRecipient(directorRecipientUid);
+        if (!recipient) return jsonError(400, 'Select an active staff recipient for Floor Time notifications');
+        directorRecipientName = recipient.displayName;
+      }
+      const codeId = body.rotateCode === true || !existing.codeId
+        ? adminDb.collection('attendanceSettings').doc().id
+        : existing.codeId;
+      const updatedAt = now.toISOString();
+      const floorTimeQr = {
+        enabled,
+        codeId,
+        directorRecipientUid,
+        directorRecipientName,
+        updatedAt,
+        updatedByUid: auth.uid,
+      };
+      await adminDb.collection('attendanceSettings').doc('office').set({ floorTimeQr, updatedAt, updatedByUid: auth.uid }, { merge: true });
+      return NextResponse.json({ ok: true, floorTimeQr: floorTimeQrSettings({ floorTimeQr }) });
     }
 
     if (action === 'recordTrainingSession') {

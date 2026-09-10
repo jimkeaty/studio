@@ -81,7 +81,7 @@ test('administrators can set and verify the official office address without rely
   assert.match(route, /const address = String\(body\.address \|\| ''\)/);
   assert.match(route, /officeLocation,\n        updatedAt/);
   assert.match(route, /officeLocationConfigured: Boolean\(officeLocation\)/);
-  assert.match(route, /officeLocation,\n        records/);
+  assert.match(route, /officeLocation,\n        floorTimeQr,\n        records/);
   assert.match(managerPanel, /Office Address/);
   assert.match(managerPanel, /Find Address/);
   assert.match(managerPanel, /nominatim\.openstreetmap\.org\/search/);

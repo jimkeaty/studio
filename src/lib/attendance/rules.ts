@@ -52,6 +52,8 @@ export const FLOOR_TIME_REQUIREMENTS = {
   monthlyWeekendShiftMinutes: 240,
 } as const;
 
+export const FLOOR_TIME_QR_DEDUPLICATION_MINUTES = 15;
+
 type CentralParts = { date: string; weekday: string; minutes: number };
 
 export function centralParts(now = new Date()): CentralParts {
@@ -147,4 +149,20 @@ export function floorTimeSummary(records: Array<Record<string, any>>, today: str
     weekendShiftMinutes: FLOOR_TIME_REQUIREMENTS.monthlyWeekendShiftMinutes,
     openShift,
   };
+}
+
+/** A QR presence scan is distinct from a secure location-verified shift. */
+export function hasRecentFloorTimeQrCheckIn(
+  records: Array<Record<string, any>>,
+  agentId: string,
+  qrCodeId: string,
+  now = new Date(),
+) {
+  return records.some(record => {
+    if (record.type !== 'floor_time' || record.source !== 'floor_time_qr') return false;
+    if (String(record.agentId || '') !== agentId || String(record.qrCodeId || '') !== qrCodeId) return false;
+    const checkedInAt = new Date(String(record.checkInAt || ''));
+    const elapsedMinutes = (now.getTime() - checkedInAt.getTime()) / 60_000;
+    return Number.isFinite(elapsedMinutes) && elapsedMinutes >= 0 && elapsedMinutes < FLOOR_TIME_QR_DEDUPLICATION_MINUTES;
+  });
 }

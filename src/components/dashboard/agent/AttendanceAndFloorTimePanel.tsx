@@ -28,6 +28,7 @@ type AttendanceData = {
   today: string;
   schedules: Record<string, { label: string; days: string[]; startLabel: string; endLabel: string; required: boolean }>;
   officeLocationConfigured: boolean;
+  floorTimeQrEnabled?: boolean;
   records: AttendanceRecord[];
   summary: {
     huddlesThisMonth: number;
@@ -80,6 +81,7 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
 
   const requestedEvent = searchParams.get('event');
   const highlightedEvent = TRACKED_SESSION_TYPES.includes(requestedEvent as TrackedSessionType) ? requestedEvent as TrackedSessionType : null;
+  const requestedFloorTimeQr = searchParams.get('floorTimeQr');
 
   const load = useCallback(async () => {
     if (!user || !impersonationReady) return;
@@ -143,6 +145,20 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
     }
   };
 
+  const checkInFloorTimeQr = async () => {
+    if (!requestedFloorTimeQr) return;
+    const result = await post('checkInFloorTimeQr', { qrCodeId: requestedFloorTimeQr });
+    if (result) {
+      toast({
+        title: 'Floor Time QR check-in recorded',
+        description: result.notification?.state === 'failed'
+          ? 'Your presence was recorded. The Director notification needs attention in Attendance Management.'
+          : 'Your presence was recorded and the Director notification was queued.',
+      });
+      load();
+    }
+  };
+
   const floorAction = async (action: 'floorCheckIn' | 'floorCheckOut') => {
     try {
       const position = await getLocation();
@@ -189,6 +205,9 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
         {highlightedEvent && (
           <Alert className="border-primary/30 bg-primary/5"><QrCode className="h-4 w-4 text-primary" /><AlertTitle>{eventLabel(highlightedEvent)} check-in</AlertTitle><AlertDescription>Use the button below while you are attending the scheduled session. Your signed-in account is recorded once per session.</AlertDescription></Alert>
         )}
+        {requestedFloorTimeQr && (
+          <Alert className="border-violet-300 bg-violet-50 text-violet-950"><QrCode className="h-4 w-4 text-violet-700" /><AlertTitle>Floor Time QR check-in</AlertTitle><AlertDescription>This identity-verified QR check-in records your Floor Time presence and asks the Director to verify or activate your floor-time leads. It does not activate leads automatically or replace secure shift check-in and check-out for shift-duration credit.</AlertDescription></Alert>
+        )}
 
         <section>
           <div className="mb-3 flex items-center gap-2"><Users className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold">Scheduled Team Attendance</h3></div>
@@ -204,6 +223,8 @@ export function AttendanceAndFloorTimePanel({ compact = false }: { compact?: boo
             })}
           </div>
         </section>
+
+        {requestedFloorTimeQr && <section aria-label="Floor Time QR check-in"><div className="rounded-lg border border-violet-200 bg-violet-50/60 p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><p className="font-semibold text-violet-950">Record Floor Time presence</p><p className="mt-1 text-sm text-violet-800">Only active signed-in agents may use an enabled current Floor Time QR code. Duplicate scans are blocked for 15 minutes.</p></div><Button onClick={checkInFloorTimeQr} disabled={submitting !== null || viewOnly || !data.floorTimeQrEnabled}>{submitting === 'checkInFloorTimeQr' ? 'Recording…' : data.floorTimeQrEnabled ? 'Record Floor Time QR Check-In' : 'Floor Time QR Is Disabled'}</Button></div>{!data.floorTimeQrEnabled && <p className="mt-2 text-xs text-amber-700">Ask an authorized administrator to enable the current Floor Time QR code.</p>}</div></section>}
 
         <section>
           <div className="mb-3 flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold">Secure Office Floor Time</h3></div>

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +19,8 @@ type Agent = { agentId: string; name: string; startDate?: string };
 type OfficeLocationConfig = { latitude: number; longitude: number; radiusMeters: number; address?: string | null; updatedAt?: string | null };
 type CglAttendanceMetric = { type: 'training' | 'huddle' | 'role_play_ids'; label: string; numerator: number; denominator: number; percentage: number | null; eligibleAgentCount: number; status: 'threshold_not_configured' | 'no_data' };
 type CglAttendanceSummary = { month: string; throughDate: string; metrics: CglAttendanceMetric[]; excludedAgents: Array<{ agentId: string; reason: string }> };
+type FloorTimeQrSettings = { enabled: boolean; codeId: string | null; directorRecipientUid: string | null; directorRecipientName: string | null; updatedAt: string | null };
+type StaffRecipient = { id: string; firebaseUid: string | null; displayName: string; status?: string };
 const DEFAULT_OFFICE_MAP_CENTER = { latitude: 30.2241, longitude: -92.0198 };
 
 const QR_EVENTS = [
@@ -35,6 +38,11 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
   const [officeLocation, setOfficeLocation] = useState<OfficeLocationConfig | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<Array<Record<string, any>>>([]);
   const [cglAttendance, setCglAttendance] = useState<CglAttendanceSummary | null>(null);
+  const [floorTimeQr, setFloorTimeQr] = useState<FloorTimeQrSettings>({ enabled: false, codeId: null, directorRecipientUid: null, directorRecipientName: null, updatedAt: null });
+  const [staffRecipients, setStaffRecipients] = useState<StaffRecipient[]>([]);
+  const [floorTimeQrOpen, setFloorTimeQrOpen] = useState(false);
+  const [floorTimeQrEnabled, setFloorTimeQrEnabled] = useState(false);
+  const [floorTimeRecipientUid, setFloorTimeRecipientUid] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [trainingOpen, setTrainingOpen] = useState(false);
@@ -66,11 +74,12 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
       const roster = Array.isArray(director.eligibleAgents?.active) ? director.eligibleAgents.active : [];
       setAgents(roster);
       const month = new Date().toISOString().slice(0, 7);
-      const [attendanceResponse, cglResponse] = await Promise.all([
+      const [attendanceResponse, cglResponse, staffResponse] = await Promise.all([
         fetch(`/api/agent/attendance?scope=all&year=${year}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/broker/cgl-attendance?month=${month}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/admin/staff-users', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-      const [attendance, cgl] = await Promise.all([attendanceResponse.json(), cglResponse.json()]);
+      const [attendance, cgl, staff] = await Promise.all([attendanceResponse.json(), cglResponse.json(), staffResponse.json()]);
       if (!attendanceResponse.ok) throw new Error(attendance.error || 'Unable to load attendance review');
       const configuredOffice = attendance.officeLocation as OfficeLocationConfig | null;
       setOfficeLocationConfigured(Boolean(configuredOffice));
@@ -82,6 +91,11 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
         setRadiusMeters(String(configuredOffice.radiusMeters || 250));
       }
       setRecentAttendance(Array.isArray(attendance.records) ? attendance.records.slice(0, 20) : []);
+      const floorQr = attendance.floorTimeQr || { enabled: false, codeId: null, directorRecipientUid: null, directorRecipientName: null, updatedAt: null };
+      setFloorTimeQr(floorQr);
+      setFloorTimeQrEnabled(Boolean(floorQr.enabled));
+      setFloorTimeRecipientUid(String(floorQr.directorRecipientUid || ''));
+      setStaffRecipients(staffResponse.ok ? (Array.isArray(staff.users) ? staff.users.filter((entry: StaffRecipient) => entry.status !== 'inactive' && entry.firebaseUid) : []) : []);
       if (!cglResponse.ok) throw new Error(cgl.error || 'Unable to calculate monthly CGL attendance');
       setCglAttendance(cgl.summary || null);
     } catch (error: any) {
@@ -94,6 +108,7 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
   useEffect(() => { load(); }, [load]);
 
   const qrUrl = (eventType: string) => typeof window === 'undefined' ? '' : `${window.location.origin}/dashboard/attendance?event=${eventType}`;
+  const floorTimeQrUrl = () => typeof window === 'undefined' || !floorTimeQr.codeId ? '' : `${window.location.origin}/dashboard/attendance?floorTimeQr=${encodeURIComponent(floorTimeQr.codeId)}`;
 
   const findOfficeAddress = async () => {
     const address = officeAddress.trim();
@@ -245,9 +260,36 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
     }
   };
 
+  const saveFloorTimeQr = async (rotateCode = false) => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch('/api/agent/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'configureFloorTimeQr', enabled: floorTimeQrEnabled, directorRecipientUid: floorTimeRecipientUid || null, rotateCode }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to save Floor Time QR settings');
+      setFloorTimeQr(result.floorTimeQr);
+      setFloorTimeQrEnabled(Boolean(result.floorTimeQr.enabled));
+      setFloorTimeRecipientUid(String(result.floorTimeQr.directorRecipientUid || ''));
+      setFloorTimeQrOpen(false);
+      toast({ title: 'Floor Time QR settings saved', description: result.floorTimeQr.enabled ? 'The Floor Time QR code is enabled.' : 'The Floor Time QR code is disabled.' });
+      load();
+    } catch (error: any) {
+      toast({ title: 'Floor Time QR settings were not saved', description: error.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleAgent = (agentId: string) => setTraining(form => ({ ...form, participantIds: form.participantIds.includes(agentId) ? form.participantIds.filter(id => id !== agentId) : [...form.participantIds, agentId] }));
   const selectedCount = useMemo(() => training.participantIds.length, [training.participantIds]);
-  const recordLabel = (record: Record<string, any>) => record.eventLabel || (record.type === 'huddle' ? 'Team Huddle' : record.type === 'role_play_ids' ? 'Role Play / New Agent IDS' : record.type === 'sales_meeting' ? 'Sales Meeting' : record.type === 'floor_time' ? 'Floor Time' : record.type === 'training' ? record.topic || 'Training' : String(record.type || '').replace(/_/g, ' '));
+  const recordLabel = (record: Record<string, any>) => record.source === 'floor_time_qr'
+    ? `Floor Time QR Check-In · SMS ${String(record.notificationState || 'pending').replace(/_/g, ' ')}`
+    : record.eventLabel || (record.type === 'huddle' ? 'Team Huddle' : record.type === 'role_play_ids' ? 'Role Play / New Agent IDS' : record.type === 'sales_meeting' ? 'Sales Meeting' : record.type === 'floor_time' ? 'Floor Time' : record.type === 'training' ? record.topic || 'Training' : String(record.type || '').replace(/_/g, ' '));
   const formatTime = (value?: string) => value ? new Date(value).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—';
   const formatDuration = (minutes?: number) => minutes ? `${Math.floor(minutes / 60) ? `${Math.floor(minutes / 60)}h ` : ''}${minutes % 60 ? `${minutes % 60}m` : ''}`.trim() : '—';
 
@@ -264,11 +306,15 @@ export function AttendanceManagementPanel({ year }: { year: number }) {
           })}</div>
           {cglAttendance?.excludedAgents.length ? <p className="mt-3 text-xs text-amber-800">{cglAttendance.excludedAgents.length} CGL profile{cglAttendance.excludedAgents.length === 1 ? '' : 's'} excluded because a required team or lifecycle effective date is missing. Correct the existing profile or team-membership date before using the percentage for that agent.</p> : null}
         </section>
-        <div className="grid gap-4 xl:grid-cols-2">{QR_EVENTS.map(event => <div key={event.type} className="flex flex-col gap-4 rounded-xl border bg-background p-4 sm:flex-row sm:items-center"><div className="rounded-lg bg-white p-2 ring-1 ring-border"><QRCodeSVG value={qrUrl(event.type) || `https://smartbroker.local/dashboard/attendance?event=${event.type}`} size={144} level="M" includeMargin /></div><div className="flex-1"><p className="font-semibold">{event.label}</p><p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{event.schedule}</p><p className="mt-2 text-xs text-muted-foreground">{event.detail}</p><Button className="mt-4" variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-1.5 h-3.5 w-3.5" />Print QR Code</Button></div></div>)}</div>
+        <div className="grid gap-4 xl:grid-cols-2">{QR_EVENTS.map(event => <div key={event.type} className="flex flex-col gap-4 rounded-xl border bg-background p-4 sm:flex-row sm:items-center"><div className="rounded-lg bg-white p-2 ring-1 ring-border"><QRCodeSVG value={qrUrl(event.type) || `https://smartbroker.local/dashboard/attendance?event=${event.type}`} size={144} level="M" includeMargin /></div><div className="flex-1"><p className="font-semibold">{event.label}</p><p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{event.schedule}</p><p className="mt-2 text-xs text-muted-foreground">{event.detail}</p><Button className="mt-4" variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-1.5 h-3.5 w-3.5" />Print QR Code</Button></div></div>)}
+          <div className="flex flex-col gap-4 rounded-xl border bg-background p-4 sm:flex-row sm:items-center"><div className="rounded-lg bg-white p-2 ring-1 ring-border">{floorTimeQr.codeId ? <QRCodeSVG value={floorTimeQrUrl() || 'https://smartbroker.local/dashboard/attendance?floorTimeQr=disabled'} size={144} level="M" includeMargin /> : <div className="flex h-36 w-36 items-center justify-center text-center text-xs text-muted-foreground">Configure Floor Time QR</div>}</div><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">Floor Time QR Code</p><span className={floorTimeQr.enabled ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800' : 'rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700'}>{floorTimeQr.enabled ? 'Enabled' : 'Disabled'}</span></div><p className="mt-1 text-sm text-muted-foreground">Active agents can scan this identity-verified code to record Floor Time presence and notify the configured Director. It does not activate leads or replace secure shift check-in/out.</p>{floorTimeQr.enabled && !floorTimeQr.directorRecipientUid ? <p className="mt-2 text-xs text-amber-700">Director recipient required: QR check-ins remain auditable, but the Director SMS will be recorded as failed until an authorized recipient is selected.</p> : null}<div className="mt-4 flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => window.print()} disabled={!floorTimeQr.codeId}><Printer className="mr-1.5 h-3.5 w-3.5" />Print QR Code</Button><Button variant="outline" size="sm" onClick={() => setFloorTimeQrOpen(true)}><Settings2 className="mr-1.5 h-3.5 w-3.5" />Configure QR</Button></div></div></div>
+        </div>
         <p className="text-xs text-muted-foreground">{loading ? 'Loading active roster…' : `${agents.length} active agent${agents.length === 1 ? '' : 's'} available for training attendance.`} {officeLocationConfigured ? `Official office location: ${officeLocation?.address || `${officeLocation?.latitude.toFixed(5)}, ${officeLocation?.longitude.toFixed(5)}`} · ${officeLocation?.radiusMeters || 250} meter radius.` : 'Set the official office address before agents begin floor-time check-ins.'}</p>
         <div className="overflow-x-auto rounded-lg border"><div className="border-b bg-muted/40 px-4 py-3"><p className="text-sm font-semibold">Recent Agent Attendance & Floor Time</p><p className="mt-0.5 text-xs text-muted-foreground">Use this list to confirm participation, on-site shift coverage, arrival, departure, and qualifying hours.</p></div><Table><TableHeader><TableRow><TableHead>Agent</TableHead><TableHead>Activity</TableHead><TableHead>Date</TableHead><TableHead>Arrived</TableHead><TableHead>Left</TableHead><TableHead>Duration</TableHead><TableHead>Verification</TableHead></TableRow></TableHeader><TableBody>{recentAttendance.length ? recentAttendance.map(record => <TableRow key={record.id}><TableCell className="font-medium">{record.agentDisplayName || '—'}</TableCell><TableCell>{recordLabel(record)}</TableCell><TableCell>{record.date || '—'}</TableCell><TableCell>{formatTime(record.checkInAt)}</TableCell><TableCell>{formatTime(record.checkOutAt)}</TableCell><TableCell>{formatDuration(Number(record.durationMinutes || 0))}</TableCell><TableCell>{record.type === 'floor_time' ? <span className={record.locationVerified && record.checkOutLocationVerified ? 'text-emerald-700' : 'text-amber-700'}>{record.locationVerified && record.checkOutLocationVerified ? 'Arrival + departure verified' : record.checkOutAt ? 'Review needed' : 'Shift open'}</span> : 'QR attendance'}</TableCell></TableRow>) : <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">No attendance or floor-time records have been logged yet.</TableCell></TableRow>}</TableBody></Table></div>
       </CardContent>
     </Card>
+
+    <Dialog open={floorTimeQrOpen} onOpenChange={setFloorTimeQrOpen}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Configure Floor Time QR Code</DialogTitle><DialogDescription>Enable the identity-verified Floor Time presence code and select the authorized Director recipient. No phone number is displayed here.</DialogDescription></DialogHeader><div className="space-y-4 py-2"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={floorTimeQrEnabled} onChange={event => setFloorTimeQrEnabled(event.target.checked)} />Enable Floor Time QR check-in</label><div className="space-y-1.5"><Label>Director SMS recipient</Label><Select value={floorTimeRecipientUid || 'none'} onValueChange={value => setFloorTimeRecipientUid(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select an active staff recipient" /></SelectTrigger><SelectContent><SelectItem value="none">Not configured</SelectItem>{staffRecipients.map(staff => <SelectItem key={staff.id} value={String(staff.firebaseUid)}>{staff.displayName || 'Unnamed staff user'}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">A missing recipient does not erase a valid check-in; its SMS attempt is recorded as failed until this is configured.</p></div><p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">Floor Time QR check-ins only notify the selected Director to verify or activate leads. They never change lead routing automatically and do not replace secure location-verified shift tracking.</p></div><DialogFooter><Button variant="outline" onClick={() => setFloorTimeQrOpen(false)}>Cancel</Button><Button variant="outline" onClick={() => saveFloorTimeQr(true)} disabled={saving}>Rotate Code</Button><Button onClick={() => saveFloorTimeQr(false)} disabled={saving}>{saving ? 'Saving…' : 'Save QR Settings'}</Button></DialogFooter></DialogContent></Dialog>
 
     <Dialog open={locationOpen} onOpenChange={setLocationOpen}><DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-violet-700" />Set Official Office Location</DialogTitle><DialogDescription>Enter the office address where agents must be for floor-time sign-in. Then drag the map pin to the exact office spot before saving.</DialogDescription></DialogHeader><div className="space-y-4 py-2"><div className="space-y-1.5"><Label htmlFor="office-address">Office Address</Label><div className="flex gap-2"><Input id="office-address" value={officeAddress} onChange={event => setOfficeAddress(event.target.value)} placeholder="Street address, city, state, ZIP" /><Button type="button" variant="outline" onClick={findOfficeAddress} disabled={saving}>Find Address</Button></div><p className="text-xs text-muted-foreground">You can set this from anywhere. Address search places an initial pin; you control the final saved point.</p></div><div className="space-y-1.5"><Label>Exact Office Pin</Label><div ref={officeMapRef} className="h-72 w-full rounded-md border bg-muted" aria-label="Office location map; click or drag the pin to set the exact floor-time office location" /><p className="text-xs text-muted-foreground">Click the map or drag the marker to move the office location. The latitude and longitude below update automatically.</p></div><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><Label htmlFor="office-latitude">Latitude</Label><Input id="office-latitude" inputMode="decimal" value={officeLatitude} onChange={event => setOfficeLatitude(event.target.value)} placeholder="30.224100" /></div><div className="space-y-1.5"><Label htmlFor="office-longitude">Longitude</Label><Input id="office-longitude" inputMode="decimal" value={officeLongitude} onChange={event => setOfficeLongitude(event.target.value)} placeholder="-92.019800" /></div></div><div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" onClick={useCurrentDeviceLocation} disabled={saving}>Use This Device Location</Button>{Number.isFinite(Number(officeLatitude)) && Number.isFinite(Number(officeLongitude)) && <a className="text-sm font-medium text-primary underline" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${officeLatitude},${officeLongitude}`)}`} target="_blank" rel="noreferrer">Open in Google Maps</a>}</div>{addressStatus && <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{addressStatus}</p>}<div className="space-y-1.5"><Label>Allowed radius (meters)</Label><Input type="number" min="25" max="1000" value={radiusMeters} onChange={event => setRadiusMeters(event.target.value)} /><p className="text-xs text-muted-foreground">250 meters is a practical starting radius. A tighter radius better verifies office presence but may fail indoors or on devices with weaker GPS.</p></div></div><DialogFooter><Button variant="outline" onClick={() => setLocationOpen(false)}>Cancel</Button><Button onClick={saveOfficeLocation} disabled={saving}>{saving ? 'Saving…' : 'Save Official Office Location'}</Button></DialogFooter></DialogContent></Dialog>
 

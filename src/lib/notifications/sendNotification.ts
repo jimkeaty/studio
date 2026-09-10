@@ -82,6 +82,12 @@ export interface NotificationPrefs {
   events?: Partial<Record<NotificationType, { in_app?: boolean; push?: boolean; email?: boolean; sms?: boolean }>>;
 }
 
+export type TransactionalSmsResult = {
+  state: 'pending' | 'sent' | 'delivered' | 'failed';
+  providerMessageId: string | null;
+  failureReason: string | null;
+};
+
 const DEFAULT_PREFS: NotificationPrefs = {
   in_app: true,
   push: true,
@@ -486,5 +492,41 @@ async function sendSms(
     });
   } catch (err) {
     console.error(`[sendNotification] Twilio SMS failed for ${toPhone}:`, err);
+  }
+}
+
+/**
+ * Sends one operational SMS and reports only auditable delivery metadata. The
+ * caller owns idempotency and persists the result; raw destination numbers are
+ * intentionally never returned or logged by this helper.
+ */
+export async function sendTransactionalSmsWithResult(
+  db: Firestore,
+  input: { toPhone: string | null | undefined; body: string },
+): Promise<TransactionalSmsResult> {
+  const toPhone = String(input.toPhone || '').trim();
+  if (!toPhone) return { state: 'failed', providerMessageId: null, failureReason: 'missing_recipient_phone' };
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = await getTwilioFromNumber(db);
+  if (!accountSid || !authToken || !fromNumber) {
+    return { state: 'pending', providerMessageId: null, failureReason: 'sms_provider_not_configured' };
+  }
+  try {
+    const twilio = (await import('twilio')).default;
+    const response = await twilio(accountSid, authToken).messages.create({
+      body: String(input.body || '').slice(0, 1600),
+      from: fromNumber,
+      to: toPhone,
+    });
+    const status = String(response.status || '').toLowerCase();
+    return {
+      state: status === 'delivered' ? 'delivered' : status === 'sent' ? 'sent' : 'pending',
+      providerMessageId: response.sid || null,
+      failureReason: null,
+    };
+  } catch (error: any) {
+    console.error('[sendNotification] Transactional SMS failed:', error?.message || error);
+    return { state: 'failed', providerMessageId: null, failureReason: 'provider_delivery_failed' };
   }
 }
