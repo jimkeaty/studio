@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { MetricInformationButton, type ReportCardMetricInformation } from '@/components/dashboard/broker/MetricInformationButton';
 import {
   Activity,
   CalendarCheck2,
@@ -39,6 +40,8 @@ type Metric = {
   detail: string;
   pct: number | null;
   grade: string;
+  primaryBasis?: string;
+  information: ReportCardMetricInformation;
   missingAgents?: Array<{ agentId: string; name: string }>;
 };
 
@@ -84,12 +87,13 @@ function GoalCard({ metric }: { metric: Metric }) {
     <div className={`border rounded-lg p-4 min-h-[168px] ${GRADE_STYLE[metric.grade] || GRADE_STYLE['—']}`}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold leading-5">{metric.label}</p>
-        <span className="text-2xl leading-none font-bold">{metric.grade}</span>
+        <div className="flex items-center gap-1"><MetricInformationButton information={metric.information} /><span className="text-2xl leading-none font-bold">{metric.grade}</span></div>
       </div>
       <p className="mt-3 text-2xl font-bold leading-none">
         {metric.actual.toLocaleString()}<span className="text-sm font-medium"> / {metric.goal.toLocaleString()}</span>
       </p>
-      <p className="mt-1 text-xs opacity-80">{metric.unit}{metric.pct == null ? ' · Set a goal' : ` · ${metric.pct}% of target`}</p>
+      <p className="mt-1 text-xs opacity-80">{metric.unit}{metric.pct == null ? ' · Goal Not Configured' : ` · ${metric.pct}% of target`}</p>
+      {metric.primaryBasis && <p className="mt-1 text-[11px] leading-4 opacity-80">{metric.primaryBasis}</p>}
       <div className="mt-3 h-2 rounded-full bg-white/70 overflow-hidden">
         <div className="h-full rounded-full bg-current" style={{ width: `${pct ?? 0}%` }} />
       </div>
@@ -130,6 +134,7 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
     recruitingFollowUpsDaily: '0',
     recruitingFollowUpsWeekly: '0',
     recruitingFollowUpsMonthly: '0',
+    effectiveStartDate: '',
     directorName: 'Ethan',
     customKpis: [] as Array<{ id: string; label: string; unit: string; monthlyGoal: string; active: boolean }>,
   });
@@ -172,6 +177,7 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
         recruitingFollowUpsDaily: String(goals.recruitingFollowUpsDaily ?? 0),
         recruitingFollowUpsWeekly: String(goals.recruitingFollowUpsWeekly ?? 0),
         recruitingFollowUpsMonthly: String(goals.recruitingFollowUpsMonthly ?? 0),
+        effectiveStartDate: String(result.plan?.effectiveStartDate || ''),
         directorName: String(result.director?.name || result.plan?.directorName || 'Ethan'),
         customKpis: (result.plan?.customKpis || []).map((item: any) => ({ ...item, monthlyGoal: String(item.monthlyGoal ?? 0) })),
       });
@@ -200,7 +206,8 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
           action: 'savePlan',
           year,
           directorName: goalForm.directorName,
-          monthlyGoals: Object.fromEntries(Object.entries(goalForm).filter(([key]) => key !== 'customKpis' && key !== 'directorName').map(([key, value]) => [key, Number(value) || 0])),
+          effectiveStartDate: goalForm.effectiveStartDate || null,
+          monthlyGoals: Object.fromEntries(Object.entries(goalForm).filter(([key]) => key !== 'customKpis' && key !== 'directorName' && key !== 'effectiveStartDate').map(([key, value]) => [key, Number(value) || 0])),
           customKpis: goalForm.customKpis.map(item => ({ ...item, monthlyGoal: Number(item.monthlyGoal) || 0 })),
         }),
       });
@@ -306,7 +313,7 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
           <div>
             <CardTitle className="flex items-center gap-2 text-xl"><ClipboardList className="h-5 w-5 text-indigo-700" />{data.director?.name || 'Ethan'} — Director of Agent Development Report Card</CardTitle>
             <CardDescription className="mt-1">Operational coaching, recruiting activity, and team-development scorecard for {year}.</CardDescription>
-            <p className="mt-2 text-xs text-muted-foreground">Current period: week of {labelDate(period.weekStart)} · month of {labelDate(period.monthStart)} · quarter starting {labelDate(period.quarterStart)}</p>
+            <p className="mt-2 text-xs text-muted-foreground">Current period: week of {labelDate(period.weekStart)} · month of {labelDate(period.monthStart)} · quarter starting {labelDate(period.quarterStart)} · effective start {labelDate(data.plan?.effectiveStartDate || `${year}-01-01`)}</p>
           </div>
           <div className="flex items-center gap-2">
             <div className={`min-w-[126px] rounded-lg border px-3 py-2 text-center ${GRADE_STYLE[scorecard.overallGrade] || GRADE_STYLE['—']}`}>
@@ -358,6 +365,7 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-indigo-700" />Director Report Card Goals</DialogTitle><DialogDescription>Set monthly company goals. The scorecard automatically prorates them through the selected year-to-date period.</DialogDescription></DialogHeader>
           <div className="grid gap-3 py-2 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2"><Label>Named Director of Agent Development</Label><Input value={goalForm.directorName} onChange={event => setGoalForm(form => ({ ...form, directorName: event.target.value }))} /><p className="text-xs text-muted-foreground">This report card and score are assigned to this named Director. Staff may document activities, but the score remains Ethan’s responsibility.</p></div>
+            <div className="space-y-1.5"><Label>Report-Card Effective Start Date</Label><Input type="date" value={goalForm.effectiveStartDate} max={new Date().toISOString().slice(0, 10)} onChange={event => setGoalForm(form => ({ ...form, effectiveStartDate: event.target.value }))} /><p className="text-xs text-muted-foreground">Cumulative YTD pacing begins on the later of this date and January 1. Changes are audited.</p></div>
             {[
               ['recruitingWorkshops', 'Recruiting Workshops / Month'],
               ['buyerSellerWorkshops', 'Buyer & Seller Workshops / Month'],

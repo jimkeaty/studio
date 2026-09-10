@@ -4,6 +4,7 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { centralParts } from '@/lib/attendance/rules';
 import { calculateOperationalMeetingEligibility } from '@/lib/agent-development/operationalMeetingEligibility';
 import { assessTeamAppointmentThreshold, TEAM_APPOINTMENT_THRESHOLDS } from '@/lib/agent-development/teamAppointmentThresholds';
+import { calculateStartDatePacing, isValidReportCardEffectiveStart, resolveReportCardEffectiveStart, type GoalCadence } from '@/lib/report-cards/startDatePacing';
 
 const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
 const ACTIVITY_TYPES = new Set([
@@ -33,6 +34,9 @@ type CustomKpi = {
 
 type DadPlan = {
   directorName: string;
+  effectiveStartDate: string | null;
+  effectiveStartHistory: Array<{ from: string | null; to: string | null; changedAt: string; changedByUid: string }>;
+  updatedAt: string | null;
   monthlyGoals: {
     teamAppointments: number;
     callNightHours: number;
@@ -54,6 +58,9 @@ type DadPlan = {
 
 const DEFAULT_PLAN: DadPlan = {
   directorName: 'Ethan',
+  effectiveStartDate: null,
+  effectiveStartHistory: [],
+  updatedAt: null,
   monthlyGoals: {
     teamAppointments: 80,
     callNightHours: 3,
@@ -160,6 +167,19 @@ function normalizePlan(raw: any): DadPlan {
   const customSource = raw?.dadGoals?.customKpis || raw?.customKpis || [];
   return {
     directorName: String(raw?.dadGoals?.directorName || raw?.directorName || DEFAULT_PLAN.directorName).trim().slice(0, 80) || DEFAULT_PLAN.directorName,
+    effectiveStartDate: isoDate(raw?.dadGoals?.effectiveStartDate ?? raw?.effectiveStartDate),
+    effectiveStartHistory: Array.isArray(raw?.dadGoals?.effectiveStartHistory ?? raw?.effectiveStartHistory)
+      ? (raw?.dadGoals?.effectiveStartHistory ?? raw?.effectiveStartHistory)
+          .map((entry: any) => ({
+            from: isoDate(entry?.from),
+            to: isoDate(entry?.to),
+            changedAt: String(entry?.changedAt || ''),
+            changedByUid: String(entry?.changedByUid || ''),
+          }))
+          .filter((entry: any) => entry.changedAt)
+          .slice(-50)
+      : [],
+    updatedAt: typeof (raw?.dadGoals?.updatedAt ?? raw?.updatedAt) === 'string' ? (raw?.dadGoals?.updatedAt ?? raw?.updatedAt) : null,
     monthlyGoals: {
       teamAppointments: sanitizeNumber(sourceGoals.teamAppointments, DEFAULT_PLAN.monthlyGoals.teamAppointments),
       callNightHours: sanitizeNumber(sourceGoals.callNightHours, DEFAULT_PLAN.monthlyGoals.callNightHours),
@@ -248,6 +268,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const plan = normalizePlan(planSnap.exists ? planSnap.data() : null);
+    const effectiveStartDate = resolveReportCardEffectiveStart(year, plan.effectiveStartDate, reportEnd);
     const agentInputs = profileSnap.docs
       .map(doc => {
         const profile = doc.data() as any;
@@ -299,7 +320,8 @@ export async function GET(req: NextRequest) {
         completedMeetings
           .filter(meeting => {
             const date = isoDate(meeting.scheduledDate);
-            if (!within(date, start, end)) return false;
+            const adjustedStart = start > effectiveStartDate ? start : effectiveStartDate;
+            if (!within(date, adjustedStart, end)) return false;
             if (requireNotes && !String(meeting.completionNotes || '').trim()) return false;
             if (allowedTypes && !allowedTypes.has(String(meeting.type || ''))) return false;
             return true;
@@ -326,11 +348,21 @@ export async function GET(req: NextRequest) {
       })
       .sort((a, b) => String(b.occurredOn || '').localeCompare(String(a.occurredOn || '')));
 
-    const activityTotal = (type: string, field = 'count') => activities
+    // Preserve the complete activity log while using only activity on or after
+    // the configured effective start for cumulative pacing and scorecard data.
+    const pacedActivities = activities.filter(activity => {
+      const date = isoDate(activity.occurredOn);
+      return Boolean(date && date >= effectiveStartDate);
+    });
+
+    const activityTotal = (type: string, field = 'count') => pacedActivities
+      .filter(activity => activity.activityType === type)
+      .reduce((total, activity) => total + sanitizeNumber(activity[field], field === 'count' ? 1 : 0), 0);
+    const pacedActivityTotal = (type: string, field = 'count') => pacedActivities
       .filter(activity => activity.activityType === type)
       .reduce((total, activity) => total + sanitizeNumber(activity[field], field === 'count' ? 1 : 0), 0);
     const distinctActivityAgents = (type: string) => new Set(
-      activities.filter(activity => activity.activityType === type && activity.relatedAgentId).map(activity => String(activity.relatedAgentId))
+      pacedActivities.filter(activity => activity.activityType === type && activity.relatedAgentId).map(activity => String(activity.relatedAgentId))
     );
 
     const welcomeIds = distinctActivityAgents('new_agent_welcome_call');
@@ -339,12 +371,12 @@ export async function GET(req: NextRequest) {
       .filter(agent => !welcomeIds.has(agent.agentId))
       .map(agent => ({ agentId: agent.agentId, name: agent.name }));
 
-    const relationshipMeetingsThisWeek = activities.filter(activity =>
+    const relationshipMeetingsThisWeek = pacedActivities.filter(activity =>
       activity.activityType === 'in_person_relationship_meeting'
       && String(activity.recruiterName || plan.directorName).trim().toLowerCase() === plan.directorName.trim().toLowerCase()
       && within(isoDate(activity.occurredOn), weekStart, weekEnd)
     );
-    const currentMonthActivities = activities.filter(activity => within(isoDate(activity.occurredOn), monthStart, monthEnd));
+    const currentMonthActivities = pacedActivities.filter(activity => within(isoDate(activity.occurredOn), monthStart, monthEnd));
     const currentMonthActivityTotal = (type: string) => currentMonthActivities
       .filter(activity => activity.activityType === type)
       .reduce((total, activity) => total + sanitizeNumber(activity.count, 1), 0);
@@ -364,7 +396,7 @@ export async function GET(req: NextRequest) {
     const recruitingFollowUps = recruitingActivitySnap.docs
       .map(doc => doc.data() as any)
       .filter(activity => ['call', 'email', 'text', 'meeting'].includes(String(activity.type || '')))
-      .filter(activity => within(isoDate(activity.createdAt), `${year}-01-01`, reportEnd));
+      .filter(activity => within(isoDate(activity.createdAt), effectiveStartDate, reportEnd));
     const recruitingFollowUpsFor = (start: string, end: string) => recruitingFollowUps
       .filter(activity => within(isoDate(activity.createdAt), start, end)).length;
     const metrics = [
@@ -419,7 +451,78 @@ export async function GET(req: NextRequest) {
       ),
     ];
 
-    const scoredMetrics = metrics.filter(metric => metric.pct !== null);
+    const metricDefinitions: Record<string, { definition: string; source: string; basis: string; cadence: GoalCadence; cumulative: boolean }> = {
+      weekly_new_agent_one_on_ones: { definition: 'Completed weekly operational one-on-ones for agents assigned to the 1–90-day category.', source: 'oneOnOnes completion records plus shared operational eligibility.', basis: 'Selected week snapshot', cadence: 'snapshot', cumulative: false },
+      monthly_under_year_one_on_ones: { definition: 'Completed monthly operational one-on-ones for qualifying agents under one year.', source: 'oneOnOnes completion records plus shared operational eligibility.', basis: 'Selected month snapshot', cadence: 'snapshot', cumulative: false },
+      monthly_no_production_one_on_ones: { definition: 'Completed monthly one-on-ones for eligible agents with no closed or pending activity in the inclusive last 60 days.', source: 'oneOnOnes completion records, transactions, and shared operational eligibility.', basis: 'Selected month snapshot', cadence: 'snapshot', cumulative: false },
+      quarterly_strategy_one_on_ones: { definition: 'Completed quarterly strategy one-on-ones with documented completion notes.', source: 'oneOnOnes completion records plus active-agent roster.', basis: 'Selected quarter snapshot', cadence: 'snapshot', cumulative: false },
+      weekly_relationship_meetings: { definition: 'In-person coffee or lunch relationship meetings logged for the named Director.', source: 'directorDevelopmentActivities.', basis: 'Selected week', cadence: 'weekly', cumulative: false },
+      new_agent_follow_ups: { definition: 'New-agent onboarding follow-up activities logged for the selected month.', source: 'directorDevelopmentActivities.', basis: 'Selected month', cadence: 'monthly', cumulative: false },
+      recruiting_follow_ups_daily: { definition: 'Completed recruiting prospect calls, emails, texts, or meetings.', source: 'recruitingPipelineActivity.', basis: 'Selected day', cadence: 'daily', cumulative: false },
+      recruiting_follow_ups_weekly: { definition: 'Completed recruiting prospect calls, emails, texts, or meetings.', source: 'recruitingPipelineActivity.', basis: 'Selected week', cadence: 'weekly', cumulative: false },
+      recruiting_follow_ups_monthly: { definition: 'Completed recruiting prospect calls, emails, texts, or meetings.', source: 'recruitingPipelineActivity.', basis: 'Selected month', cadence: 'monthly', cumulative: false },
+      valid_call_nights_monthly: { definition: 'Call nights lasting at least 180 minutes.', source: 'directorDevelopmentActivities durationHours.', basis: 'Selected month threshold', cadence: 'threshold', cumulative: false },
+      recruiting_workshops: { definition: 'Recruiting workshops logged by the named Director.', source: 'directorDevelopmentActivities.', basis: 'Start-date-adjusted year to date', cadence: 'monthly', cumulative: true },
+      buyer_seller_workshops: { definition: 'Buyer and seller workshops logged by the named Director.', source: 'directorDevelopmentActivities.', basis: 'Start-date-adjusted year to date', cadence: 'monthly', cumulative: true },
+      ypn_events: { definition: 'YPN attendance activities logged by the named Director.', source: 'directorDevelopmentActivities.', basis: 'Start-date-adjusted year to date', cadence: 'monthly', cumulative: true },
+      qualifying_events: { definition: 'YPN, mortgage, builder, or RCA networking events logged by the named Director.', source: 'directorDevelopmentActivities.', basis: 'Start-date-adjusted year to date', cadence: 'monthly', cumulative: true },
+      team_appointments_monthly: { definition: 'Team appointments logged by the named Director.', source: 'directorDevelopmentActivities.', basis: 'Selected month threshold', cadence: 'threshold', cumulative: false },
+      new_agent_welcome_calls: { definition: 'Distinct new agents with a tracked welcome call.', source: 'directorDevelopmentActivities plus agent profiles.', basis: 'Selected-year coverage snapshot', cadence: 'snapshot', cumulative: false },
+    };
+    const cumulativeActuals: Record<string, number> = {
+      recruiting_workshops: pacedActivityTotal('recruiting_workshop'),
+      buyer_seller_workshops: pacedActivityTotal('buyer_seller_workshop'),
+      ypn_events: pacedActivityTotal('ypn_event'),
+      qualifying_events: pacedActivityTotal('ypn_event') + pacedActivityTotal('partner_event'),
+      ...Object.fromEntries(plan.customKpis.filter(item => item.active).map(kpi => [
+        `custom_${kpi.id}`,
+        pacedActivities.filter(activity => activity.activityType === 'custom' && activity.customKpiId === kpi.id)
+          .reduce((total, activity) => total + sanitizeNumber(activity.count, 1), 0),
+      ])),
+    };
+    const enrichedMetrics = metrics.map(metric => {
+      const definition = metricDefinitions[metric.key] || {
+        definition: metric.key.startsWith('custom_') ? 'Custom KPI activity selected in the Director Goals configuration.' : metric.detail,
+        source: 'directorDevelopmentActivities.',
+        basis: metric.key.startsWith('custom_') ? 'Start-date-adjusted year to date' : 'Approved report-card period',
+        cadence: 'monthly' as GoalCadence,
+        cumulative: metric.key.startsWith('custom_'),
+      };
+      const rawGoal = metric.goal > 0 ? metric.goal : null;
+      const pacing = calculateStartDatePacing({
+        year,
+        configuredStartDate: plan.effectiveStartDate,
+        asOfDate: reportEnd,
+        actual: definition.cumulative ? (cumulativeActuals[metric.key] ?? metric.actual) : metric.actual,
+        nativeGoal: definition.cumulative && rawGoal !== null ? rawGoal / Math.max(1, monthsElapsed) : rawGoal,
+        nativeCadence: definition.cadence,
+        cumulative: definition.cumulative,
+      });
+      const paceGrade = pacing.pct == null ? { pct: null, grade: '—' } : gradeFor(pacing.pct, 100);
+      const displayMetric = definition.cumulative && pacing.ytdGoal !== null
+        ? { ...metric, actual: pacing.ytdActual!, goal: pacing.ytdGoal, ...paceGrade, primaryBasis: 'Start-date-adjusted YTD pacing' }
+        : { ...metric, primaryBasis: definition.basis };
+      return {
+        ...displayMetric,
+        information: {
+          metricName: metric.label,
+          definition: definition.definition,
+          dataSource: definition.source,
+          evaluationBasis: definition.basis,
+          effectiveStartDate,
+          asOfDate: reportEnd,
+          originalGoal: rawGoal,
+          originalCadence: definition.cadence,
+          weeklyPace: pacing.weeklyPace,
+          ytdGoal: pacing.ytdGoal,
+          ytdActual: pacing.ytdActual,
+          catchUpNeeded: pacing.catchUpNeeded,
+          aheadBy: pacing.aheadBy,
+          lastUpdated: plan.updatedAt,
+        },
+      };
+    });
+    const scoredMetrics = enrichedMetrics.filter(metric => metric.pct !== null);
     const overallPct = scoredMetrics.length
       ? Math.round(scoredMetrics.reduce((total, metric) => total + Math.min(metric.pct ?? 0, 100), 0) / scoredMetrics.length)
       : null;
@@ -457,7 +560,7 @@ export async function GET(req: NextRequest) {
       reportPeriod: { reportEnd, monthStart, monthEnd, weekStart, weekEnd, quarterStart, monthsElapsed },
       plan,
       director: { name: plan.directorName },
-      scorecard: { metrics, overallPct, overallGrade, scoredMetricCount: scoredMetrics.length },
+      scorecard: { metrics: enrichedMetrics, overallPct, overallGrade, scoredMetricCount: scoredMetrics.length },
       eligibleAgents: {
         active: activeAgents.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate, teamGroup: agent.teamGroup })),
         newAgent90: newAgent90.map(agent => ({ agentId: agent.agentId, name: agent.name, startDate: agent.startDate })),
@@ -507,8 +610,30 @@ export async function POST(req: NextRequest) {
 
     if (body.action === 'savePlan') {
       const monthlyGoals = body.monthlyGoals || {};
+      const planRef = adminDb.collection('recruitingPlans').doc(String(year));
+      const previousPlanSnap = await planRef.get();
+      const previousPlan = normalizePlan(previousPlanSnap.exists ? previousPlanSnap.data() : null);
+      const hasEffectiveStartUpdate = Object.prototype.hasOwnProperty.call(body, 'effectiveStartDate');
+      const nextEffectiveStartDate = hasEffectiveStartUpdate
+        ? (body.effectiveStartDate ? String(body.effectiveStartDate) : null)
+        : previousPlan.effectiveStartDate;
+      const asOfDate = centralParts().date;
+      if (!isValidReportCardEffectiveStart(nextEffectiveStartDate, year, asOfDate)) {
+        return jsonError(400, 'Effective start date must be a valid date and cannot be in the future');
+      }
+      const updatedAt = new Date().toISOString();
+      const effectiveStartHistory = previousPlan.effectiveStartDate === nextEffectiveStartDate
+        ? previousPlan.effectiveStartHistory
+        : [...previousPlan.effectiveStartHistory, {
+            from: previousPlan.effectiveStartDate,
+            to: nextEffectiveStartDate,
+            changedAt: updatedAt,
+            changedByUid: caller.uid,
+          }].slice(-50);
       const dadGoals = {
         directorName: String(body.directorName || DEFAULT_PLAN.directorName).trim().slice(0, 80) || DEFAULT_PLAN.directorName,
+        effectiveStartDate: nextEffectiveStartDate,
+        effectiveStartHistory,
         monthlyGoals: {
           teamAppointments: sanitizeNumber(monthlyGoals.teamAppointments, DEFAULT_PLAN.monthlyGoals.teamAppointments),
           callNightHours: sanitizeNumber(monthlyGoals.callNightHours, DEFAULT_PLAN.monthlyGoals.callNightHours),
@@ -526,10 +651,10 @@ export async function POST(req: NextRequest) {
           recruitingFollowUpsMonthly: sanitizeNumber(monthlyGoals.recruitingFollowUpsMonthly, DEFAULT_PLAN.monthlyGoals.recruitingFollowUpsMonthly),
         },
         customKpis: normalizeCustomKpis(body.customKpis),
-        updatedAt: new Date().toISOString(),
+        updatedAt,
         updatedByUid: caller.uid,
       };
-      await adminDb.collection('recruitingPlans').doc(String(year)).set({ dadGoals }, { merge: true });
+      await planRef.set({ dadGoals }, { merge: true });
       return NextResponse.json({ ok: true, plan: normalizePlan({ dadGoals }) });
     }
 
