@@ -225,12 +225,11 @@ export async function GET(req: NextRequest) {
     const weekEnd = ymd(addDays(fromYmd(weekStart), 6));
     const quarterStart = getQuarterStart(reportEnd);
 
-    const [planSnap, profileSnap, oneOnOneSnap, activitySnap, attendanceSnap, closedSnap, pendingSnap] = await Promise.all([
+    const [planSnap, profileSnap, oneOnOneSnap, activitySnap, closedSnap, pendingSnap] = await Promise.all([
       adminDb.collection('recruitingPlans').doc(String(year)).get(),
       adminDb.collection('agentProfiles').get(),
       adminDb.collection('oneOnOnes').get(),
       adminDb.collection('directorDevelopmentActivities').where('year', '==', year).get(),
-      adminDb.collection('agentAttendance').get(),
       adminDb.collection('transactions').where('status', '==', 'closed').get(),
       adminDb.collection('transactions').where('status', 'in', ['pending', 'under_contract']).get(),
     ]);
@@ -336,26 +335,12 @@ export async function GET(req: NextRequest) {
     const currentMonthActivityTotal = (type: string) => currentMonthActivities
       .filter(activity => activity.activityType === type)
       .reduce((total, activity) => total + sanitizeNumber(activity.count, 1), 0);
-    const attendanceRecords = attendanceSnap.docs
-      .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
-      .filter(record => within(isoDate(record.date), monthStart, monthEnd));
-    const attendanceCount = (type: string) => attendanceRecords.filter(record => record.type === type).length;
-    const trainingSessionIds = new Set(attendanceRecords.filter(record => record.type === 'training' && record.sessionId).map(record => String(record.sessionId)));
-
     const metrics = [
       makeMetric('weekly_new_agent_one_on_ones', 'New Agent 1:1s — This Week', weeklyNew.actual, newAgent90.length, 'agents', 'Active CGL and Charles Ditch Team agents on days 1–90 receive this exclusive weekly operational assignment.', weeklyNew.missing),
       makeMetric('monthly_under_year_one_on_ones', 'Agents Under 1 Year — This Month', monthlyUnderYear.actual, agentsUnderYear.length, 'agents', 'Active CGL and Charles Ditch Team agents on days 91–365 qualify only when they had production or a pending transaction in the inclusive last 60 days.', monthlyUnderYear.missing),
       makeMetric('monthly_no_production_one_on_ones', 'No Production or Pending in Last 60 Days — This Month', monthlyNoProduction.actual, noProductionOrPending.length, 'agents', `Active CGL and Charles Ditch Team agents with no closed or pending activity from ${eligibility.sixtyDayWindowStart} through ${reportEnd}; this category takes precedence over Under One Year.`, monthlyNoProduction.missing),
       makeMetric('quarterly_strategy_one_on_ones', 'All-Agent Strategy 1:1s — This Quarter', quarterlyAllCoverage.actual, quarterlyAll.length, 'agents', 'All active agents qualify regardless of team. Requires a completed quarterly 1:1 with completion notes and a strategic plan.', quarterlyAllCoverage.missing),
       makeMetric('weekly_relationship_meetings', 'In-Person Coffee / Lunch Meetings — This Week', relationshipMeetingsThisWeek.length, 4, 'meetings', 'Four in-person relationship meetings each week, outside the office, with current agents or recruiting prospects.'),
-      makeMetric('sales_meetings', 'Sales Meetings — This Month', currentMonthActivityTotal('sales_meeting'), plan.monthlyGoals.salesMeetings, 'meetings', 'Track individual or group sales meetings led by the Director. Set a monthly goal when a required cadence is established.'),
-      makeMetric('huddles_led', 'Team Huddles — This Month', currentMonthActivityTotal('huddle'), plan.monthlyGoals.huddles, 'huddles', 'Required huddles are Tuesday and Thursday from 8:30 to 9:00 AM.'),
-      makeMetric('role_play_ids_led', 'Role Play / New Agent IDS — This Month', currentMonthActivityTotal('role_play_ids'), plan.monthlyGoals.rolePlaySessions, 'sessions', 'Required role play or New Agent IDS is Wednesday from 10:00 to 11:00 AM.'),
-      makeMetric('training_sessions', 'Training Sessions — This Month', currentMonthActivityTotal('training_session'), plan.monthlyGoals.trainingSessions, 'sessions', 'Optional training is Tuesday and Thursday from 9:00 to 10:00 AM. Participation is tracked separately from the recorded roster.'),
-      makeMetric('training_participants', 'Training Attendance — This Month', attendanceCount('training'), 0, 'agent attendances', `${trainingSessionIds.size} training session${trainingSessionIds.size === 1 ? '' : 's'} recorded with named participants this month.`),
-      makeMetric('huddle_attendance', 'Huddle Attendance — This Month', attendanceCount('huddle'), 0, 'agent attendances', 'QR scans record each participating agent for Tuesday and Thursday huddles.'),
-      makeMetric('role_play_attendance', 'Role Play / IDS Attendance — This Month', attendanceCount('role_play_ids'), 0, 'agent attendances', 'QR scans record each participating agent for Wednesday role play and New Agent IDS.'),
-      makeMetric('sales_meeting_attendance', 'Sales Meeting Attendance — This Month', attendanceCount('sales_meeting'), 0, 'agent attendances', 'Optional Wednesday sales meeting attendance is tracked from 9:00 to 10:00 AM without creating a mandatory attendance requirement.'),
       makeMetric('new_agent_follow_ups', 'New-Agent Follow-Ups — This Month', currentMonthActivityTotal('new_agent_follow_up'), plan.monthlyGoals.newAgentFollowUps, 'follow-ups', 'Log calls, meetings, or direct follow-up with new agents. Set the required monthly goal in Goals.'),
       makeMetric('call_nights_held', 'Call Nights Held', activities.filter(activity => activity.activityType === 'call_night').length, monthsElapsed, 'nights', 'Target is one completed call night each month.'),
       makeMetric('call_night_hours', 'Call Night Hours', activityTotal('call_night', 'durationHours'), plan.monthlyGoals.callNightHours * monthsElapsed, 'hours', `Target is ${plan.monthlyGoals.callNightHours} hours per month; log actual call-night hours.`),

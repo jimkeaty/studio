@@ -356,10 +356,6 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
               ['buyerSellerWorkshops', 'Buyer & Seller Workshops / Month'],
               ['networkingEvents', 'Qualifying Events / Month (YPN, Mortgage, Builder, RCA)'],
               ['ypnEventsScheduled', 'Scheduled YPN Events / Month'],
-              ['salesMeetings', 'Sales Meetings / Month (optional agent attendance Wed 9:00–10:00 AM)'],
-              ['huddles', 'Team Huddles / Month (required Tue & Thu 8:30–9:00 AM)'],
-              ['rolePlaySessions', 'Role Play / New Agent IDS / Month (required Wed 10:00–11:00 AM)'],
-              ['trainingSessions', 'Training Sessions Led / Month (optional agent attendance Tue & Thu 9:00–10:00 AM)'],
               ['newAgentFollowUps', 'New-Agent Follow-Ups / Month'],
             ].map(([key, label]) => <div key={key} className="space-y-1.5"><Label>{label}</Label><Input type="number" min="0" value={(goalForm as any)[key]} onChange={event => setGoalForm(form => ({ ...form, [key]: event.target.value }))} /></div>)}
           </div>

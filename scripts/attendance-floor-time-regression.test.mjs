@@ -128,15 +128,15 @@ test('agent and staff interfaces retain QR, secure floor-time, and training-rost
   assert.match(navigation, /Attendance & Floor Time/);
 });
 
-test('Director reporting retains attendance, training, and new-agent follow-up tracking', async () => {
+test('Director reporting preserves routine activity history without scoring director-entered attendance', async () => {
   const route = await readFile(new URL('../src/app/api/broker/dad-report-card/route.ts', import.meta.url), 'utf8');
   assert.match(route, /'sales_meeting'/);
   assert.match(route, /'huddle'/);
   assert.match(route, /'role_play_ids'/);
   assert.match(route, /'training_session'/);
   assert.match(route, /'new_agent_follow_up'/);
-  assert.match(route, /Huddle Attendance — This Month/);
-  assert.match(route, /Role Play \/ IDS Attendance — This Month/);
-  assert.match(route, /Training Attendance — This Month/);
-  assert.match(route, /Sales Meeting Attendance — This Month/);
+  assert.doesNotMatch(route, /Huddle Attendance — This Month/);
+  assert.doesNotMatch(route, /Role Play \/ IDS Attendance — This Month/);
+  assert.doesNotMatch(route, /Training Attendance — This Month/);
+  assert.doesNotMatch(route, /Sales Meeting Attendance — This Month/);
 });
