@@ -66,6 +66,9 @@ const GRADE_STYLE: Record<string, string> = {
   D: 'border-orange-200 bg-orange-50 text-orange-700',
   F: 'border-red-200 bg-red-50 text-red-700',
   '—': 'border-slate-200 bg-slate-50 text-slate-600',
+  'Below Minimum': 'border-red-200 bg-red-50 text-red-700',
+  'Meets Minimum': 'border-amber-200 bg-amber-50 text-amber-800',
+  'Meets Target': 'border-emerald-200 bg-emerald-50 text-emerald-700',
 };
 
 function labelDate(date: string | null | undefined) {
@@ -338,7 +341,7 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
                   <div className="space-y-2">
                     {data.activities.slice(0, 20).map((activity: any) => (
                       <div key={activity.id} className="flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-                        <div><p className="font-medium">{ACTIVITY_LABELS[activity.activityType] || activity.activityType}{activity.title ? ` — ${activity.title}` : ''}</p><p className="mt-0.5 text-xs text-muted-foreground">{labelDate(activity.occurredOn)} · {activity.activityType === 'call_night' ? `${activity.durationHours} hours` : `${activity.count} ${activity.count === 1 ? 'activity' : 'activities'}`}{activity.relatedAgentName ? ` · ${activity.relatedAgentName}` : ''}{activity.organization ? ` · ${activity.organization}` : ''}{activity.relationshipPurpose ? ` · ${activity.relationshipPurpose === 'retention' ? 'Retention' : 'Recruiting'}` : ''}{activity.notes ? ` · ${activity.notes}` : ''}</p></div>
+                        <div><p className="font-medium">{ACTIVITY_LABELS[activity.activityType] || activity.activityType}{activity.title ? ` — ${activity.title}` : ''}</p><p className="mt-0.5 text-xs text-muted-foreground">{labelDate(activity.occurredOn)} · {activity.activityType === 'call_night' ? `${activity.durationHours} hours${Number(activity.durationHours || 0) < 3 ? ' · Short event (under 180 minutes)' : ' · Valid call night'}` : `${activity.count} ${activity.count === 1 ? 'activity' : 'activities'}`}{activity.relatedAgentName ? ` · ${activity.relatedAgentName}` : ''}{activity.organization ? ` · ${activity.organization}` : ''}{activity.relationshipPurpose ? ` · ${activity.relationshipPurpose === 'retention' ? 'Retention' : 'Recruiting'}` : ''}{activity.notes ? ` · ${activity.notes}` : ''}</p></div>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-600" onClick={() => deleteActivity(activity.id)} aria-label="Remove activity"><Trash2 className="h-3.5 w-3.5" /></Button>
                       </div>
                     ))}
@@ -357,7 +360,6 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
             <div className="space-y-1.5 sm:col-span-2"><Label>Named Director of Agent Development</Label><Input value={goalForm.directorName} onChange={event => setGoalForm(form => ({ ...form, directorName: event.target.value }))} /><p className="text-xs text-muted-foreground">This report card and score are assigned to this named Director. Staff may document activities, but the score remains Ethan’s responsibility.</p></div>
             {[
               ['teamAppointments', 'Team Appointments / Month'],
-              ['callNightHours', 'Call Night Hours / Month'],
               ['recruitingWorkshops', 'Recruiting Workshops / Month'],
               ['buyerSellerWorkshops', 'Buyer & Seller Workshops / Month'],
               ['networkingEvents', 'Qualifying Events / Month (YPN, Mortgage, Builder, RCA)'],

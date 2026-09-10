@@ -347,6 +347,14 @@ export async function GET(req: NextRequest) {
     const currentMonthActivityTotal = (type: string) => currentMonthActivities
       .filter(activity => activity.activityType === type)
       .reduce((total, activity) => total + sanitizeNumber(activity.count, 1), 0);
+    const callNightsThisMonth = currentMonthActivities.filter(activity => activity.activityType === 'call_night');
+    const validCallNightsThisMonth = callNightsThisMonth.filter(activity => sanitizeNumber(activity.durationHours, 0) >= 3);
+    const shortCallNightsThisMonth = callNightsThisMonth.filter(activity => sanitizeNumber(activity.durationHours, 0) < 3);
+    const callNightStatus = validCallNightsThisMonth.length >= 2
+      ? { grade: 'Meets Target', pct: 100 }
+      : validCallNightsThisMonth.length === 1
+        ? { grade: 'Meets Minimum', pct: 50 }
+        : { grade: 'Below Minimum', pct: 0 };
     // Recruiting-pipeline contact history is the canonical prospect follow-up
     // system. It deliberately does not read or write new-agent activity records,
     // and retains contacts for every pipeline status, including legacy test-agent
@@ -367,8 +375,18 @@ export async function GET(req: NextRequest) {
       makeMetric('recruiting_follow_ups_daily', 'Recruiting Prospect Follow-Ups — Today', recruitingFollowUpsFor(reportEnd, reportEnd), plan.monthlyGoals.recruitingFollowUpsDaily, 'completed contacts', 'Completed call, email, text, or meeting entries from the Recruiting Pipeline. Candidate stage does not affect the count; configure an approved daily target in Goals.'),
       makeMetric('recruiting_follow_ups_weekly', 'Recruiting Prospect Follow-Ups — This Week', recruitingFollowUpsFor(weekStart, weekEnd), plan.monthlyGoals.recruitingFollowUpsWeekly, 'completed contacts', 'Completed call, email, text, or meeting entries from the Recruiting Pipeline. Configure an approved weekly target in Goals.'),
       makeMetric('recruiting_follow_ups_monthly', 'Recruiting Prospect Follow-Ups — This Month', recruitingFollowUpsFor(monthStart, monthEnd), plan.monthlyGoals.recruitingFollowUpsMonthly, 'completed contacts', 'Completed call, email, text, or meeting entries from the Recruiting Pipeline. Configure an approved monthly target in Goals.'),
-      makeMetric('call_nights_held', 'Call Nights Held', activities.filter(activity => activity.activityType === 'call_night').length, monthsElapsed, 'nights', 'Target is one completed call night each month.'),
-      makeMetric('call_night_hours', 'Call Night Hours', activityTotal('call_night', 'durationHours'), plan.monthlyGoals.callNightHours * monthsElapsed, 'hours', `Target is ${plan.monthlyGoals.callNightHours} hours per month; log actual call-night hours.`),
+      {
+        key: 'valid_call_nights_monthly',
+        label: 'Valid Call Nights — This Month',
+        actual: validCallNightsThisMonth.length,
+        goal: 2,
+        unit: 'valid nights',
+        detail: shortCallNightsThisMonth.length
+          ? `${shortCallNightsThisMonth.length} logged call night${shortCallNightsThisMonth.length === 1 ? '' : 's'} under 180 minutes ${shortCallNightsThisMonth.length === 1 ? 'does' : 'do'} not count toward the monthly minimum.`
+          : 'A valid call night is at least 180 minutes. One valid night meets minimum; two or more meet target.',
+        missingAgents: [],
+        ...callNightStatus,
+      },
       makeMetric('recruiting_workshops', 'Recruiting Workshops', activityTotal('recruiting_workshop'), plan.monthlyGoals.recruitingWorkshops * monthsElapsed, 'workshops', `Target is ${plan.monthlyGoals.recruitingWorkshops} recruiting workshop(s) per month.`),
       makeMetric('buyer_seller_workshops', 'Buyer & Seller Workshops', activityTotal('buyer_seller_workshop'), plan.monthlyGoals.buyerSellerWorkshops * monthsElapsed, 'workshops', `Target is ${plan.monthlyGoals.buyerSellerWorkshops} buyer/seller workshop(s) per month.`),
       makeMetric('ypn_events', 'YPN Events Attended', activityTotal('ypn_event'), plan.monthlyGoals.ypnEventsScheduled * monthsElapsed, 'events', 'Set the number of scheduled YPN events in Goals; attendance is expected at every scheduled event.'),
