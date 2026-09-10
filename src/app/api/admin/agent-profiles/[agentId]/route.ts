@@ -5,6 +5,8 @@ import type { AgentProfileInput, AgentTier, TeamMemberCompMode, TeamMemberOverri
 import type { MemberPlan, MemberPlanBand, TeamMembership, TeamPlan } from '@/lib/teams/types';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getTeamDefaultTiers } from '@/lib/commissions/teamTemplates';
+import { centralParts } from '@/lib/attendance/rules';
+import { lifecycleYmd } from '@/lib/agents/lifecycle';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -185,6 +187,10 @@ function normalizeInput(body: AgentProfileInput) {
   const referringAgentId = body.referringAgentId?.trim() || null;
   const referringAgentDisplayNameSnapshot =
     body.referringAgentDisplayNameSnapshot?.trim() || null;
+  const inactiveDate = body.inactiveDate?.trim() || null;
+  const endDate = body.endDate?.trim() || null;
+  const effectiveDeparture = lifecycleYmd(endDate);
+  const status = effectiveDeparture && effectiveDeparture <= centralParts().date ? 'out' : body.status;
 
   return {
     firstName: body.firstName.trim(),
@@ -193,7 +199,7 @@ function normalizeInput(body: AgentProfileInput) {
     email: body.email?.trim() || null,
     phone: body.phone?.trim() || null,
     office: body.office?.trim() || null,
-    status: body.status,
+    status,
     startDate: body.startDate.trim(),
 
     agentType: body.agentType,
@@ -230,8 +236,8 @@ function normalizeInput(body: AgentProfileInput) {
     gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
     isDemoAccount: body.isDemoAccount === true,
-    inactiveDate: body.inactiveDate?.trim() || null,
-    endDate: body.endDate?.trim() || null,
+    inactiveDate,
+    endDate,
   };
 }
 

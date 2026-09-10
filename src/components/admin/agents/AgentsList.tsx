@@ -15,7 +15,14 @@ type AgentRow = {
   primaryTeamId?: string | null;
   anniversaryMonth?: number;
   anniversaryDay?: number;
+  lifecycleStatus?: 'active' | 'inactive' | 'out';
+  lifecycleDate?: string | null;
+  lifecycleDateConflict?: boolean;
+  lifecycleConflictMessage?: string | null;
+  lifecycleMissingEffectiveDate?: boolean;
 };
+
+type LifecycleSummary = { active: number; inactive: number; out: number; departedLost: number; total: number };
 
 type DuplicateGroup = {
   agentId: string;
@@ -59,6 +66,8 @@ export default function AgentsList() {
   const [mergeResults, setMergeResults] = useState<string[]>([]);
   const [deletingAgent, setDeletingAgent] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [lifecycleScope, setLifecycleScope] = useState<'active' | 'archive'>('active');
+  const [lifecycleSummary, setLifecycleSummary] = useState<LifecycleSummary>({ active: 0, inactive: 0, out: 0, departedLost: 0, total: 0 });
 
   async function getToken() {
     const auth = getFirebaseAuth();
@@ -86,7 +95,7 @@ export default function AgentsList() {
 
         const token = await currentUser.getIdToken();
 
-        const response = await fetch('/api/admin/agent-profiles', {
+        const response = await fetch(`/api/admin/agent-profiles?scope=${lifecycleScope}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -100,6 +109,7 @@ export default function AgentsList() {
 
         if (!isMounted) return;
         setAgents(Array.isArray(result.agents) ? result.agents : []);
+        setLifecycleSummary(result.summary || { active: 0, inactive: 0, out: 0, departedLost: 0, total: 0 });
       } catch (err: any) {
         if (!isMounted) return;
         setErrorMessage(err?.message || 'Failed to load agent profiles.');
@@ -114,7 +124,7 @@ export default function AgentsList() {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [lifecycleScope]);
 
   async function handleFindDuplicates() {
     setLoadingDuplicates(true);
@@ -233,7 +243,7 @@ export default function AgentsList() {
         <div>
           <h1 className="text-2xl font-semibold">Agents</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Manage agent profiles, team assignments, and commission setup.
+            {lifecycleScope === 'active' ? 'Manage current active agent profiles, team assignments, and commission setup.' : 'Review archived Inactive and Out profiles without removing historical relationships.'}
           </p>
         </div>
 
@@ -259,6 +269,15 @@ export default function AgentsList() {
           </Link>
         </div>
       </div>
+
+      <section aria-label="Agent lifecycle summary" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <button type="button" onClick={() => setLifecycleScope('active')} className={`rounded-lg border px-4 py-3 text-left ${lifecycleScope === 'active' ? 'border-green-400 bg-green-50' : 'bg-white'}`}><p className="text-xs font-medium text-gray-500">Active Agents</p><p className="mt-1 text-2xl font-semibold text-green-700">{lifecycleSummary.active}</p></button>
+        <button type="button" onClick={() => setLifecycleScope('archive')} className={`rounded-lg border px-4 py-3 text-left ${lifecycleScope === 'archive' ? 'border-amber-400 bg-amber-50' : 'bg-white'}`}><p className="text-xs font-medium text-gray-500">Inactive Agents</p><p className="mt-1 text-2xl font-semibold text-amber-700">{lifecycleSummary.inactive}</p></button>
+        <button type="button" onClick={() => setLifecycleScope('archive')} className={`rounded-lg border px-4 py-3 text-left ${lifecycleScope === 'archive' ? 'border-rose-400 bg-rose-50' : 'bg-white'}`}><p className="text-xs font-medium text-gray-500">Out Agents</p><p className="mt-1 text-2xl font-semibold text-rose-700">{lifecycleSummary.out}</p></button>
+        <button type="button" onClick={() => setLifecycleScope('archive')} className={`rounded-lg border px-4 py-3 text-left ${lifecycleScope === 'archive' ? 'border-slate-500 bg-slate-100' : 'bg-white'}`}><p className="text-xs font-medium text-gray-500">Departed/Lost Agents <span className="font-normal">(Inactive + Out)</span></p><p className="mt-1 text-2xl font-semibold text-slate-800">{lifecycleSummary.departedLost}</p></button>
+      </section>
+
+      {lifecycleScope === 'active' ? <button type="button" onClick={() => setLifecycleScope('archive')} className="w-fit text-sm font-medium text-blue-700 underline">View Departed/Lost Agents</button> : <button type="button" onClick={() => setLifecycleScope('active')} className="w-fit text-sm font-medium text-blue-700 underline">Return to Active Agents</button>}
 
       {/* ── Search Bar ──────────────────────────────────────────────────── */}
       <div className="relative">
@@ -439,7 +458,7 @@ export default function AgentsList() {
             ];
             const gradientIndex = (agent.displayName || '').charCodeAt(0) % gradients.length;
             const gradient = gradients[gradientIndex];
-            const isActive = agent.status === 'active';
+            const isActive = agent.lifecycleStatus === 'active';
             return (
               <div key={agent.agentId} className="rounded-xl border bg-white shadow-sm overflow-hidden hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col">
                 {/* Gradient header */}
@@ -460,7 +479,7 @@ export default function AgentsList() {
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                       isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                     }`}>
-                      {isActive ? '● Active' : '○ Inactive'}
+                      {isActive ? '● Active' : agent.lifecycleStatus === 'out' ? '● Out' : '○ Inactive'}
                     </span>
                     <span className="text-[11px] text-gray-500">{formatAgentType(agent.agentType, agent.teamRole)}</span>
                   </div>
@@ -470,6 +489,8 @@ export default function AgentsList() {
                   <p className="text-[11px] text-gray-400">
                     Anniversary: {formatAnniversary(agent.anniversaryMonth, agent.anniversaryDay)}
                   </p>
+                  {!isActive && <p className="text-[11px] text-amber-700">{agent.lifecycleStatus === 'out' ? 'Departure / end date' : 'Inactive date'}: {agent.lifecycleDate || 'Missing — correct profile'}</p>}
+                  {agent.lifecycleDateConflict && <p className="text-[11px] text-red-700">{agent.lifecycleConflictMessage}</p>}
                 </div>
                 {/* Actions */}
                 <div className="border-t px-3 py-2 flex items-center gap-2 bg-gray-50/50">
@@ -486,14 +507,13 @@ export default function AgentsList() {
                   >
                     Edit
                   </Link>
-                  <span className="text-gray-200">|</span>
-                  <button
+                  {isActive && <><span className="text-gray-200">|</span><button
                     onClick={() => handleDeleteAgent(agent.agentId, agent.displayName)}
                     disabled={deletingAgent === agent.agentId}
                     className="flex-1 text-center text-[11px] font-medium text-red-500 hover:text-red-700 hover:underline disabled:opacity-50"
                   >
                     {deletingAgent === agent.agentId ? '...' : 'Delete'}
-                  </button>
+                  </button></>}
                 </div>
               </div>
             );

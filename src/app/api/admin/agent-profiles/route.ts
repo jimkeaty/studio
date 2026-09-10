@@ -6,6 +6,8 @@ import type { AgentProfile, AgentProfileInput, AgentTier, TeamMemberCompMode, Te
 import type { MemberPlan, MemberPlanBand, TeamMembership, TeamPlan } from '@/lib/teams/types';
 import { isAdminLike, isStaff } from '@/lib/auth/staffAccess';
 import { getTeamDefaultTiers } from '@/lib/commissions/teamTemplates';
+import { centralParts } from '@/lib/attendance/rules';
+import { classifyAgentLifecycle, lifecyclePopulation, lifecycleYmd } from '@/lib/agents/lifecycle';
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
@@ -201,6 +203,10 @@ function normalizeInput(body: AgentProfileInput) {
   const referringAgentId = body.referringAgentId?.trim() || null;
   const referringAgentDisplayNameSnapshot =
     body.referringAgentDisplayNameSnapshot?.trim() || null;
+  const inactiveDate = body.inactiveDate?.trim() || null;
+  const endDate = body.endDate?.trim() || null;
+  const effectiveDeparture = lifecycleYmd(endDate);
+  const status = effectiveDeparture && effectiveDeparture <= centralParts().date ? 'out' : body.status;
 
   return {
     firstName: body.firstName.trim(),
@@ -209,7 +215,7 @@ function normalizeInput(body: AgentProfileInput) {
     email: body.email?.trim() || null,
     phone: body.phone?.trim() || null,
     office: body.office?.trim() || null,
-    status: body.status,
+    status,
     startDate: body.startDate.trim(),
 
     agentType: body.agentType,
@@ -245,8 +251,8 @@ function normalizeInput(body: AgentProfileInput) {
         : null,
     gracePeriodEnabled: body.gracePeriodEnabled === true,
     notes: body.notes?.trim() || null,
-    inactiveDate: body.inactiveDate?.trim() || null,
-    endDate: body.endDate?.trim() || null,
+    inactiveDate,
+    endDate,
   };
 }
 
@@ -378,18 +384,41 @@ export async function GET(req: NextRequest) {
     // TC-only users need read access to the agent list so they can pick an agent to impersonate
     await requireStaff(req);
 
+    const { searchParams } = new URL(req.url);
+    const scope = searchParams.get('scope') === 'archive' ? 'archive' : searchParams.get('scope') === 'all' ? 'all' : 'active';
+    const requestedAsOf = lifecycleYmd(searchParams.get('asOf'));
+    const asOfDate = requestedAsOf || centralParts().date;
     const snap = await adminDb
       .collection('agentProfiles')
       .orderBy('displayName', 'asc')
       .limit(500)
       .get();
 
-    const agents = snap.docs.map((doc) => doc.data());
+    const profiles = snap.docs.map((doc) => ({ agentId: String(doc.data().agentId || doc.id), ...doc.data() } as Record<string, any>));
+    const population = lifecyclePopulation(profiles, asOfDate);
+    const agents = profiles
+      .map(profile => {
+        const lifecycle = classifyAgentLifecycle(profile, asOfDate);
+        return {
+          ...profile,
+          profileStatus: String(profile.status || 'active').toLowerCase(),
+          status: lifecycle.status,
+          lifecycleStatus: lifecycle.status,
+          lifecycleDate: lifecycle.applicableDate,
+          lifecycleDateConflict: lifecycle.dateConflict,
+          lifecycleConflictMessage: lifecycle.conflictMessage,
+          lifecycleMissingEffectiveDate: lifecycle.missingEffectiveDate,
+        };
+      })
+      .filter(profile => scope === 'all' || (scope === 'archive' ? profile.lifecycleStatus !== 'active' : profile.lifecycleStatus === 'active'));
 
     return NextResponse.json({
       ok: true,
+      scope,
+      asOfDate,
       count: agents.length,
       agents,
+      summary: { ...population, departedLost: population.inactive + population.out, total: population.active + population.inactive + population.out },
     });
   } catch (err: any) {
     if (err?.message === 'UNAUTHORIZED') {

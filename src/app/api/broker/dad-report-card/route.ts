@@ -3,10 +3,10 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { centralParts } from '@/lib/attendance/rules';
 import { calculateOperationalMeetingEligibility } from '@/lib/agent-development/operationalMeetingEligibility';
+import { classifyAgentLifecycle } from '@/lib/agents/lifecycle';
 import { assessTeamAppointmentThreshold, TEAM_APPOINTMENT_THRESHOLDS } from '@/lib/agent-development/teamAppointmentThresholds';
 import { calculateStartDatePacing, isValidReportCardEffectiveStart, resolveReportCardEffectiveStart, type GoalCadence } from '@/lib/report-cards/startDatePacing';
 
-const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
 const ACTIVITY_TYPES = new Set([
   'call_night',
   'recruiting_workshop',
@@ -278,12 +278,15 @@ export async function GET(req: NextRequest) {
           name: String(profile.displayName || profile.name || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || doc.id),
           startDate: isoDate(profile.startDate),
           status,
+          inactiveDate: isoDate(profile.inactiveDate),
+          endDate: isoDate(profile.endDate),
+          departureDate: isoDate(profile.departureDate),
           teamGroup: String(profile.teamGroup || ''),
           identityKeys: [doc.id, profile.agentId, profile.uid, profile.firebaseUid],
         };
       })
       .filter(agent => agent.startDate && agent.startDate <= reportEnd);
-    const agents = agentInputs.map(agent => ({ ...agent, active: !INACTIVE_STATUSES.has(agent.status) }));
+    const agents = agentInputs.map(agent => ({ ...agent, active: classifyAgentLifecycle(agent, reportEnd).status === 'active' }));
     const eligibility = calculateOperationalMeetingEligibility({
       agents: agentInputs,
       transactions: [

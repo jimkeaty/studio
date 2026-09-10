@@ -8,24 +8,21 @@ const profileUpdateRoutePath = new URL('../src/app/api/admin/agent-profiles/[age
 const activeChartPath = new URL('../src/components/dashboard/broker/ActiveAgentsChart.tsx', import.meta.url);
 const recruitingMetricsPath = new URL('../src/app/api/broker/recruiting-metrics/route.ts', import.meta.url);
 
-test('all inactive profiles are excluded from active-agent reporting regardless of end date', async () => {
+test('active-agent reporting uses effective lifecycle dates instead of the later profile-status timestamp', async () => {
   const route = await readFile(routePath, 'utf8');
 
   assert.match(route, /excludeFromActiveCount: boolean/);
-  assert.match(route, /const excludeFromActiveCount = INACTIVE_STATUSES\.has\(profileStatus\)/);
-  assert.match(route, /if \(ar\.excludeFromActiveCount\) continue;/);
-  assert.match(route, /if \(ar\.excludeFromActiveCount\) return false;/);
-  assert.match(route, /even when the person remains licensed with the brokerage/);
+  assert.match(route, /classifyAgentLifecycle/);
+  assert.match(route, /monthEndYmd/);
+  assert.match(route, /currentAsOfDate/);
 });
 
-test('only confirmed departure statuses with an end date count as departures', async () => {
+test('only effective departure dates classify agents as Out and count as departures', async () => {
   const route = await readFile(routePath, 'utf8');
 
-  assert.match(route, /const DEPARTURE_STATUSES = new Set\(\['out', 'terminated', 'churned'\]\)/);
-  assert.match(route, /if \(!DEPARTURE_STATUSES\.has\(ar\.status\)\) return false/);
-  assert.match(route, /if \(endDate\) \{/);
-  assert.match(route, /endMonth = toYearMonth\(addMonths\(ed, 1\)\)/);
-  assert.match(route, /hasExplicitEndDate = true/);
+  assert.match(route, /lifecycle\.status !== 'out'/);
+  assert.match(route, /lifecycle\.departureDate/);
+  assert.match(route, /departureYM\.startsWith/);
 });
 
 test('inactive-agent review list and inactive-date capture remain distinct from departure dates', async () => {
@@ -36,12 +33,13 @@ test('inactive-agent review list and inactive-date capture remain distinct from 
   ]);
 
   assert.match(route, /const inactiveAgents = agentRecords/);
-  assert.match(route, /\.filter\(ar => ar\.status === 'inactive'\)/);
+  assert.match(route, /classifyAgentLifecycle\(ar, currentAsOfDate\)\.status === 'inactive'/);
   assert.match(route, /inactiveDate: ar\.inactiveDate/);
   assert.match(form, /Inactive Date/);
-  assert.match(form, /This does not count as a departure/);
+  assert.match(form, /this does not count as a departure unless an effective Departure/);
   assert.match(form, /Departure \/ End Date/);
-  assert.match(updateRoute, /inactiveDate: body\.inactiveDate\?\.trim\(\) \|\| null/);
+  assert.match(updateRoute, /const inactiveDate = body\.inactiveDate\?\.trim\(\) \|\| null/);
+  assert.match(updateRoute, /const status = effectiveDeparture/);
   assert.match(updateRoute, /inactiveDate: normalized\.inactiveDate/);
 });
 

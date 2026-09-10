@@ -1,4 +1,5 @@
 import { addDays, centralParts } from '@/lib/attendance/rules';
+import { classifyAgentLifecycle } from '@/lib/agents/lifecycle';
 
 export type OperationalMeetingCategory =
   | 'new_agent_90_day'
@@ -9,6 +10,9 @@ export type OperationalMeetingAgentInput = {
   agentId: string;
   name: string;
   status?: string | null;
+  inactiveDate?: string | null;
+  endDate?: string | null;
+  departureDate?: string | null;
   teamGroup?: string | null;
   startDate?: string | null;
   identityKeys?: Array<string | null | undefined>;
@@ -46,7 +50,6 @@ export type OperationalMeetingEligibilityResult = {
   excluded: Array<{ agentId: string; name: string; reason: string }>;
 };
 
-const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
 const OPERATIONAL_TEAM_GROUPS = new Set(['cgl', 'charles_ditch_team']);
 
 function normalizeYmd(value: unknown): string | null {
@@ -65,10 +68,6 @@ function daysInclusive(start: string, end: string): number {
   const startMs = Date.parse(`${start}T00:00:00Z`);
   const endMs = Date.parse(`${end}T00:00:00Z`);
   return Math.floor((endMs - startMs) / 86_400_000) + 1;
-}
-
-function isActive(status: string | null | undefined): boolean {
-  return !INACTIVE_STATUSES.has(String(status || 'active').trim().toLowerCase());
 }
 
 function transactionActivity(
@@ -122,7 +121,7 @@ export function calculateOperationalMeetingEligibility(input: {
   for (const agent of input.agents) {
     const startDate = normalizeYmd(agent.startDate);
     const normalizedTeamGroup = String(agent.teamGroup || '').trim().toLowerCase();
-    if (!isActive(agent.status)) {
+    if (classifyAgentLifecycle(agent, asOfDate).status !== 'active') {
       excluded.push({ agentId: agent.agentId, name: agent.name, reason: 'inactive_lifecycle_status' });
       continue;
     }

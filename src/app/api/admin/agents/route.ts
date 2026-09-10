@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { centralParts } from '@/lib/attendance/rules';
+import { classifyAgentLifecycle } from '@/lib/agents/lifecycle';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -36,63 +38,27 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url);
     const source = url.searchParams.get('source') || 'profiles';
+    const includeArchived = url.searchParams.get('includeArchived') === 'true';
 
     if (source === 'profiles') {
-      // Pull from agentProfiles — canonical list, no duplicates
-      const snap = await adminDb.collection('agentProfiles')
-        .where('status', '==', 'active')
-        .limit(5000)
-        .get();
-
-      const agents: { agentId: string; agentName: string }[] = [];
-
+      // Pull from canonical profiles. Operational callers get Active only; the
+      // Transaction Ledger explicitly opts into archived research results.
+      const snap = await adminDb.collection('agentProfiles').limit(5000).get();
+      const asOfDate = centralParts().date;
+      const agents: Array<{ agentId: string; agentName: string; lifecycleStatus: 'active' | 'inactive' | 'out'; lifecycleDate: string | null }> = [];
       for (const doc of snap.docs) {
         const data = doc.data() || {};
-        const agentId = doc.id || String(data.agentId || '').trim();
+        const agentId = String(data.agentId || doc.id).trim();
         if (!agentId) continue;
-
-        const agentName =
-          String(data.displayName || data.name || data.agentName || '').trim() ||
-          agentId;
-
-        agents.push({ agentId, agentName });
-      }
-
-      // Also include grace_period agents in the active list
-      const graceSnap = await adminDb.collection('agentProfiles')
-        .where('status', '==', 'grace_period')
-        .limit(5000)
-        .get();
-
-      for (const doc of graceSnap.docs) {
-        const data = doc.data() || {};
-        const agentId = doc.id || String(data.agentId || '').trim();
-        if (!agentId) continue;
-        if (agents.some(a => a.agentId === agentId)) continue;
-        const agentName =
-          String(data.displayName || data.name || data.agentName || '').trim() || agentId;
-        agents.push({ agentId, agentName });
-      }
-
-      // Also include inactive/out profiles so we don't lose anyone
-      const inactiveSnap = await adminDb.collection('agentProfiles')
-        .where('status', 'in', ['inactive', 'out'])
-        .limit(5000)
-        .get();
-
-      for (const doc of inactiveSnap.docs) {
-        const data = doc.data() || {};
-        const agentId = doc.id || String(data.agentId || '').trim();
-        if (!agentId) continue;
-        // Skip if already in active list
-        if (agents.some(a => a.agentId === agentId)) continue;
-
-        const agentName =
-          String(data.displayName || data.name || data.agentName || '').trim() ||
-          agentId;
-
-        const statusLabel = String(data.status || 'inactive');
-        agents.push({ agentId, agentName: `${agentName} (${statusLabel})` });
+        const lifecycle = classifyAgentLifecycle(data, asOfDate);
+        if (!includeArchived && lifecycle.status !== 'active') continue;
+        const displayName = String(data.displayName || data.name || data.agentName || '').trim() || agentId;
+        agents.push({
+          agentId,
+          agentName: lifecycle.status === 'active' ? displayName : `${displayName} (${lifecycle.status === 'out' ? 'Out' : 'Inactive'})`,
+          lifecycleStatus: lifecycle.status,
+          lifecycleDate: lifecycle.applicableDate,
+        });
       }
 
       // Exclude demo accounts from the roster
@@ -103,7 +69,7 @@ export async function GET(req: NextRequest) {
 
       visibleAgents.sort((a, b) => a.agentName.localeCompare(b.agentName));
 
-      return NextResponse.json({ ok: true, source: 'profiles', count: visibleAgents.length, agents: visibleAgents });
+      return NextResponse.json({ ok: true, source: 'profiles', includeArchived, asOfDate, count: visibleAgents.length, agents: visibleAgents });
     }
 
     // Fallback: agentYearRollups

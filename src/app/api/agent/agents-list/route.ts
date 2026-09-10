@@ -5,6 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
+import { centralParts } from '@/lib/attendance/rules';
+import { isLifecycleActive } from '@/lib/agents/lifecycle';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -18,15 +20,13 @@ export async function GET(req: NextRequest) {
     // Verify the token — any valid Firebase user can access this
     await adminAuth.verifyIdToken(token);
 
-    const snap = await adminDb
-      .collection('agentProfiles')
-      .where('status', '==', 'active')
-      .limit(500)
-      .get();
+    const snap = await adminDb.collection('agentProfiles').limit(500).get();
+    const asOfDate = centralParts().date;
 
     const agents: { agentId: string; agentName: string }[] = [];
     for (const doc of snap.docs) {
       const d = doc.data() || {};
+      if (!isLifecycleActive(d, asOfDate)) continue;
       const agentId = (d.agentId as string) || doc.id;
       const agentName =
         (d.agentName as string) ||

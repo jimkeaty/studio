@@ -223,12 +223,12 @@ export default function AdminTransactionLedgerPage() {
     if (!user) return;
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/admin/agents', {
+      const res = await fetch('/api/admin/agents?includeArchived=true', {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (data.ok && data.agents) {
-        setAllAgents(data.agents.map((a: any) => ({ id: a.uid || a.id, displayName: a.displayName || a.name || a.email })));
+        setAllAgents(data.agents.map((a: any) => ({ id: a.agentId || a.uid || a.id, displayName: a.agentName || a.displayName || a.name || a.email })));
       }
     } catch { /* ignore */ }
   }, [user]);

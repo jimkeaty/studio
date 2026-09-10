@@ -56,8 +56,10 @@ test('SBUSA-001 baseline captures the current sources that later queue tasks mus
     readFile(recruitingPage, 'utf8'),
   ]);
 
-  // SBUSA-011: ordinary selectors currently append inactive and out profiles.
-  assert.match(selector, /where\('status', 'in', \['inactive', 'out'\]\)/);
+  // SBUSA-011: ordinary selectors use one lifecycle-aware active scope; the
+  // Transaction Ledger opts in explicitly when historical research is needed.
+  assert.match(selector, /includeArchived/);
+  assert.match(selector, /classifyAgentLifecycle/);
   // SBUSA-002: the report card now uses the canonical rolling 60-day eligibility service.
   assert.match(dad, /calculateOperationalMeetingEligibility/);
   assert.match(dad, /No Production or Pending in Last 60 Days — This Month/);

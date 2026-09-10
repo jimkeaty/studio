@@ -10,6 +10,8 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { format, addMonths } from 'date-fns';
 import type admin from 'firebase-admin';
+import { centralParts } from '@/lib/attendance/rules';
+import { classifyAgentLifecycle } from '@/lib/agents/lifecycle';
 
 function jsonError(s: number, e: string) {
   return NextResponse.json({ ok: false, error: e }, { status: s });
@@ -42,6 +44,11 @@ function parseDate(raw: admin.firestore.Timestamp | string | undefined | null): 
 /** Returns YYYY-MM string for a date */
 function toYearMonth(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthEndYmd(ym: string): string {
+  const [year, month] = ym.split('-').map(Number);
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 }
 
 /**
@@ -216,17 +223,12 @@ export async function GET(req: NextRequest) {
       startDate: string | null;
       inactiveDate: string | null;
       endDate: string | null;
+      departureDate: string | null;
       status: string;
       teamGroup: string | null;
       gracePeriodEnabled: boolean;
       graceEndMonth: string | null; // YYYY-MM when 90-day grace ends
     };
-
-    // Statuses that mean the agent is no longer active at the brokerage
-    const INACTIVE_STATUSES = new Set(['inactive', 'out', 'terminated', 'churned']);
-    // Inactive agents can remain licensed or associated with the brokerage.
-    // Only an explicit departure status can enter the departures report.
-    const DEPARTURE_STATUSES = new Set(['out', 'terminated', 'churned']);
 
     const agentRecords: AgentRecord[] = agents.map((a: any) => {
       const agentId = a.agentId || a.id;
@@ -234,6 +236,7 @@ export async function GET(req: NextRequest) {
       const startDate = a.startDate || null;
       const inactiveDate = a.inactiveDate || null;
       const endDate = a.endDate || null;
+      const departureDate = a.departureDate || null;
       const profileStatus = String(a.status || a.agentStatus || '').toLowerCase();
       const firstDeal = firstDealMap.get(agentId) || null;
       // Start date determines when the person joins the brokerage; qualifying new
@@ -242,10 +245,9 @@ export async function GET(req: NextRequest) {
 
       let endMonth: string | null = null;
       let hasExplicitEndDate = false;
-      // A profile marked inactive is not an active agent for reporting purposes,
-      // even when the person remains licensed with the brokerage or has an old
-      // endDate recorded for historical reference.
-      const excludeFromActiveCount = INACTIVE_STATUSES.has(profileStatus);
+      // Keep the legacy field in the returned shape, but derive it from the
+      // lifecycle's effective date so a future status update is not applied early.
+      const excludeFromActiveCount = classifyAgentLifecycle(a, centralParts().date).status !== 'active';
       if (endDate) {
         // Explicit end date set — use it (agent drops out the month after)
         const ed = parseDate(endDate);
@@ -279,6 +281,7 @@ export async function GET(req: NextRequest) {
         startDate,
         inactiveDate,
         endDate,
+        departureDate,
         status: profileStatus,
         teamGroup: a.teamGroup || null,
         gracePeriodEnabled,
@@ -289,6 +292,7 @@ export async function GET(req: NextRequest) {
     // ── 6. Build monthly data using slots (supports calendar, rolling_back, rolling_forward) ──
     const now = new Date();
     const currentYM = toYearMonth(now);
+    const currentAsOfDate = centralParts(now).date;
 
     const months = slots.map((slot, i) => {
       const monthNum = slot.month;
@@ -300,9 +304,7 @@ export async function GET(req: NextRequest) {
       // Team breakdown
       const teamCounts: Record<string, number> = {};
       for (const ar of agentRecords) {
-        if (ar.excludeFromActiveCount) continue;
-        // Skip agents who have already departed
-        if (ar.endMonth && ar.endMonth <= ym) continue;
+        if (classifyAgentLifecycle(ar, monthEndYmd(ym)).status !== 'active') continue;
         // Agent must have an activationMonth (startDate or first deal) on or before this month
         if (!ar.activationMonth) continue;
         if (ar.activationMonth > ym) continue;
@@ -335,9 +337,8 @@ export async function GET(req: NextRequest) {
       // Deals closed in this month — count actual deal count per active agent
       let dealsInMonth = 0;
       for (const ar of agentRecords) {
-        if (ar.excludeFromActiveCount) continue;
+        if (classifyAgentLifecycle(ar, monthEndYmd(ym)).status !== 'active') continue;
         if (!ar.activationMonth || ar.activationMonth > ym) continue;
-        if (ar.endMonth && ar.endMonth <= ym) continue;
         if (ar.graceEndMonth && ar.graceEndMonth > ym) continue;
         const monthMap = dealCountMap.get(ar.agentId);
         if (monthMap) dealsInMonth += monthMap.get(ym) ?? 0;
@@ -378,10 +379,9 @@ export async function GET(req: NextRequest) {
         // Count established agents (past grace) in compare year month
         let total = 0;
         for (const ar of agentRecords) {
-          if (ar.excludeFromActiveCount) continue;
+          if (classifyAgentLifecycle(ar, monthEndYmd(ym)).status !== 'active') continue;
           if (!ar.activationMonth) continue;
           if (ar.activationMonth > ym) continue;
-          if (ar.endMonth && ar.endMonth <= ym) continue;
           // Apply grace period filter for compare year too
           const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
           if (!pastGrace) continue;
@@ -390,7 +390,7 @@ export async function GET(req: NextRequest) {
         // Count actual deals (not just agent-month presence)
         let dealsInMonth = 0;
         for (const ar of agentRecords) {
-          if (ar.excludeFromActiveCount) continue;
+          if (classifyAgentLifecycle(ar, monthEndYmd(ym)).status !== 'active') continue;
           const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
           if (!pastGrace) continue;
           const monthMap = dealCountMap.get(ar.agentId);
@@ -464,27 +464,22 @@ export async function GET(req: NextRequest) {
       }));
 
     const ytdDeparturesRecords = agentRecords.filter(ar => {
-      // An inactive agent remains separate from a confirmed departure, even if
-      // a legacy endDate was entered. Only explicit departure statuses count.
-      if (!DEPARTURE_STATUSES.has(ar.status)) return false;
-      if (!ar.hasExplicitEndDate || !ar.endDate) return false;
+      const lifecycle = classifyAgentLifecycle(ar, currentAsOfDate);
+      if (lifecycle.status !== 'out' || !lifecycle.departureDate) return false;
       // Only count as a departure if the agent was ever actually activated.
       if (!ar.activationMonth) return false;
-      // endMonth is intentionally one month after endDate for active-agent
-      // counts. Departure reporting, however, must use the actual endDate so
-      // a Dec. 2025 departure never appears in the 2026 departures list.
-      const departureDate = parseDate(ar.endDate);
+      const departureDate = parseDate(lifecycle.departureDate);
       if (!departureDate) return false;
       const departureYM = toYearMonth(departureDate);
       return departureYM.startsWith(String(year)) && departureYM <= currentYM;
     });
     const ytdDepartures = ytdDeparturesRecords.length;
     const ytdDeparturesList = ytdDeparturesRecords
-      .sort((a, b) => (a.endDate ?? '').localeCompare(b.endDate ?? ''))
+      .sort((a, b) => (classifyAgentLifecycle(a, currentAsOfDate).departureDate ?? '').localeCompare(classifyAgentLifecycle(b, currentAsOfDate).departureDate ?? ''))
       .map(ar => ({
         name: ar.name,
         agentId: ar.agentId,
-        endDate: ar.endDate,
+        endDate: classifyAgentLifecycle(ar, currentAsOfDate).departureDate,
         endMonth: ar.endMonth,
         teamGroup: ar.teamGroup,
       }));
@@ -492,12 +487,12 @@ export async function GET(req: NextRequest) {
     // Review list for profiles that are inactive but not confirmed departures.
     // Staff/admins can record Inactive Date when known without inflating departures.
     const inactiveAgents = agentRecords
-      .filter(ar => ar.status === 'inactive')
+      .filter(ar => classifyAgentLifecycle(ar, currentAsOfDate).status === 'inactive')
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(ar => ({
         agentId: ar.agentId,
         name: ar.name,
-        status: ar.status,
+        status: 'inactive',
         inactiveDate: ar.inactiveDate,
         startDate: ar.startDate,
         endDate: ar.endDate,
@@ -510,7 +505,7 @@ export async function GET(req: NextRequest) {
     for (let m = 1; m <= currentMonthData.month; m++) {
       const ym = `${year}-${String(m).padStart(2, '0')}`;
       for (const ar of agentRecords) {
-        if (ar.excludeFromActiveCount) continue;
+        if (classifyAgentLifecycle(ar, monthEndYmd(ym)).status !== 'active') continue;
         // Only count deals by established agents (past grace at that month)
         const pastGrace = !ar.graceEndMonth || ar.graceEndMonth <= ym;
         if (!pastGrace) continue;
@@ -537,9 +532,8 @@ export async function GET(req: NextRequest) {
     // No Deals Yet count: established agents (past grace) with no closed AND no pending deals.
     // Grace period agents are excluded — they are not yet counted as active.
     const noDealsYetCount = agentRecords.filter(ar => {
-      if (ar.excludeFromActiveCount) return false;
+      if (classifyAgentLifecycle(ar, currentAsOfDate).status !== 'active') return false;
       // Must be currently active (not departed)
-      if (ar.endMonth && ar.endMonth <= currentYM) return false;
       // Must have been activated
       if (!ar.activationMonth && !ar.startDate) return false;
       // Must be past grace period (grace period agents are excluded entirely)
@@ -553,10 +547,9 @@ export async function GET(req: NextRequest) {
 
     const currentGraceAgents = agentRecords
       .filter(ar =>
-        !ar.excludeFromActiveCount &&
+        classifyAgentLifecycle(ar, currentAsOfDate).status === 'active' &&
         Boolean(ar.graceEndMonth) &&
-        ar.graceEndMonth! > currentYM &&
-        (!ar.endMonth || ar.endMonth > currentYM)
+        ar.graceEndMonth! > currentYM
       )
       .sort((a, b) => (a.graceEndMonth ?? '').localeCompare(b.graceEndMonth ?? ''))
       .map(ar => ({
@@ -591,9 +584,8 @@ export async function GET(req: NextRequest) {
 
       // Agents graduating in this specific month
       const graduating = agentRecords.filter(ar => {
-        if (ar.excludeFromActiveCount) return false;
+        if (classifyAgentLifecycle(ar, monthEndYmd(projYM)).status !== 'active') return false;
         if (!ar.graceEndMonth) return false;
-        if (ar.endMonth && ar.endMonth <= projYM) return false;
         return ar.graceEndMonth === projYM;
       });
 
@@ -607,11 +599,10 @@ export async function GET(req: NextRequest) {
         return startYM > currentYM && startYM <= projYM;
       }).length;
       const graceGraduatingByProjection = agentRecords.filter(ar =>
-        !ar.excludeFromActiveCount &&
+        classifyAgentLifecycle(ar, monthEndYmd(projYM)).status === 'active' &&
         Boolean(ar.graceEndMonth) &&
         ar.graceEndMonth! > currentYM &&
-        ar.graceEndMonth! <= projYM &&
-        (!ar.endMonth || ar.endMonth > projYM)
+        ar.graceEndMonth! <= projYM
       ).length;
       const projectedTotal = currentActives + pipelineJoining + graceGraduatingByProjection;
 

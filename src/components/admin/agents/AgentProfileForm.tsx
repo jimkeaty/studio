@@ -65,7 +65,9 @@ export type AgentProfileFormValues = {
   defaultTransactionFee: number | string;
   gracePeriodEnabled: boolean;
   notes: string;
+  /** Effective date for archival as Inactive while the person remains associated. */
   inactiveDate: string;
+  /** Canonical effective departure date. An effective value takes precedence as Out. */
   endDate: string;
   isDemoAccount: boolean;
   tvNotificationPrefs: {
@@ -1397,7 +1399,7 @@ export default function AgentProfileForm({
               onChange={(e) => updateField('inactiveDate', e.target.value)}
               type="date"
             />
-            <p className="mt-1 text-xs text-muted-foreground">Use when the agent remains licensed or associated but is not active. This does not count as a departure.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Takes effect on this date for headcount and archive reporting. Use when the agent remains licensed or associated; this does not count as a departure unless an effective Departure / End Date exists.</p>
           </div>
 
           <div>
@@ -1408,7 +1410,7 @@ export default function AgentProfileForm({
               onChange={(e) => updateField('endDate', e.target.value)}
               type="date"
             />
-            <p className="mt-1 text-xs text-muted-foreground">Set only when the agent has actually left the brokerage. Do not use this for inactive-but-licensed agents.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Takes effect on this date and classifies the agent as Out. It takes precedence over an Inactive Date; do not use it for inactive-but-licensed agents.</p>
           </div>
         </div>
 
