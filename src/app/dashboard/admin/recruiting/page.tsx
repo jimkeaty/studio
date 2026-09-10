@@ -812,9 +812,11 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
   const fmtCurrency = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(0)}k` : `$${n.toFixed(0)}`;
 
-  // First-year tracker agents: grace period + first-year (day 0-365), sorted by trackerPriority
-  const firstYearTrackerAgents = agents
-    .filter((a: any) => a.isFirstYearAgent === true)
+  // SBUSA-015: the roster's new-agent tracker is intentionally limited to the
+  // active canonical 90-day grace cohort. Established-agent performance stays
+  // available in the roster below; no history or API rows are removed.
+  const gracePeriodAgents = agents
+    .filter((a: any) => a.isGracePeriod === true)
     .sort((a: any, b: any) => {
       // Primary: trackerPriority (lower = more urgent)
       const pDiff = (a.trackerPriority ?? 99) - (b.trackerPriority ?? 99);
@@ -894,53 +896,42 @@ function AgentPerformanceRoster({ year }: { year: number }) {
         </div>
       )}
 
-      {/* ── Block 1: New Agent 90-Day + First-Year Tracker ──────────────── */}
-      {firstYearTrackerAgents.length > 0 && (
+      {/* ── Block 1: New Agent 90-Day Grace Period ─────────────────────── */}
+      {gracePeriodAgents.length > 0 && (
         <Card className="border-2 border-amber-200">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-amber-600" />
-                <CardTitle className="text-lg">New Agent 90-Day + First-Year Tracker</CardTitle>
+                <CardTitle className="text-lg">New Agent 90-Day Grace Period</CardTitle>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {summary.firstYearCritical > 0 && (
+                {summary.graceAtRisk > 0 && (
                   <Badge className="bg-red-100 text-red-800 border border-red-300">
-                    🚨 {summary.firstYearCritical} Critical
+                    🚨 {summary.graceAtRisk} At Risk
                   </Badge>
                 )}
-                {summary.firstYearNeedAttention > 0 && (
+                {summary.graceNoDeal > 0 && (
                   <Badge className="bg-amber-100 text-amber-800 border border-amber-300">
-                    ⚠️ {summary.firstYearNeedAttention} Need Attention
+                    ⚠️ {summary.graceNoDeal} No Deal Yet
                   </Badge>
                 )}
-                {summary.firstYearSlipped > 0 && (
-                  <Badge className="bg-orange-100 text-orange-800 border border-orange-300">
-                    ⏰ {summary.firstYearSlipped} Slipped
-                  </Badge>
-                )}
-                {summary.firstYearOnTrack > 0 && (
+                {summary.graceOnTrack > 0 && (
                   <Badge className="bg-green-100 text-green-800 border border-green-300">
-                    ✓ {summary.firstYearOnTrack} On Track
-                  </Badge>
-                )}
-                {summary.firstYearProducing > 0 && (
-                  <Badge className="bg-blue-100 text-blue-800 border border-blue-300">
-                    🏆 {summary.firstYearProducing} Producing
+                    ✓ {summary.graceOnTrack} On Track
                   </Badge>
                 )}
               </div>
             </div>
             <CardDescription>
-              Goal: every new agent closes a deal by day 90. Something under contract by day 60. First-year agents (day 0–365) only. Sorted by urgency.
+              Goal: every new agent has something under contract by day 60 and a closed deal by day 90. Only active agents in their current 90-day grace period appear here. Sorted by urgency.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {firstYearTrackerAgents.map((a: any) => {
+              {gracePeriodAgents.map((a: any) => {
                 const isInGrace = a.isGracePeriod;
                 const days = a.daysSinceStart ?? 0;
-                const progressPct = Math.min(100, (days / 365) * 100);
                 const gracePct = Math.min(100, (days / 90) * 100);
 
                 // Row color by priority
@@ -974,17 +965,6 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
                       {/* Progress bars */}
                       <div className="flex-1 min-w-[160px]">
-                        {/* Year progress */}
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-0.5">
-                          <span>Day {days} / 365</span>
-                          {a.startDate && <span>Started {a.startDate}</span>}
-                        </div>
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden relative mb-1">
-                          <div className="h-full rounded-full bg-gray-400 transition-all" style={{ width: `${progressPct}%` }} />
-                          {/* 90-day marker */}
-                          <div className="absolute top-0 left-[24.6%] w-px h-full bg-amber-500/70" />
-                        </div>
-                        {/* 90-day grace bar (if still in grace) */}
                         {isInGrace && (
                           <>
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-0.5">
