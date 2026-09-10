@@ -232,7 +232,10 @@ export async function GET(req: NextRequest) {
 
     const agentRecords: AgentRecord[] = agents.map((a: any) => {
       const agentId = a.agentId || a.id;
-      const name = String(a.displayName || a.name || a.firstName && a.lastName ? `${a.firstName || ''} ${a.lastName || ''}`.trim() : '').trim() || agentId;
+      const fullName = `${String(a.firstName || '').trim()} ${String(a.lastName || '').trim()}`.trim();
+      // Agent profiles are canonical for review-list identity. Preserve their
+      // displayName first; only fall back to legacy name, then first/last name.
+      const name = String(a.displayName || a.name || fullName || '').trim() || agentId;
       const startDate = a.startDate || null;
       const inactiveDate = a.inactiveDate || null;
       const endDate = a.endDate || null;
