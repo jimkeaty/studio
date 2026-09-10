@@ -34,9 +34,8 @@ const STATUSES = [
   { value: 'declined',        label: 'Declined',         color: 'bg-red-100 text-red-700',       border: 'border-red-300',     dot: 'bg-red-500'     },
 ];
 
-// Started recruits remain available in the table and history, but leave the
-// active recruiting Kanban because recruiting is complete after their start date.
-const BOARD_STATUSES = STATUSES.filter(s => !['declined', 'started'].includes(s.value));
+// Started recruits remain visible until a later archive rule is deliberately introduced.
+const BOARD_STATUSES = STATUSES.filter(s => s.value !== 'declined');
 
 const ACTIVITY_TYPES = [
   { value: 'call',    label: 'Call',    icon: Phone },
@@ -53,7 +52,7 @@ const SOURCES = [
 
 const EMPTY_FORM = {
   name: '', source: '', recruiter: '', status: 'prospect',
-  expectedStartDate: '', phone: '', email: '', currentBrokerage: '', notes: '',
+  expectedStartDate: '', actualStartDate: '', agentProfileId: '', phone: '', email: '', currentBrokerage: '', notes: '',
   followUpDate: '', followUpAction: '',
 };
 
@@ -64,6 +63,9 @@ type Candidate = {
   recruiter?: string;
   status: string;
   expectedStartDate?: string;
+  actualStartDate?: string;
+  agentProfileId?: string;
+  startVerification?: { reason?: string | null; warning?: string | null };
   phone?: string;
   email?: string;
   currentBrokerage?: string;
@@ -204,6 +206,12 @@ function KanbanCard({
             {fmtDate(candidate.followUpDate)}
             {candidate.followUpAction && ` — ${candidate.followUpAction}`}
           </span>
+        </div>
+      )}
+
+      {candidate.startVerification?.warning && (
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+          <AlertTriangle className="mr-1 inline h-3 w-3" />{candidate.startVerification.warning}
         </div>
       )}
 
@@ -394,6 +402,8 @@ export function RecruitingPipelinePanel({
       recruiter: c.recruiter || '',
       status: c.status || 'prospect',
       expectedStartDate: c.expectedStartDate || '',
+      actualStartDate: c.actualStartDate || '',
+      agentProfileId: c.agentProfileId || '',
       phone: c.phone || '',
       email: c.email || '',
       currentBrokerage: c.currentBrokerage || '',
@@ -543,7 +553,7 @@ export function RecruitingPipelinePanel({
           <p className="text-sm text-muted-foreground">
             {compact
               ? 'A concise, actionable candidate list for staff and administrators.'
-              : 'Track candidates through scheduled start; started agents leave the active board automatically.'}
+              : 'Track candidates through verified Started status. A passed scheduled date remains Scheduled Start until an actual start or active profile verifies it.'}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -682,6 +692,7 @@ export function RecruitingPipelinePanel({
                     <TableHead>Follow-Up</TableHead>
                     <TableHead>Source</TableHead>
                     <TableHead>Expected Start</TableHead>
+                    <TableHead>Actual Start</TableHead>
                     <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -734,7 +745,8 @@ export function RecruitingPipelinePanel({
                           <div className="text-sm">{c.source || '—'}</div>
                           {c.recruiter && <div className="text-xs text-muted-foreground">{c.recruiter}</div>}
                         </TableCell>
-                        <TableCell>{fmtDate(c.expectedStartDate)}</TableCell>
+                        <TableCell>{fmtDate(c.expectedStartDate)}{c.startVerification?.warning ? <div className="mt-1 text-xs text-amber-700">Verification needed</div> : null}</TableCell>
+                        <TableCell>{fmtDate(c.actualStartDate)}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button variant="ghost" size="icon" className="h-7 w-7" title="Log Activity" onClick={() => openActivityLog(c)}>
@@ -785,6 +797,10 @@ export function RecruitingPipelinePanel({
               <div>
                 <Label>Expected Start Date</Label>
                 <Input type="date" value={form.expectedStartDate} onChange={e => fld('expectedStartDate', e.target.value)} />
+              </div>
+              <div>
+                <Label>Actual Start Date</Label>
+                <Input type="date" value={form.actualStartDate} onChange={e => fld('actualStartDate', e.target.value)} />
               </div>
               <div>
                 <Label>Phone</Label>

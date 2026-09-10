@@ -5,15 +5,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { isValidActualStartDate, verifyRecruitingStart } from '@/lib/recruiting/startVerification';
 
 function jsonError(s: number, e: string) {
   return NextResponse.json({ ok: false, error: e }, { status: s });
-}
-
-function isPastScheduledStart(data: Record<string, any>, todayYmd: string) {
-  if (data.status !== 'scheduled_start' || typeof data.expectedStartDate !== 'string') return false;
-  const startYmd = data.expectedStartDate.slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(startYmd) && startYmd < todayYmd;
 }
 
 async function requireAdmin(req: NextRequest) {
@@ -33,47 +28,14 @@ export async function GET(req: NextRequest) {
     const snap = await adminDb.collection('recruitingPipeline')
       .orderBy('createdAt', 'desc').get();
 
-    // A scheduled start belongs on the recruiting board only through the day
-    // before it begins. On the next calendar day, it is a started recruit and
-    // no longer an active recruiting-pipeline item.
-    const transitionedAt = new Date().toISOString();
-    const todayYmd = transitionedAt.slice(0, 10);
-    const scheduledToStart = snap.docs.filter(doc => isPastScheduledStart(doc.data(), todayYmd));
-    const transitionResults = await Promise.all(scheduledToStart.map(doc =>
-      adminDb.runTransaction(async transaction => {
-        const latest = await transaction.get(doc.ref);
-        if (!latest.exists || !isPastScheduledStart(latest.data() || {}, todayYmd)) return false;
-
-        transaction.update(doc.ref, {
-          status: 'started',
-          stageEnteredAt: transitionedAt,
-          autoStartedAt: transitionedAt,
-          updatedAt: transitionedAt,
-        });
-        transaction.set(adminDb.collection('recruitingPipelineActivity').doc(), {
-          candidateId: doc.id,
-          type: 'stage_change',
-          summary: 'Stage changed automatically: Scheduled Start → Started after the scheduled start date passed',
-          notes: null,
-          authorUid: null,
-          authorName: 'System',
-          followUpDate: null,
-          followUpAction: null,
-          createdAt: transitionedAt,
-        });
-        return true;
-      })
-    ));
-    const transitionedIds = new Set(
-      scheduledToStart.filter((_, index) => transitionResults[index]).map(doc => doc.id)
-    );
-    const candidates = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data(),
-      ...(transitionedIds.has(d.id)
-        ? { status: 'started', stageEnteredAt: transitionedAt, autoStartedAt: transitionedAt, updatedAt: transitionedAt }
-        : {}),
-    }));
+    const [profileSnap] = await Promise.all([adminDb.collection('agentProfiles').get()]);
+    const profiles = profileSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+    const todayYmd = new Date().toISOString().slice(0, 10);
+    const candidates = snap.docs.map(d => {
+      const candidate = { id: d.id, ...(d.data() as any) };
+      const startVerification = verifyRecruitingStart({ candidate, profiles, asOfDate: todayYmd });
+      return { ...candidate, status: startVerification.status, startVerification };
+    });
     return NextResponse.json({ ok: true, candidates });
   } catch (err: any) {
     return jsonError(500, err?.message || 'Internal Server Error');
@@ -86,18 +48,23 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      name, source, recruiter, status, expectedStartDate,
+      name, source, recruiter, status, expectedStartDate, actualStartDate, agentProfileId,
       phone, email, currentBrokerage, notes,
       followUpDate, followUpAction,
     } = body;
     if (!name?.trim()) return jsonError(400, 'name is required');
     const now = new Date().toISOString();
+    const todayYmd = now.slice(0, 10);
+    if (actualStartDate && !isValidActualStartDate(actualStartDate, todayYmd)) return jsonError(400, 'Actual start date must be a valid date on or before today');
+    if (status === 'started' && !isValidActualStartDate(actualStartDate, todayYmd)) return jsonError(400, 'Started requires an actual start date or a verified active agent profile');
     const doc = {
       name: name.trim(),
       source: source?.trim() || null,
       recruiter: recruiter?.trim() || null,
       status: status || 'prospect',
       expectedStartDate: expectedStartDate || null,
+      actualStartDate: actualStartDate || null,
+      agentProfileId: agentProfileId?.trim() || null,
       phone: phone?.trim() || null,
       email: email?.trim() || null,
       currentBrokerage: currentBrokerage?.trim() || null,
@@ -130,11 +97,25 @@ export async function PATCH(req: NextRequest) {
     const now = new Date().toISOString();
     const cleaned: Record<string, any> = { updatedAt: now };
     const allowed = [
-      'name','source','recruiter','status','expectedStartDate','phone','email','currentBrokerage','notes',
+      'name','source','recruiter','status','expectedStartDate','actualStartDate','agentProfileId','phone','email','currentBrokerage','notes',
       'followUpDate','followUpAction','lastContactedAt',
     ];
     for (const key of allowed) {
       if (key in updates) cleaned[key] = updates[key] ?? null;
+    }
+    const todayYmd = now.slice(0, 10);
+    const effectiveCandidate = { ...snap.data(), ...cleaned };
+    if (effectiveCandidate.actualStartDate && !isValidActualStartDate(effectiveCandidate.actualStartDate, todayYmd)) {
+      return jsonError(400, 'Actual start date must be a valid date on or before today');
+    }
+    if (updates.status === 'started') {
+      const profileSnap = await adminDb.collection('agentProfiles').get();
+      const verification = verifyRecruitingStart({
+        candidate: { ...effectiveCandidate, status: 'scheduled_start' },
+        profiles: profileSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })),
+        asOfDate: todayYmd,
+      });
+      if (verification.status !== 'started') return jsonError(400, 'Started requires an actual start date or a verified active agent profile');
     }
     // If status changed, record when they entered the new stage
     const prevData = snap.data();

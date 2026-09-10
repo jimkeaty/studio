@@ -62,9 +62,10 @@ test('SBUSA-001 baseline captures the current sources that later queue tasks mus
   assert.match(dad, /calculateOperationalMeetingEligibility/);
   assert.match(dad, /No Production or Pending in Last 60 Days — This Month/);
   assert.match(dad, /sixtyDayWindowStart/);
-  // SBUSA-008: a past scheduled start currently transitions automatically.
-  assert.match(pipeline, /status: 'started'/);
-  assert.match(pipeline, /autoStartedAt/);
+  // SBUSA-008: Started now requires canonical actual-start or active-profile verification.
+  assert.match(pipeline, /verifyRecruitingStart/);
+  assert.match(pipeline, /actualStartDate/);
+  assert.doesNotMatch(pipeline, /autoStartedAt/);
   // SBUSA-009: recruiting-plan values currently have two write surfaces.
   assert.match(page, /fetch\('\/api\/admin\/broker-business-plan'/);
   assert.match(page, /fetch\('\/api\/broker\/recruiting-metrics'/);
